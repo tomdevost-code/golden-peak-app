@@ -162,6 +162,7 @@ tr:last-child td { border-bottom: none; }
             <div class="field"><label>Entry date</label><input type="date" id="ec-date" oninput="ecBadge()" /></div>
             <div class="field"><label>Veg start date</label><input type="date" id="ec-veg" oninput="ecBadge()" /></div>
             <div class="field"><label>Flower start date</label><input type="date" id="ec-flower" oninput="ecBadge()" /></div>
+            <div class="field"><label>Harvest date <span style="font-size:10px;color:var(--text3);">(closes batch)</span></label><input type="date" id="ec-harvest" oninput="ecBadge()" /></div>
           </div>
           <div class="day-badge" id="ec-badge"><span style="font-size:12px;color:var(--text3);">Enter veg start date to calculate</span></div>
         </div>
@@ -231,6 +232,7 @@ tr:last-child td { border-bottom: none; }
             <div class="field"><label>Test date</label><input type="date" id="ro-date" oninput="roBadge()" /></div>
             <div class="field"><label>Veg start date</label><input type="date" id="ro-veg" oninput="roBadge()" /></div>
             <div class="field"><label>Flower start date</label><input type="date" id="ro-flower" oninput="roBadge()" /></div>
+            <div class="field"><label>Harvest date <span style="font-size:10px;color:var(--text3);">(closes batch)</span></label><input type="date" id="ro-harvest" oninput="roBadge()" /></div>
           </div>
           <div class="day-badge" id="ro-badge"><span style="font-size:12px;color:var(--text3);">Enter veg start date to calculate</span></div>
         </div>
@@ -373,26 +375,31 @@ function switchRepTab(tab,btn){document.getElementById('rep-ec-view').style.disp
 
 function buildECEvents(){const c=document.getElementById('ec-events-container');c.innerHTML='';for(let i=1;i<=8;i++){c.innerHTML+='<div class="event-row"><div class="event-lbl">Event '+i+'</div><input type="number" id="ec-evt-'+i+'" step="1" min="0" placeholder="-" style="font-size:14px;font-family:var(--mono);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;color:var(--text);outline:none;text-align:center;" oninput="ecTotalML()" /></div>';}}
 function ecTotalML(){let t=0,any=false;for(let i=1;i<=8;i++){const v=parseFloat(document.getElementById('ec-evt-'+i).value);if(!isNaN(v)&&v>0){t+=v;any=true;}}document.getElementById('ec-total-ml').textContent=any?t.toFixed(0)+'ml':'-';}
-function findBatchDates(batch,recs){const match=recs.find(r=>r.batch&&r.batch.trim().toLowerCase()===batch.trim().toLowerCase());return match?{vegStart:match.vegStart||'',flowerStart:match.flowerStart||''}:null;}
-function ecBatchLookup(){const batch=document.getElementById('ec-batch').value.trim();if(!batch)return;const found=findBatchDates(batch,[...ecRecs,...roRecs]);if(found){if(found.vegStart){document.getElementById('ec-veg').value=found.vegStart;}if(found.flowerStart){document.getElementById('ec-flower').value=found.flowerStart;}ecBadge();if(found.vegStart)toast('Batch found - dates loaded automatically');}}
-function roBatchLookup(){const batch=document.getElementById('ro-batch').value.trim();if(!batch)return;const found=findBatchDates(batch,[...ecRecs,...roRecs]);if(found){if(found.vegStart){document.getElementById('ro-veg').value=found.vegStart;}if(found.flowerStart){document.getElementById('ro-flower').value=found.flowerStart;}roBadge();if(found.vegStart)toast('Batch found - dates loaded automatically');}}
+function findBatchDates(batch,recs){const match=recs.find(r=>r.batch&&r.batch.trim().toLowerCase()===batch.trim().toLowerCase());return match?{vegStart:match.vegStart||'',flowerStart:match.flowerStart||'',harvestDate:match.harvestDate||''}:null;}
+function isBatchClosed(batch){const found=findBatchDates(batch,[...ecRecs,...roRecs]);return found&&found.harvestDate?found.harvestDate:null;}
+function ecBatchLookup(){const batch=document.getElementById('ec-batch').value.trim();if(!batch)return;const found=findBatchDates(batch,[...ecRecs,...roRecs]);if(found){if(found.vegStart)document.getElementById('ec-veg').value=found.vegStart;if(found.flowerStart)document.getElementById('ec-flower').value=found.flowerStart;if(found.harvestDate)document.getElementById('ec-harvest').value=found.harvestDate;ecBadge();if(found.harvestDate){showClosedWarning('ec',found.harvestDate);}else{hideClosedWarning('ec');if(found.vegStart)toast('Batch found - dates loaded automatically');}}}
+function roBatchLookup(){const batch=document.getElementById('ro-batch').value.trim();if(!batch)return;const found=findBatchDates(batch,[...ecRecs,...roRecs]);if(found){if(found.vegStart)document.getElementById('ro-veg').value=found.vegStart;if(found.flowerStart)document.getElementById('ro-flower').value=found.flowerStart;if(found.harvestDate)document.getElementById('ro-harvest').value=found.harvestDate;roBadge();if(found.harvestDate){showClosedWarning('ro',found.harvestDate);}else{hideClosedWarning('ro');if(found.vegStart)toast('Batch found - dates loaded automatically');}}}
+function showClosedWarning(form,harvestDate){const id=form+'-closed-warning';let el=document.getElementById(id);if(!el){el=document.createElement('div');el.id=id;el.style.cssText='background:var(--red-pale);color:var(--red);border:1px solid var(--red);border-radius:var(--radius-sm);padding:10px 12px;font-size:13px;font-weight:500;margin-bottom:12px;';const badge=document.getElementById(form+'-badge');badge.parentNode.insertBefore(el,badge);}el.textContent='This batch was harvested on '+harvestDate+'. No new entries can be added.';el.style.display='block';document.getElementById(form+'-btn').disabled=true;}
+function hideClosedWarning(form){const el=document.getElementById(form+'-closed-warning');if(el)el.style.display='none';document.getElementById(form+'-btn').disabled=false;}
 function ecBadge(){const d=document.getElementById('ec-date').value,vs=document.getElementById('ec-veg').value,fs=document.getElementById('ec-flower').value,b=document.getElementById('ec-badge');if(!d||!vs){b.innerHTML='<span style="font-size:12px;color:var(--text3);">Enter veg start date to calculate</span>';return;}const{stage,day}=calcStage(vs,fs,d);if(stage&&day)b.innerHTML='<span class="day-pill '+stage+'">'+(stage==='flower'?'Flower Day':'Veg Day')+' '+day+'</span>';else b.innerHTML='<span style="font-size:12px;color:var(--text3);">Check your dates</span>';}
 function ecAvgs(){setAvg('ec-avg-ec',avg(pens('.ec-drip-ec').filter(v=>v)),EC_LO,EC_HI);setAvg('ec-avg-ph',avg(pens('.ec-drip-ph').filter(v=>v)),PH_EC_LO,PH_EC_HI);}
 
 async function ecSave(){
   const grower=document.getElementById('ec-grower').value,date=document.getElementById('ec-date').value,vs=document.getElementById('ec-veg').value;
   if(!grower){toast('Please select a grower.');return;}if(!date){toast('Please set a date.');return;}if(!vs){toast('Please enter veg start date.');return;}
+  const harvestDate=document.getElementById('ec-harvest').value;
+  if(harvestDate&&date>harvestDate){toast('This batch was harvested on '+harvestDate+'. Entry blocked.',3500);return;}
   const dripEcPens=pens('.ec-drip-ec'),dripPhPens=pens('.ec-drip-ph');
   const dripEc=avg(dripEcPens.filter(v=>v)),dripPh=avg(dripPhPens.filter(v=>v));
   if(dripEc===null&&dripPh===null){toast('Enter at least one reading.');return;}
   const fs=document.getElementById('ec-flower').value,{stage,day}=calcStage(vs,fs,date);
   const evts=[];let totalML=0;for(let i=1;i<=8;i++){const v=parseFloat(document.getElementById('ec-evt-'+i).value)||null;evts.push(v);if(v)totalML+=v;}
-  const rec={id:Date.now(),date,room:document.getElementById('ec-room').value,grower,batch:document.getElementById('ec-batch').value.trim(),vegStart:vs,flowerStart:fs,stage,day,dripEcPens,dripPhPens,dripEc,dripPh,wtype:document.getElementById('ec-wtype').value,events:evts,totalML:totalML||null,flow:parseFloat(document.getElementById('ec-flow').value)||null,notes:document.getElementById('ec-notes').value.trim(),synced:false};
+  const rec={id:Date.now(),date,room:document.getElementById('ec-room').value,grower,batch:document.getElementById('ec-batch').value.trim(),vegStart:vs,flowerStart:fs,harvestDate:harvestDate||null,stage,day,dripEcPens,dripPhPens,dripEc,dripPh,wtype:document.getElementById('ec-wtype').value,events:evts,totalML:totalML||null,flow:parseFloat(document.getElementById('ec-flow').value)||null,notes:document.getElementById('ec-notes').value.trim(),synced:false};
   ecRecs.unshift(rec);lsSet('gp-ec',ecRecs);
   if(atReady()){
     setSyncPill('ing','Syncing...');document.getElementById('ec-btn').disabled=true;
     try{
-      const f={'Date':rec.date,'Room':rec.room,'Grower':rec.grower,'Batch ID':rec.batch,'Veg Start Date':rec.vegStart,'Flower Start Date':rec.flowerStart||undefined,'Watering Type':rec.wtype||undefined,'Drip EC Pen 1':rec.dripEcPens[0]||undefined,'Drip EC Pen 2':rec.dripEcPens[1]||undefined,'Drip EC Pen 3':rec.dripEcPens[2]||undefined,'Drip pH Pen 1':rec.dripPhPens[0]||undefined,'Drip pH Pen 2':rec.dripPhPens[1]||undefined,'Drip pH Pen 3':rec.dripPhPens[2]||undefined,'Event 1 ml/plant':rec.events[0]||undefined,'Event 2 ml/plant':rec.events[1]||undefined,'Event 3 ml/plant':rec.events[2]||undefined,'Event 4 ml/plant':rec.events[3]||undefined,'Event 5 ml/plant':rec.events[4]||undefined,'Event 6 ml/plant':rec.events[5]||undefined,'Event 7 ml/plant':rec.events[6]||undefined,'Event 8 ml/plant':rec.events[7]||undefined,'Flow Meter Reading':rec.flow||undefined,'Notes':rec.notes||undefined};
+      const f={'Date':rec.date,'Room':rec.room,'Grower':rec.grower,'Batch ID':rec.batch,'Veg Start Date':rec.vegStart,'Flower Start Date':rec.flowerStart||undefined,'Harvest Date':rec.harvestDate||undefined,'Watering Type':rec.wtype||undefined,'Drip EC Pen 1':rec.dripEcPens[0]||undefined,'Drip EC Pen 2':rec.dripEcPens[1]||undefined,'Drip EC Pen 3':rec.dripEcPens[2]||undefined,'Drip pH Pen 1':rec.dripPhPens[0]||undefined,'Drip pH Pen 2':rec.dripPhPens[1]||undefined,'Drip pH Pen 3':rec.dripPhPens[2]||undefined,'Event 1 ml/plant':rec.events[0]||undefined,'Event 2 ml/plant':rec.events[1]||undefined,'Event 3 ml/plant':rec.events[2]||undefined,'Event 4 ml/plant':rec.events[3]||undefined,'Event 5 ml/plant':rec.events[4]||undefined,'Event 6 ml/plant':rec.events[5]||undefined,'Event 7 ml/plant':rec.events[6]||undefined,'Event 8 ml/plant':rec.events[7]||undefined,'Flow Meter Reading':rec.flow||undefined,'Notes':rec.notes||undefined};
       Object.keys(f).forEach(k=>{if(f[k]===undefined)delete f[k];});
       await atPost(cfg.ecTbl,f);rec.synced=true;lsSet('gp-ec',ecRecs);setSyncPill('ok','Synced');toast('Saved and synced to Airtable');
     }catch(e){setSyncPill('err','Sync failed');toast('Saved locally - Airtable sync failed.',3500);}
@@ -400,7 +407,7 @@ async function ecSave(){
   }else{toast('Entry saved locally');}
   ecClear();
 }
-function ecClear(){document.querySelectorAll('.ec-drip-ec,.ec-drip-ph').forEach(i=>i.value='');for(let i=1;i<=8;i++)document.getElementById('ec-evt-'+i).value='';['ec-notes','ec-flow'].forEach(id=>document.getElementById(id).value='');document.getElementById('ec-wtype').value='';document.getElementById('ec-total-ml').textContent='-';['ec-avg-ec','ec-avg-ph'].forEach(id=>{document.getElementById(id).textContent='-';document.getElementById(id).className='avg-val';});}
+function ecClear(){document.querySelectorAll('.ec-drip-ec,.ec-drip-ph').forEach(i=>i.value='');for(let i=1;i<=8;i++)document.getElementById('ec-evt-'+i).value='';['ec-notes','ec-flow'].forEach(id=>document.getElementById(id).value='');document.getElementById('ec-wtype').value='';document.getElementById('ec-total-ml').textContent='-';['ec-avg-ec','ec-avg-ph'].forEach(id=>{document.getElementById(id).textContent='-';document.getElementById(id).className='avg-val';});const h=document.getElementById('ec-harvest').value;if(h)showClosedWarning('ec',h);}
 
 function buildROSamples(){const c=document.getElementById('ro-samples');c.innerHTML='';for(let i=1;i<=8;i++){c.innerHTML+='<div class="sample-item"><div class="sample-num">Sample '+i+'</div><div class="s-lbl">EC (mS/cm)</div><input type="number" class="ro-s-ec s-input" id="ro-ec-'+i+'" step="0.01" placeholder="0.00" oninput="roCalc()" /><div class="s-lbl" style="margin-top:6px;">pH</div><input type="number" class="ro-s-ph s-input" id="ro-ph-'+i+'" step="0.01" placeholder="0.00" oninput="roCalc()" /></div>';}}
 function roBadge(){const d=document.getElementById('ro-date').value,vs=document.getElementById('ro-veg').value,fs=document.getElementById('ro-flower').value,b=document.getElementById('ro-badge');if(!d||!vs){b.innerHTML='<span style="font-size:12px;color:var(--text3);">Enter veg start date to calculate</span>';return;}const{stage,day}=calcStage(vs,fs,d);if(stage&&day)b.innerHTML='<span class="day-pill '+stage+'">'+(stage==='flower'?'Flower Day':'Veg Day')+' '+day+'</span>';else b.innerHTML='<span style="font-size:12px;color:var(--text3);">Check your dates</span>';}
@@ -409,18 +416,20 @@ function roCalc(){const ecV=[],phV=[];for(let i=1;i<=8;i++){const ec=parseFloat(
 async function roSave(){
   const grower=document.getElementById('ro-grower').value,date=document.getElementById('ro-date').value,vs=document.getElementById('ro-veg').value;
   if(!grower){toast('Please select a grower.');return;}if(!date){toast('Please set a date.');return;}if(!vs){toast('Please enter veg start date.');return;}
+  const harvestDate=document.getElementById('ro-harvest').value;
+  if(harvestDate&&date>harvestDate){toast('This batch was harvested on '+harvestDate+'. Entry blocked.',3500);return;}
   const fs=document.getElementById('ro-flower').value,inputEC=parseFloat(document.getElementById('ro-input-ec').value)||null;
   const samples=[];let hasData=false;for(let i=1;i<=8;i++){const ec=parseFloat(document.getElementById('ro-ec-'+i).value)||null,ph=parseFloat(document.getElementById('ro-ph-'+i).value)||null;if(ec||ph)hasData=true;samples.push({ec,ph});}
   if(!hasData){toast('Enter at least one sample reading.');return;}
   const ecV=samples.map(s=>s.ec).filter(v=>v),phV=samples.map(s=>s.ph).filter(v=>v);
   const avgEC=avg(ecV),avgPH=avg(phV),variance=avgEC!==null&&inputEC!==null?Math.round((avgEC-inputEC)*100)/100:null;
   const{stage,day}=calcStage(vs,fs,date);
-  const rec={id:Date.now(),date,room:document.getElementById('ro-room').value,grower,batch:document.getElementById('ro-batch').value.trim(),vegStart:vs,flowerStart:fs,stage,day,inputEC,samples,avgEC,avgPH,variance,ecAlert:variance!==null&&variance>RO_VAR_ALERT,notes:document.getElementById('ro-notes').value.trim(),synced:false};
+  const rec={id:Date.now(),date,room:document.getElementById('ro-room').value,grower,batch:document.getElementById('ro-batch').value.trim(),vegStart:vs,flowerStart:fs,harvestDate:harvestDate||null,stage,day,inputEC,samples,avgEC,avgPH,variance,ecAlert:variance!==null&&variance>RO_VAR_ALERT,notes:document.getElementById('ro-notes').value.trim(),synced:false};
   roRecs.unshift(rec);lsSet('gp-ro',roRecs);
   if(atReady()){
     setSyncPill('ing','Syncing...');document.getElementById('ro-btn').disabled=true;
     try{
-      const f={'Date':rec.date,'Room':rec.room,'Grower':rec.grower,'Batch ID':rec.batch,'Veg Start Date':rec.vegStart,'Flower Start Date':rec.flowerStart||undefined,'Input EC':rec.inputEC||undefined,'Notes':rec.notes||undefined};
+      const f={'Date':rec.date,'Room':rec.room,'Grower':rec.grower,'Batch ID':rec.batch,'Veg Start Date':rec.vegStart,'Flower Start Date':rec.flowerStart||undefined,'Harvest Date':rec.harvestDate||undefined,'Input EC':rec.inputEC||undefined,'Notes':rec.notes||undefined};
       rec.samples.forEach((s,i)=>{if(s.ec)f['S'+(i+1)+' EC']=s.ec;if(s.ph)f['S'+(i+1)+' pH']=s.ph;});
       Object.keys(f).forEach(k=>{if(f[k]===undefined)delete f[k];});
       await atPost(cfg.roTbl,f);rec.synced=true;lsSet('gp-ro',roRecs);setSyncPill('ok','Synced');toast('Saved and synced to Airtable');
