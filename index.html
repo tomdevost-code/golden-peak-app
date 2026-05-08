@@ -147,9 +147,9 @@ tr:last-child td { border-bottom: none; }
           <div class="g2" style="margin-bottom:10px;">
             <div class="field"><label>Room</label>
               <select id="ec-room">
-                <option>Flower 1 (240 plants)</option><option>Flower 2 (240 plants)</option>
-                <option>Flower 3 (234 plants)</option><option>Flower 4 (240 plants)</option>
-                <option>Flower 5 - R&D</option><option>Veg Room</option>
+                <option>Flower 1</option><option>Flower 2</option>
+                <option>Flower 3</option><option>Flower 4</option>
+                <option>Flower 5</option><option>Veg</option>
               </select>
             </div>
             <div class="field"><label>Batch ID</label><select id="ec-batch-select" onchange="ecBatchSelect()" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;margin-bottom:6px;"><option value="">-- select existing batch --</option></select><input type="text" id="ec-batch" placeholder="Or type new batch ID" oninput="ecBatchLookup()" autocomplete="off" /></div>
@@ -217,9 +217,9 @@ tr:last-child td { border-bottom: none; }
           <div class="g2" style="margin-bottom:10px;">
             <div class="field"><label>Room</label>
               <select id="ro-room">
-                <option>Flower 1 (240 plants)</option><option>Flower 2 (240 plants)</option>
-                <option>Flower 3 (234 plants)</option><option>Flower 4 (240 plants)</option>
-                <option>Flower 5 - R&D</option><option>Veg Room</option>
+                <option>Flower 1</option><option>Flower 2</option>
+                <option>Flower 3</option><option>Flower 4</option>
+                <option>Flower 5</option><option>Veg</option>
               </select>
             </div>
             <div class="field"><label>Batch ID</label>
@@ -280,7 +280,7 @@ tr:last-child td { border-bottom: none; }
       </div>
       <div id="rep-ec-view">
         <div class="filters">
-          <select id="f-ec-room" onchange="renderEC()"><option value="">All rooms</option><option>Flower 1 (240 plants)</option><option>Flower 2 (240 plants)</option><option>Flower 3 (234 plants)</option><option>Flower 4 (240 plants)</option><option>Flower 5 - R&D</option><option>Veg Room</option></select>
+          <select id="f-ec-room" onchange="renderEC()"><option value="">All rooms</option><option>Flower 1</option><option>Flower 2</option><option>Flower 3</option><option>Flower 4</option><option>Flower 5</option><option>Veg</option></select>
           <select id="f-ec-grower" onchange="renderEC()"><option value="">All growers</option><option>Jordan Elliott</option><option>Brandon Cail</option><option>Tom Devost</option></select>
           <input type="date" id="f-ec-from" onchange="renderEC()" />
           <input type="date" id="f-ec-to" onchange="renderEC()" />
@@ -291,7 +291,7 @@ tr:last-child td { border-bottom: none; }
       </div>
       <div id="rep-ro-view" style="display:none;">
         <div class="filters">
-          <select id="f-ro-room" onchange="renderRO()"><option value="">All rooms</option><option>Flower 1 (240 plants)</option><option>Flower 2 (240 plants)</option><option>Flower 3 (234 plants)</option><option>Flower 4 (240 plants)</option><option>Flower 5 - R&D</option><option>Veg Room</option></select>
+          <select id="f-ro-room" onchange="renderRO()"><option value="">All rooms</option><option>Flower 1</option><option>Flower 2</option><option>Flower 3</option><option>Flower 4</option><option>Flower 5</option><option>Veg</option></select>
           <select id="f-ro-grower" onchange="renderRO()"><option value="">All growers</option><option>Jordan Elliott</option><option>Brandon Cail</option><option>Tom Devost</option></select>
           <input type="date" id="f-ro-from" onchange="renderRO()" />
           <input type="date" id="f-ro-to" onchange="renderRO()" />
