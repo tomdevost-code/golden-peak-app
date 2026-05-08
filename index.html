@@ -519,7 +519,15 @@ function dlCSV(rows,name){const a=document.createElement('a');a.href=URL.createO
 function exportEC(){const data=filterRecs(ecRecs,'f-ec-room','f-ec-grower','f-ec-from','f-ec-to');if(!data.length){toast('No data to export.');return;}dlCSV([['Date','Room','Stage','Day','Grower','Batch','Watering Type','Drip EC Avg','Drip pH Avg','Total ml/plant','Flow Meter L','Notes'],...data.map(r=>[r.date,r.room,r.stage||'',r.day||'',r.grower,r.batch,r.wtype||'',r.dripEc||'',r.dripPh||'',r.totalML||'',r.flow||'','"'+(r.notes||'').replace(/"/g,'""')+'"'])],'EC_Log_GoldenPeak.csv');}
 function exportRO(){const data=filterRecs(roRecs,'f-ro-room','f-ro-grower','f-ro-from','f-ro-to');if(!data.length){toast('No data to export.');return;}dlCSV([['Date','Room','Stage','Day','Grower','Batch','Input EC','Avg Runoff EC','EC Variance','Avg Runoff pH','Notes'],...data.map(r=>[r.date,r.room,r.stage||'',r.day||'',r.grower,r.batch,r.inputEC||'',r.avgEC||'',r.variance||'',r.avgPH||'','"'+(r.notes||'').replace(/"/g,'""')+'"'])],'Runoff_Log_GoldenPeak.csv');}
 
+
+function migrateRoomNames(){
+  const map={'Flower 1 (240 plants)':'Flower 1','Flower 2 (240 plants)':'Flower 2','Flower 3 (234 plants)':'Flower 3','Flower 4 (240 plants)':'Flower 4','Flower 5 - R&D':'Flower 5','Veg Room':'Veg'};
+  let changed=false;
+  [...ecRecs,...roRecs].forEach(r=>{if(map[r.room]){r.room=map[r.room];changed=true;}});
+  if(changed){lsSet('gp-ec',ecRecs);lsSet('gp-ro',roRecs);}
+}
 async function syncPending(){
+  migrateRoomNames();
   if(!atReady()){toast('Configure Airtable connection first.');return;}
   const st=document.getElementById('sync-pending-status');
   const btn=document.getElementById('sync-pending-btn');
