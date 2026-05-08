@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Golden Peak Cannabis — Field Log</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+<style>
+:root {
+  --green: #2D6A4F; --green-light: #52B788; --green-pale: #D8F3DC;
+  --amber: #E76F00; --amber-pale: #FFF3E0;
+  --red: #B5312C; --red-pale: #FDECEA;
+  --blue: #1A5F8A; --blue-pale: #E3F2FD;
+  --bg: #F7F6F2; --bg2: #EEECEA; --bg3: #E4E2DD;
+  --card: #FFFFFF; --border: #D9D6CF; --border2: #C8C4BB;
+  --text: #1A1917; --text2: #5C5850; --text3: #9B9690;
+  --mono: 'DM Mono', monospace; --sans: 'DM Sans', sans-serif;
+  --radius: 10px; --radius-sm: 6px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; background: var(--bg); font-family: var(--sans); color: var(--text); }
+.shell { display: flex; flex-direction: column; min-height: 100vh; max-width: 680px; margin: 0 auto; }
+.topbar { background: var(--card); border-bottom: 1px solid var(--border); padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+.topbar-brand { display: flex; align-items: center; gap: 10px; }
+.leaf { width: 28px; height: 28px; background: var(--green); border-radius: 50% 50% 50% 0; display: flex; align-items: center; justify-content: center; }
+.leaf svg { width: 14px; height: 14px; fill: white; }
+.topbar-brand h1 { font-size: 15px; font-weight: 600; letter-spacing: -0.3px; }
+.topbar-brand p { font-size: 11px; color: var(--text3); font-family: var(--mono); }
+.sync-pill { font-size: 11px; font-family: var(--mono); padding: 4px 10px; border-radius: 20px; border: 1px solid var(--border); color: var(--text3); background: var(--bg2); transition: all 0.2s; }
+.sync-pill.ok { color: var(--green); background: var(--green-pale); border-color: var(--green-light); }
+.sync-pill.err { color: var(--red); background: var(--red-pale); border-color: var(--red); }
+.sync-pill.ing { color: var(--amber); background: var(--amber-pale); border-color: var(--amber); }
+.content { flex: 1; padding: 20px 16px 100px; }
+.bottom-nav { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 680px; background: var(--card); border-top: 1px solid var(--border); display: flex; z-index: 100; }
+.bnav-btn { flex: 1; padding: 10px 4px 14px; border: none; background: transparent; cursor: pointer; font-family: var(--sans); display: flex; flex-direction: column; align-items: center; gap: 3px; color: var(--text3); transition: color 0.15s; font-size: 10px; font-weight: 500; letter-spacing: 0.02em; }
+.bnav-btn svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.bnav-btn.active { color: var(--green); }
+.page { display: none; }
+.page.active { display: block; }
+.section { margin-bottom: 20px; }
+.section-label { font-size: 10px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 8px; font-family: var(--mono); }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 10px; }
+.g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field label { font-size: 11px; color: var(--text2); font-weight: 500; }
+.field input, .field select, .field textarea { font-size: 14px; font-family: var(--sans); color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 10px; outline: none; transition: border-color 0.15s; width: 100%; }
+.field input:focus, .field select:focus, .field textarea:focus { border-color: var(--green); background: white; }
+.field textarea { resize: vertical; }
+.field input[readonly] { color: var(--text3); cursor: default; }
+.day-badge { display: flex; align-items: center; justify-content: center; gap: 8px; background: var(--bg2); border-radius: var(--radius-sm); padding: 8px 14px; margin-bottom: 16px; min-height: 38px; flex-wrap: wrap; }
+.day-pill { font-size: 13px; font-weight: 600; font-family: var(--mono); color: var(--text); background: var(--card); border: 1px solid var(--border); border-radius: 20px; padding: 3px 12px; }
+.day-pill.veg { color: var(--green); border-color: var(--green-light); background: var(--green-pale); }
+.day-pill.flower { color: var(--amber); border-color: var(--amber); background: var(--amber-pale); }
+.pen-col-headers { display: grid; grid-template-columns: 60px 1fr 1fr; gap: 8px; margin-bottom: 4px; }
+.pen-col-h { font-size: 10px; color: var(--text3); text-align: center; font-family: var(--mono); font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; }
+.pen-col-h:first-child { text-align: left; }
+.pen-row { display: grid; grid-template-columns: 60px 1fr 1fr; gap: 8px; align-items: center; padding: 4px 0; border-bottom: 1px solid var(--bg2); }
+.pen-row:last-child { border-bottom: none; }
+.pen-lbl { font-size: 12px; color: var(--text3); font-family: var(--mono); }
+.pen-input { font-size: 14px; font-family: var(--mono); text-align: center; padding: 6px 4px !important; }
+.avg-row { display: grid; grid-template-columns: 60px 1fr 1fr; gap: 8px; align-items: center; padding-top: 8px; margin-top: 6px; border-top: 1px solid var(--border); }
+.avg-lbl { font-size: 11px; font-weight: 600; color: var(--text2); font-family: var(--mono); }
+.avg-val { text-align: center; font-size: 16px; font-weight: 600; font-family: var(--mono); color: var(--text3); }
+.avg-val.ok { color: var(--green); } .avg-val.lo { color: var(--blue); } .avg-val.hi { color: var(--red); }
+.range-hint { font-size: 10px; color: var(--text3); text-align: center; margin-top: 6px; font-family: var(--mono); }
+.event-row { display: grid; grid-template-columns: 80px 1fr; gap: 8px; align-items: center; padding: 4px 0; border-bottom: 1px solid var(--bg2); }
+.event-row:last-child { border-bottom: none; }
+.event-lbl { font-size: 12px; color: var(--text3); font-family: var(--mono); }
+.summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.summary-item { text-align: center; background: var(--bg2); border-radius: var(--radius-sm); padding: 10px; }
+.summary-lbl { font-size: 10px; color: var(--text3); font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+.summary-val { font-size: 22px; font-weight: 600; font-family: var(--mono); }
+.alert-box { border-radius: var(--radius-sm); padding: 10px 12px; font-size: 13px; margin-top: 10px; display: none; font-weight: 500; }
+.alert-warn { background: var(--red-pale); color: var(--red); border: 1px solid var(--red); }
+.alert-ok { background: var(--green-pale); color: var(--green); border: 1px solid var(--green-light); }
+.btn-primary { width: 100%; padding: 13px; border: none; background: var(--green); border-radius: var(--radius); font-size: 15px; font-weight: 600; cursor: pointer; color: white; font-family: var(--sans); margin-top: 8px; letter-spacing: -0.2px; transition: background 0.15s; }
+.btn-primary:hover { background: #236040; }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-secondary { padding: 8px 14px; border: 1px solid var(--border); background: var(--card); border-radius: var(--radius-sm); font-size: 12px; cursor: pointer; color: var(--text2); font-family: var(--mono); white-space: nowrap; transition: background 0.15s; }
+.btn-secondary:hover { background: var(--bg2); }
+.btn-save { width: 100%; padding: 11px; border: none; background: var(--green); border-radius: var(--radius-sm); font-size: 14px; font-weight: 600; cursor: pointer; color: white; font-family: var(--sans); margin-top: 8px; }
+.rep-tabs { display: flex; gap: 4px; background: var(--bg2); border-radius: var(--radius-sm); padding: 3px; margin-bottom: 16px; }
+.rep-tab { flex: 1; padding: 7px; border: none; background: transparent; border-radius: 5px; font-size: 13px; cursor: pointer; color: var(--text3); font-family: var(--sans); font-weight: 500; transition: all 0.15s; }
+.rep-tab.active { background: var(--card); color: var(--text); border: 1px solid var(--border); }
+.filters { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+.filters select, .filters input { font-size: 12px; font-family: var(--sans); flex: 1; min-width: 110px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 6px 8px; color: var(--text); }
+.stat-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 8px; margin-bottom: 14px; }
+.stat-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px; }
+.stat-lbl { font-size: 10px; color: var(--text3); font-family: var(--mono); margin-bottom: 3px; }
+.stat-val { font-size: 20px; font-weight: 600; font-family: var(--mono); }
+.tbl-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+th { font-size: 10px; font-weight: 600; color: var(--text3); text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.05em; }
+td { padding: 8px 8px; border-bottom: 1px solid var(--bg2); color: var(--text); white-space: nowrap; font-size: 12px; }
+tr:last-child td { border-bottom: none; }
+.empty { text-align: center; padding: 40px 16px; color: var(--text3); font-size: 13px; }
+.tag { display: inline-block; background: var(--bg2); border-radius: 20px; font-size: 11px; padding: 2px 8px; color: var(--text3); font-family: var(--mono); }
+.ok { color: var(--green); font-weight: 600; } .lo { color: var(--blue); font-weight: 600; } .hi { color: var(--red); font-weight: 600; }
+.veg-txt { color: var(--green); font-weight: 600; font-family: var(--mono); }
+.flower-txt { color: var(--amber); font-weight: 600; font-family: var(--mono); }
+.settings-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 12px; }
+.settings-card h3 { font-size: 14px; font-weight: 600; margin-bottom: 12px; }
+.sfield { margin-bottom: 10px; }
+.sfield label { font-size: 11px; color: var(--text2); font-weight: 500; display: block; margin-bottom: 4px; }
+.sfield input { font-size: 13px; font-family: var(--mono); width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 10px; color: var(--text); outline: none; }
+.sfield input:focus { border-color: var(--green); }
+.conn-status { font-size: 13px; padding: 10px; border-radius: var(--radius-sm); margin-top: 10px; text-align: center; font-weight: 500; display: none; }
+.step-ol { list-style: none; counter-reset: s; }
+.step-ol li { counter-increment: s; display: flex; gap: 10px; margin-bottom: 8px; font-size: 13px; color: var(--text2); line-height: 1.5; }
+.step-ol li::before { content: counter(s); background: var(--bg2); border-radius: 50%; width: 22px; height: 22px; min-width: 22px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; color: var(--text); font-family: var(--mono); margin-top: 1px; }
+.target-strip { display: flex; gap: 12px; background: var(--bg2); border-radius: var(--radius-sm); padding: 8px 12px; margin-bottom: 16px; font-size: 11px; color: var(--text2); flex-wrap: wrap; font-family: var(--mono); }
+.dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; margin-right: 5px; vertical-align: middle; }
+.dg { background: var(--green); } .db { background: var(--blue); } .dr { background: var(--red); }
+.toast { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: var(--text); color: white; padding: 10px 18px; border-radius: var(--radius); font-size: 13px; opacity: 0; pointer-events: none; transition: opacity 0.3s; z-index: 999; max-width: 90%; text-align: center; font-family: var(--sans); }
+.toast.show { opacity: 1; }
+.sample-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.sample-item { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px; }
+.sample-num { font-size: 10px; font-family: var(--mono); color: var(--text3); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
+.s-input { font-size: 14px; font-family: var(--mono); background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 6px 8px; color: var(--text); outline: none; width: 100%; text-align: center; margin-top: 4px; }
+.s-input:focus { border-color: var(--green); }
+.s-lbl { font-size: 10px; color: var(--text3); font-family: var(--mono); font-weight: 500; }
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="topbar">
+    <div class="topbar-brand">
+      <div class="leaf"><svg viewBox="0 0 24 24"><path d="M12 2C6 2 2 8 2 14c0 4 2.5 7 6 8.5C9 20 10 17 10 14c0-2 1-4 2-5 1 1 2 3 2 5 0 3-1 6-2 8.5C16 21 18.5 18 18.5 14 18.5 8 15 2 12 2z"/></svg></div>
+      <div><h1>Golden Peak</h1><p>Field Log System</p></div>
+    </div>
+    <div class="sync-pill" id="global-sync">Not configured</div>
+  </div>
+
+  <div class="content">
+
+    <!-- EC LOG -->
+    <div class="page active" id="page-ec">
+      <div class="target-strip">
+        <div><span class="dot dg"></span>EC 2.2-2.3</div>
+        <div><span class="dot dg"></span>pH 6.2-6.3</div>
+        <div><span class="dot db"></span>Low</div>
+        <div><span class="dot dr"></span>High</div>
+      </div>
+      <div class="section">
+        <div class="section-label">Batch info</div>
+        <div class="card">
+          <div class="g2" style="margin-bottom:10px;">
+            <div class="field"><label>Room</label>
+              <select id="ec-room">
+                <option>Flower 1 (240 plants)</option><option>Flower 2 (240 plants)</option>
+                <option>Flower 3 (234 plants)</option><option>Flower 4 (240 plants)</option>
+                <option>Flower 5 - R&D</option><option>Veg Room</option>
+              </select>
+            </div>
+            <div class="field"><label>Batch ID</label><input type="text" id="ec-batch" placeholder="B-2026-042" /></div>
+            <div class="field"><label>Grower</label>
+              <select id="ec-grower">
+                <option value="">select grower</option>
+                <option>Jordan Elliott</option><option>Brandon Cail</option>
+              </select>
+            </div>
+            <div class="field"><label>Entry date</label><input type="date" id="ec-date" oninput="ecBadge()" /></div>
+            <div class="field"><label>Veg start date</label><input type="date" id="ec-veg" oninput="ecBadge()" /></div>
+            <div class="field"><label>Flower start date</label><input type="date" id="ec-flower" oninput="ecBadge()" /></div>
+          </div>
+          <div class="day-badge" id="ec-badge"><span style="font-size:12px;color:var(--text3);">Enter veg start date to calculate</span></div>
+        </div>
+      </div>
+      <div class="section">
+        <div class="section-label">Drip emitter (3 pens)</div>
+        <div class="card">
+          <div class="pen-col-headers"><div class="pen-col-h"></div><div class="pen-col-h">EC mS/cm</div><div class="pen-col-h">pH</div></div>
+          <div class="pen-row"><div class="pen-lbl">Pen 1</div><input class="pen-input ec-drip-ec" type="number" step="0.01" placeholder="0.00" oninput="ecAvgs()" /><input class="pen-input ec-drip-ph" type="number" step="0.01" placeholder="0.00" oninput="ecAvgs()" /></div>
+          <div class="pen-row"><div class="pen-lbl">Pen 2</div><input class="pen-input ec-drip-ec" type="number" step="0.01" placeholder="0.00" oninput="ecAvgs()" /><input class="pen-input ec-drip-ph" type="number" step="0.01" placeholder="0.00" oninput="ecAvgs()" /></div>
+          <div class="pen-row"><div class="pen-lbl">Pen 3</div><input class="pen-input ec-drip-ec" type="number" step="0.01" placeholder="0.00" oninput="ecAvgs()" /><input class="pen-input ec-drip-ph" type="number" step="0.01" placeholder="0.00" oninput="ecAvgs()" /></div>
+          <div class="avg-row"><div class="avg-lbl">Avg</div><div class="avg-val" id="ec-avg-ec">-</div><div class="avg-val" id="ec-avg-ph">-</div></div>
+          <div class="range-hint">Target EC 2.2-2.3 | pH 6.2-6.3</div>
+        </div>
+      </div>
+      <div class="section">
+        <div class="section-label">Watering</div>
+        <div class="card">
+          <div class="field" style="margin-bottom:12px;"><label>Watering type</label>
+            <select id="ec-wtype">
+              <option value="">select type</option>
+              <option>Hydration</option><option>Pre-charge</option><option>Water In</option>
+              <option>Full Saturation</option><option>Feed</option><option>Flush</option><option>RO Water</option>
+            </select>
+          </div>
+          <div class="section-label">ml/plant per event</div>
+          <div id="ec-events-container"></div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;padding-top:8px;border-top:1px solid var(--bg2);">
+            <div style="font-size:11px;font-weight:600;color:var(--text2);font-family:var(--mono);">Total ml/plant</div>
+            <div style="font-size:18px;font-weight:600;font-family:var(--mono);" id="ec-total-ml">-</div>
+          </div>
+          <div class="field" style="margin-top:12px;"><label>Flow meter reading (L)</label><input type="number" id="ec-flow" step="0.01" placeholder="0.00" /></div>
+        </div>
+      </div>
+      <div class="section">
+        <div class="section-label">Notes</div>
+        <textarea id="ec-notes" rows="2" style="width:100%;font-size:14px;font-family:var(--sans);border-radius:var(--radius-sm);border:1px solid var(--border);padding:10px;background:var(--card);color:var(--text);outline:none;" placeholder="Observations, corrective actions..."></textarea>
+      </div>
+      <button class="btn-primary" id="ec-btn" onclick="ecSave()">Save EC Entry</button>
+    </div>
+
+    <!-- RUNOFF -->
+    <div class="page" id="page-ro">
+      <div class="target-strip">
+        <div><span class="dot dg"></span>Runoff EC: input +0.3-0.5</div>
+        <div><span class="dot dg"></span>pH 6.0-6.5</div>
+        <div><span class="dot dr"></span>Alert if variance &gt;1.0</div>
+      </div>
+      <div class="section">
+        <div class="section-label">Batch info</div>
+        <div class="card">
+          <div class="g2" style="margin-bottom:10px;">
+            <div class="field"><label>Room</label>
+              <select id="ro-room">
+                <option>Flower 1 (240 plants)</option><option>Flower 2 (240 plants)</option>
+                <option>Flower 3 (234 plants)</option><option>Flower 4 (240 plants)</option>
+                <option>Flower 5 - R&D</option><option>Veg Room</option>
+              </select>
+            </div>
+            <div class="field"><label>Batch ID</label><input type="text" id="ro-batch" placeholder="B-2026-042" /></div>
+            <div class="field"><label>Grower</label>
+              <select id="ro-grower">
+                <option value="">select grower</option>
+                <option>Jordan Elliott</option><option>Brandon Cail</option>
+              </select>
+            </div>
+            <div class="field"><label>Test date</label><input type="date" id="ro-date" oninput="roBadge()" /></div>
+            <div class="field"><label>Veg start date</label><input type="date" id="ro-veg" oninput="roBadge()" /></div>
+            <div class="field"><label>Flower start date</label><input type="date" id="ro-flower" oninput="roBadge()" /></div>
+          </div>
+          <div class="day-badge" id="ro-badge"><span style="font-size:12px;color:var(--text3);">Enter veg start date to calculate</span></div>
+        </div>
+      </div>
+      <div class="section">
+        <div class="section-label">Input EC (today's drip emitter average)</div>
+        <div class="card">
+          <div class="field"><label>Input EC (mS/cm)</label><input type="number" id="ro-input-ec" step="0.01" placeholder="2.20" oninput="roCalc()" /></div>
+        </div>
+      </div>
+      <div class="section">
+        <div class="section-label">8 plant samples - averaged EC and pH</div>
+        <div class="card"><div class="sample-grid" id="ro-samples"></div></div>
+      </div>
+      <div class="section">
+        <div class="section-label">Overall runoff</div>
+        <div class="card">
+          <div class="summary-grid">
+            <div class="summary-item"><div class="summary-lbl">Avg Runoff EC</div><div class="summary-val" id="ro-avg-ec">-</div></div>
+            <div class="summary-item"><div class="summary-lbl">Avg Runoff pH</div><div class="summary-val" id="ro-avg-ph">-</div></div>
+            <div class="summary-item"><div class="summary-lbl">EC Variance</div><div class="summary-val" id="ro-variance">-</div></div>
+            <div class="summary-item"><div class="summary-lbl">Samples done</div><div class="summary-val" id="ro-count">0/8</div></div>
+          </div>
+          <div class="alert-box alert-warn" id="ro-warn">EC variance &gt;1.0 - Notify Head Grower. Flush may be required.</div>
+          <div class="alert-box alert-ok" id="ro-ok">EC and pH within acceptable range.</div>
+        </div>
+      </div>
+      <div class="section">
+        <div class="section-label">Notes</div>
+        <textarea id="ro-notes" rows="2" style="width:100%;font-size:14px;font-family:var(--sans);border-radius:var(--radius-sm);border:1px solid var(--border);padding:10px;background:var(--card);color:var(--text);outline:none;" placeholder="Salt accumulation, flush decisions, corrective actions..."></textarea>
+      </div>
+      <button class="btn-primary" id="ro-btn" onclick="roSave()">Save Runoff Entry</button>
+    </div>
+
+    <!-- REPORT -->
+    <div class="page" id="page-report">
+      <div class="rep-tabs">
+        <button class="rep-tab active" onclick="switchRepTab('ec',this)">EC Log</button>
+        <button class="rep-tab" onclick="switchRepTab('ro',this)">Runoff Log</button>
+      </div>
+      <div id="rep-ec-view">
+        <div class="filters">
+          <select id="f-ec-room" onchange="renderEC()"><option value="">All rooms</option><option>Flower 1 (240 plants)</option><option>Flower 2 (240 plants)</option><option>Flower 3 (234 plants)</option><option>Flower 4 (240 plants)</option><option>Flower 5 - R&D</option><option>Veg Room</option></select>
+          <select id="f-ec-grower" onchange="renderEC()"><option value="">All growers</option><option>Jordan Elliott</option><option>Brandon Cail</option></select>
+          <input type="date" id="f-ec-from" onchange="renderEC()" />
+          <input type="date" id="f-ec-to" onchange="renderEC()" />
+          <button class="btn-secondary" onclick="exportEC()">CSV</button>
+        </div>
+        <div class="stat-cards" id="ec-stat-cards"></div>
+        <div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Room</th><th>Stage</th><th>Grower</th><th>Batch</th><th>Type</th><th>Drip EC</th><th>Drip pH</th><th>Total ml</th><th>Flow L</th><th>Notes</th></tr></thead><tbody id="ec-tbl-body"></tbody></table></div>
+      </div>
+      <div id="rep-ro-view" style="display:none;">
+        <div class="filters">
+          <select id="f-ro-room" onchange="renderRO()"><option value="">All rooms</option><option>Flower 1 (240 plants)</option><option>Flower 2 (240 plants)</option><option>Flower 3 (234 plants)</option><option>Flower 4 (240 plants)</option><option>Flower 5 - R&D</option><option>Veg Room</option></select>
+          <select id="f-ro-grower" onchange="renderRO()"><option value="">All growers</option><option>Jordan Elliott</option><option>Brandon Cail</option></select>
+          <input type="date" id="f-ro-from" onchange="renderRO()" />
+          <input type="date" id="f-ro-to" onchange="renderRO()" />
+          <button class="btn-secondary" onclick="exportRO()">CSV</button>
+        </div>
+        <div class="stat-cards" id="ro-stat-cards"></div>
+        <div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Room</th><th>Stage</th><th>Grower</th><th>Batch</th><th>Input EC</th><th>Avg EC</th><th>Variance</th><th>Avg pH</th><th>Notes</th></tr></thead><tbody id="ro-tbl-body"></tbody></table></div>
+      </div>
+    </div>
+
+    <!-- SETTINGS -->
+    <div class="page" id="page-settings">
+      <div class="settings-card">
+        <h3>Airtable connection</h3>
+        <div class="sfield"><label>Personal Access Token</label><input type="password" id="s-token" placeholder="patXXXXXXXXXXXXXX" /></div>
+        <div class="sfield"><label>Base ID</label><input type="text" id="s-base" placeholder="appXXXXXXXXXXXXXX" /></div>
+        <div class="sfield"><label>EC Log Table ID</label><input type="text" id="s-ec" placeholder="tblXXXXXXXXXXXXXX" /></div>
+        <div class="sfield"><label>Runoff Log Table ID</label><input type="text" id="s-ro" placeholder="tblXXXXXXXXXXXXXX" /></div>
+        <button class="btn-save" onclick="saveSettings()">Save and Test Connection</button>
+        <div class="conn-status" id="conn-status"></div>
+      </div>
+      <div class="settings-card">
+        <h3>How to get your credentials</h3>
+        <ol class="step-ol">
+          <li>Go to airtable.com/create/tokens while logged in</li>
+          <li>Click Create token and name it Golden Peak App</li>
+          <li>Add scopes: data.records:read and data.records:write</li>
+          <li>Under Access select your Golden Peak Cannabis Inc. base</li>
+          <li>Click Create token and paste it above</li>
+          <li>For Base ID and Table IDs open your base in Airtable and copy the app and tbl values from the browser URL</li>
+        </ol>
+      </div>
+      <div class="settings-card">
+        <h3>Grower access</h3>
+        <p style="font-size:13px;color:var(--text2);line-height:1.6;">Share this page URL with Jordan and Brandon. On mobile tap Share then Add to Home Screen to install it like a native app. On desktop bookmark it. All entries sync directly to Airtable in real time.</p>
+      </div>
+    </div>
+
+  </div>
+
+  <nav class="bottom-nav">
+    <button class="bnav-btn active" id="bn-ec" onclick="switchPage('ec',this)">
+      <svg viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+      EC Log
+    </button>
+    <button class="bnav-btn" id="bn-ro" onclick="switchPage('ro',this)">
+      <svg viewBox="0 0 24 24"><path d="M12 2.69l5.66 5.66a8 8 0 11-11.31 0z"/></svg>
+      Runoff
+    </button>
+    <button class="bnav-btn" id="bn-report" onclick="switchPage('report',this)">
+      <svg viewBox="0 0 24 24"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+      Report
+    </button>
+    <button class="bnav-btn" id="bn-settings" onclick="switchPage('settings',this)">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+      Settings
+    </button>
+  </nav>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const EC_LO=2.2,EC_HI=2.3,PH_EC_LO=6.2,PH_EC_HI=6.3;
+const RO_PH_LO=6.0,RO_PH_HI=6.5,RO_VAR_LO=0.3,RO_VAR_HI=0.5,RO_VAR_ALERT=1.0;
+let ecRecs=[],roRecs=[],cfg={token:'',base:'',ecTbl:'',roTbl:''};
+
+function lsGet(k){try{return JSON.parse(localStorage.getItem(k)||'null');}catch(e){return null;}}
+function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
+function loadAll(){ecRecs=lsGet('gp-ec')||[];roRecs=lsGet('gp-ro')||[];const s=lsGet('gp-cfg');if(s){cfg=s;applySettings();}}
+function atReady(){return cfg.token&&cfg.base&&cfg.ecTbl&&cfg.roTbl;}
+async function atPost(tbl,fields){const r=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+tbl,{method:'POST',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify({fields})});if(!r.ok)throw new Error(r.status);return r.json();}
+function setSyncPill(state,msg){const el=document.getElementById('global-sync');el.className='sync-pill'+(state==='ok'?' ok':state==='err'?' err':state==='ing'?' ing':'');el.textContent=msg;}
+function avg(arr){const v=arr.filter(x=>x!==null&&!isNaN(x)&&x>0);return v.length?Math.round(v.reduce((a,b)=>a+b,0)/v.length*100)/100:null;}
+function pens(sel){return Array.from(document.querySelectorAll(sel)).map(i=>parseFloat(i.value)||null);}
+function daysBetween(s,e){if(!s||!e)return null;const a=new Date(s),b=new Date(e);return isNaN(a)||isNaN(b)?null:Math.floor((b-a)/864e5)+1;}
+function calcStage(vs,fs,d){if(fs&&d>=fs){const fd=daysBetween(fs,d);return{stage:'flower',day:fd>0?fd:null};}if(vs){const vd=daysBetween(vs,d);return{stage:'veg',day:vd>0?vd:null};}return{stage:null,day:null};}
+function colorEC(v){if(v===null)return'<span style="color:var(--text3)">-</span>';const s=v.toFixed(2);return v<EC_LO?'<span class="lo">'+s+'</span>':v>EC_HI?'<span class="hi">'+s+'</span>':'<span class="ok">'+s+'</span>';}
+function colorPHec(v){if(v===null)return'<span style="color:var(--text3)">-</span>';const s=v.toFixed(2);return v<PH_EC_LO?'<span class="lo">'+s+'</span>':v>PH_EC_HI?'<span class="hi">'+s+'</span>':'<span class="ok">'+s+'</span>';}
+function colorPHro(v){if(v===null)return'<span style="color:var(--text3)">-</span>';const s=v.toFixed(2);return v<RO_PH_LO?'<span class="lo">'+s+'</span>':v>RO_PH_HI?'<span class="hi">'+s+'</span>':'<span class="ok">'+s+'</span>';}
+function setAvg(id,val,lo,hi){const el=document.getElementById(id);if(val===null){el.textContent='-';el.className='avg-val';return;}el.textContent=val.toFixed(2);el.className='avg-val'+(val<lo?' lo':val>hi?' hi':' ok');}
+function stageLabel(r){if(!r.stage||!r.day)return'<span style="color:var(--text3)">-</span>';return r.stage==='flower'?'<span class="flower-txt">F'+r.day+'</span>':'<span class="veg-txt">V'+r.day+'</span>';}
+function toast(msg,dur){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),dur||2500);}
+
+function switchPage(page,btn){document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.bnav-btn').forEach(b=>b.classList.remove('active'));document.getElementById('page-'+page).classList.add('active');btn.classList.add('active');if(page==='report'){renderEC();renderRO();}}
+function switchRepTab(tab,btn){document.getElementById('rep-ec-view').style.display=tab==='ec'?'':'none';document.getElementById('rep-ro-view').style.display=tab==='ro'?'':'none';document.querySelectorAll('.rep-tab').forEach(b=>b.classList.remove('active'));btn.classList.add('active');}
+
+function buildECEvents(){const c=document.getElementById('ec-events-container');c.innerHTML='';for(let i=1;i<=8;i++){c.innerHTML+='<div class="event-row"><div class="event-lbl">Event '+i+'</div><input type="number" id="ec-evt-'+i+'" step="1" min="0" placeholder="-" style="font-size:14px;font-family:var(--mono);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;color:var(--text);outline:none;text-align:center;" oninput="ecTotalML()" /></div>';}}
+function ecTotalML(){let t=0,any=false;for(let i=1;i<=8;i++){const v=parseFloat(document.getElementById('ec-evt-'+i).value);if(!isNaN(v)&&v>0){t+=v;any=true;}}document.getElementById('ec-total-ml').textContent=any?t.toFixed(0)+'ml':'-';}
+function ecBadge(){const d=document.getElementById('ec-date').value,vs=document.getElementById('ec-veg').value,fs=document.getElementById('ec-flower').value,b=document.getElementById('ec-badge');if(!d||!vs){b.innerHTML='<span style="font-size:12px;color:var(--text3);">Enter veg start date to calculate</span>';return;}const{stage,day}=calcStage(vs,fs,d);if(stage&&day)b.innerHTML='<span class="day-pill '+stage+'">'+(stage==='flower'?'Flower Day':'Veg Day')+' '+day+'</span>';else b.innerHTML='<span style="font-size:12px;color:var(--text3);">Check your dates</span>';}
+function ecAvgs(){setAvg('ec-avg-ec',avg(pens('.ec-drip-ec').filter(v=>v)),EC_LO,EC_HI);setAvg('ec-avg-ph',avg(pens('.ec-drip-ph').filter(v=>v)),PH_EC_LO,PH_EC_HI);}
+
+async function ecSave(){
+  const grower=document.getElementById('ec-grower').value,date=document.getElementById('ec-date').value,vs=document.getElementById('ec-veg').value;
+  if(!grower){toast('Please select a grower.');return;}if(!date){toast('Please set a date.');return;}if(!vs){toast('Please enter veg start date.');return;}
+  const dripEcPens=pens('.ec-drip-ec'),dripPhPens=pens('.ec-drip-ph');
+  const dripEc=avg(dripEcPens.filter(v=>v)),dripPh=avg(dripPhPens.filter(v=>v));
+  if(dripEc===null&&dripPh===null){toast('Enter at least one reading.');return;}
+  const fs=document.getElementById('ec-flower').value,{stage,day}=calcStage(vs,fs,date);
+  const evts=[];let totalML=0;for(let i=1;i<=8;i++){const v=parseFloat(document.getElementById('ec-evt-'+i).value)||null;evts.push(v);if(v)totalML+=v;}
+  const rec={id:Date.now(),date,room:document.getElementById('ec-room').value,grower,batch:document.getElementById('ec-batch').value.trim(),vegStart:vs,flowerStart:fs,stage,day,dripEcPens,dripPhPens,dripEc,dripPh,wtype:document.getElementById('ec-wtype').value,events:evts,totalML:totalML||null,flow:parseFloat(document.getElementById('ec-flow').value)||null,notes:document.getElementById('ec-notes').value.trim(),synced:false};
+  ecRecs.unshift(rec);lsSet('gp-ec',ecRecs);
+  if(atReady()){
+    setSyncPill('ing','Syncing...');document.getElementById('ec-btn').disabled=true;
+    try{
+      const f={'Date':rec.date,'Room':rec.room,'Grower':rec.grower,'Batch ID':rec.batch,'Veg Start Date':rec.vegStart,'Flower Start Date':rec.flowerStart||undefined,'Watering Type':rec.wtype||undefined,'Drip EC Pen 1':rec.dripEcPens[0]||undefined,'Drip EC Pen 2':rec.dripEcPens[1]||undefined,'Drip EC Pen 3':rec.dripEcPens[2]||undefined,'Drip pH Pen 1':rec.dripPhPens[0]||undefined,'Drip pH Pen 2':rec.dripPhPens[1]||undefined,'Drip pH Pen 3':rec.dripPhPens[2]||undefined,'Event 1 ml/plant':rec.events[0]||undefined,'Event 2 ml/plant':rec.events[1]||undefined,'Event 3 ml/plant':rec.events[2]||undefined,'Event 4 ml/plant':rec.events[3]||undefined,'Event 5 ml/plant':rec.events[4]||undefined,'Event 6 ml/plant':rec.events[5]||undefined,'Event 7 ml/plant':rec.events[6]||undefined,'Event 8 ml/plant':rec.events[7]||undefined,'Flow Meter Reading':rec.flow||undefined,'Notes':rec.notes||undefined};
+      Object.keys(f).forEach(k=>{if(f[k]===undefined)delete f[k];});
+      await atPost(cfg.ecTbl,f);rec.synced=true;lsSet('gp-ec',ecRecs);setSyncPill('ok','Synced');toast('Saved and synced to Airtable');
+    }catch(e){setSyncPill('err','Sync failed');toast('Saved locally - Airtable sync failed.',3500);}
+    document.getElementById('ec-btn').disabled=false;
+  }else{toast('Entry saved locally');}
+  ecClear();
+}
+function ecClear(){document.querySelectorAll('.ec-drip-ec,.ec-drip-ph').forEach(i=>i.value='');for(let i=1;i<=8;i++)document.getElementById('ec-evt-'+i).value='';['ec-batch','ec-notes','ec-flow'].forEach(id=>document.getElementById(id).value='');document.getElementById('ec-wtype').value='';document.getElementById('ec-total-ml').textContent='-';['ec-avg-ec','ec-avg-ph'].forEach(id=>{document.getElementById(id).textContent='-';document.getElementById(id).className='avg-val';});}
+
+function buildROSamples(){const c=document.getElementById('ro-samples');c.innerHTML='';for(let i=1;i<=8;i++){c.innerHTML+='<div class="sample-item"><div class="sample-num">Sample '+i+'</div><div class="s-lbl">EC (mS/cm)</div><input type="number" class="ro-s-ec s-input" id="ro-ec-'+i+'" step="0.01" placeholder="0.00" oninput="roCalc()" /><div class="s-lbl" style="margin-top:6px;">pH</div><input type="number" class="ro-s-ph s-input" id="ro-ph-'+i+'" step="0.01" placeholder="0.00" oninput="roCalc()" /></div>';}}
+function roBadge(){const d=document.getElementById('ro-date').value,vs=document.getElementById('ro-veg').value,fs=document.getElementById('ro-flower').value,b=document.getElementById('ro-badge');if(!d||!vs){b.innerHTML='<span style="font-size:12px;color:var(--text3);">Enter veg start date to calculate</span>';return;}const{stage,day}=calcStage(vs,fs,d);if(stage&&day)b.innerHTML='<span class="day-pill '+stage+'">'+(stage==='flower'?'Flower Day':'Veg Day')+' '+day+'</span>';else b.innerHTML='<span style="font-size:12px;color:var(--text3);">Check your dates</span>';}
+function roCalc(){const ecV=[],phV=[];for(let i=1;i<=8;i++){const ec=parseFloat(document.getElementById('ro-ec-'+i).value),ph=parseFloat(document.getElementById('ro-ph-'+i).value);if(!isNaN(ec)&&ec>0)ecV.push(ec);if(!isNaN(ph)&&ph>0)phV.push(ph);}const avgEC=avg(ecV),avgPH=avg(phV);document.getElementById('ro-avg-ec').textContent=avgEC!==null?avgEC.toFixed(2):'-';document.getElementById('ro-avg-ph').textContent=avgPH!==null?avgPH.toFixed(2):'-';document.getElementById('ro-count').textContent=ecV.length+'/8';const inputEC=parseFloat(document.getElementById('ro-input-ec').value);const warn=document.getElementById('ro-warn'),ok=document.getElementById('ro-ok');warn.style.display='none';ok.style.display='none';if(avgEC!==null&&!isNaN(inputEC)){const v=Math.round((avgEC-inputEC)*100)/100;document.getElementById('ro-variance').textContent=(v>=0?'+':'')+v.toFixed(2);if(v>RO_VAR_ALERT)warn.style.display='block';else if(v>=RO_VAR_LO&&v<=RO_VAR_HI&&(avgPH===null||(avgPH>=RO_PH_LO&&avgPH<=RO_PH_HI)))ok.style.display='block';}else document.getElementById('ro-variance').textContent='-';}
+
+async function roSave(){
+  const grower=document.getElementById('ro-grower').value,date=document.getElementById('ro-date').value,vs=document.getElementById('ro-veg').value;
+  if(!grower){toast('Please select a grower.');return;}if(!date){toast('Please set a date.');return;}if(!vs){toast('Please enter veg start date.');return;}
+  const fs=document.getElementById('ro-flower').value,inputEC=parseFloat(document.getElementById('ro-input-ec').value)||null;
+  const samples=[];let hasData=false;for(let i=1;i<=8;i++){const ec=parseFloat(document.getElementById('ro-ec-'+i).value)||null,ph=parseFloat(document.getElementById('ro-ph-'+i).value)||null;if(ec||ph)hasData=true;samples.push({ec,ph});}
+  if(!hasData){toast('Enter at least one sample reading.');return;}
+  const ecV=samples.map(s=>s.ec).filter(v=>v),phV=samples.map(s=>s.ph).filter(v=>v);
+  const avgEC=avg(ecV),avgPH=avg(phV),variance=avgEC!==null&&inputEC!==null?Math.round((avgEC-inputEC)*100)/100:null;
+  const{stage,day}=calcStage(vs,fs,date);
+  const rec={id:Date.now(),date,room:document.getElementById('ro-room').value,grower,batch:document.getElementById('ro-batch').value.trim(),vegStart:vs,flowerStart:fs,stage,day,inputEC,samples,avgEC,avgPH,variance,ecAlert:variance!==null&&variance>RO_VAR_ALERT,notes:document.getElementById('ro-notes').value.trim(),synced:false};
+  roRecs.unshift(rec);lsSet('gp-ro',roRecs);
+  if(atReady()){
+    setSyncPill('ing','Syncing...');document.getElementById('ro-btn').disabled=true;
+    try{
+      const f={'Date':rec.date,'Room':rec.room,'Grower':rec.grower,'Batch ID':rec.batch,'Veg Start Date':rec.vegStart,'Flower Start Date':rec.flowerStart||undefined,'Input EC':rec.inputEC||undefined,'Notes':rec.notes||undefined};
+      rec.samples.forEach((s,i)=>{if(s.ec)f['S'+(i+1)+' EC']=s.ec;if(s.ph)f['S'+(i+1)+' pH']=s.ph;});
+      Object.keys(f).forEach(k=>{if(f[k]===undefined)delete f[k];});
+      await atPost(cfg.roTbl,f);rec.synced=true;lsSet('gp-ro',roRecs);setSyncPill('ok','Synced');toast('Saved and synced to Airtable');
+    }catch(e){setSyncPill('err','Sync failed');toast('Saved locally - Airtable sync failed.',3500);}
+    document.getElementById('ro-btn').disabled=false;
+  }else{toast('Entry saved locally');}
+  roClear();
+}
+function roClear(){for(let i=1;i<=8;i++){document.getElementById('ro-ec-'+i).value='';document.getElementById('ro-ph-'+i).value='';}['ro-batch','ro-notes','ro-input-ec'].forEach(id=>document.getElementById(id).value='');['ro-avg-ec','ro-avg-ph','ro-variance'].forEach(id=>document.getElementById(id).textContent='-');document.getElementById('ro-count').textContent='0/8';document.getElementById('ro-warn').style.display='none';document.getElementById('ro-ok').style.display='none';}
+
+function filterRecs(recs,roomId,growerId,fromId,toId){const room=document.getElementById(roomId).value,grower=document.getElementById(growerId).value,from=document.getElementById(fromId).value,to=document.getElementById(toId).value;return recs.filter(r=>{if(room&&r.room!==room)return false;if(grower&&r.grower!==grower)return false;if(from&&r.date<from)return false;if(to&&r.date>to)return false;return true;});}
+function statCards(cards,id){document.getElementById(id).innerHTML=cards.map(c=>'<div class="stat-card"><div class="stat-lbl">'+c.l+'</div><div class="stat-val" style="'+(c.s||'')+'">'+c.v+'</div></div>').join('');}
+
+function renderEC(){const data=filterRecs(ecRecs,'f-ec-room','f-ec-grower','f-ec-from','f-ec-to'),body=document.getElementById('ec-tbl-body');if(!data.length){body.innerHTML='<tr><td colspan="11"><div class="empty">No entries yet.</div></td></tr>';statCards([],'ec-stat-cards');return;}const ecV=data.map(r=>r.dripEc).filter(v=>v!==null),flags=data.filter(r=>(r.dripEc!==null&&(r.dripEc<EC_LO||r.dripEc>EC_HI))||(r.dripPh!==null&&(r.dripPh<PH_EC_LO||r.dripPh>PH_EC_HI))).length;statCards([{l:'Entries',v:data.length},{l:'Avg Drip EC',v:ecV.length?(ecV.reduce((a,b)=>a+b,0)/ecV.length).toFixed(2):'-'},{l:'Flags',v:flags,s:flags>0?'color:var(--red)':''}],'ec-stat-cards');body.innerHTML=data.map(r=>'<tr><td style="font-family:var(--mono);">'+r.date+'</td><td>'+r.room+'</td><td>'+stageLabel(r)+'</td><td><span class="tag">'+(r.grower||'-')+'</span></td><td style="color:var(--text3);font-family:var(--mono);">'+(r.batch||'-')+'</td><td style="font-size:11px;color:var(--text2);">'+(r.wtype||'-')+'</td><td>'+colorEC(r.dripEc)+'</td><td>'+colorPHec(r.dripPh)+'</td><td style="font-family:var(--mono);">'+(r.totalML?r.totalML+'ml':'-')+'</td><td style="font-family:var(--mono);">'+(r.flow?r.flow+'L':'-')+'</td><td style="max-width:120px;white-space:normal;font-size:11px;color:var(--text3);">'+(r.notes||'')+'</td></tr>').join('');}
+
+function renderRO(){const data=filterRecs(roRecs,'f-ro-room','f-ro-grower','f-ro-from','f-ro-to'),body=document.getElementById('ro-tbl-body');if(!data.length){body.innerHTML='<tr><td colspan="10"><div class="empty">No runoff entries yet.</div></td></tr>';statCards([],'ro-stat-cards');return;}const ecV=data.map(r=>r.avgEC).filter(v=>v!==null),alerts=data.filter(r=>r.ecAlert).length;statCards([{l:'Entries',v:data.length},{l:'Avg EC',v:ecV.length?(ecV.reduce((a,b)=>a+b,0)/ecV.length).toFixed(2):'-'},{l:'Alerts',v:alerts,s:alerts>0?'color:var(--red)':''}],'ro-stat-cards');body.innerHTML=data.map(r=>{const vs=r.variance!==null?(r.variance>=0?'+':'')+r.variance.toFixed(2):'-',vc=r.variance!==null&&r.variance>RO_VAR_ALERT?'hi':r.variance>=RO_VAR_LO&&r.variance<=RO_VAR_HI?'ok':'';return'<tr><td style="font-family:var(--mono);">'+r.date+'</td><td>'+r.room+'</td><td>'+stageLabel(r)+'</td><td><span class="tag">'+(r.grower||'-')+'</span></td><td style="color:var(--text3);font-family:var(--mono);">'+(r.batch||'-')+'</td><td style="font-family:var(--mono);">'+(r.inputEC!==null?r.inputEC.toFixed(2):'-')+'</td><td style="font-family:var(--mono);">'+(r.avgEC!==null?r.avgEC.toFixed(2):'-')+'</td><td><span class="'+vc+'" style="font-family:var(--mono);">'+vs+'</span></td><td>'+colorPHro(r.avgPH)+'</td><td style="max-width:120px;white-space:normal;font-size:11px;color:var(--text3);">'+(r.notes||'')+'</td></tr>';}).join('');}
+
+function dlCSV(rows,name){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([rows.map(r=>r.join(',')).join('\n')],{type:'text/csv'}));a.download=name;a.click();}
+function exportEC(){const data=filterRecs(ecRecs,'f-ec-room','f-ec-grower','f-ec-from','f-ec-to');if(!data.length){toast('No data to export.');return;}dlCSV([['Date','Room','Stage','Day','Grower','Batch','Watering Type','Drip EC Avg','Drip pH Avg','Total ml/plant','Flow Meter L','Notes'],...data.map(r=>[r.date,r.room,r.stage||'',r.day||'',r.grower,r.batch,r.wtype||'',r.dripEc||'',r.dripPh||'',r.totalML||'',r.flow||'','"'+(r.notes||'').replace(/"/g,'""')+'"'])],'EC_Log_GoldenPeak.csv');}
+function exportRO(){const data=filterRecs(roRecs,'f-ro-room','f-ro-grower','f-ro-from','f-ro-to');if(!data.length){toast('No data to export.');return;}dlCSV([['Date','Room','Stage','Day','Grower','Batch','Input EC','Avg Runoff EC','EC Variance','Avg Runoff pH','Notes'],...data.map(r=>[r.date,r.room,r.stage||'',r.day||'',r.grower,r.batch,r.inputEC||'',r.avgEC||'',r.variance||'',r.avgPH||'','"'+(r.notes||'').replace(/"/g,'""')+'"'])],'Runoff_Log_GoldenPeak.csv');}
+
+function applySettings(){document.getElementById('s-token').value=cfg.token||'';document.getElementById('s-base').value=cfg.base||'';document.getElementById('s-ec').value=cfg.ecTbl||'';document.getElementById('s-ro').value=cfg.roTbl||'';setSyncPill(atReady()?'ok':'off',atReady()?'Airtable connected':'Not configured');}
+async function saveSettings(){cfg={token:document.getElementById('s-token').value.trim(),base:document.getElementById('s-base').value.trim(),ecTbl:document.getElementById('s-ec').value.trim(),roTbl:document.getElementById('s-ro').value.trim()};const st=document.getElementById('conn-status');st.style.display='block';st.style.background='var(--bg2)';st.style.color='var(--text2)';st.textContent='Testing connection...';if(!atReady()){st.textContent='Please fill in all fields.';st.style.background='var(--amber-pale)';st.style.color='var(--amber)';return;}try{const r=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+cfg.ecTbl+'?maxRecords=1',{headers:{'Authorization':'Bearer '+cfg.token}});if(r.ok){lsSet('gp-cfg',cfg);applySettings();st.textContent='Connected! Credentials saved.';st.style.background='var(--green-pale)';st.style.color='var(--green)';}else{st.textContent='Failed ('+r.status+'). Check your credentials.';st.style.background='var(--red-pale)';st.style.color='var(--red)';}}catch(e){st.textContent='Could not reach Airtable. Check internet connection.';st.style.background='var(--red-pale)';st.style.color='var(--red)';}}
+
+const today=new Date().toISOString().split('T')[0];
+document.getElementById('ec-date').value=today;
+document.getElementById('ro-date').value=today;
+buildECEvents();buildROSamples();loadAll();
+</script>
+</body>
+</html>
