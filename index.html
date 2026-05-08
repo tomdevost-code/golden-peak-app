@@ -356,11 +356,11 @@ tr:last-child td { border-bottom: none; }
 <script>
 const EC_LO=2.2,EC_HI=2.3,PH_EC_LO=6.2,PH_EC_HI=6.3;
 const RO_PH_LO=6.0,RO_PH_HI=6.5,RO_VAR_LO=0.3,RO_VAR_HI=0.5,RO_VAR_ALERT=1.0;
-let ecRecs=[],roRecs=[],cfg={token:'',base:'',ecTbl:'',roTbl:''};
+let ecRecs=[],roRecs=[],cfg={token:'',base:'',ecTbl:'',roTbl:''},batchRooms={};
 
 function lsGet(k){try{return JSON.parse(localStorage.getItem(k)||'null');}catch(e){return null;}}
 function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
-function loadAll(){ecRecs=lsGet('gp-ec')||[];roRecs=lsGet('gp-ro')||[];const s=lsGet('gp-cfg');if(s){cfg=s;applySettings();}}
+function loadAll(){ecRecs=lsGet('gp-ec')||[];roRecs=lsGet('gp-ro')||[];batchRooms=lsGet('gp-batch-rooms')||{};const s=lsGet('gp-cfg');if(s){cfg=s;applySettings();}}
 function atReady(){return cfg.token&&cfg.base&&cfg.ecTbl&&cfg.roTbl;}
 async function atPost(tbl,fields){const r=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+tbl,{method:'POST',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify({fields})});if(!r.ok)throw new Error(r.status);return r.json();}
 function setSyncPill(state,msg){const el=document.getElementById('global-sync');el.className='sync-pill'+(state==='ok'?' ok':state==='err'?' err':state==='ing'?' ing':'');el.textContent=msg;}
@@ -395,9 +395,33 @@ function populateBatchDropdowns(){
   roSel.value=roCur;
 }
 function ecBatchSelect(){const val=document.getElementById('ec-batch-select').value;if(!val)return;document.getElementById('ec-batch').value=val;ecBatchLookup();}
+
+// Batch-room locking helpers
+function saveBatchRoom(batch,room){if(!batch)return;if(!batchRooms[batch]){batchRooms[batch]=room;lsSet('gp-batch-rooms',batchRooms);}}
+function applyBatchRoomLock(form,batch){
+  const roomEl=document.getElementById(form+'-room');
+  const lockedRoom=batchRooms[batch];
+  if(lockedRoom){
+    roomEl.value=lockedRoom;
+    roomEl.disabled=true;
+    roomEl.style.background='var(--bg2)';roomEl.style.color='var(--text3)';roomEl.style.cursor='not-allowed';
+    let hint=roomEl.closest('.field').querySelector('.room-lock-hint');
+    if(!hint){hint=document.createElement('div');hint.className='room-lock-hint';hint.style.cssText='font-size:10px;color:var(--text3);margin-top:3px;font-family:var(--mono);';roomEl.closest('.field').appendChild(hint);}
+    hint.textContent='Room locked to this batch';
+  } else {
+    roomEl.disabled=false;roomEl.style.background='';roomEl.style.color='';roomEl.style.cursor='';
+    const hint=roomEl.closest('.field').querySelector('.room-lock-hint');if(hint)hint.remove();
+  }
+}
+function clearBatchRoomLock(form){
+  const roomEl=document.getElementById(form+'-room');
+  roomEl.disabled=false;roomEl.style.background='';roomEl.style.color='';roomEl.style.cursor='';
+  const hint=roomEl.closest('.field').querySelector('.room-lock-hint');if(hint)hint.remove();
+}
 function roBatchSelect(){
   const val=document.getElementById('ro-batch-select').value;
-  if(!val){document.getElementById('ro-batch').value='';document.getElementById('ro-veg').value='';document.getElementById('ro-flower').value='';document.getElementById('ro-harvest').value='';hideClosedWarning('ro');roBadge();return;}
+  if(!val){document.getElementById('ro-batch').value='';document.getElementById('ro-veg').value='';document.getElementById('ro-flower').value='';document.getElementById('ro-harvest').value='';hideClosedWarning('ro');roBadge();clearBatchRoomLock('ro');return;}
+  applyBatchRoomLock('ro',val);
   const batches=getECBatches();const b=batches[val];
   document.getElementById('ro-batch').value=val;
   document.getElementById('ro-veg').value=b?b.vegStart:'';
@@ -408,7 +432,7 @@ function roBatchSelect(){
 }
 function findBatchDates(batch,recs){const match=recs.find(r=>r.batch&&r.batch.trim().toLowerCase()===batch.trim().toLowerCase());return match?{vegStart:match.vegStart||'',flowerStart:match.flowerStart||'',harvestDate:match.harvestDate||''}:null;}
 function isBatchClosed(batch){const found=findBatchDates(batch,[...ecRecs,...roRecs]);return found&&found.harvestDate?found.harvestDate:null;}
-function ecBatchLookup(){const batch=document.getElementById('ec-batch').value.trim();if(!batch)return;const found=findBatchDates(batch,[...ecRecs,...roRecs]);if(found){if(found.vegStart)document.getElementById('ec-veg').value=found.vegStart;if(found.flowerStart)document.getElementById('ec-flower').value=found.flowerStart;if(found.harvestDate)document.getElementById('ec-harvest').value=found.harvestDate;applyCascadeLocks();ecBadge();if(found.harvestDate){showClosedWarning('ec',found.harvestDate);}else{hideClosedWarning('ec');if(found.vegStart)toast('Batch found - dates loaded automatically');}}else{applyCascadeLocks();}}
+function ecBatchLookup(){const batch=document.getElementById('ec-batch').value.trim();if(!batch){clearBatchRoomLock('ec');return;}applyBatchRoomLock('ec',batch);const found=findBatchDates(batch,[...ecRecs,...roRecs]);if(found){if(found.vegStart)document.getElementById('ec-veg').value=found.vegStart;if(found.flowerStart)document.getElementById('ec-flower').value=found.flowerStart;if(found.harvestDate)document.getElementById('ec-harvest').value=found.harvestDate;applyCascadeLocks();ecBadge();if(found.harvestDate){showClosedWarning('ec',found.harvestDate);}else{hideClosedWarning('ec');if(found.vegStart)toast('Batch found - dates loaded automatically');}}else{applyCascadeLocks();}}
 function roBatchLookup(){const batch=document.getElementById('ro-batch').value.trim();if(!batch)return;const found=findBatchDates(batch,[...ecRecs,...roRecs]);if(found){if(found.vegStart)document.getElementById('ro-veg').value=found.vegStart;if(found.flowerStart)document.getElementById('ro-flower').value=found.flowerStart;if(found.harvestDate)document.getElementById('ro-harvest').value=found.harvestDate;roBadge();if(found.harvestDate){showClosedWarning('ro',found.harvestDate);}else{hideClosedWarning('ro');if(found.vegStart)toast('Batch found - dates loaded automatically');}}}
 function showClosedWarning(form,harvestDate){const id=form+'-closed-warning';let el=document.getElementById(id);if(!el){el=document.createElement('div');el.id=id;el.style.cssText='background:var(--red-pale);color:var(--red);border:1px solid var(--red);border-radius:var(--radius-sm);padding:10px 12px;font-size:13px;font-weight:500;margin-bottom:12px;';const badge=document.getElementById(form+'-badge');badge.parentNode.insertBefore(el,badge);}el.textContent='This batch was harvested on '+harvestDate+'. No new entries can be added.';el.style.display='block';document.getElementById(form+'-btn').disabled=true;}
 function hideClosedWarning(form){const el=document.getElementById(form+'-closed-warning');if(el)el.style.display='none';document.getElementById(form+'-btn').disabled=false;}
@@ -431,7 +455,7 @@ async function ecSave(){
   const fs=document.getElementById('ec-flower').value,{stage,day}=calcStage(vs,fs,date);
   const evts=[];let totalML=0;for(let i=1;i<=8;i++){const v=parseFloat(document.getElementById('ec-evt-'+i).value)||null;evts.push(v);if(v)totalML+=v;}
   const rec={id:Date.now(),date,room:document.getElementById('ec-room').value,grower,batch:document.getElementById('ec-batch').value.trim(),vegStart:vs,flowerStart:fs,harvestDate:harvestDate||null,stage,day,dripEcPens,dripPhPens,dripEc,dripPh,wtype:document.getElementById('ec-wtype').value,events:evts,totalML:totalML||null,flow:parseFloat(document.getElementById('ec-flow').value)||null,notes:document.getElementById('ec-notes').value.trim(),synced:false};
-  ecRecs.unshift(rec);lsSet('gp-ec',ecRecs);populateBatchDropdowns();
+  ecRecs.unshift(rec);lsSet('gp-ec',ecRecs);saveBatchRoom(rec.batch,rec.room);populateBatchDropdowns();
   if(atReady()){
     setSyncPill('ing','Syncing...');document.getElementById('ec-btn').disabled=true;
     try{
@@ -443,7 +467,7 @@ async function ecSave(){
   }else{toast('Entry saved locally');}
   ecClear();
 }
-function ecClear(){document.querySelectorAll('.ec-drip-ec,.ec-drip-ph').forEach(i=>i.value='');for(let i=1;i<=8;i++)document.getElementById('ec-evt-'+i).value='';['ec-notes','ec-flow'].forEach(id=>document.getElementById(id).value='');document.getElementById('ec-wtype').value='';document.getElementById('ec-total-ml').textContent='-';['ec-avg-ec','ec-avg-ph'].forEach(id=>{document.getElementById(id).textContent='-';document.getElementById(id).className='avg-val';});const h=document.getElementById('ec-harvest').value;if(h)showClosedWarning('ec',h);applyCascadeLocks();}
+function ecClear(){document.querySelectorAll('.ec-drip-ec,.ec-drip-ph').forEach(i=>i.value='');for(let i=1;i<=8;i++)document.getElementById('ec-evt-'+i).value='';['ec-notes','ec-flow'].forEach(id=>document.getElementById(id).value='');document.getElementById('ec-wtype').value='';document.getElementById('ec-total-ml').textContent='-';['ec-avg-ec','ec-avg-ph'].forEach(id=>{document.getElementById(id).textContent='-';document.getElementById(id).className='avg-val';});document.getElementById('ec-batch').value='';document.getElementById('ec-batch-select').value='';clearBatchRoomLock('ec');const h=document.getElementById('ec-harvest').value;if(h)showClosedWarning('ec',h);applyCascadeLocks();}
 
 function buildROSamples(){const c=document.getElementById('ro-samples');c.innerHTML='';for(let i=1;i<=8;i++){c.innerHTML+='<div class="sample-item"><div class="sample-num">Sample '+i+'</div><div class="s-lbl">EC (mS/cm)</div><input type="number" class="ro-s-ec s-input" id="ro-ec-'+i+'" step="0.01" placeholder="0.00" oninput="roCalc()" /><div class="s-lbl" style="margin-top:6px;">pH</div><input type="number" class="ro-s-ph s-input" id="ro-ph-'+i+'" step="0.01" placeholder="0.00" oninput="roCalc()" /></div>';}}
 function roBadge(){const d=document.getElementById('ro-date').value,vs=document.getElementById('ro-veg').value,fs=document.getElementById('ro-flower').value,b=document.getElementById('ro-badge');if(!d||!vs){b.innerHTML='<span style="font-size:12px;color:var(--text3);">Enter veg start date to calculate</span>';return;}const{stage,day}=calcStage(vs,fs,d);if(stage&&day)b.innerHTML='<span class="day-pill '+stage+'">'+(stage==='flower'?'Flower Day':'Veg Day')+' '+day+'</span>';else b.innerHTML='<span style="font-size:12px;color:var(--text3);">Check your dates</span>';}
@@ -464,7 +488,7 @@ async function roSave(){
   const avgEC=avg(ecV),avgPH=avg(phV),variance=avgEC!==null&&inputEC!==null?Math.round((avgEC-inputEC)*100)/100:null;
   const{stage,day}=calcStage(vs,fs,date);
   const rec={id:Date.now(),date,room:document.getElementById('ro-room').value,grower,batch:document.getElementById('ro-batch').value.trim(),vegStart:vs,flowerStart:fs,harvestDate:harvestDate||null,stage,day,inputEC,samples,avgEC,avgPH,variance,ecAlert:variance!==null&&variance>RO_VAR_ALERT,notes:document.getElementById('ro-notes').value.trim(),synced:false};
-  roRecs.unshift(rec);lsSet('gp-ro',roRecs);populateBatchDropdowns();
+  roRecs.unshift(rec);lsSet('gp-ro',roRecs);saveBatchRoom(rec.batch,rec.room);populateBatchDropdowns();
   if(atReady()){
     setSyncPill('ing','Syncing...');document.getElementById('ro-btn').disabled=true;
     try{
@@ -477,7 +501,7 @@ async function roSave(){
   }else{toast('Entry saved locally');}
   roClear();
 }
-function roClear(){for(let i=1;i<=8;i++){document.getElementById('ro-ec-'+i).value='';document.getElementById('ro-ph-'+i).value='';}['ro-notes','ro-input-ec'].forEach(id=>document.getElementById(id).value='');['ro-avg-ec','ro-avg-ph','ro-variance'].forEach(id=>document.getElementById(id).textContent='-');document.getElementById('ro-count').textContent='0/8';document.getElementById('ro-warn').style.display='none';document.getElementById('ro-ok').style.display='none';document.getElementById('ro-batch-select').value='';document.getElementById('ro-batch').value='';document.getElementById('ro-veg').value='';document.getElementById('ro-flower').value='';document.getElementById('ro-harvest').value='';document.getElementById('ro-badge').innerHTML='<span style="font-size:12px;color:var(--text3);">Select a batch to calculate stage</span>';hideClosedWarning('ro');}
+function roClear(){for(let i=1;i<=8;i++){document.getElementById('ro-ec-'+i).value='';document.getElementById('ro-ph-'+i).value='';}['ro-notes','ro-input-ec'].forEach(id=>document.getElementById(id).value='');['ro-avg-ec','ro-avg-ph','ro-variance'].forEach(id=>document.getElementById(id).textContent='-');document.getElementById('ro-count').textContent='0/8';document.getElementById('ro-warn').style.display='none';document.getElementById('ro-ok').style.display='none';document.getElementById('ro-batch-select').value='';document.getElementById('ro-batch').value='';document.getElementById('ro-veg').value='';document.getElementById('ro-flower').value='';document.getElementById('ro-harvest').value='';document.getElementById('ro-badge').innerHTML='<span style="font-size:12px;color:var(--text3);">Select a batch to calculate stage</span>';clearBatchRoomLock('ro');hideClosedWarning('ro');}
 
 function filterRecs(recs,roomId,growerId,fromId,toId){const room=document.getElementById(roomId).value,grower=document.getElementById(growerId).value,from=document.getElementById(fromId).value,to=document.getElementById(toId).value;return recs.filter(r=>{if(room&&r.room!==room)return false;if(grower&&r.grower!==grower)return false;if(from&&r.date<from)return false;if(to&&r.date>to)return false;return true;});}
 function statCards(cards,id){document.getElementById(id).innerHTML=cards.map(c=>'<div class="stat-card"><div class="stat-lbl">'+c.l+'</div><div class="stat-val" style="'+(c.s||'')+'">'+c.v+'</div></div>').join('');}
