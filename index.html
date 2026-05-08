@@ -312,6 +312,8 @@ tr:last-child td { border-bottom: none; }
         <div class="sfield"><label>Runoff Log Table ID</label><input type="text" id="s-ro" placeholder="tblXXXXXXXXXXXXXX" /></div>
         <button class="btn-save" onclick="saveSettings()">Save and Test Connection</button>
         <div class="conn-status" id="conn-status"></div>
+        <button class="btn-save" id="sync-pending-btn" onclick="syncPending()" style="margin-top:8px;background:var(--blue);">Sync Pending Records</button>
+        <div class="conn-status" id="sync-pending-status"></div>
       </div>
       <div class="settings-card">
         <h3>How to get your credentials</h3>
@@ -449,12 +451,15 @@ async function ecSave(){
   if(!grower){toast('Please select a grower.');return;}if(!date){toast('Please set a date.');return;}if(!vs){toast('Please enter veg start date.');return;}
   const harvestDate=document.getElementById('ec-harvest').value;
   if(harvestDate&&date>harvestDate){toast('This batch was harvested on '+harvestDate+'. Entry blocked.',3500);return;}
+  const wtype=document.getElementById('ec-wtype').value;
+  if(!wtype){toast('Please select a watering type.');return;}
   const dripEcPens=pens('.ec-drip-ec'),dripPhPens=pens('.ec-drip-ph');
   const dripEc=avg(dripEcPens.filter(v=>v)),dripPh=avg(dripPhPens.filter(v=>v));
   if(dripEc===null&&dripPh===null){toast('Enter at least one reading.');return;}
   const fs=document.getElementById('ec-flower').value,{stage,day}=calcStage(vs,fs,date);
   const evts=[];let totalML=0;for(let i=1;i<=8;i++){const v=parseFloat(document.getElementById('ec-evt-'+i).value)||null;evts.push(v);if(v)totalML+=v;}
-  const rec={id:Date.now(),date,room:document.getElementById('ec-room').value,grower,batch:document.getElementById('ec-batch').value.trim(),vegStart:vs,flowerStart:fs,harvestDate:harvestDate||null,stage,day,dripEcPens,dripPhPens,dripEc,dripPh,wtype:document.getElementById('ec-wtype').value,events:evts,totalML:totalML||null,flow:parseFloat(document.getElementById('ec-flow').value)||null,notes:document.getElementById('ec-notes').value.trim(),synced:false};
+  if(!totalML){toast('Enter at least one watering event.');return;}
+  const rec={id:Date.now(),date,room:document.getElementById('ec-room').value,grower,batch:document.getElementById('ec-batch').value.trim(),vegStart:vs,flowerStart:fs,harvestDate:harvestDate||null,stage,day,dripEcPens,dripPhPens,dripEc,dripPh,wtype,events:evts,totalML:totalML||null,flow:parseFloat(document.getElementById('ec-flow').value)||null,notes:document.getElementById('ec-notes').value.trim(),synced:false};
   ecRecs.unshift(rec);lsSet('gp-ec',ecRecs);saveBatchRoom(rec.batch,rec.room);populateBatchDropdowns();
   if(atReady()){
     setSyncPill('ing','Syncing...');document.getElementById('ec-btn').disabled=true;
@@ -514,6 +519,39 @@ function dlCSV(rows,name){const a=document.createElement('a');a.href=URL.createO
 function exportEC(){const data=filterRecs(ecRecs,'f-ec-room','f-ec-grower','f-ec-from','f-ec-to');if(!data.length){toast('No data to export.');return;}dlCSV([['Date','Room','Stage','Day','Grower','Batch','Watering Type','Drip EC Avg','Drip pH Avg','Total ml/plant','Flow Meter L','Notes'],...data.map(r=>[r.date,r.room,r.stage||'',r.day||'',r.grower,r.batch,r.wtype||'',r.dripEc||'',r.dripPh||'',r.totalML||'',r.flow||'','"'+(r.notes||'').replace(/"/g,'""')+'"'])],'EC_Log_GoldenPeak.csv');}
 function exportRO(){const data=filterRecs(roRecs,'f-ro-room','f-ro-grower','f-ro-from','f-ro-to');if(!data.length){toast('No data to export.');return;}dlCSV([['Date','Room','Stage','Day','Grower','Batch','Input EC','Avg Runoff EC','EC Variance','Avg Runoff pH','Notes'],...data.map(r=>[r.date,r.room,r.stage||'',r.day||'',r.grower,r.batch,r.inputEC||'',r.avgEC||'',r.variance||'',r.avgPH||'','"'+(r.notes||'').replace(/"/g,'""')+'"'])],'Runoff_Log_GoldenPeak.csv');}
 
+async function syncPending(){
+  if(!atReady()){toast('Configure Airtable connection first.');return;}
+  const st=document.getElementById('sync-pending-status');
+  const btn=document.getElementById('sync-pending-btn');
+  const pendingEC=ecRecs.filter(r=>!r.synced);
+  const pendingRO=roRecs.filter(r=>!r.synced);
+  const total=pendingEC.length+pendingRO.length;
+  if(!total){st.style.display='block';st.style.background='var(--green-pale)';st.style.color='var(--green)';st.textContent='No pending records - everything is synced.';return;}
+  st.style.display='block';st.style.background='var(--bg2)';st.style.color='var(--text2)';st.textContent='Syncing '+total+' record(s)...';
+  btn.disabled=true;setSyncPill('ing','Syncing...');
+  let ok=0,fail=0;
+  for(const rec of pendingEC){
+    try{
+      const f={'Date':rec.date,'Room':rec.room,'Grower':rec.grower,'Batch ID':rec.batch,'Veg Start Date':rec.vegStart,'Flower Start Date':rec.flowerStart||undefined,'Harvest Date':rec.harvestDate||undefined,'Watering Type':rec.wtype||undefined,'Drip EC Pen 1':rec.dripEcPens?rec.dripEcPens[0]||undefined:undefined,'Drip EC Pen 2':rec.dripEcPens?rec.dripEcPens[1]||undefined:undefined,'Drip EC Pen 3':rec.dripEcPens?rec.dripEcPens[2]||undefined:undefined,'Drip pH Pen 1':rec.dripPhPens?rec.dripPhPens[0]||undefined:undefined,'Drip pH Pen 2':rec.dripPhPens?rec.dripPhPens[1]||undefined:undefined,'Drip pH Pen 3':rec.dripPhPens?rec.dripPhPens[2]||undefined:undefined,'Event 1 ml/plant':rec.events?rec.events[0]||undefined:undefined,'Event 2 ml/plant':rec.events?rec.events[1]||undefined:undefined,'Event 3 ml/plant':rec.events?rec.events[2]||undefined:undefined,'Event 4 ml/plant':rec.events?rec.events[3]||undefined:undefined,'Event 5 ml/plant':rec.events?rec.events[4]||undefined:undefined,'Event 6 ml/plant':rec.events?rec.events[5]||undefined:undefined,'Event 7 ml/plant':rec.events?rec.events[6]||undefined:undefined,'Event 8 ml/plant':rec.events?rec.events[7]||undefined:undefined,'Flow Meter Reading':rec.flow||undefined,'Notes':rec.notes||undefined};
+      Object.keys(f).forEach(k=>{if(f[k]===undefined)delete f[k];});
+      await atPost(cfg.ecTbl,f);rec.synced=true;ok++;
+    }catch(e){fail++;}
+  }
+  lsSet('gp-ec',ecRecs);
+  for(const rec of pendingRO){
+    try{
+      const f={'Date':rec.date,'Room':rec.room,'Grower':rec.grower,'Batch ID':rec.batch,'Veg Start Date':rec.vegStart,'Flower Start Date':rec.flowerStart||undefined,'Harvest Date':rec.harvestDate||undefined,'Input EC':rec.inputEC||undefined,'Notes':rec.notes||undefined};
+      rec.samples&&rec.samples.forEach((s,i)=>{if(s.ec)f['S'+(i+1)+' EC']=s.ec;if(s.ph)f['S'+(i+1)+' pH']=s.ph;});
+      Object.keys(f).forEach(k=>{if(f[k]===undefined)delete f[k];});
+      await atPost(cfg.roTbl,f);rec.synced=true;ok++;
+    }catch(e){fail++;}
+  }
+  lsSet('gp-ro',roRecs);
+  btn.disabled=false;
+  if(fail===0){setSyncPill('ok','Synced');st.style.background='var(--green-pale)';st.style.color='var(--green)';st.textContent='Done! '+ok+' record(s) synced to Airtable.';}
+  else if(ok>0){setSyncPill('err','Partial sync');st.style.background='var(--amber-pale)';st.style.color='var(--amber)';st.textContent=ok+' synced, '+fail+' failed. Check connection and retry.';}
+  else{setSyncPill('err','Sync failed');st.style.background='var(--red-pale)';st.style.color='var(--red)';st.textContent='Sync failed. Check your Airtable connection.';}
+}
 function applySettings(){document.getElementById('s-token').value=cfg.token||'';document.getElementById('s-base').value=cfg.base||'';document.getElementById('s-ec').value=cfg.ecTbl||'';document.getElementById('s-ro').value=cfg.roTbl||'';setSyncPill(atReady()?'ok':'off',atReady()?'Airtable connected':'Not configured');}
 async function saveSettings(){cfg={token:document.getElementById('s-token').value.trim(),base:document.getElementById('s-base').value.trim(),ecTbl:document.getElementById('s-ec').value.trim(),roTbl:document.getElementById('s-ro').value.trim()};const st=document.getElementById('conn-status');st.style.display='block';st.style.background='var(--bg2)';st.style.color='var(--text2)';st.textContent='Testing connection...';if(!atReady()){st.textContent='Please fill in all fields.';st.style.background='var(--amber-pale)';st.style.color='var(--amber)';return;}try{const r=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+cfg.ecTbl+'?maxRecords=1',{headers:{'Authorization':'Bearer '+cfg.token}});if(r.ok){lsSet('gp-cfg',cfg);applySettings();st.textContent='Connected! Credentials saved.';st.style.background='var(--green-pale)';st.style.color='var(--green)';}else{st.textContent='Failed ('+r.status+'). Check your credentials.';st.style.background='var(--red-pale)';st.style.color='var(--red)';}}catch(e){st.textContent='Could not reach Airtable. Check internet connection.';st.style.background='var(--red-pale)';st.style.color='var(--red)';}}
 
