@@ -521,10 +521,17 @@ function exportRO(){const data=filterRecs(roRecs,'f-ro-room','f-ro-grower','f-ro
 
 
 function migrateRoomNames(){
-  const map={'Flower 1 (240 plants)':'Flower 1','Flower 2 (240 plants)':'Flower 2','Flower 3 (234 plants)':'Flower 3','Flower 4 (240 plants)':'Flower 4','Flower 5 - R&D':'Flower 5','Veg Room':'Veg'};
-  let changed=false;
-  [...ecRecs,...roRecs].forEach(r=>{if(map[r.room]){r.room=map[r.room];changed=true;}});
-  if(changed){lsSet('gp-ec',ecRecs);lsSet('gp-ro',roRecs);}
+  function fixRoom(r){
+    if(!r.room)return;
+    if(r.room.includes('Flower 1'))r.room='Flower 1';
+    else if(r.room.includes('Flower 2'))r.room='Flower 2';
+    else if(r.room.includes('Flower 3'))r.room='Flower 3';
+    else if(r.room.includes('Flower 4'))r.room='Flower 4';
+    else if(r.room.includes('Flower 5'))r.room='Flower 5';
+    else if(r.room.includes('Veg'))r.room='Veg';
+  }
+  [...ecRecs,...roRecs].forEach(fixRoom);
+  lsSet('gp-ec',ecRecs);lsSet('gp-ro',roRecs);
 }
 async function syncPending(){
   migrateRoomNames();
