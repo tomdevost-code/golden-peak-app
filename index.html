@@ -152,7 +152,7 @@ tr:last-child td { border-bottom: none; }
                 <option>Flower 5 - R&D</option><option>Veg Room</option>
               </select>
             </div>
-            <div class="field"><label>Batch ID</label><input type="text" id="ec-batch" placeholder="B-2026-042" oninput="ecBatchLookup()" autocomplete="off" /></div>
+            <div class="field"><label>Batch ID</label><select id="ec-batch-select" onchange="ecBatchSelect()" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;margin-bottom:6px;"><option value="">-- select existing batch --</option></select><input type="text" id="ec-batch" placeholder="Or type new batch ID" oninput="ecBatchLookup()" autocomplete="off" /></div>
             <div class="field"><label>Grower</label>
               <select id="ec-grower">
                 <option value="">select grower</option>
@@ -222,7 +222,7 @@ tr:last-child td { border-bottom: none; }
                 <option>Flower 5 - R&D</option><option>Veg Room</option>
               </select>
             </div>
-            <div class="field"><label>Batch ID</label><input type="text" id="ro-batch" placeholder="B-2026-042" oninput="roBatchLookup()" autocomplete="off" /></div>
+            <div class="field"><label>Batch ID</label><select id="ro-batch-select" onchange="roBatchSelect()" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;margin-bottom:6px;"><option value="">-- select existing batch --</option></select><input type="text" id="ro-batch" placeholder="Or type new batch ID" oninput="roBatchLookup()" autocomplete="off" /></div>
             <div class="field"><label>Grower</label>
               <select id="ro-grower">
                 <option value="">select grower</option>
@@ -375,6 +375,10 @@ function switchRepTab(tab,btn){document.getElementById('rep-ec-view').style.disp
 
 function buildECEvents(){const c=document.getElementById('ec-events-container');c.innerHTML='';for(let i=1;i<=8;i++){c.innerHTML+='<div class="event-row"><div class="event-lbl">Event '+i+'</div><input type="number" id="ec-evt-'+i+'" step="1" min="0" placeholder="-" style="font-size:14px;font-family:var(--mono);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;color:var(--text);outline:none;text-align:center;" oninput="ecTotalML()" /></div>';}}
 function ecTotalML(){let t=0,any=false;for(let i=1;i<=8;i++){const v=parseFloat(document.getElementById('ec-evt-'+i).value);if(!isNaN(v)&&v>0){t+=v;any=true;}}document.getElementById('ec-total-ml').textContent=any?t.toFixed(0)+'ml':'-';}
+function getAllBatches(){const all=[...ecRecs,...roRecs];const seen={};all.forEach(r=>{if(r.batch&&!seen[r.batch]){seen[r.batch]={vegStart:r.vegStart||'',flowerStart:r.flowerStart||'',harvestDate:r.harvestDate||''};}});return seen;}
+function populateBatchDropdowns(){const batches=getAllBatches();const ids=Object.keys(batches).sort();['ec-batch-select','ro-batch-select'].forEach(id=>{const sel=document.getElementById(id);const cur=sel.value;sel.innerHTML='<option value="">-- select existing batch --</option>';ids.forEach(b=>{const opt=document.createElement('option');opt.value=b;opt.textContent=b+(batches[b].harvestDate?' (harvested)':'');if(batches[b].harvestDate)opt.style.color='var(--text3)';sel.appendChild(opt);});sel.value=cur;});}
+function ecBatchSelect(){const val=document.getElementById('ec-batch-select').value;if(!val)return;document.getElementById('ec-batch').value=val;ecBatchLookup();}
+function roBatchSelect(){const val=document.getElementById('ro-batch-select').value;if(!val)return;document.getElementById('ro-batch').value=val;roBatchLookup();}
 function findBatchDates(batch,recs){const match=recs.find(r=>r.batch&&r.batch.trim().toLowerCase()===batch.trim().toLowerCase());return match?{vegStart:match.vegStart||'',flowerStart:match.flowerStart||'',harvestDate:match.harvestDate||''}:null;}
 function isBatchClosed(batch){const found=findBatchDates(batch,[...ecRecs,...roRecs]);return found&&found.harvestDate?found.harvestDate:null;}
 function ecBatchLookup(){const batch=document.getElementById('ec-batch').value.trim();if(!batch)return;const found=findBatchDates(batch,[...ecRecs,...roRecs]);if(found){if(found.vegStart)document.getElementById('ec-veg').value=found.vegStart;if(found.flowerStart)document.getElementById('ec-flower').value=found.flowerStart;if(found.harvestDate)document.getElementById('ec-harvest').value=found.harvestDate;ecBadge();if(found.harvestDate){showClosedWarning('ec',found.harvestDate);}else{hideClosedWarning('ec');if(found.vegStart)toast('Batch found - dates loaded automatically');}}}
@@ -395,7 +399,7 @@ async function ecSave(){
   const fs=document.getElementById('ec-flower').value,{stage,day}=calcStage(vs,fs,date);
   const evts=[];let totalML=0;for(let i=1;i<=8;i++){const v=parseFloat(document.getElementById('ec-evt-'+i).value)||null;evts.push(v);if(v)totalML+=v;}
   const rec={id:Date.now(),date,room:document.getElementById('ec-room').value,grower,batch:document.getElementById('ec-batch').value.trim(),vegStart:vs,flowerStart:fs,harvestDate:harvestDate||null,stage,day,dripEcPens,dripPhPens,dripEc,dripPh,wtype:document.getElementById('ec-wtype').value,events:evts,totalML:totalML||null,flow:parseFloat(document.getElementById('ec-flow').value)||null,notes:document.getElementById('ec-notes').value.trim(),synced:false};
-  ecRecs.unshift(rec);lsSet('gp-ec',ecRecs);
+  ecRecs.unshift(rec);lsSet('gp-ec',ecRecs);populateBatchDropdowns();
   if(atReady()){
     setSyncPill('ing','Syncing...');document.getElementById('ec-btn').disabled=true;
     try{
@@ -425,7 +429,7 @@ async function roSave(){
   const avgEC=avg(ecV),avgPH=avg(phV),variance=avgEC!==null&&inputEC!==null?Math.round((avgEC-inputEC)*100)/100:null;
   const{stage,day}=calcStage(vs,fs,date);
   const rec={id:Date.now(),date,room:document.getElementById('ro-room').value,grower,batch:document.getElementById('ro-batch').value.trim(),vegStart:vs,flowerStart:fs,harvestDate:harvestDate||null,stage,day,inputEC,samples,avgEC,avgPH,variance,ecAlert:variance!==null&&variance>RO_VAR_ALERT,notes:document.getElementById('ro-notes').value.trim(),synced:false};
-  roRecs.unshift(rec);lsSet('gp-ro',roRecs);
+  roRecs.unshift(rec);lsSet('gp-ro',roRecs);populateBatchDropdowns();
   if(atReady()){
     setSyncPill('ing','Syncing...');document.getElementById('ro-btn').disabled=true;
     try{
@@ -457,7 +461,7 @@ async function saveSettings(){cfg={token:document.getElementById('s-token').valu
 const today=new Date().toISOString().split('T')[0];
 document.getElementById('ec-date').value=today;
 document.getElementById('ro-date').value=today;
-buildECEvents();buildROSamples();loadAll();
+buildECEvents();buildROSamples();loadAll();populateBatchDropdowns();
 </script>
 </body>
 </html>
