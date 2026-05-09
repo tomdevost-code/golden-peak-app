@@ -444,7 +444,7 @@ function lockVegDate(lock){const vegInput=document.getElementById('ec-veg');vegI
 function ecHydrationChanged(){
   const hyd=document.getElementById('ec-hydration').value;
   const veg=document.getElementById('ec-veg').value;
-  if(veg&&hyd&&veg<hyd){document.getElementById('ec-veg').value='';ecBadge();}
+  if(veg&&hyd&&veg<=hyd){document.getElementById('ec-veg').value='';ecBadge();}
   applyCascadeLocks();
 }
 function applyCascadeLocks(){
@@ -459,7 +459,7 @@ function applyCascadeLocks(){
 function ecVegChanged(){
   const hyd=document.getElementById('ec-hydration').value;
   const veg=document.getElementById('ec-veg').value;
-  if(hyd&&veg&&veg<hyd){toast('Veg start date must be after hydration date.');document.getElementById('ec-veg').value='';ecBadge();applyCascadeLocks();return;}
+  if(hyd&&veg&&veg<=hyd){toast('Veg start date must be at least 1 day after hydration date.');document.getElementById('ec-veg').value='';ecBadge();applyCascadeLocks();return;}
   ecBadge();applyCascadeLocks();
 }
 function ecFlowerChanged(){ecBadge();applyCascadeLocks();}
