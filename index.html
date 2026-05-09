@@ -146,7 +146,8 @@ tr:last-child td { border-bottom: none; }
         <div class="card">
           <div class="g2" style="margin-bottom:10px;">
             <div class="field"><label>Room</label>
-              <select id="ec-room">
+              <select id="ec-room" onchange="ecRoomChanged()">
+                <option value="">select room</option>
                 <option>Flower 1</option><option>Flower 2</option>
                 <option>Flower 3</option><option>Flower 4</option>
                 <option>Flower 5</option><option>Veg</option>
@@ -360,11 +361,11 @@ tr:last-child td { border-bottom: none; }
 <script>
 const EC_LO=2.2,EC_HI=2.3,PH_EC_LO=6.2,PH_EC_HI=6.3;
 const RO_PH_LO=6.0,RO_PH_HI=6.5,RO_VAR_LO=0.3,RO_VAR_HI=0.5,RO_VAR_ALERT=1.0;
-let ecRecs=[],roRecs=[],cfg={token:'',base:'',ecTbl:'',roTbl:''},batchRooms={};
+let ecRecs=[],roRecs=[],cfg={token:'',base:'',ecTbl:'',roTbl:''};
 
 function lsGet(k){try{return JSON.parse(localStorage.getItem(k)||'null');}catch(e){return null;}}
 function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
-function loadAll(){ecRecs=lsGet('gp-ec')||[];roRecs=lsGet('gp-ro')||[];batchRooms=lsGet('gp-batch-rooms')||{};const s=lsGet('gp-cfg');if(s){cfg=s;applySettings();}}
+function loadAll(){ecRecs=lsGet('gp-ec')||[];roRecs=lsGet('gp-ro')||[];const s=lsGet('gp-cfg');if(s){cfg=s;applySettings();}}
 function atReady(){return cfg.token&&cfg.base&&cfg.ecTbl&&cfg.roTbl;}
 async function atPost(tbl,fields){const r=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+tbl,{method:'POST',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify({fields})});if(!r.ok)throw new Error(r.status);return r.json();}
 function setSyncPill(state,msg){const el=document.getElementById('global-sync');el.className='sync-pill'+(state==='ok'?' ok':state==='err'?' err':state==='ing'?' ing':'');el.textContent=msg;}
@@ -398,30 +399,12 @@ function populateBatchDropdowns(){
   ecIds.forEach(b=>{const opt=document.createElement('option');opt.value=b;opt.textContent=b+(ecBatches[b].harvestDate?' (harvested)':'');if(ecBatches[b].harvestDate)opt.style.color='var(--text3)';roSel.appendChild(opt);});
   roSel.value=roCur;
 }
-function ecBatchSelect(){const val=document.getElementById('ec-batch-select').value;if(!val)return;document.getElementById('ec-batch').value=val;ecBatchLookup();}
+function ecBatchSelect(){const val=document.getElementById('ec-batch-select').value;if(!val)return;document.getElementById('ec-batch').value=val;ecBatchLookup();ecRoomChanged();}
 
 // Batch-room locking helpers
-function saveBatchRoom(batch,room){if(!batch)return;if(!batchRooms[batch]){batchRooms[batch]=room;lsSet('gp-batch-rooms',batchRooms);}}
-function applyBatchRoomLock(form,batch){
-  const roomEl=document.getElementById(form+'-room');
-  const lockedRoom=batchRooms[batch];
-  if(lockedRoom){
-    roomEl.value=lockedRoom;
-    roomEl.disabled=true;
-    roomEl.style.background='var(--bg2)';roomEl.style.color='var(--text3)';roomEl.style.cursor='not-allowed';
-    let hint=roomEl.closest('.field').querySelector('.room-lock-hint');
-    if(!hint){hint=document.createElement('div');hint.className='room-lock-hint';hint.style.cssText='font-size:10px;color:var(--text3);margin-top:3px;font-family:var(--mono);';roomEl.closest('.field').appendChild(hint);}
-    hint.textContent='Room locked to this batch';
-  } else {
-    roomEl.disabled=false;roomEl.style.background='';roomEl.style.color='';roomEl.style.cursor='';
-    const hint=roomEl.closest('.field').querySelector('.room-lock-hint');if(hint)hint.remove();
-  }
-}
-function clearBatchRoomLock(form){
-  const roomEl=document.getElementById(form+'-room');
-  roomEl.disabled=false;roomEl.style.background='';roomEl.style.color='';roomEl.style.cursor='';
-  const hint=roomEl.closest('.field').querySelector('.room-lock-hint');if(hint)hint.remove();
-}
+function saveBatchRoom(batch,room){}
+function applyBatchRoomLock(form,batch){}
+function clearBatchRoomLock(form){}
 function roBatchSelect(){
   const val=document.getElementById('ro-batch-select').value;
   if(!val){document.getElementById('ro-batch').value='';document.getElementById('ro-veg').value='';document.getElementById('ro-flower').value='';document.getElementById('ro-harvest').value='';hideClosedWarning('ro');roBadge();clearBatchRoomLock('ro');return;}
@@ -456,6 +439,18 @@ function setVegMin(){
   } else {
     vegEl.min='';
   }
+}
+const FLOWER_ROOMS=['Flower 1','Flower 2','Flower 3','Flower 4','Flower 5'];
+const VEG_WTYPES=['Hydration','Pre-Charge','Water In','Full Saturation','Feed','Flush','RO Water'];
+const FLOWER_WTYPES=['Full Saturation','Feed','Flush','RO Water'];
+function ecRoomChanged(){
+  const room=document.getElementById('ec-room').value;
+  const wtype=document.getElementById('ec-wtype');
+  const cur=wtype.value;
+  const isFlower=FLOWER_ROOMS.includes(room);
+  const opts=isFlower?FLOWER_WTYPES:VEG_WTYPES;
+  wtype.innerHTML='<option value="">select type</option>'+opts.map(o=>'<option'+(o===cur?' selected':'')+'>'+o+'</option>').join('');
+  if(isFlower&&cur&&!FLOWER_WTYPES.includes(cur))wtype.value='';
 }
 function ecHydrationChanged(){setVegMin();applyCascadeLocks();}
 function applyCascadeLocks(){
