@@ -501,8 +501,9 @@ function lockSavedDateField(inputId, value, hintText){
   const el=document.getElementById(inputId);
   const locked=!!value;
   el.readOnly=locked;
-  el.style.background=locked?'var(--bg2)':'var(--bg)';
-  el.style.color=locked?'var(--text3)':'var(--text)';
+  el.disabled=locked;
+  el.style.background=locked?'var(--bg2)':'';
+  el.style.color=locked?'var(--text3)':'';
   el.style.cursor=locked?'not-allowed':'';
   const field=el.closest('.field');
   let h=field.querySelector('.saved-lock-hint');
