@@ -443,8 +443,15 @@ function lockField(inputId,lock,hint){const el=document.getElementById(inputId);
 function lockVegDate(lock){const vegInput=document.getElementById('ec-veg');vegInput.readOnly=lock;vegInput.style.background=lock?'var(--bg2)':'var(--bg)';vegInput.style.color=lock?'var(--text3)':'var(--text)';vegInput.style.cursor=lock?'not-allowed':'';const vegField=vegInput.closest('.field');let hint=vegField.querySelector('.lock-hint');if(lock&&!hint){hint=document.createElement('div');hint.className='lock-hint';hint.style.cssText='font-size:10px;color:var(--text3);margin-top:3px;font-family:var(--mono);';hint.textContent='Locked - flower stage started';vegField.appendChild(hint);}else if(!lock&&hint){hint.remove();}}
 function ecHydrationChanged(){
   const hyd=document.getElementById('ec-hydration').value;
-  const veg=document.getElementById('ec-veg').value;
-  if(veg&&hyd&&veg<=hyd){document.getElementById('ec-veg').value='';ecBadge();}
+  const vegEl=document.getElementById('ec-veg');
+  if(hyd){
+    const minVeg=new Date(hyd);minVeg.setDate(minVeg.getDate()+1);
+    const minStr=minVeg.getFullYear()+'-'+String(minVeg.getMonth()+1).padStart(2,'0')+'-'+String(minVeg.getDate()).padStart(2,'0');
+    vegEl.min=minStr;
+    if(vegEl.value&&vegEl.value<=hyd){vegEl.value='';ecBadge();}
+  } else {
+    vegEl.min='';
+  }
   applyCascadeLocks();
 }
 function applyCascadeLocks(){
