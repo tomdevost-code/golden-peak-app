@@ -443,13 +443,25 @@ function ecBatchLookup(){
   }
   const found=findBatchDates(batch,[...ecRecs,...roRecs]);
   if(found){
-    // Existing batch — unlock room, load dates
-    roomEl.disabled=false;roomEl.style.background='';roomEl.style.color='';roomEl.style.cursor='';
-    const hint=roomEl.closest('.field').querySelector('.room-lock-hint');if(hint)hint.remove();
+    // Load saved dates
     if(found.hydrationDate)document.getElementById('ec-hydration').value=found.hydrationDate;
     if(found.vegStart)document.getElementById('ec-veg').value=found.vegStart;
     if(found.flowerStart)document.getElementById('ec-flower').value=found.flowerStart;
     if(found.harvestDate)document.getElementById('ec-harvest').value=found.harvestDate;
+    // Lock any date fields that are already saved
+    lockSavedDateField('ec-hydration',found.hydrationDate,'Hydration date is locked once saved');
+    lockSavedDateField('ec-veg',found.vegStart,'Veg start date is locked once saved');
+    lockSavedDateField('ec-flower',found.flowerStart,'Flower start date is locked once saved');
+    // Lock room if flower date is saved
+    if(found.flowerStart){
+      roomEl.disabled=true;roomEl.style.background='var(--bg2)';roomEl.style.color='var(--text3)';roomEl.style.cursor='not-allowed';
+      let hint=roomEl.closest('.field').querySelector('.room-lock-hint');
+      if(!hint){hint=document.createElement('div');hint.className='room-lock-hint';hint.style.cssText='font-size:10px;color:var(--text3);margin-top:3px;font-family:var(--mono);';roomEl.closest('.field').appendChild(hint);}
+      hint.textContent='Room locked — batch is in flower stage';
+    } else {
+      roomEl.disabled=false;roomEl.style.background='';roomEl.style.color='';roomEl.style.cursor='';
+      const hint=roomEl.closest('.field').querySelector('.room-lock-hint');if(hint)hint.remove();
+    }
     applyCascadeLocks();ecBadge();updateBatchRoomsInfo(batch);
     if(found.harvestDate){showClosedWarning('ec',found.harvestDate);}else{hideClosedWarning('ec');if(found.vegStart)toast('Batch found - dates loaded automatically');}
   } else {
@@ -465,6 +477,18 @@ function ecBatchLookup(){
 function roBatchLookup(){const batch=document.getElementById('ro-batch').value.trim();if(!batch)return;const found=findBatchDates(batch,[...ecRecs,...roRecs]);if(found){if(found.vegStart)document.getElementById('ro-veg').value=found.vegStart;if(found.flowerStart)document.getElementById('ro-flower').value=found.flowerStart;if(found.harvestDate)document.getElementById('ro-harvest').value=found.harvestDate;roBadge();if(found.harvestDate){showClosedWarning('ro',found.harvestDate);}else{hideClosedWarning('ro');if(found.vegStart)toast('Batch found - dates loaded automatically');}}}
 function showClosedWarning(form,harvestDate){const id=form+'-closed-warning';let el=document.getElementById(id);if(!el){el=document.createElement('div');el.id=id;el.style.cssText='background:var(--red-pale);color:var(--red);border:1px solid var(--red);border-radius:var(--radius-sm);padding:10px 12px;font-size:13px;font-weight:500;margin-bottom:12px;';const badge=document.getElementById(form+'-badge');badge.parentNode.insertBefore(el,badge);}el.textContent='This batch was harvested on '+harvestDate+'. No new entries can be added.';el.style.display='block';document.getElementById(form+'-btn').disabled=true;}
 function hideClosedWarning(form){const el=document.getElementById(form+'-closed-warning');if(el)el.style.display='none';document.getElementById(form+'-btn').disabled=false;}
+function lockSavedDateField(inputId, value, hintText){
+  const el=document.getElementById(inputId);
+  const locked=!!value;
+  el.readOnly=locked;
+  el.style.background=locked?'var(--bg2)':'var(--bg)';
+  el.style.color=locked?'var(--text3)':'var(--text)';
+  el.style.cursor=locked?'not-allowed':'';
+  const field=el.closest('.field');
+  let h=field.querySelector('.saved-lock-hint');
+  if(locked&&!h){h=document.createElement('div');h.className='saved-lock-hint';h.style.cssText='font-size:10px;color:var(--text3);margin-top:3px;font-family:var(--mono);';h.textContent=hintText;field.appendChild(h);}
+  else if(!locked&&h){h.remove();}
+}
 function lockField(inputId,lock,hint){const el=document.getElementById(inputId);el.disabled=lock;el.style.background=lock?'var(--bg2)':'var(--bg)';el.style.color=lock?'var(--text3)':'var(--text)';el.style.cursor=lock?'not-allowed':'';if(lock&&!el.value)el.value='';const field=el.closest('.field');let h=field.querySelector('.lock-hint');if(lock&&hint&&!h){h=document.createElement('div');h.className='lock-hint';h.style.cssText='font-size:10px;color:var(--text3);margin-top:3px;font-family:var(--mono);';h.textContent=hint;field.appendChild(h);}else if(!lock&&h){h.remove();}}
 function lockVegDate(lock){const vegInput=document.getElementById('ec-veg');vegInput.readOnly=lock;vegInput.style.background=lock?'var(--bg2)':'var(--bg)';vegInput.style.color=lock?'var(--text3)':'var(--text)';vegInput.style.cursor=lock?'not-allowed':'';const vegField=vegInput.closest('.field');let hint=vegField.querySelector('.lock-hint');if(lock&&!hint){hint=document.createElement('div');hint.className='lock-hint';hint.style.cssText='font-size:10px;color:var(--text3);margin-top:3px;font-family:var(--mono);';hint.textContent='Locked - flower stage started';vegField.appendChild(hint);}else if(!lock&&hint){hint.remove();}}
 function setVegMin(){
@@ -599,7 +623,14 @@ async function ecSave(){
   }else{toast('Entry saved locally');}
   ecClear();updatePendingBadge();
 }
-function ecClear(){document.querySelectorAll('.ec-drip-ec,.ec-drip-ph').forEach(i=>i.value='');for(let i=1;i<=8;i++)document.getElementById('ec-evt-'+i).value='';['ec-notes','ec-flow'].forEach(id=>document.getElementById(id).value='');document.getElementById('ec-wtype').value='';document.getElementById('ec-total-ml').textContent='-';['ec-avg-ec','ec-avg-ph'].forEach(id=>{document.getElementById(id).textContent='-';document.getElementById(id).className='avg-val';});document.getElementById('ec-batch').value='';document.getElementById('ec-batch-select').value='';document.getElementById('ec-hydration').value='';clearBatchRoomLock('ec');updateBatchRoomsInfo('');const h=document.getElementById('ec-harvest').value;if(h)showClosedWarning('ec',h);applyCascadeLocks();}
+function ecClear(){
+  ['ec-hydration','ec-veg','ec-flower'].forEach(id=>{
+    const el=document.getElementById(id);el.readOnly=false;el.style.background='';el.style.color='';el.style.cursor='';
+    const h=el.closest('.field').querySelector('.saved-lock-hint');if(h)h.remove();
+  });
+  const roomEl=document.getElementById('ec-room');roomEl.disabled=false;roomEl.style.background='';roomEl.style.color='';roomEl.style.cursor='';
+  const rh=roomEl.closest('.field').querySelector('.room-lock-hint');if(rh)rh.remove();
+  document.querySelectorAll('.ec-drip-ec,.ec-drip-ph').forEach(i=>i.value='');for(let i=1;i<=8;i++)document.getElementById('ec-evt-'+i).value='';['ec-notes','ec-flow'].forEach(id=>document.getElementById(id).value='');document.getElementById('ec-wtype').value='';document.getElementById('ec-total-ml').textContent='-';['ec-avg-ec','ec-avg-ph'].forEach(id=>{document.getElementById(id).textContent='-';document.getElementById(id).className='avg-val';});document.getElementById('ec-batch').value='';document.getElementById('ec-batch-select').value='';document.getElementById('ec-hydration').value='';clearBatchRoomLock('ec');updateBatchRoomsInfo('');const h=document.getElementById('ec-harvest').value;if(h)showClosedWarning('ec',h);applyCascadeLocks();}
 
 function buildROSamples(){const c=document.getElementById('ro-samples');c.innerHTML='';for(let i=1;i<=8;i++){c.innerHTML+='<div class="sample-item"><div class="sample-num">Sample '+i+'</div><div class="s-lbl">EC (mS/cm)</div><input type="number" class="ro-s-ec s-input" id="ro-ec-'+i+'" step="0.01" placeholder="0.00" oninput="roCalc()" /><div class="s-lbl" style="margin-top:6px;">pH</div><input type="number" class="ro-s-ph s-input" id="ro-ph-'+i+'" step="0.01" placeholder="0.00" oninput="roCalc()" /></div>';}}
 function roBadge(){const d=document.getElementById('ro-date').value,vs=document.getElementById('ro-veg').value,fs=document.getElementById('ro-flower').value,b=document.getElementById('ro-badge');if(!d||!vs){b.innerHTML='<span style="font-size:12px;color:var(--text3);">Enter veg start date to calculate</span>';return;}const{stage,day}=calcStage(vs,fs,d);if(stage&&day)b.innerHTML='<span class="day-pill '+stage+'">'+(stage==='flower'?'Flower Day':'Veg Day')+' '+day+'</span>';else b.innerHTML='<span style="font-size:12px;color:var(--text3);">Check your dates</span>';}
