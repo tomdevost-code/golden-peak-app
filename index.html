@@ -8,6 +8,11 @@
 <style>
 :root {
   --green: #2D6A4F; --green-light: #52B788; --green-pale: #D8F3DC;
+  --room1: #C0392B; --room1-pale: #FADBD8;
+  --room2: #E67E22; --room2-pale: #FDEBD0;
+  --room3: #27AE60; --room3-pale: #D5F5E3;
+  --room4: #8E44AD; --room4-pale: #E8DAEF;
+  --room5: #6D4C41; --room5-pale: #EFEBE9;
   --amber: #E76F00; --amber-pale: #FFF3E0;
   --red: #B5312C; --red-pale: #FDECEA;
   --blue: #1A5F8A; --blue-pale: #E3F2FD;
@@ -135,6 +140,7 @@ tr:last-child td { border-bottom: none; }
 
     <!-- EC LOG -->
     <div class="page active" id="page-ec">
+      <div id="ec-room-strip" style="display:none;align-items:center;padding:8px 12px;border-radius:var(--radius-sm);border:1px solid;margin-bottom:12px;"></div>
       <div class="target-strip">
         <div><span class="dot dg"></span>EC 2.2-2.3</div>
         <div><span class="dot dg"></span>pH 6.2-6.3</div>
@@ -210,6 +216,7 @@ tr:last-child td { border-bottom: none; }
 
     <!-- RUNOFF -->
     <div class="page" id="page-ro">
+      <div id="ro-room-strip" style="display:none;align-items:center;padding:8px 12px;border-radius:var(--radius-sm);border:1px solid;margin-bottom:12px;"></div>
       <div class="target-strip">
         <div><span class="dot dg"></span>Runoff EC: input +0.3-0.5</div>
         <div><span class="dot dg"></span>pH 6.0-6.5</div>
@@ -220,7 +227,7 @@ tr:last-child td { border-bottom: none; }
         <div class="card">
           <div class="g2" style="margin-bottom:10px;">
             <div class="field"><label>Room</label>
-              <select id="ro-room">
+              <select id="ro-room" onchange="applyRoomColor('ro',this.value)">
                 <option value="">select room</option>
                 <option>Flower 1</option><option>Flower 2</option>
                 <option>Flower 3</option><option>Flower 4</option>
@@ -476,6 +483,21 @@ function setVegMin(){
   }
 }
 const FLOWER_ROOMS=['Flower 1','Flower 2','Flower 3','Flower 4','Flower 5'];
+const ROOM_COLORS={
+  'Flower 1':{bg:'var(--room1-pale)',border:'var(--room1)',text:'var(--room1)',dot:'#C0392B'},
+  'Flower 2':{bg:'var(--room2-pale)',border:'var(--room2)',text:'var(--room2)',dot:'#E67E22'},
+  'Flower 3':{bg:'var(--room3-pale)',border:'var(--room3)',text:'var(--room3)',dot:'#27AE60'},
+  'Flower 4':{bg:'var(--room4-pale)',border:'var(--room4)',text:'var(--room4)',dot:'#8E44AD'},
+  'Flower 5':{bg:'var(--room5-pale)',border:'var(--room5)',text:'var(--room5)',dot:'#6D4C41'},
+};
+function getRoomColor(room){return ROOM_COLORS[room]||null;}
+function applyRoomColor(formPrefix,room){
+  const c=getRoomColor(room);
+  const card=document.getElementById('page-'+formPrefix)?.querySelector('.card');
+  const strip=document.getElementById(formPrefix+'-room-strip');
+  if(strip){strip.style.display=c?'flex':'none';if(c){strip.style.background=c.bg;strip.style.borderColor=c.border;strip.innerHTML='<span style="width:10px;height:10px;border-radius:50%;background:'+c.dot+';display:inline-block;margin-right:8px;"></span><span style="color:'+c.text+';font-weight:600;font-size:12px;font-family:var(--mono);">'+room+'</span>';}}
+}
+function roomDot(room){const c=getRoomColor(room);if(!c)return room;return'<span style="display:inline-flex;align-items:center;gap:5px;"><span style="width:8px;height:8px;border-radius:50%;background:'+c.dot+';display:inline-block;flex-shrink:0;"></span>'+room+'</span>';}
 const VEG_WTYPES=['Hydration','Pre-Charge','Water In','Full Saturation','Feed','Flush','RO Water'];
 const FLOWER_WTYPES=['Full Saturation','Feed','Flush','RO Water'];
 function ecRoomChanged(){
@@ -486,6 +508,7 @@ function ecRoomChanged(){
   const opts=isFlower?FLOWER_WTYPES:VEG_WTYPES;
   wtype.innerHTML='<option value="">select type</option>'+opts.map(o=>'<option'+(o===cur?' selected':'')+'>'+o+'</option>').join('');
   if(isFlower&&cur&&!FLOWER_WTYPES.includes(cur))wtype.value='';
+  applyRoomColor('ec',room);
 }
 function ecHydrationChanged(){setVegMin();applyCascadeLocks();}
 function applyCascadeLocks(){
@@ -552,12 +575,10 @@ async function ecSave(){
   if(room&&FLOWER_ROOMS.includes(room)&&wtype&&!FLOWER_WTYPES.includes(wtype)){toast('Watering type "'+wtype+'" is not allowed in '+room+'. Use: Full Saturation, Feed, Flush, or RO Water.',4000);return;}
   const hydrationDate=document.getElementById('ec-hydration').value;
   if(!hydrationDate){toast('Please enter a hydration date.');return;}
-  const hydCheck=document.getElementById('ec-hydration').value;
-  if(hydCheck&&vs){const hd=new Date(hydCheck+'T00:00:00'),vd=new Date(vs+'T00:00:00');if(vd<=hd){toast('Veg start must be at least 1 day after hydration date.',3000);return;}}
+  if(hydrationDate&&vs){const hd=new Date(hydrationDate+'T00:00:00'),vd=new Date(vs+'T00:00:00');if(vd<=hd){toast('Veg start must be at least 1 day after hydration date.',3000);return;}}
   const harvestDate=document.getElementById('ec-harvest').value;
   if(hydrationDate&&date<hydrationDate){toast('Entry date cannot be before hydration date ('+hydrationDate+').',3500);return;}
   if(harvestDate&&date>harvestDate){toast('This batch was harvested on '+harvestDate+'. Entry blocked.',3500);return;}
-  const wtype=document.getElementById('ec-wtype').value;
   if(!wtype){toast('Please select a watering type.');return;}
   const dripEcPens=pens('.ec-drip-ec'),dripPhPens=pens('.ec-drip-ph');
   const dripEc=avg(dripEcPens.filter(v=>v)),dripPh=avg(dripPhPens.filter(v=>v));
@@ -588,9 +609,6 @@ async function roSave(){
   const grower=document.getElementById('ro-grower').value,date=document.getElementById('ro-date').value;
   const batchVal=document.getElementById('ro-batch').value;
   if(!grower){toast('Please select a grower.');return;}if(!date){toast('Please set a date.');return;}
-  const room=document.getElementById('ec-room').value;
-  const wtype=document.getElementById('ec-wtype').value;
-  if(room&&FLOWER_ROOMS.includes(room)&&wtype&&!FLOWER_WTYPES.includes(wtype)){toast('Watering type "'+wtype+'" is not allowed in '+room+'. Use: Full Saturation, Feed, Flush, or RO Water.',4000);return;}
   if(!batchVal){toast('Please select a batch.');return;}
   const harvestDate=document.getElementById('ro-harvest').value;
   if(harvestDate&&date>harvestDate){toast('This batch was harvested on '+harvestDate+'. Entry blocked.',3500);return;}
@@ -663,9 +681,9 @@ function filterRecs(recs,roomId,growerId,fromId,toId,batchId){
 }
 function statCards(cards,id){document.getElementById(id).innerHTML=cards.map(c=>'<div class="stat-card"><div class="stat-lbl">'+c.l+'</div><div class="stat-val" style="'+(c.s||'')+'">'+c.v+'</div></div>').join('');}
 
-function renderEC(){populateReportBatchFilters();const data=filterRecs(ecRecs,'f-ec-room','f-ec-grower','f-ec-from','f-ec-to','f-ec-batch'),body=document.getElementById('ec-tbl-body');if(!data.length){body.innerHTML='<tr><td colspan="11"><div class="empty">No entries yet.</div></td></tr>';statCards([],'ec-stat-cards');return;}const ecV=data.map(r=>r.dripEc).filter(v=>v!==null),flags=data.filter(r=>(r.dripEc!==null&&(r.dripEc<EC_LO||r.dripEc>EC_HI))||(r.dripPh!==null&&(r.dripPh<PH_EC_LO||r.dripPh>PH_EC_HI))).length;statCards([{l:'Entries',v:data.length},{l:'Avg Drip EC',v:ecV.length?(ecV.reduce((a,b)=>a+b,0)/ecV.length).toFixed(2):'-'},{l:'Flags',v:flags,s:flags>0?'color:var(--red)':''}],'ec-stat-cards');body.innerHTML=data.map(r=>'<tr><td style="font-family:var(--mono);">'+r.date+'</td><td>'+r.room+'</td><td>'+stageLabel(r)+'</td><td><span class="tag">'+(r.grower||'-')+'</span></td><td style="color:var(--text3);font-family:var(--mono);">'+(r.batch||'-')+'</td><td style="font-size:11px;color:var(--text2);">'+(r.wtype||'-')+'</td><td>'+colorEC(r.dripEc)+'</td><td>'+colorPHec(r.dripPh)+'</td><td style="font-family:var(--mono);">'+(r.totalML?r.totalML+'ml':'-')+'</td><td style="font-family:var(--mono);">'+(r.flow?r.flow+'L':'-')+'</td><td style="max-width:120px;white-space:normal;font-size:11px;color:var(--text3);">'+(r.notes||'')+'</td></tr>').join('');}
+function renderEC(){populateReportBatchFilters();const data=filterRecs(ecRecs,'f-ec-room','f-ec-grower','f-ec-from','f-ec-to','f-ec-batch'),body=document.getElementById('ec-tbl-body');if(!data.length){body.innerHTML='<tr><td colspan="11"><div class="empty">No entries yet.</div></td></tr>';statCards([],'ec-stat-cards');return;}const ecV=data.map(r=>r.dripEc).filter(v=>v!==null),flags=data.filter(r=>(r.dripEc!==null&&(r.dripEc<EC_LO||r.dripEc>EC_HI))||(r.dripPh!==null&&(r.dripPh<PH_EC_LO||r.dripPh>PH_EC_HI))).length;statCards([{l:'Entries',v:data.length},{l:'Avg Drip EC',v:ecV.length?(ecV.reduce((a,b)=>a+b,0)/ecV.length).toFixed(2):'-'},{l:'Flags',v:flags,s:flags>0?'color:var(--red)':''}],'ec-stat-cards');body.innerHTML=data.map(r=>'<tr><td style="font-family:var(--mono);">'+r.date+'</td><td>'+roomDot(r.room)+'</td><td>'+stageLabel(r)+'</td><td><span class="tag">'+(r.grower||'-')+'</span></td><td style="color:var(--text3);font-family:var(--mono);">'+(r.batch||'-')+'</td><td style="font-size:11px;color:var(--text2);">'+(r.wtype||'-')+'</td><td>'+colorEC(r.dripEc)+'</td><td>'+colorPHec(r.dripPh)+'</td><td style="font-family:var(--mono);">'+(r.totalML?r.totalML+'ml':'-')+'</td><td style="font-family:var(--mono);">'+(r.flow?r.flow+'L':'-')+'</td><td style="max-width:120px;white-space:normal;font-size:11px;color:var(--text3);">'+(r.notes||'')+'</td></tr>').join('');}
 
-function renderRO(){populateReportBatchFilters();const data=filterRecs(roRecs,'f-ro-room','f-ro-grower','f-ro-from','f-ro-to','f-ro-batch'),body=document.getElementById('ro-tbl-body');if(!data.length){body.innerHTML='<tr><td colspan="10"><div class="empty">No runoff entries yet.</div></td></tr>';statCards([],'ro-stat-cards');return;}const ecV=data.map(r=>r.avgEC).filter(v=>v!==null),alerts=data.filter(r=>r.ecAlert).length;statCards([{l:'Entries',v:data.length},{l:'Avg EC',v:ecV.length?(ecV.reduce((a,b)=>a+b,0)/ecV.length).toFixed(2):'-'},{l:'Alerts',v:alerts,s:alerts>0?'color:var(--red)':''}],'ro-stat-cards');body.innerHTML=data.map(r=>{const vs=r.variance!==null?(r.variance>=0?'+':'')+r.variance.toFixed(2):'-',vc=r.variance!==null&&r.variance>RO_VAR_ALERT?'hi':r.variance>=RO_VAR_LO&&r.variance<=RO_VAR_HI?'ok':'';return'<tr><td style="font-family:var(--mono);">'+r.date+'</td><td>'+r.room+'</td><td>'+stageLabel(r)+'</td><td><span class="tag">'+(r.grower||'-')+'</span></td><td style="color:var(--text3);font-family:var(--mono);">'+(r.batch||'-')+'</td><td style="font-family:var(--mono);">'+(r.inputEC!==null?r.inputEC.toFixed(2):'-')+'</td><td style="font-family:var(--mono);">'+(r.avgEC!==null?r.avgEC.toFixed(2):'-')+'</td><td><span class="'+vc+'" style="font-family:var(--mono);">'+vs+'</span></td><td>'+colorPHro(r.avgPH)+'</td><td style="max-width:120px;white-space:normal;font-size:11px;color:var(--text3);">'+(r.notes||'')+'</td></tr>';}).join('');}
+function renderRO(){populateReportBatchFilters();const data=filterRecs(roRecs,'f-ro-room','f-ro-grower','f-ro-from','f-ro-to','f-ro-batch'),body=document.getElementById('ro-tbl-body');if(!data.length){body.innerHTML='<tr><td colspan="10"><div class="empty">No runoff entries yet.</div></td></tr>';statCards([],'ro-stat-cards');return;}const ecV=data.map(r=>r.avgEC).filter(v=>v!==null),alerts=data.filter(r=>r.ecAlert).length;statCards([{l:'Entries',v:data.length},{l:'Avg EC',v:ecV.length?(ecV.reduce((a,b)=>a+b,0)/ecV.length).toFixed(2):'-'},{l:'Alerts',v:alerts,s:alerts>0?'color:var(--red)':''}],'ro-stat-cards');body.innerHTML=data.map(r=>{const vs=r.variance!==null?(r.variance>=0?'+':'')+r.variance.toFixed(2):'-',vc=r.variance!==null&&r.variance>RO_VAR_ALERT?'hi':r.variance>=RO_VAR_LO&&r.variance<=RO_VAR_HI?'ok':'';return'<tr><td style="font-family:var(--mono);">'+r.date+'</td><td>'+roomDot(r.room)+'</td><td>'+stageLabel(r)+'</td><td><span class="tag">'+(r.grower||'-')+'</span></td><td style="color:var(--text3);font-family:var(--mono);">'+(r.batch||'-')+'</td><td style="font-family:var(--mono);">'+(r.inputEC!==null?r.inputEC.toFixed(2):'-')+'</td><td style="font-family:var(--mono);">'+(r.avgEC!==null?r.avgEC.toFixed(2):'-')+'</td><td><span class="'+vc+'" style="font-family:var(--mono);">'+vs+'</span></td><td>'+colorPHro(r.avgPH)+'</td><td style="max-width:120px;white-space:normal;font-size:11px;color:var(--text3);">'+(r.notes||'')+'</td></tr>';}).join('');}
 
 function dlCSV(rows,name){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([rows.map(r=>r.join(',')).join('\n')],{type:'text/csv'}));a.download=name;a.click();}
 function exportEC(){const data=filterRecs(ecRecs,'f-ec-room','f-ec-grower','f-ec-from','f-ec-to');if(!data.length){toast('No data to export.');return;}dlCSV([['Date','Room','Stage','Day','Grower','Batch','Watering Type','Drip EC Avg','Drip pH Avg','Total ml/plant','Flow Meter L','Notes'],...data.map(r=>[r.date,r.room,r.stage||'',r.day||'',r.grower,r.batch,r.wtype||'',r.dripEc||'',r.dripPh||'',r.totalML||'',r.flow||'','"'+(r.notes||'').replace(/"/g,'""')+'"'])],'EC_Log_GoldenPeak.csv');}
