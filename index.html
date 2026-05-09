@@ -315,6 +315,7 @@ tr:last-child td { border-bottom: none; }
         <div class="conn-status" id="conn-status"></div>
         <button class="btn-save" id="sync-pending-btn" onclick="syncPending()" style="margin-top:8px;background:var(--blue);">Sync Pending Records</button>
         <div class="conn-status" id="sync-pending-status"></div>
+        <button class="btn-save" onclick="clearPendingRecords()" style="margin-top:8px;background:var(--red);">Clear Pending Records</button>
       </div>
       <div class="settings-card">
         <h3>How to get your credentials</h3>
@@ -611,6 +612,14 @@ function migrateRoomNames(){
   }
   [...ecRecs,...roRecs].forEach(fixRoom);
   lsSet('gp-ec',ecRecs);lsSet('gp-ro',roRecs);
+}
+function clearPendingRecords(){
+  if(!confirm('This will permanently delete all unsynced records. This cannot be undone. Continue?'))return;
+  ecRecs=ecRecs.filter(r=>r.synced);
+  roRecs=roRecs.filter(r=>r.synced);
+  lsSet('gp-ec',ecRecs);lsSet('gp-ro',roRecs);
+  populateBatchDropdowns();renderEC();renderRO();
+  toast('Pending records cleared.');
 }
 async function syncPending(){
   migrateRoomNames();
