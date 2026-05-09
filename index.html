@@ -441,42 +441,26 @@ function showClosedWarning(form,harvestDate){const id=form+'-closed-warning';let
 function hideClosedWarning(form){const el=document.getElementById(form+'-closed-warning');if(el)el.style.display='none';document.getElementById(form+'-btn').disabled=false;}
 function lockField(inputId,lock,hint){const el=document.getElementById(inputId);el.disabled=lock;el.style.background=lock?'var(--bg2)':'var(--bg)';el.style.color=lock?'var(--text3)':'var(--text)';el.style.cursor=lock?'not-allowed':'';if(lock&&!el.value)el.value='';const field=el.closest('.field');let h=field.querySelector('.lock-hint');if(lock&&hint&&!h){h=document.createElement('div');h.className='lock-hint';h.style.cssText='font-size:10px;color:var(--text3);margin-top:3px;font-family:var(--mono);';h.textContent=hint;field.appendChild(h);}else if(!lock&&h){h.remove();}}
 function lockVegDate(lock){const vegInput=document.getElementById('ec-veg');vegInput.readOnly=lock;vegInput.style.background=lock?'var(--bg2)':'var(--bg)';vegInput.style.color=lock?'var(--text3)':'var(--text)';vegInput.style.cursor=lock?'not-allowed':'';const vegField=vegInput.closest('.field');let hint=vegField.querySelector('.lock-hint');if(lock&&!hint){hint=document.createElement('div');hint.className='lock-hint';hint.style.cssText='font-size:10px;color:var(--text3);margin-top:3px;font-family:var(--mono);';hint.textContent='Locked - flower stage started';vegField.appendChild(hint);}else if(!lock&&hint){hint.remove();}}
-function ecHydrationChanged(){
+function setVegMin(){
   const hyd=document.getElementById('ec-hydration').value;
   const vegEl=document.getElementById('ec-veg');
   if(hyd){
-    const minVeg=new Date(hyd);minVeg.setDate(minVeg.getDate()+1);
-    const minStr=minVeg.getFullYear()+'-'+String(minVeg.getMonth()+1).padStart(2,'0')+'-'+String(minVeg.getDate()).padStart(2,'0');
-    vegEl.min=minStr;
+    const p=hyd.split('-');
+    const d=new Date(parseInt(p[0]),parseInt(p[1])-1,parseInt(p[2]));
+    d.setDate(d.getDate()+1);
+    vegEl.min=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
     if(vegEl.value&&vegEl.value<=hyd){vegEl.value='';ecBadge();}
   } else {
     vegEl.min='';
   }
-  applyCascadeLocks();
 }
+function ecHydrationChanged(){setVegMin();applyCascadeLocks();}
 function applyCascadeLocks(){
   const hyd=document.getElementById('ec-hydration').value;
   const hasHydration=!!hyd;
   const hasVeg=!!document.getElementById('ec-veg').value;
   const hasFlower=!!document.getElementById('ec-flower').value;
-  // Set min date on veg to day after hydration
-  const vegInput=document.getElementById('ec-veg');
-  if(hyd){
-    const p=hyd.split('-');
-    const minVeg=new Date(parseInt(p[0]),parseInt(p[1])-1,parseInt(p[2]));
-    minVeg.setDate(minVeg.getDate()+1);
-    vegInput.min=minVeg.getFullYear()+'-'+String(minVeg.getMonth()+1).padStart(2,'0')+'-'+String(minVeg.getDate()).padStart(2,'0');
-  } else {
-    vegInput.min='';
-  }
-  // Set min veg date to day after hydration
-  const vegEl=document.getElementById('ec-veg');
-  if(hyd){
-    const minVeg=new Date(hyd+'T00:00:00');minVeg.setDate(minVeg.getDate()+1);
-    vegEl.min=minVeg.getFullYear()+'-'+String(minVeg.getMonth()+1).padStart(2,'0')+'-'+String(minVeg.getDate()).padStart(2,'0');
-  } else {
-    vegEl.min='';
-  }
+  setVegMin();
   lockField('ec-flower',!hasVeg,'Enter veg start date first');
   lockVegDate(hasFlower);
   lockField('ec-harvest',!hasFlower,'Enter flower start date first');
@@ -645,7 +629,7 @@ document.getElementById('ro-date').readOnly=true;
 document.getElementById('ro-date').style.background='var(--bg2)';
 document.getElementById('ro-date').style.color='var(--text3)';
 document.getElementById('ro-date').style.cursor='default';
-buildECEvents();buildROSamples();loadAll();populateBatchDropdowns();applyCascadeLocks();
+buildECEvents();buildROSamples();loadAll();populateBatchDropdowns();setVegMin();applyCascadeLocks();
 // Keep entry dates updated to today on each page load
 setInterval(()=>{const t=localDate();document.getElementById('ec-date').value=t;document.getElementById('ro-date').value=t;},60000);
 </script>
