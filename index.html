@@ -151,19 +151,19 @@ tr:last-child td { border-bottom: none; }
         <div class="section-label">Batch info</div>
         <div class="card">
           <div class="g2" style="margin-bottom:10px;">
+            <div class="field"><label>Grower</label>
+              <select id="ec-grower">
+                <option value="">select grower</option>
+                <option>Jordan Elliott</option><option>Brandon Cail</option><option>Tom Devost</option>
+              </select>
+            </div>
+            <div class="field"><label>Batch ID</label><select id="ec-batch-select" onchange="ecBatchSelect()" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;margin-bottom:6px;"><option value="">-- select existing batch --</option></select><input type="text" id="ec-batch" placeholder="Or type new batch ID" oninput="ecBatchLookup()" autocomplete="off" /></div>
             <div class="field"><label>Room</label>
               <select id="ec-room" onchange="ecRoomChanged()">
                 <option value="">select room</option>
                 <option>Flower 1</option><option>Flower 2</option>
                 <option>Flower 3</option><option>Flower 4</option>
                 <option>Flower 5</option><option>Veg</option>
-              </select>
-            </div>
-            <div class="field"><label>Batch ID</label><select id="ec-batch-select" onchange="ecBatchSelect()" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;margin-bottom:6px;"><option value="">-- select existing batch --</option></select><input type="text" id="ec-batch" placeholder="Or type new batch ID" oninput="ecBatchLookup()" autocomplete="off" /></div>
-            <div class="field"><label>Grower</label>
-              <select id="ec-grower">
-                <option value="">select grower</option>
-                <option>Jordan Elliott</option><option>Brandon Cail</option><option>Tom Devost</option>
               </select>
             </div>
             <div class="field"><label>Entry date</label><input type="date" id="ec-date" readonly style="background:var(--bg2);color:var(--text3);cursor:default;" /></div>
@@ -226,12 +226,10 @@ tr:last-child td { border-bottom: none; }
         <div class="section-label">Batch info</div>
         <div class="card">
           <div class="g2" style="margin-bottom:10px;">
-            <div class="field"><label>Room</label>
-              <select id="ro-room" onchange="applyRoomColor('ro',this.value)">
-                <option value="">select room</option>
-                <option>Flower 1</option><option>Flower 2</option>
-                <option>Flower 3</option><option>Flower 4</option>
-                <option>Flower 5</option>
+            <div class="field"><label>Grower</label>
+              <select id="ro-grower">
+                <option value="">select grower</option>
+                <option>Jordan Elliott</option><option>Brandon Cail</option><option>Tom Devost</option>
               </select>
             </div>
             <div class="field"><label>Batch ID</label>
@@ -239,10 +237,12 @@ tr:last-child td { border-bottom: none; }
                 <option value="">-- select batch --</option>
               </select>
             </div>
-            <div class="field"><label>Grower</label>
-              <select id="ro-grower">
-                <option value="">select grower</option>
-                <option>Jordan Elliott</option><option>Brandon Cail</option><option>Tom Devost</option>
+            <div class="field"><label>Room</label>
+              <select id="ro-room" onchange="applyRoomColor('ro',this.value)">
+                <option value="">select room</option>
+                <option>Flower 1</option><option>Flower 2</option>
+                <option>Flower 3</option><option>Flower 4</option>
+                <option>Flower 5</option>
               </select>
             </div>
             <div class="field"><label>Test date</label><input type="date" id="ro-date" oninput="roBadge()" /></div>
@@ -548,6 +548,23 @@ function applyCascadeLocks(){
   const hyd=document.getElementById('ec-hydration').value;
   const hasVeg=!!document.getElementById('ec-veg').value;
   const hasFlower=!!document.getElementById('ec-flower').value;
+  // Lock veg until hydration date entered; set min to day after hydration
+  const vegEl=document.getElementById('ec-veg');
+  const vegSavedLock=vegEl.readOnly;
+  if(!vegSavedLock){
+    const hydLocked=!hyd;
+    vegEl.disabled=hydLocked;
+    vegEl.style.background=hydLocked?'var(--bg2)':'var(--bg)';
+    vegEl.style.color=hydLocked?'var(--text3)':'var(--text)';
+    vegEl.style.cursor=hydLocked?'not-allowed':'';
+    if(hyd){
+      const _p=hyd.split('-');const _d=new Date(parseInt(_p[0]),parseInt(_p[1])-1,parseInt(_p[2]));_d.setDate(_d.getDate()+1);
+      vegEl.min=_d.getFullYear()+'-'+String(_d.getMonth()+1).padStart(2,'0')+'-'+String(_d.getDate()).padStart(2,'0');
+    } else { vegEl.min=''; }
+    let vh=vegEl.closest('.field').querySelector('.veg-lock-hint');
+    if(hydLocked&&!vh){vh=document.createElement('div');vh.className='veg-lock-hint';vh.style.cssText='font-size:10px;color:var(--text3);margin-top:3px;font-family:var(--mono);';vh.textContent='Enter hydration date first';vegEl.closest('.field').appendChild(vh);}
+    else if(!hydLocked&&vh){vh.remove();}
+  }
   setVegMin();
   // Set min flower date to day after veg
   const flowerEl=document.getElementById('ec-flower');
@@ -568,7 +585,13 @@ function applyCascadeLocks(){
     // No saved locks — apply normal cascade
     lockField('ec-flower',!hasVeg,'Enter veg start date first');
     lockVegDate(hasFlower);
-    lockField('ec-harvest',!hasFlower,'Enter flower start date first');
+    const flowerVal=document.getElementById('ec-flower').value;
+  const harvestEl=document.getElementById('ec-harvest');
+  if(flowerVal){
+    const _p=flowerVal.split('-');const _d=new Date(parseInt(_p[0]),parseInt(_p[1])-1,parseInt(_p[2]));_d.setDate(_d.getDate()+1);
+    harvestEl.min=_d.getFullYear()+'-'+String(_d.getMonth()+1).padStart(2,'0')+'-'+String(_d.getDate()).padStart(2,'0');
+  } else { harvestEl.min=''; }
+  lockField('ec-harvest',!hasFlower,'Enter flower start date first');
   } else {
     // Saved locks exist — only lock harvest if no flower date
     lockField('ec-harvest',!hasFlower,'Enter flower start date first');
@@ -645,14 +668,15 @@ async function ecSave(){
 }
 function ecClear(){
   ['ec-hydration','ec-veg','ec-flower'].forEach(id=>{
-    const el=document.getElementById(id);el.readOnly=false;el.style.background='';el.style.color='';el.style.cursor='';
+    const el=document.getElementById(id);el.readOnly=false;el.disabled=false;el.style.background='';el.style.color='';el.style.cursor='';el.min='';
     const h=el.closest('.field').querySelector('.saved-lock-hint');if(h)h.remove();
+    const vh=el.closest('.field').querySelector('.veg-lock-hint');if(vh)vh.remove();
   });
   const roomEl=document.getElementById('ec-room');
   roomEl.innerHTML='<option value="">select room</option><option>Flower 1</option><option>Flower 2</option><option>Flower 3</option><option>Flower 4</option><option>Flower 5</option><option>Veg</option>';
   roomEl.disabled=false;roomEl.style.background='';roomEl.style.color='';roomEl.style.cursor='';
   const rh=roomEl.closest('.field').querySelector('.room-lock-hint');if(rh)rh.remove();
-  document.querySelectorAll('.ec-drip-ec,.ec-drip-ph').forEach(i=>i.value='');for(let i=1;i<=8;i++)document.getElementById('ec-evt-'+i).value='';['ec-notes','ec-flow'].forEach(id=>document.getElementById(id).value='');document.getElementById('ec-wtype').value='';document.getElementById('ec-total-ml').textContent='-';['ec-avg-ec','ec-avg-ph'].forEach(id=>{document.getElementById(id).textContent='-';document.getElementById(id).className='avg-val';});document.getElementById('ec-batch').value='';document.getElementById('ec-batch-select').value='';document.getElementById('ec-hydration').value='';clearBatchRoomLock('ec');updateBatchRoomsInfo('');const h=document.getElementById('ec-harvest').value;if(h)showClosedWarning('ec',h);applyCascadeLocks();}
+  document.querySelectorAll('.ec-drip-ec,.ec-drip-ph').forEach(i=>i.value='');for(let i=1;i<=8;i++)document.getElementById('ec-evt-'+i).value='';['ec-notes','ec-flow'].forEach(id=>document.getElementById(id).value='');document.getElementById('ec-wtype').value='';document.getElementById('ec-total-ml').textContent='-';['ec-avg-ec','ec-avg-ph'].forEach(id=>{document.getElementById(id).textContent='-';document.getElementById(id).className='avg-val';});document.getElementById('ec-batch').value='';document.getElementById('ec-batch-select').value='';document.getElementById('ec-hydration').value='';clearBatchRoomLock('ec');updateBatchRoomsInfo('');document.getElementById('ec-room-strip').style.display='none';document.getElementById('ec-badge').innerHTML='<span style="font-size:12px;color:var(--text3);">Enter veg start date to calculate</span>';const h=document.getElementById('ec-harvest').value;if(h)showClosedWarning('ec',h);applyCascadeLocks();}
 
 function buildROSamples(){const c=document.getElementById('ro-samples');c.innerHTML='';for(let i=1;i<=8;i++){c.innerHTML+='<div class="sample-item"><div class="sample-num">Sample '+i+'</div><div class="s-lbl">EC (mS/cm)</div><input type="number" class="ro-s-ec s-input" id="ro-ec-'+i+'" step="0.01" placeholder="0.00" oninput="roCalc()" /><div class="s-lbl" style="margin-top:6px;">pH</div><input type="number" class="ro-s-ph s-input" id="ro-ph-'+i+'" step="0.01" placeholder="0.00" oninput="roCalc()" /></div>';}}
 function roBadge(){const d=document.getElementById('ro-date').value,vs=document.getElementById('ro-veg').value,fs=document.getElementById('ro-flower').value,b=document.getElementById('ro-badge');if(!d||!vs){b.innerHTML='<span style="font-size:12px;color:var(--text3);">Enter veg start date to calculate</span>';return;}const{stage,day}=calcStage(vs,fs,d);if(stage&&day)b.innerHTML='<span class="day-pill '+stage+'">'+(stage==='flower'?'Flower Day':'Veg Day')+' '+day+'</span>';else b.innerHTML='<span style="font-size:12px;color:var(--text3);">Check your dates</span>';}
@@ -702,8 +726,11 @@ function updateBatchRoomsInfo(batch){
   if(!batch){el.style.display='none';return;}
   const rooms=[...new Set([...ecRecs,...roRecs].filter(r=>r.batch===batch&&r.room&&!r.harvestDate).map(r=>r.room))];
   if(rooms.length===0){el.style.display='none';return;}
+  const hasFlower=[...ecRecs,...roRecs].some(r=>r.batch&&r.batch.trim().toLowerCase()===batch.trim().toLowerCase()&&r.flowerStart);
+  const displayRooms=hasFlower?rooms.filter(r=>r!=='Veg'):rooms;
+  if(!displayRooms.length){el.style.display='none';return;}
   el.style.display='block';
-  el.innerHTML='<span style="color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;font-size:10px;">Active rooms: </span>'+rooms.map(r=>'<span style="display:inline-block;background:var(--amber-pale);color:var(--amber);border:1px solid var(--amber);border-radius:20px;padding:1px 8px;font-size:11px;margin:2px 3px;">'+r+'</span>').join('');
+  el.innerHTML='<span style="color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;font-size:10px;">Active rooms: </span>'+displayRooms.map(r=>{const c=getRoomColor(r);const dot=c?'<span style="width:8px;height:8px;border-radius:50%;background:'+c.dot+';display:inline-block;margin-right:4px;vertical-align:middle;"></span>':'';return'<span style="display:inline-block;background:'+(c?c.bg:'var(--amber-pale)')+';color:'+(c?c.text:'var(--amber)')+';border:1px solid '+(c?c.border:'var(--amber)')+';border-radius:20px;padding:1px 8px;font-size:11px;margin:2px 3px;">'+dot+r+'</span>'}).join('');
 }
 
 // Confirm clear helpers
