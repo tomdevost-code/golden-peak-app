@@ -459,7 +459,16 @@ function applyCascadeLocks(){
   const hasHydration=!!hyd;
   const hasVeg=!!document.getElementById('ec-veg').value;
   const hasFlower=!!document.getElementById('ec-flower').value;
-  lockField('ec-veg',!hasHydration,'Enter hydration date first');
+  // Use readonly (not disabled) for veg so value is always readable on save
+  const vegInput=document.getElementById('ec-veg');
+  if(!hasHydration){
+    vegInput.readOnly=true;vegInput.style.background='var(--bg2)';vegInput.style.color='var(--text3)';vegInput.style.cursor='not-allowed';
+    let hint=vegInput.closest('.field').querySelector('.hydration-hint');
+    if(!hint){hint=document.createElement('div');hint.className='hydration-hint';hint.style.cssText='font-size:10px;color:var(--text3);margin-top:3px;font-family:var(--mono);';hint.textContent='Enter hydration date first';vegInput.closest('.field').appendChild(hint);}
+  } else {
+    if(!hasFlower){vegInput.readOnly=false;vegInput.style.background='';vegInput.style.color='';vegInput.style.cursor='';}
+    const hint=vegInput.closest('.field').querySelector('.hydration-hint');if(hint)hint.remove();
+  }
   // Set min veg date to day after hydration
   const vegEl=document.getElementById('ec-veg');
   if(hyd){
