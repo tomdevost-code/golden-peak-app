@@ -152,7 +152,7 @@ tr:last-child td { border-bottom: none; }
         <div class="card">
           <div class="g2" style="margin-bottom:10px;">
             <div class="field"><label>Grower</label>
-              <select id="ec-grower">
+              <select id="ec-grower" onchange="ecSeqUnlock()">
                 <option value="">select grower</option>
                 <option>Jordan Elliott</option><option>Brandon Cail</option><option>Tom Devost</option>
               </select>
@@ -413,7 +413,7 @@ function populateBatchDropdowns(){
   ecIds.forEach(b=>{const opt=document.createElement('option');opt.value=b;opt.textContent=b+(ecBatches[b].harvestDate?' (harvested)':'');if(ecBatches[b].harvestDate)opt.style.color='var(--text3)';roSel.appendChild(opt);});
   roSel.value=roCur;
 }
-function ecBatchSelect(){const val=document.getElementById('ec-batch-select').value;if(!val)return;document.getElementById('ec-batch').value=val;ecBatchLookup();ecRoomChanged();}
+function ecBatchSelect(){const val=document.getElementById('ec-batch-select').value;document.getElementById('ec-batch').value=val;ecBatchLookup();ecSeqUnlock();}
 
 // Batch-room locking helpers
 function saveBatchRoom(batch,room){}
@@ -470,7 +470,7 @@ function ecBatchLookup(){
       roomEl.disabled=false;roomEl.style.background='';roomEl.style.color='';roomEl.style.cursor='';
       const hint=roomEl.closest('.field').querySelector('.room-lock-hint');if(hint)hint.remove();
     }
-    applyCascadeLocks();ecBadge();updateBatchRoomsInfo(batch);
+    applyCascadeLocks();ecBadge();updateBatchRoomsInfo(batch);ecSeqUnlock();
     if(found.harvestDate){showClosedWarning('ec',found.harvestDate);}else{hideClosedWarning('ec');if(found.vegStart)toast('Batch found - dates loaded automatically');}
   } else {
     // New batch — lock to Veg
@@ -479,7 +479,7 @@ function ecBatchLookup(){
     let hint=roomEl.closest('.field').querySelector('.room-lock-hint');
     if(!hint){hint=document.createElement('div');hint.className='room-lock-hint';hint.style.cssText='font-size:10px;color:var(--text3);margin-top:3px;font-family:var(--mono);';roomEl.closest('.field').appendChild(hint);}
     hint.textContent='New batches must start in Veg Room';
-    ecRoomChanged();applyCascadeLocks();updateBatchRoomsInfo(batch);
+    ecRoomChanged();applyCascadeLocks();updateBatchRoomsInfo(batch);ecSeqUnlock();
   }
 }
 function roBatchLookup(){const batch=document.getElementById('ro-batch').value.trim();if(!batch)return;const found=findBatchDates(batch,[...ecRecs,...roRecs]);if(found){if(found.vegStart)document.getElementById('ro-veg').value=found.vegStart;if(found.flowerStart)document.getElementById('ro-flower').value=found.flowerStart;if(found.harvestDate)document.getElementById('ro-harvest').value=found.harvestDate;roBadge();if(found.harvestDate){showClosedWarning('ro',found.harvestDate);}else{hideClosedWarning('ro');if(found.vegStart)toast('Batch found - dates loaded automatically');}}}
@@ -532,6 +532,49 @@ function applyRoomColor(formPrefix,room){
 function roomDot(room){const c=getRoomColor(room);if(!c)return room;return'<span style="display:inline-flex;align-items:center;gap:5px;"><span style="width:8px;height:8px;border-radius:50%;background:'+c.dot+';display:inline-block;flex-shrink:0;"></span>'+room+'</span>';}
 const VEG_WTYPES=['Hydration','Pre-Charge','Water In','Full Saturation','Feed','Flush','RO Water'];
 const FLOWER_WTYPES=['Full Saturation','Feed','Flush','RO Water'];
+function seqDisable(id,hint){
+  const el=document.getElementById(id);if(!el)return;
+  el.disabled=true;el.style.background='var(--bg2)';el.style.color='var(--text3)';el.style.cursor='not-allowed';el.style.opacity='0.6';
+  if(hint){const f=el.closest('.field');if(f){let h=f.querySelector('.seq-hint');if(!h){h=document.createElement('div');h.className='seq-hint';h.style.cssText='font-size:10px;color:var(--text3);margin-top:3px;font-family:var(--mono);';f.appendChild(h);}h.textContent=hint;}}
+}
+function seqEnable(id){
+  const el=document.getElementById(id);if(!el)return;
+  el.disabled=false;el.style.background='';el.style.color='';el.style.cursor='';el.style.opacity='';
+  const f=el.closest('.field');if(f){const h=f.querySelector('.seq-hint');if(h)h.remove();}
+}
+function ecSeqUnlock(){
+  const grower=document.getElementById('ec-grower').value;
+  const batch=document.getElementById('ec-batch').value.trim();
+  const batchSel=document.getElementById('ec-batch-select').value;
+  const hasBatch=!!(batch||batchSel);
+  const room=document.getElementById('ec-room').value;
+  // Grower selected → unlock batch
+  if(grower){
+    seqEnable('ec-batch-select');seqEnable('ec-batch');
+  } else {
+    seqDisable('ec-batch-select','Select a grower first');seqDisable('ec-batch','Select a grower first');
+    seqDisable('ec-room','Select a grower first');
+    return;
+  }
+  // Batch selected → unlock room
+  if(hasBatch){
+    seqEnable('ec-room');
+  } else {
+    seqDisable('ec-room','Select a batch first');
+    return;
+  }
+  // Room selected → unlock rest of form
+  if(room){
+    seqEnable('ec-hydration');seqEnable('ec-wtype');
+    ['ec-notes','ec-flow'].forEach(id=>seqEnable(id));
+    document.querySelectorAll('.ec-drip-ec,.ec-drip-ph,.ec-evt-input').forEach(el=>{el.disabled=false;el.style.opacity='';});
+    applyCascadeLocks(); // re-apply date cascade on top
+  } else {
+    seqDisable('ec-hydration','Select a room first');
+    ['ec-notes','ec-flow'].forEach(id=>seqDisable(id,'Select a room first'));
+    document.querySelectorAll('.ec-drip-ec,.ec-drip-ph').forEach(el=>{el.disabled=true;el.style.opacity='0.4';});
+  }
+}
 function ecRoomChanged(){
   const roomEl=document.getElementById('ec-room');
   const room=roomEl.value;
@@ -548,22 +591,24 @@ function applyCascadeLocks(){
   const hyd=document.getElementById('ec-hydration').value;
   const hasVeg=!!document.getElementById('ec-veg').value;
   const hasFlower=!!document.getElementById('ec-flower').value;
-  // Lock veg until hydration date entered; set min to day after hydration
+  // Lock veg until a hydration RECORD is saved for this batch
   const vegEl=document.getElementById('ec-veg');
   const vegSavedLock=vegEl.readOnly;
   if(!vegSavedLock){
-    const hydLocked=!hyd;
-    vegEl.disabled=hydLocked;
-    vegEl.style.background=hydLocked?'var(--bg2)':'var(--bg)';
-    vegEl.style.color=hydLocked?'var(--text3)':'var(--text)';
-    vegEl.style.cursor=hydLocked?'not-allowed':'';
-    if(hyd){
+    const curBatch=document.getElementById('ec-batch').value.trim();
+    const hydSaved=curBatch&&ecRecs.some(r=>r.batch&&r.batch.trim().toLowerCase()===curBatch.toLowerCase()&&r.hydrationDate);
+    const vegLocked=!hydSaved;
+    vegEl.disabled=vegLocked;
+    vegEl.style.background=vegLocked?'var(--bg2)':'var(--bg)';
+    vegEl.style.color=vegLocked?'var(--text3)':'var(--text)';
+    vegEl.style.cursor=vegLocked?'not-allowed':'';
+    if(hydSaved&&hyd){
       const _p=hyd.split('-');const _d=new Date(parseInt(_p[0]),parseInt(_p[1])-1,parseInt(_p[2]));_d.setDate(_d.getDate()+1);
       vegEl.min=_d.getFullYear()+'-'+String(_d.getMonth()+1).padStart(2,'0')+'-'+String(_d.getDate()).padStart(2,'0');
     } else { vegEl.min=''; }
     let vh=vegEl.closest('.field').querySelector('.veg-lock-hint');
-    if(hydLocked&&!vh){vh=document.createElement('div');vh.className='veg-lock-hint';vh.style.cssText='font-size:10px;color:var(--text3);margin-top:3px;font-family:var(--mono);';vh.textContent='Enter hydration date first';vegEl.closest('.field').appendChild(vh);}
-    else if(!hydLocked&&vh){vh.remove();}
+    if(vegLocked&&!vh){vh=document.createElement('div');vh.className='veg-lock-hint';vh.style.cssText='font-size:10px;color:var(--text3);margin-top:3px;font-family:var(--mono);';vh.textContent='Save a hydration record first';vegEl.closest('.field').appendChild(vh);}
+    else if(!vegLocked&&vh){vh.remove();}
   }
   setVegMin();
   // Set min flower date to day after veg
@@ -682,7 +727,7 @@ function ecClear(){
   roomEl.innerHTML='<option value="">select room</option><option>Flower 1</option><option>Flower 2</option><option>Flower 3</option><option>Flower 4</option><option>Flower 5</option><option>Veg</option>';
   roomEl.disabled=false;roomEl.style.background='';roomEl.style.color='';roomEl.style.cursor='';
   const rh=roomEl.closest('.field').querySelector('.room-lock-hint');if(rh)rh.remove();
-  document.querySelectorAll('.ec-drip-ec,.ec-drip-ph').forEach(i=>i.value='');for(let i=1;i<=8;i++)document.getElementById('ec-evt-'+i).value='';['ec-notes','ec-flow'].forEach(id=>document.getElementById(id).value='');document.getElementById('ec-wtype').value='';document.getElementById('ec-total-ml').textContent='-';['ec-avg-ec','ec-avg-ph'].forEach(id=>{document.getElementById(id).textContent='-';document.getElementById(id).className='avg-val';});document.getElementById('ec-batch').value='';document.getElementById('ec-batch-select').value='';document.getElementById('ec-hydration').value='';clearBatchRoomLock('ec');updateBatchRoomsInfo('');document.getElementById('ec-room-strip').style.display='none';document.getElementById('ec-badge').innerHTML='<span style="font-size:12px;color:var(--text3);">Enter veg start date to calculate</span>';const h=document.getElementById('ec-harvest').value;if(h)showClosedWarning('ec',h);applyCascadeLocks();}
+  document.querySelectorAll('.ec-drip-ec,.ec-drip-ph').forEach(i=>i.value='');for(let i=1;i<=8;i++)document.getElementById('ec-evt-'+i).value='';['ec-notes','ec-flow'].forEach(id=>document.getElementById(id).value='');document.getElementById('ec-wtype').value='';document.getElementById('ec-total-ml').textContent='-';['ec-avg-ec','ec-avg-ph'].forEach(id=>{document.getElementById(id).textContent='-';document.getElementById(id).className='avg-val';});document.getElementById('ec-batch').value='';document.getElementById('ec-batch-select').value='';document.getElementById('ec-hydration').value='';clearBatchRoomLock('ec');updateBatchRoomsInfo('');document.getElementById('ec-room-strip').style.display='none';document.getElementById('ec-badge').innerHTML='<span style="font-size:12px;color:var(--text3);">Enter veg start date to calculate</span>';const h=document.getElementById('ec-harvest').value;if(h)showClosedWarning('ec',h);applyCascadeLocks();ecSeqUnlock();}
 
 function buildROSamples(){const c=document.getElementById('ro-samples');c.innerHTML='';for(let i=1;i<=8;i++){c.innerHTML+='<div class="sample-item"><div class="sample-num">Sample '+i+'</div><div class="s-lbl">EC (mS/cm)</div><input type="number" class="ro-s-ec s-input" id="ro-ec-'+i+'" step="0.01" placeholder="0.00" oninput="roCalc()" /><div class="s-lbl" style="margin-top:6px;">pH</div><input type="number" class="ro-s-ph s-input" id="ro-ph-'+i+'" step="0.01" placeholder="0.00" oninput="roCalc()" /></div>';}}
 function roBadge(){const d=document.getElementById('ro-date').value,vs=document.getElementById('ro-veg').value,fs=document.getElementById('ro-flower').value,b=document.getElementById('ro-badge');if(!d||!vs){b.innerHTML='<span style="font-size:12px;color:var(--text3);">Enter veg start date to calculate</span>';return;}const{stage,day}=calcStage(vs,fs,d);if(stage&&day)b.innerHTML='<span class="day-pill '+stage+'">'+(stage==='flower'?'Flower Day':'Veg Day')+' '+day+'</span>';else b.innerHTML='<span style="font-size:12px;color:var(--text3);">Check your dates</span>';}
@@ -852,7 +897,7 @@ document.getElementById('ro-date').readOnly=true;
 document.getElementById('ro-date').style.background='var(--bg2)';
 document.getElementById('ro-date').style.color='var(--text3)';
 document.getElementById('ro-date').style.cursor='default';
-buildECEvents();buildROSamples();loadAll();populateBatchDropdowns();setVegMin();applyCascadeLocks();updatePendingBadge();
+buildECEvents();buildROSamples();loadAll();populateBatchDropdowns();setVegMin();applyCascadeLocks();updatePendingBadge();ecSeqUnlock();
 // Keep entry dates updated to today on each page load
 setInterval(()=>{const t=localDate();document.getElementById('ec-date').value=t;document.getElementById('ro-date').value=t;},60000);
 </script>
