@@ -184,7 +184,7 @@ tr:last-child td { border-bottom: none; }
           <div class="field" style="margin-bottom:12px;"><label>Watering type</label>
             <select id="ec-wtype">
               <option value="">select type</option>
-              <option>Hydration</option><option>Pre-charge</option><option>Water In</option>
+              <option>Hydration</option><option>Pre-Charge</option><option>Water In</option>
               <option>Full Saturation</option><option>Feed</option><option>Flush</option><option>RO Water</option>
             </select>
           </div>
@@ -520,6 +520,11 @@ function exportEC(){const data=filterRecs(ecRecs,'f-ec-room','f-ec-grower','f-ec
 function exportRO(){const data=filterRecs(roRecs,'f-ro-room','f-ro-grower','f-ro-from','f-ro-to');if(!data.length){toast('No data to export.');return;}dlCSV([['Date','Room','Stage','Day','Grower','Batch','Input EC','Avg Runoff EC','EC Variance','Avg Runoff pH','Notes'],...data.map(r=>[r.date,r.room,r.stage||'',r.day||'',r.grower,r.batch,r.inputEC||'',r.avgEC||'',r.variance||'',r.avgPH||'','"'+(r.notes||'').replace(/"/g,'""')+'"'])],'Runoff_Log_GoldenPeak.csv');}
 
 
+function migrateWaterTypes(){
+  const map={'Pre-charge':'Pre-Charge'};
+  [...ecRecs].forEach(r=>{if(map[r.wtype])r.wtype=map[r.wtype];});
+  lsSet('gp-ec',ecRecs);
+}
 function migrateRoomNames(){
   function fixRoom(r){
     if(!r.room)return;
@@ -535,6 +540,7 @@ function migrateRoomNames(){
 }
 async function syncPending(){
   migrateRoomNames();
+  migrateWaterTypes();
   if(!atReady()){toast('Configure Airtable connection first.');return;}
   const st=document.getElementById('sync-pending-status');
   const btn=document.getElementById('sync-pending-btn');
