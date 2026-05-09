@@ -443,14 +443,17 @@ function ecBatchLookup(){
   }
   const found=findBatchDates(batch,[...ecRecs,...roRecs]);
   if(found){
-    // Load saved dates
+    // Load saved dates — veg is NOT auto-populated, grower must enter it explicitly
     if(found.hydrationDate)document.getElementById('ec-hydration').value=found.hydrationDate;
-    if(found.vegStart)document.getElementById('ec-veg').value=found.vegStart;
     if(found.flowerStart)document.getElementById('ec-flower').value=found.flowerStart;
     if(found.harvestDate)document.getElementById('ec-harvest').value=found.harvestDate;
     // Lock any date fields that are already saved
     lockSavedDateField('ec-hydration',found.hydrationDate,'Hydration date is locked once saved');
-    lockSavedDateField('ec-veg',found.vegStart,'Veg start date is locked once saved');
+    // Veg: populate and lock only if already saved — grower must enter it themselves
+    if(found.vegStart){
+      document.getElementById('ec-veg').value=found.vegStart;
+      lockSavedDateField('ec-veg',found.vegStart,'Veg start date is locked once saved');
+    }
     lockSavedDateField('ec-flower',found.flowerStart,'Flower start date is locked once saved');
     // If flower date is saved, restrict room to only rooms this batch has been in
     if(found.flowerStart){
@@ -462,13 +465,22 @@ function ecBatchLookup(){
       let hint=roomEl.closest('.field').querySelector('.room-lock-hint');
       if(!hint){hint=document.createElement('div');hint.className='room-lock-hint';hint.style.cssText='font-size:10px;color:var(--text3);margin-top:3px;font-family:var(--mono);';roomEl.closest('.field').appendChild(hint);}
       hint.textContent='Only rooms already assigned to this batch are available';
-    } else {
-      // Restore full room list for veg-stage batch
+    } else if(found.vegStart){
+      // Veg start saved — allow any room
       const fullRooms=['Flower 1','Flower 2','Flower 3','Flower 4','Flower 5','Veg'];
       const prevVal=roomEl.value;
       roomEl.innerHTML='<option value="">select room</option>'+fullRooms.map(r=>'<option'+(r===prevVal?' selected':'')+'>'+r+'</option>').join('');
       roomEl.disabled=false;roomEl.style.background='';roomEl.style.color='';roomEl.style.cursor='';
       const hint=roomEl.closest('.field').querySelector('.room-lock-hint');if(hint)hint.remove();
+    } else {
+      // Hydration saved but no veg yet — lock room to Veg
+      roomEl.value='Veg';
+      const fullRooms=['Veg'];
+      roomEl.innerHTML=fullRooms.map(r=>'<option>'+r+'</option>').join('');
+      roomEl.disabled=true;roomEl.style.background='var(--bg2)';roomEl.style.color='var(--text3)';roomEl.style.cursor='not-allowed';
+      let hint=roomEl.closest('.field').querySelector('.room-lock-hint');
+      if(!hint){hint=document.createElement('div');hint.className='room-lock-hint';hint.style.cssText='font-size:10px;color:var(--text3);margin-top:3px;font-family:var(--mono);';roomEl.closest('.field').appendChild(hint);}
+      hint.textContent='Room locked to Veg until veg start date is saved';
     }
     applyCascadeLocks();ecBadge();updateBatchRoomsInfo(batch);ecSeqUnlock();
     if(found.harvestDate){showClosedWarning('ec',found.harvestDate);}else{hideClosedWarning('ec');if(found.vegStart)toast('Batch found - dates loaded automatically');}
