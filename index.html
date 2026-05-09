@@ -160,7 +160,7 @@ tr:last-child td { border-bottom: none; }
               </select>
             </div>
             <div class="field"><label>Entry date</label><input type="date" id="ec-date" readonly style="background:var(--bg2);color:var(--text3);cursor:default;" /></div>
-            <div class="field"><label>Hydration date</label><input type="date" id="ec-hydration" oninput="ecHydrationChanged()" /></div>
+            <div class="field"><label>Hydration date</label><input type="date" id="ec-hydration" oninput="ecHydrationChanged()" onchange="ecHydrationChanged()" /></div>
             <div class="field"><label>Veg start date</label><input type="date" id="ec-veg" oninput="ecVegChanged()" /></div>
             <div class="field"><label>Flower start date</label><input type="date" id="ec-flower" oninput="ecFlowerChanged()" /></div>
             <div class="field"><label>Harvest date <span style="font-size:10px;color:var(--text3);">(closes batch)</span></label><input type="date" id="ec-harvest" oninput="ecBadge()" /></div>
@@ -462,7 +462,9 @@ function applyCascadeLocks(){
   // Set min date on veg to day after hydration
   const vegInput=document.getElementById('ec-veg');
   if(hyd){
-    const minVeg=new Date(hyd+'T00:00:00');minVeg.setDate(minVeg.getDate()+1);
+    const p=hyd.split('-');
+    const minVeg=new Date(parseInt(p[0]),parseInt(p[1])-1,parseInt(p[2]));
+    minVeg.setDate(minVeg.getDate()+1);
     vegInput.min=minVeg.getFullYear()+'-'+String(minVeg.getMonth()+1).padStart(2,'0')+'-'+String(minVeg.getDate()).padStart(2,'0');
   } else {
     vegInput.min='';
