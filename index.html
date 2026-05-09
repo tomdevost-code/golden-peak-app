@@ -555,8 +555,6 @@ async function roSave(){
   const grower=document.getElementById('ro-grower').value,date=document.getElementById('ro-date').value;
   const batchVal=document.getElementById('ro-batch').value;
   if(!grower){toast('Please select a grower.');return;}if(!date){toast('Please set a date.');return;}
-  const hydrationDate=document.getElementById('ec-hydration').value;
-  if(!hydrationDate){toast('Please enter a hydration date.');return;}
   if(!batchVal){toast('Please select a batch.');return;}
   const harvestDate=document.getElementById('ro-harvest').value;
   if(harvestDate&&date>harvestDate){toast('This batch was harvested on '+harvestDate+'. Entry blocked.',3500);return;}
@@ -567,7 +565,8 @@ async function roSave(){
   const ecV=samples.map(s=>s.ec).filter(v=>v),phV=samples.map(s=>s.ph).filter(v=>v);
   const avgEC=avg(ecV),avgPH=avg(phV),variance=avgEC!==null&&inputEC!==null?Math.round((avgEC-inputEC)*100)/100:null;
   const{stage,day}=calcStage(vs,fs,date);
-  const rec={id:Date.now(),date,room:document.getElementById('ro-room').value,grower,batch:document.getElementById('ro-batch').value.trim(),vegStart:vs,flowerStart:fs,harvestDate:harvestDate||null,stage,day,inputEC,samples,avgEC,avgPH,variance,ecAlert:variance!==null&&variance>RO_VAR_ALERT,notes:document.getElementById('ro-notes').value.trim(),synced:false};
+  const hydrationDate=ecRecs.find(r=>r.batch===batchVal)?.hydrationDate||null;
+  const rec={id:Date.now(),date,room:document.getElementById('ro-room').value,grower,batch:document.getElementById('ro-batch').value.trim(),hydrationDate,vegStart:vs,flowerStart:fs,harvestDate:harvestDate||null,stage,day,inputEC,samples,avgEC,avgPH,variance,ecAlert:variance!==null&&variance>RO_VAR_ALERT,notes:document.getElementById('ro-notes').value.trim(),synced:false};
   roRecs.unshift(rec);lsSet('gp-ro',roRecs);saveBatchRoom(rec.batch,rec.room);populateBatchDropdowns();
   if(atReady()){
     setSyncPill('ing','Syncing...');document.getElementById('ro-btn').disabled=true;
