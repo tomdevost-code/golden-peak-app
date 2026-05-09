@@ -571,7 +571,7 @@ async function roSave(){
   if(atReady()){
     setSyncPill('ing','Syncing...');document.getElementById('ro-btn').disabled=true;
     try{
-      const f={'Date':rec.date,'Room':rec.room,'Grower':rec.grower,'Batch ID':rec.batch,'Veg Start Date':rec.vegStart||undefined,'Flower Start Date':rec.flowerStart||undefined,'Harvest Date':rec.harvestDate||undefined,'Input EC':rec.inputEC||undefined,'Avg Runoff EC':rec.avgEC||undefined,'Avg Runoff pH':rec.avgPH||undefined,'EC Variance':rec.variance||undefined,'Notes':rec.notes||undefined};
+      const f={'Date':rec.date,'Room':rec.room,'Grower':rec.grower,'Batch ID':rec.batch,'Veg Start Date':rec.vegStart||undefined,'Flower Start Date':rec.flowerStart||undefined,'Harvest Date':rec.harvestDate||undefined,'Input EC':rec.inputEC||undefined,'Avg Runoff pH':rec.avgPH||undefined,'EC Variance':rec.variance||undefined,'Notes':rec.notes||undefined};
       rec.samples.forEach((s,i)=>{if(s.ec)f['S'+(i+1)+' EC']=s.ec;if(s.ph)f['S'+(i+1)+' pH']=s.ph;});
       Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
       await atPost(cfg.roTbl,f);rec.synced=true;lsSet('gp-ro',roRecs);setSyncPill('ok','Synced');toast('Saved and synced to Airtable');
@@ -637,7 +637,7 @@ async function syncPending(){
   lsSet('gp-ec',ecRecs);
   for(const rec of pendingRO){
     try{
-      const f={'Date':rec.date,'Room':rec.room,'Grower':rec.grower,'Batch ID':rec.batch,'Veg Start Date':rec.vegStart||undefined,'Flower Start Date':rec.flowerStart||undefined,'Harvest Date':rec.harvestDate||undefined,'Input EC':rec.inputEC||undefined,'Avg Runoff EC':rec.avgEC||undefined,'Avg Runoff pH':rec.avgPH||undefined,'EC Variance':rec.variance||undefined,'Notes':rec.notes||undefined};
+      const f={'Date':rec.date,'Room':rec.room,'Grower':rec.grower,'Batch ID':rec.batch,'Veg Start Date':rec.vegStart||undefined,'Flower Start Date':rec.flowerStart||undefined,'Harvest Date':rec.harvestDate||undefined,'Input EC':rec.inputEC||undefined,'Avg Runoff pH':rec.avgPH||undefined,'EC Variance':rec.variance||undefined,'Notes':rec.notes||undefined};
       rec.samples&&rec.samples.forEach((s,i)=>{if(s.ec)f['S'+(i+1)+' EC']=s.ec;if(s.ph)f['S'+(i+1)+' pH']=s.ph;});
       Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
       const roRes=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+cfg.roTbl,{method:'POST',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify({fields:f})});
