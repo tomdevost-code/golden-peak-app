@@ -444,7 +444,7 @@ function ecBatchLookup(){
     roomEl.style.background='var(--bg2)';roomEl.style.color='var(--text3)';roomEl.style.cursor='not-allowed';
     let hint=roomEl.closest('.field').querySelector('.room-lock-hint');
     if(!hint){hint=document.createElement('div');hint.className='room-lock-hint';hint.style.cssText='font-size:10px;color:var(--text3);margin-top:3px;font-family:var(--mono);';roomEl.closest('.field').appendChild(hint);}
-    hint.textContent='New batches must start in Veg';
+    hint.textContent='New batches must start in Veg Room';
     ecRoomChanged();applyCascadeLocks();
   }
 }
