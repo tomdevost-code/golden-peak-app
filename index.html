@@ -448,7 +448,9 @@ function setVegMin(){
     const p=hyd.split('-');
     const d=new Date(parseInt(p[0]),parseInt(p[1])-1,parseInt(p[2]));
     d.setDate(d.getDate()+1);
-    vegEl.min=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    const minVal=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    vegEl.min=minVal;
+    vegEl.setAttribute('min',minVal);
     if(vegEl.value&&vegEl.value<=hyd){vegEl.value='';ecBadge();}
   } else {
     vegEl.min='';
