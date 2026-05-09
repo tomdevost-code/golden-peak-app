@@ -167,6 +167,7 @@ tr:last-child td { border-bottom: none; }
             <div class="field"><label>Harvest date <span style="font-size:10px;color:var(--text3);">(closes batch)</span></label><input type="date" id="ec-harvest" oninput="ecBadge()" /></div>
           </div>
           <div class="day-badge" id="ec-badge"><span style="font-size:12px;color:var(--text3);">Enter veg start date to calculate</span></div>
+          <div id="ec-batch-rooms-info" style="display:none;font-size:11px;color:var(--text2);font-family:var(--mono);background:var(--bg2);border-radius:var(--radius-sm);padding:6px 10px;margin-top:6px;"></div>
         </div>
       </div>
       <div class="section">
@@ -204,6 +205,7 @@ tr:last-child td { border-bottom: none; }
         <textarea id="ec-notes" rows="2" style="width:100%;font-size:14px;font-family:var(--sans);border-radius:var(--radius-sm);border:1px solid var(--border);padding:10px;background:var(--card);color:var(--text);outline:none;" placeholder="Observations, corrective actions..."></textarea>
       </div>
       <button class="btn-primary" id="ec-btn" onclick="ecSave()">Save EC Entry</button>
+      <button class="btn-secondary" style="width:100%;margin-top:8px;" onclick="ecClearConfirm()">Clear Form</button>
     </div>
 
     <!-- RUNOFF -->
@@ -219,9 +221,10 @@ tr:last-child td { border-bottom: none; }
           <div class="g2" style="margin-bottom:10px;">
             <div class="field"><label>Room</label>
               <select id="ro-room">
+                <option value="">select room</option>
                 <option>Flower 1</option><option>Flower 2</option>
                 <option>Flower 3</option><option>Flower 4</option>
-                <option>Flower 5</option><option>Veg</option>
+                <option>Flower 5</option>
               </select>
             </div>
             <div class="field"><label>Batch ID</label>
@@ -272,6 +275,7 @@ tr:last-child td { border-bottom: none; }
         <textarea id="ro-notes" rows="2" style="width:100%;font-size:14px;font-family:var(--sans);border-radius:var(--radius-sm);border:1px solid var(--border);padding:10px;background:var(--card);color:var(--text);outline:none;" placeholder="Salt accumulation, flush decisions, corrective actions..."></textarea>
       </div>
       <button class="btn-primary" id="ro-btn" onclick="roSave()">Save Runoff Entry</button>
+      <button class="btn-secondary" style="width:100%;margin-top:8px;" onclick="roClearConfirm()">Clear Form</button>
     </div>
 
     <!-- REPORT -->
@@ -283,6 +287,7 @@ tr:last-child td { border-bottom: none; }
       <div id="rep-ec-view">
         <div class="filters">
           <select id="f-ec-room" onchange="renderEC()"><option value="">All rooms</option><option>Flower 1</option><option>Flower 2</option><option>Flower 3</option><option>Flower 4</option><option>Flower 5</option><option>Veg</option></select>
+          <select id="f-ec-batch" onchange="renderEC()"><option value="">All batches</option></select>
           <select id="f-ec-grower" onchange="renderEC()"><option value="">All growers</option><option>Jordan Elliott</option><option>Brandon Cail</option><option>Tom Devost</option></select>
           <input type="date" id="f-ec-from" onchange="renderEC()" />
           <input type="date" id="f-ec-to" onchange="renderEC()" />
@@ -293,7 +298,8 @@ tr:last-child td { border-bottom: none; }
       </div>
       <div id="rep-ro-view" style="display:none;">
         <div class="filters">
-          <select id="f-ro-room" onchange="renderRO()"><option value="">All rooms</option><option>Flower 1</option><option>Flower 2</option><option>Flower 3</option><option>Flower 4</option><option>Flower 5</option><option>Veg</option></select>
+          <select id="f-ro-room" onchange="renderRO()"><option value="">All rooms</option><option>Flower 1</option><option>Flower 2</option><option>Flower 3</option><option>Flower 4</option><option>Flower 5</option></select>
+          <select id="f-ro-batch" onchange="renderRO()"><option value="">All batches</option></select>
           <select id="f-ro-grower" onchange="renderRO()"><option value="">All growers</option><option>Jordan Elliott</option><option>Brandon Cail</option><option>Tom Devost</option></select>
           <input type="date" id="f-ro-from" onchange="renderRO()" />
           <input type="date" id="f-ro-to" onchange="renderRO()" />
@@ -350,9 +356,10 @@ tr:last-child td { border-bottom: none; }
       <svg viewBox="0 0 24 24"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
       Report
     </button>
-    <button class="bnav-btn" id="bn-settings" onclick="switchPage('settings',this)">
+    <button class="bnav-btn" id="bn-settings" onclick="switchPage('settings',this)" style="position:relative;">
       <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
       Settings
+      <span id="pending-badge" style="display:none;position:absolute;top:6px;right:12px;background:var(--red);color:white;font-size:9px;font-weight:700;font-family:var(--mono);border-radius:20px;padding:1px 5px;min-width:16px;text-align:center;"></span>
     </button>
   </nav>
 </div>
@@ -436,7 +443,7 @@ function ecBatchLookup(){
     if(found.vegStart)document.getElementById('ec-veg').value=found.vegStart;
     if(found.flowerStart)document.getElementById('ec-flower').value=found.flowerStart;
     if(found.harvestDate)document.getElementById('ec-harvest').value=found.harvestDate;
-    applyCascadeLocks();ecBadge();
+    applyCascadeLocks();ecBadge();updateBatchRoomsInfo(batch);
     if(found.harvestDate){showClosedWarning('ec',found.harvestDate);}else{hideClosedWarning('ec');if(found.vegStart)toast('Batch found - dates loaded automatically');}
   } else {
     // New batch — lock to Veg
@@ -445,7 +452,7 @@ function ecBatchLookup(){
     let hint=roomEl.closest('.field').querySelector('.room-lock-hint');
     if(!hint){hint=document.createElement('div');hint.className='room-lock-hint';hint.style.cssText='font-size:10px;color:var(--text3);margin-top:3px;font-family:var(--mono);';roomEl.closest('.field').appendChild(hint);}
     hint.textContent='New batches must start in Veg Room';
-    ecRoomChanged();applyCascadeLocks();
+    ecRoomChanged();applyCascadeLocks();updateBatchRoomsInfo(batch);
   }
 }
 function roBatchLookup(){const batch=document.getElementById('ro-batch').value.trim();if(!batch)return;const found=findBatchDates(batch,[...ecRecs,...roRecs]);if(found){if(found.vegStart)document.getElementById('ro-veg').value=found.vegStart;if(found.flowerStart)document.getElementById('ro-flower').value=found.flowerStart;if(found.harvestDate)document.getElementById('ro-harvest').value=found.harvestDate;roBadge();if(found.harvestDate){showClosedWarning('ro',found.harvestDate);}else{hideClosedWarning('ro');if(found.vegStart)toast('Batch found - dates loaded automatically');}}}
@@ -540,6 +547,9 @@ function ecAvgs(){setAvg('ec-avg-ec',avg(pens('.ec-drip-ec').filter(v=>v)),EC_LO
 async function ecSave(){
   const grower=document.getElementById('ec-grower').value,date=document.getElementById('ec-date').value,vs=document.getElementById('ec-veg').value;
   if(!grower){toast('Please select a grower.');return;}if(!date){toast('Please set a date.');return;}
+  const room=document.getElementById('ec-room').value;
+  const wtype=document.getElementById('ec-wtype').value;
+  if(room&&FLOWER_ROOMS.includes(room)&&wtype&&!FLOWER_WTYPES.includes(wtype)){toast('Watering type "'+wtype+'" is not allowed in '+room+'. Use: Full Saturation, Feed, Flush, or RO Water.',4000);return;}
   const hydrationDate=document.getElementById('ec-hydration').value;
   if(!hydrationDate){toast('Please enter a hydration date.');return;}
   const hydCheck=document.getElementById('ec-hydration').value;
@@ -566,9 +576,9 @@ async function ecSave(){
     }catch(e){setSyncPill('err','Sync failed');toast('Saved locally - Airtable sync failed.',3500);}
     document.getElementById('ec-btn').disabled=false;
   }else{toast('Entry saved locally');}
-  ecClear();
+  ecClear();updatePendingBadge();
 }
-function ecClear(){document.querySelectorAll('.ec-drip-ec,.ec-drip-ph').forEach(i=>i.value='');for(let i=1;i<=8;i++)document.getElementById('ec-evt-'+i).value='';['ec-notes','ec-flow'].forEach(id=>document.getElementById(id).value='');document.getElementById('ec-wtype').value='';document.getElementById('ec-total-ml').textContent='-';['ec-avg-ec','ec-avg-ph'].forEach(id=>{document.getElementById(id).textContent='-';document.getElementById(id).className='avg-val';});document.getElementById('ec-batch').value='';document.getElementById('ec-batch-select').value='';document.getElementById('ec-hydration').value='';clearBatchRoomLock('ec');const h=document.getElementById('ec-harvest').value;if(h)showClosedWarning('ec',h);applyCascadeLocks();}
+function ecClear(){document.querySelectorAll('.ec-drip-ec,.ec-drip-ph').forEach(i=>i.value='');for(let i=1;i<=8;i++)document.getElementById('ec-evt-'+i).value='';['ec-notes','ec-flow'].forEach(id=>document.getElementById(id).value='');document.getElementById('ec-wtype').value='';document.getElementById('ec-total-ml').textContent='-';['ec-avg-ec','ec-avg-ph'].forEach(id=>{document.getElementById(id).textContent='-';document.getElementById(id).className='avg-val';});document.getElementById('ec-batch').value='';document.getElementById('ec-batch-select').value='';document.getElementById('ec-hydration').value='';clearBatchRoomLock('ec');updateBatchRoomsInfo('');const h=document.getElementById('ec-harvest').value;if(h)showClosedWarning('ec',h);applyCascadeLocks();}
 
 function buildROSamples(){const c=document.getElementById('ro-samples');c.innerHTML='';for(let i=1;i<=8;i++){c.innerHTML+='<div class="sample-item"><div class="sample-num">Sample '+i+'</div><div class="s-lbl">EC (mS/cm)</div><input type="number" class="ro-s-ec s-input" id="ro-ec-'+i+'" step="0.01" placeholder="0.00" oninput="roCalc()" /><div class="s-lbl" style="margin-top:6px;">pH</div><input type="number" class="ro-s-ph s-input" id="ro-ph-'+i+'" step="0.01" placeholder="0.00" oninput="roCalc()" /></div>';}}
 function roBadge(){const d=document.getElementById('ro-date').value,vs=document.getElementById('ro-veg').value,fs=document.getElementById('ro-flower').value,b=document.getElementById('ro-badge');if(!d||!vs){b.innerHTML='<span style="font-size:12px;color:var(--text3);">Enter veg start date to calculate</span>';return;}const{stage,day}=calcStage(vs,fs,d);if(stage&&day)b.innerHTML='<span class="day-pill '+stage+'">'+(stage==='flower'?'Flower Day':'Veg Day')+' '+day+'</span>';else b.innerHTML='<span style="font-size:12px;color:var(--text3);">Check your dates</span>';}
@@ -578,6 +588,9 @@ async function roSave(){
   const grower=document.getElementById('ro-grower').value,date=document.getElementById('ro-date').value;
   const batchVal=document.getElementById('ro-batch').value;
   if(!grower){toast('Please select a grower.');return;}if(!date){toast('Please set a date.');return;}
+  const room=document.getElementById('ec-room').value;
+  const wtype=document.getElementById('ec-wtype').value;
+  if(room&&FLOWER_ROOMS.includes(room)&&wtype&&!FLOWER_WTYPES.includes(wtype)){toast('Watering type "'+wtype+'" is not allowed in '+room+'. Use: Full Saturation, Feed, Flush, or RO Water.',4000);return;}
   if(!batchVal){toast('Please select a batch.');return;}
   const harvestDate=document.getElementById('ro-harvest').value;
   if(harvestDate&&date>harvestDate){toast('This batch was harvested on '+harvestDate+'. Entry blocked.',3500);return;}
@@ -601,16 +614,58 @@ async function roSave(){
     }catch(e){setSyncPill('err','Sync failed');toast('Saved locally - Airtable sync failed.',3500);}
     document.getElementById('ro-btn').disabled=false;
   }else{toast('Entry saved locally');}
-  roClear();
+  roClear();updatePendingBadge();
 }
 function roClear(){for(let i=1;i<=8;i++){document.getElementById('ro-ec-'+i).value='';document.getElementById('ro-ph-'+i).value='';}['ro-notes','ro-input-ec'].forEach(id=>document.getElementById(id).value='');['ro-avg-ec','ro-avg-ph','ro-variance'].forEach(id=>document.getElementById(id).textContent='-');document.getElementById('ro-count').textContent='0/8';document.getElementById('ro-warn').style.display='none';document.getElementById('ro-ok').style.display='none';document.getElementById('ro-batch-select').value='';document.getElementById('ro-batch').value='';document.getElementById('ro-veg').value='';document.getElementById('ro-flower').value='';document.getElementById('ro-harvest').value='';document.getElementById('ro-badge').innerHTML='<span style="font-size:12px;color:var(--text3);">Select a batch to calculate stage</span>';clearBatchRoomLock('ro');hideClosedWarning('ro');}
 
-function filterRecs(recs,roomId,growerId,fromId,toId){const room=document.getElementById(roomId).value,grower=document.getElementById(growerId).value,from=document.getElementById(fromId).value,to=document.getElementById(toId).value;return recs.filter(r=>{if(room&&r.room!==room)return false;if(grower&&r.grower!==grower)return false;if(from&&r.date<from)return false;if(to&&r.date>to)return false;return true;});}
+// Pending badge
+function updatePendingBadge(){
+  const n=(ecRecs.filter(r=>!r.synced).length)+(roRecs.filter(r=>!r.synced).length);
+  const b=document.getElementById('pending-badge');
+  if(n>0){b.textContent=n;b.style.display='block';}else{b.style.display='none';}
+}
+
+// Batch status — which rooms a batch currently occupies
+function updateBatchRoomsInfo(batch){
+  const el=document.getElementById('ec-batch-rooms-info');
+  if(!batch){el.style.display='none';return;}
+  const rooms=[...new Set([...ecRecs,...roRecs].filter(r=>r.batch===batch&&r.room&&!r.harvestDate).map(r=>r.room))];
+  if(rooms.length===0){el.style.display='none';return;}
+  el.style.display='block';
+  el.innerHTML='<span style="color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;font-size:10px;">Active rooms: </span>'+rooms.map(r=>'<span style="display:inline-block;background:var(--amber-pale);color:var(--amber);border:1px solid var(--amber);border-radius:20px;padding:1px 8px;font-size:11px;margin:2px 3px;">'+r+'</span>').join('');
+}
+
+// Confirm clear helpers
+function ecClearConfirm(){if(confirm('Clear the current form? Unsaved data will be lost.'))ecClear();}
+function roClearConfirm(){if(confirm('Clear the current form? Unsaved data will be lost.'))roClear();}
+
+// Populate batch filter dropdowns in Report page
+function populateReportBatchFilters(){
+  const allBatches=Object.keys(getAllBatches()).sort();
+  ['f-ec-batch','f-ro-batch'].forEach(id=>{
+    const sel=document.getElementById(id);if(!sel)return;
+    const cur=sel.value;
+    sel.innerHTML='<option value="">All batches</option>'+allBatches.map(b=>'<option'+(b===cur?' selected':'')+'>'+b+'</option>').join('');
+  });
+}
+
+function filterRecs(recs,roomId,growerId,fromId,toId,batchId){
+  const room=document.getElementById(roomId).value,grower=document.getElementById(growerId).value,from=document.getElementById(fromId).value,to=document.getElementById(toId).value;
+  const batch=batchId?document.getElementById(batchId).value:'';
+  return recs.filter(r=>{
+    if(room&&r.room!==room)return false;
+    if(grower&&r.grower!==grower)return false;
+    if(batch&&r.batch!==batch)return false;
+    if(from&&r.date<from)return false;
+    if(to&&r.date>to)return false;
+    return true;
+  });
+}
 function statCards(cards,id){document.getElementById(id).innerHTML=cards.map(c=>'<div class="stat-card"><div class="stat-lbl">'+c.l+'</div><div class="stat-val" style="'+(c.s||'')+'">'+c.v+'</div></div>').join('');}
 
-function renderEC(){const data=filterRecs(ecRecs,'f-ec-room','f-ec-grower','f-ec-from','f-ec-to'),body=document.getElementById('ec-tbl-body');if(!data.length){body.innerHTML='<tr><td colspan="11"><div class="empty">No entries yet.</div></td></tr>';statCards([],'ec-stat-cards');return;}const ecV=data.map(r=>r.dripEc).filter(v=>v!==null),flags=data.filter(r=>(r.dripEc!==null&&(r.dripEc<EC_LO||r.dripEc>EC_HI))||(r.dripPh!==null&&(r.dripPh<PH_EC_LO||r.dripPh>PH_EC_HI))).length;statCards([{l:'Entries',v:data.length},{l:'Avg Drip EC',v:ecV.length?(ecV.reduce((a,b)=>a+b,0)/ecV.length).toFixed(2):'-'},{l:'Flags',v:flags,s:flags>0?'color:var(--red)':''}],'ec-stat-cards');body.innerHTML=data.map(r=>'<tr><td style="font-family:var(--mono);">'+r.date+'</td><td>'+r.room+'</td><td>'+stageLabel(r)+'</td><td><span class="tag">'+(r.grower||'-')+'</span></td><td style="color:var(--text3);font-family:var(--mono);">'+(r.batch||'-')+'</td><td style="font-size:11px;color:var(--text2);">'+(r.wtype||'-')+'</td><td>'+colorEC(r.dripEc)+'</td><td>'+colorPHec(r.dripPh)+'</td><td style="font-family:var(--mono);">'+(r.totalML?r.totalML+'ml':'-')+'</td><td style="font-family:var(--mono);">'+(r.flow?r.flow+'L':'-')+'</td><td style="max-width:120px;white-space:normal;font-size:11px;color:var(--text3);">'+(r.notes||'')+'</td></tr>').join('');}
+function renderEC(){populateReportBatchFilters();const data=filterRecs(ecRecs,'f-ec-room','f-ec-grower','f-ec-from','f-ec-to','f-ec-batch'),body=document.getElementById('ec-tbl-body');if(!data.length){body.innerHTML='<tr><td colspan="11"><div class="empty">No entries yet.</div></td></tr>';statCards([],'ec-stat-cards');return;}const ecV=data.map(r=>r.dripEc).filter(v=>v!==null),flags=data.filter(r=>(r.dripEc!==null&&(r.dripEc<EC_LO||r.dripEc>EC_HI))||(r.dripPh!==null&&(r.dripPh<PH_EC_LO||r.dripPh>PH_EC_HI))).length;statCards([{l:'Entries',v:data.length},{l:'Avg Drip EC',v:ecV.length?(ecV.reduce((a,b)=>a+b,0)/ecV.length).toFixed(2):'-'},{l:'Flags',v:flags,s:flags>0?'color:var(--red)':''}],'ec-stat-cards');body.innerHTML=data.map(r=>'<tr><td style="font-family:var(--mono);">'+r.date+'</td><td>'+r.room+'</td><td>'+stageLabel(r)+'</td><td><span class="tag">'+(r.grower||'-')+'</span></td><td style="color:var(--text3);font-family:var(--mono);">'+(r.batch||'-')+'</td><td style="font-size:11px;color:var(--text2);">'+(r.wtype||'-')+'</td><td>'+colorEC(r.dripEc)+'</td><td>'+colorPHec(r.dripPh)+'</td><td style="font-family:var(--mono);">'+(r.totalML?r.totalML+'ml':'-')+'</td><td style="font-family:var(--mono);">'+(r.flow?r.flow+'L':'-')+'</td><td style="max-width:120px;white-space:normal;font-size:11px;color:var(--text3);">'+(r.notes||'')+'</td></tr>').join('');}
 
-function renderRO(){const data=filterRecs(roRecs,'f-ro-room','f-ro-grower','f-ro-from','f-ro-to'),body=document.getElementById('ro-tbl-body');if(!data.length){body.innerHTML='<tr><td colspan="10"><div class="empty">No runoff entries yet.</div></td></tr>';statCards([],'ro-stat-cards');return;}const ecV=data.map(r=>r.avgEC).filter(v=>v!==null),alerts=data.filter(r=>r.ecAlert).length;statCards([{l:'Entries',v:data.length},{l:'Avg EC',v:ecV.length?(ecV.reduce((a,b)=>a+b,0)/ecV.length).toFixed(2):'-'},{l:'Alerts',v:alerts,s:alerts>0?'color:var(--red)':''}],'ro-stat-cards');body.innerHTML=data.map(r=>{const vs=r.variance!==null?(r.variance>=0?'+':'')+r.variance.toFixed(2):'-',vc=r.variance!==null&&r.variance>RO_VAR_ALERT?'hi':r.variance>=RO_VAR_LO&&r.variance<=RO_VAR_HI?'ok':'';return'<tr><td style="font-family:var(--mono);">'+r.date+'</td><td>'+r.room+'</td><td>'+stageLabel(r)+'</td><td><span class="tag">'+(r.grower||'-')+'</span></td><td style="color:var(--text3);font-family:var(--mono);">'+(r.batch||'-')+'</td><td style="font-family:var(--mono);">'+(r.inputEC!==null?r.inputEC.toFixed(2):'-')+'</td><td style="font-family:var(--mono);">'+(r.avgEC!==null?r.avgEC.toFixed(2):'-')+'</td><td><span class="'+vc+'" style="font-family:var(--mono);">'+vs+'</span></td><td>'+colorPHro(r.avgPH)+'</td><td style="max-width:120px;white-space:normal;font-size:11px;color:var(--text3);">'+(r.notes||'')+'</td></tr>';}).join('');}
+function renderRO(){populateReportBatchFilters();const data=filterRecs(roRecs,'f-ro-room','f-ro-grower','f-ro-from','f-ro-to','f-ro-batch'),body=document.getElementById('ro-tbl-body');if(!data.length){body.innerHTML='<tr><td colspan="10"><div class="empty">No runoff entries yet.</div></td></tr>';statCards([],'ro-stat-cards');return;}const ecV=data.map(r=>r.avgEC).filter(v=>v!==null),alerts=data.filter(r=>r.ecAlert).length;statCards([{l:'Entries',v:data.length},{l:'Avg EC',v:ecV.length?(ecV.reduce((a,b)=>a+b,0)/ecV.length).toFixed(2):'-'},{l:'Alerts',v:alerts,s:alerts>0?'color:var(--red)':''}],'ro-stat-cards');body.innerHTML=data.map(r=>{const vs=r.variance!==null?(r.variance>=0?'+':'')+r.variance.toFixed(2):'-',vc=r.variance!==null&&r.variance>RO_VAR_ALERT?'hi':r.variance>=RO_VAR_LO&&r.variance<=RO_VAR_HI?'ok':'';return'<tr><td style="font-family:var(--mono);">'+r.date+'</td><td>'+r.room+'</td><td>'+stageLabel(r)+'</td><td><span class="tag">'+(r.grower||'-')+'</span></td><td style="color:var(--text3);font-family:var(--mono);">'+(r.batch||'-')+'</td><td style="font-family:var(--mono);">'+(r.inputEC!==null?r.inputEC.toFixed(2):'-')+'</td><td style="font-family:var(--mono);">'+(r.avgEC!==null?r.avgEC.toFixed(2):'-')+'</td><td><span class="'+vc+'" style="font-family:var(--mono);">'+vs+'</span></td><td>'+colorPHro(r.avgPH)+'</td><td style="max-width:120px;white-space:normal;font-size:11px;color:var(--text3);">'+(r.notes||'')+'</td></tr>';}).join('');}
 
 function dlCSV(rows,name){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([rows.map(r=>r.join(',')).join('\n')],{type:'text/csv'}));a.download=name;a.click();}
 function exportEC(){const data=filterRecs(ecRecs,'f-ec-room','f-ec-grower','f-ec-from','f-ec-to');if(!data.length){toast('No data to export.');return;}dlCSV([['Date','Room','Stage','Day','Grower','Batch','Watering Type','Drip EC Avg','Drip pH Avg','Total ml/plant','Flow Meter L','Notes'],...data.map(r=>[r.date,r.room,r.stage||'',r.day||'',r.grower,r.batch,r.wtype||'',r.dripEc||'',r.dripPh||'',r.totalML||'',r.flow||'','"'+(r.notes||'').replace(/"/g,'""')+'"'])],'EC_Log_GoldenPeak.csv');}
@@ -693,7 +748,7 @@ document.getElementById('ro-date').readOnly=true;
 document.getElementById('ro-date').style.background='var(--bg2)';
 document.getElementById('ro-date').style.color='var(--text3)';
 document.getElementById('ro-date').style.cursor='default';
-buildECEvents();buildROSamples();loadAll();populateBatchDropdowns();setVegMin();applyCascadeLocks();
+buildECEvents();buildROSamples();loadAll();populateBatchDropdowns();setVegMin();applyCascadeLocks();updatePendingBadge();
 // Keep entry dates updated to today on each page load
 setInterval(()=>{const t=localDate();document.getElementById('ec-date').value=t;document.getElementById('ro-date').value=t;},60000);
 </script>
