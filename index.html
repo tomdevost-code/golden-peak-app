@@ -168,7 +168,7 @@ tr:last-child td { border-bottom: none; }
             </div>
             <div class="field"><label>Entry date</label><input type="date" id="ec-date" readonly style="background:var(--bg2);color:var(--text3);cursor:default;" /></div>
             <div class="field"><label>Hydration date</label><input type="date" id="ec-hydration" oninput="ecHydrationChanged()" onchange="ecHydrationChanged()" /></div>
-            <div class="field"><label>Veg start date</label><input type="date" id="ec-veg" oninput="ecVegChanged()" onchange="ecVegChanged()" /></div>
+            <div class="field"><label>Veg start date</label><input type="date" id="ec-veg" oninput="ecVegChanged()" onchange="ecVegChanged()" disabled style="background:var(--bg2);color:var(--text3);cursor:not-allowed;" /></div>
             <div class="field"><label>Flower start date</label><input type="date" id="ec-flower" oninput="ecFlowerChanged()" onchange="ecFlowerChanged()" /></div>
             <div class="field"><label>Harvest date <span style="font-size:10px;color:var(--text3);">(closes batch)</span></label><input type="date" id="ec-harvest" oninput="ecBadge()" /></div>
           </div>
@@ -556,9 +556,11 @@ function ecSeqUnlock(){
     seqDisable('ec-room','Select a grower first');
     return;
   }
-  // Batch selected → unlock room
+  // Batch selected → unlock room (unless it's locked to Veg for a new batch)
   if(hasBatch){
-    seqEnable('ec-room');
+    const roomEl=document.getElementById('ec-room');
+    const isNewBatchLocked=roomEl.closest('.field').querySelector('.room-lock-hint');
+    if(!isNewBatchLocked) seqEnable('ec-room');
   } else {
     seqDisable('ec-room','Select a batch first');
     return;
@@ -593,8 +595,8 @@ function applyCascadeLocks(){
   const hasFlower=!!document.getElementById('ec-flower').value;
   // Lock veg until a hydration RECORD is saved for this batch
   const vegEl=document.getElementById('ec-veg');
-  const vegSavedLock=vegEl.readOnly;
-  if(!vegSavedLock){
+  const vegHardLocked=vegEl.readOnly; // locked because veg is already saved
+  if(!vegHardLocked){
     const curBatch=document.getElementById('ec-batch').value.trim();
     const hydSaved=curBatch&&ecRecs.some(r=>r.batch&&r.batch.trim().toLowerCase()===curBatch.toLowerCase()&&r.hydrationDate);
     const vegLocked=!hydSaved;
@@ -715,7 +717,7 @@ async function ecSave(){
     }catch(e){setSyncPill('err','Sync failed');toast('Saved locally - Airtable sync failed.',3500);}
     document.getElementById('ec-btn').disabled=false;
   }else{toast('Entry saved locally');}
-  ecClear();updatePendingBadge();
+  applyCascadeLocks();ecClear();updatePendingBadge();
 }
 function ecClear(){
   ['ec-hydration','ec-veg','ec-flower'].forEach(id=>{
