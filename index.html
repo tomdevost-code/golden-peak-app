@@ -161,7 +161,7 @@ tr:last-child td { border-bottom: none; }
             </div>
             <div class="field"><label>Entry date</label><input type="date" id="ec-date" readonly style="background:var(--bg2);color:var(--text3);cursor:default;" /></div>
             <div class="field"><label>Hydration date</label><input type="date" id="ec-hydration" oninput="ecHydrationChanged()" onchange="ecHydrationChanged()" /></div>
-            <div class="field"><label>Veg start date</label><input type="date" id="ec-veg" oninput="ecVegChanged()" /></div>
+            <div class="field"><label>Veg start date</label><input type="date" id="ec-veg" oninput="ecVegChanged()" onchange="ecVegChanged()" /></div>
             <div class="field"><label>Flower start date</label><input type="date" id="ec-flower" oninput="ecFlowerChanged()" /></div>
             <div class="field"><label>Harvest date <span style="font-size:10px;color:var(--text3);">(closes batch)</span></label><input type="date" id="ec-harvest" oninput="ecBadge()" /></div>
           </div>
@@ -469,13 +469,15 @@ function applyCascadeLocks(){
 }
 function ecVegChanged(){
   const hyd=document.getElementById('ec-hydration').value;
-  const veg=document.getElementById('ec-veg').value;
+  const vegEl=document.getElementById('ec-veg');
+  const veg=vegEl.value;
   if(hyd&&veg){
-    const hydDay=new Date(hyd+'T00:00:00');
-    const vegDay=new Date(veg+'T00:00:00');
+    const p1=hyd.split('-'),p2=veg.split('-');
+    const hydDay=new Date(parseInt(p1[0]),parseInt(p1[1])-1,parseInt(p1[2]));
+    const vegDay=new Date(parseInt(p2[0]),parseInt(p2[1])-1,parseInt(p2[2]));
     if(vegDay<=hydDay){
+      vegEl.value='';
       toast('Veg start must be at least 1 day after hydration date ('+hyd+').',3000);
-      document.getElementById('ec-veg').value='';
       ecBadge();applyCascadeLocks();return;
     }
   }
