@@ -455,10 +455,19 @@ function ecHydrationChanged(){
   applyCascadeLocks();
 }
 function applyCascadeLocks(){
-  const hasHydration=!!document.getElementById('ec-hydration').value;
+  const hyd=document.getElementById('ec-hydration').value;
+  const hasHydration=!!hyd;
   const hasVeg=!!document.getElementById('ec-veg').value;
   const hasFlower=!!document.getElementById('ec-flower').value;
   lockField('ec-veg',!hasHydration,'Enter hydration date first');
+  // Set min veg date to day after hydration
+  const vegEl=document.getElementById('ec-veg');
+  if(hyd){
+    const minVeg=new Date(hyd+'T00:00:00');minVeg.setDate(minVeg.getDate()+1);
+    vegEl.min=minVeg.getFullYear()+'-'+String(minVeg.getMonth()+1).padStart(2,'0')+'-'+String(minVeg.getDate()).padStart(2,'0');
+  } else {
+    vegEl.min='';
+  }
   lockField('ec-flower',!hasVeg,'Enter veg start date first');
   lockVegDate(hasFlower);
   lockField('ec-harvest',!hasFlower,'Enter flower start date first');
