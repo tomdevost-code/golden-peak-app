@@ -515,11 +515,12 @@ function ecAvgs(){setAvg('ec-avg-ec',avg(pens('.ec-drip-ec').filter(v=>v)),EC_LO
 
 async function ecSave(){
   const grower=document.getElementById('ec-grower').value,date=document.getElementById('ec-date').value,vs=document.getElementById('ec-veg').value;
-  if(!grower){toast('Please select a grower.');return;}if(!date){toast('Please set a date.');return;}if(!vs){toast('Please enter veg start date.');return;}
+  if(!grower){toast('Please select a grower.');return;}if(!date){toast('Please set a date.');return;}
+  const hydrationDate=document.getElementById('ec-hydration').value;
+  if(!hydrationDate){toast('Please enter a hydration date.');return;}
   const hydCheck=document.getElementById('ec-hydration').value;
   if(hydCheck&&vs){const hd=new Date(hydCheck+'T00:00:00'),vd=new Date(vs+'T00:00:00');if(vd<=hd){toast('Veg start must be at least 1 day after hydration date.',3000);return;}}
   const harvestDate=document.getElementById('ec-harvest').value;
-  const hydrationDate=document.getElementById('ec-hydration').value;
   if(hydrationDate&&date<hydrationDate){toast('Entry date cannot be before hydration date ('+hydrationDate+').',3500);return;}
   if(harvestDate&&date>harvestDate){toast('This batch was harvested on '+harvestDate+'. Entry blocked.',3500);return;}
   const wtype=document.getElementById('ec-wtype').value;
@@ -553,6 +554,8 @@ async function roSave(){
   const grower=document.getElementById('ro-grower').value,date=document.getElementById('ro-date').value;
   const batchVal=document.getElementById('ro-batch').value;
   if(!grower){toast('Please select a grower.');return;}if(!date){toast('Please set a date.');return;}
+  const hydrationDate=document.getElementById('ec-hydration').value;
+  if(!hydrationDate){toast('Please enter a hydration date.');return;}
   if(!batchVal){toast('Please select a batch.');return;}
   const harvestDate=document.getElementById('ro-harvest').value;
   if(harvestDate&&date>harvestDate){toast('This batch was harvested on '+harvestDate+'. Entry blocked.',3500);return;}
