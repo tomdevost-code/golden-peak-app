@@ -162,7 +162,7 @@ tr:last-child td { border-bottom: none; }
             <div class="field"><label>Entry date</label><input type="date" id="ec-date" readonly style="background:var(--bg2);color:var(--text3);cursor:default;" /></div>
             <div class="field"><label>Hydration date</label><input type="date" id="ec-hydration" oninput="ecHydrationChanged()" onchange="ecHydrationChanged()" /></div>
             <div class="field"><label>Veg start date</label><input type="date" id="ec-veg" oninput="ecVegChanged()" onchange="ecVegChanged()" /></div>
-            <div class="field"><label>Flower start date</label><input type="date" id="ec-flower" oninput="ecFlowerChanged()" /></div>
+            <div class="field"><label>Flower start date</label><input type="date" id="ec-flower" oninput="ecFlowerChanged()" onchange="ecFlowerChanged()" /></div>
             <div class="field"><label>Harvest date <span style="font-size:10px;color:var(--text3);">(closes batch)</span></label><input type="date" id="ec-harvest" oninput="ecBadge()" /></div>
           </div>
           <div class="day-badge" id="ec-badge"><span style="font-size:12px;color:var(--text3);">Enter veg start date to calculate</span></div>
@@ -463,6 +463,17 @@ function applyCascadeLocks(){
   const hasVeg=!!document.getElementById('ec-veg').value;
   const hasFlower=!!document.getElementById('ec-flower').value;
   setVegMin();
+  // Set min flower date to day after veg
+  const flowerEl=document.getElementById('ec-flower');
+  const veg=document.getElementById('ec-veg').value;
+  if(veg){
+    const p=veg.split('-');
+    const d=new Date(parseInt(p[0]),parseInt(p[1])-1,parseInt(p[2]));
+    d.setDate(d.getDate()+1);
+    flowerEl.min=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  } else {
+    flowerEl.min='';
+  }
   lockField('ec-flower',!hasVeg,'Enter veg start date first');
   lockVegDate(hasFlower);
   lockField('ec-harvest',!hasFlower,'Enter flower start date first');
@@ -483,7 +494,22 @@ function ecVegChanged(){
   }
   ecBadge();applyCascadeLocks();
 }
-function ecFlowerChanged(){ecBadge();applyCascadeLocks();}
+function ecFlowerChanged(){
+  const veg=document.getElementById('ec-veg').value;
+  const flowerEl=document.getElementById('ec-flower');
+  const flower=flowerEl.value;
+  if(veg&&flower){
+    const p1=veg.split('-'),p2=flower.split('-');
+    const vegDay=new Date(parseInt(p1[0]),parseInt(p1[1])-1,parseInt(p1[2]));
+    const flowerDay=new Date(parseInt(p2[0]),parseInt(p2[1])-1,parseInt(p2[2]));
+    if(flowerDay<=vegDay){
+      flowerEl.value='';
+      toast('Flower start must be after veg start date ('+veg+').',3000);
+      ecBadge();applyCascadeLocks();return;
+    }
+  }
+  ecBadge();applyCascadeLocks();
+}
 function ecBadge(){const d=document.getElementById('ec-date').value,vs=document.getElementById('ec-veg').value,fs=document.getElementById('ec-flower').value,b=document.getElementById('ec-badge');if(!d||!vs){b.innerHTML='<span style="font-size:12px;color:var(--text3);">Enter veg start date to calculate</span>';return;}const{stage,day}=calcStage(vs,fs,d);if(stage&&day)b.innerHTML='<span class="day-pill '+stage+'">'+(stage==='flower'?'Flower Day':'Veg Day')+' '+day+'</span>';else b.innerHTML='<span style="font-size:12px;color:var(--text3);">Check your dates</span>';}
 function ecAvgs(){setAvg('ec-avg-ec',avg(pens('.ec-drip-ec').filter(v=>v)),EC_LO,EC_HI);setAvg('ec-avg-ph',avg(pens('.ec-drip-ph').filter(v=>v)),PH_EC_LO,PH_EC_HI);}
 
