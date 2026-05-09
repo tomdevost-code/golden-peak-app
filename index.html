@@ -484,7 +484,15 @@ function applyCascadeLocks(){
 function ecVegChanged(){
   const hyd=document.getElementById('ec-hydration').value;
   const veg=document.getElementById('ec-veg').value;
-  if(hyd&&veg&&veg<=hyd){toast('Veg start date must be at least 1 day after hydration date.');document.getElementById('ec-veg').value='';ecBadge();applyCascadeLocks();return;}
+  if(hyd&&veg){
+    const hydDay=new Date(hyd+'T00:00:00');
+    const vegDay=new Date(veg+'T00:00:00');
+    if(vegDay<=hydDay){
+      toast('Veg start must be at least 1 day after hydration date ('+hyd+').',3000);
+      document.getElementById('ec-veg').value='';
+      ecBadge();applyCascadeLocks();return;
+    }
+  }
   ecBadge();applyCascadeLocks();
 }
 function ecFlowerChanged(){ecBadge();applyCascadeLocks();}
@@ -494,6 +502,8 @@ function ecAvgs(){setAvg('ec-avg-ec',avg(pens('.ec-drip-ec').filter(v=>v)),EC_LO
 async function ecSave(){
   const grower=document.getElementById('ec-grower').value,date=document.getElementById('ec-date').value,vs=document.getElementById('ec-veg').value;
   if(!grower){toast('Please select a grower.');return;}if(!date){toast('Please set a date.');return;}if(!vs){toast('Please enter veg start date.');return;}
+  const hydCheck=document.getElementById('ec-hydration').value;
+  if(hydCheck&&vs){const hd=new Date(hydCheck+'T00:00:00'),vd=new Date(vs+'T00:00:00');if(vd<=hd){toast('Veg start must be at least 1 day after hydration date.',3000);return;}}
   const harvestDate=document.getElementById('ec-harvest').value;
   const hydrationDate=document.getElementById('ec-hydration').value;
   if(hydrationDate&&date<hydrationDate){toast('Entry date cannot be before hydration date ('+hydrationDate+').',3500);return;}
