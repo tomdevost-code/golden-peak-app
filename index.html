@@ -452,13 +452,21 @@ function ecBatchLookup(){
     lockSavedDateField('ec-hydration',found.hydrationDate,'Hydration date is locked once saved');
     lockSavedDateField('ec-veg',found.vegStart,'Veg start date is locked once saved');
     lockSavedDateField('ec-flower',found.flowerStart,'Flower start date is locked once saved');
-    // Lock room if flower date is saved
+    // If flower date is saved, restrict room to only rooms this batch has been in
     if(found.flowerStart){
-      roomEl.disabled=true;roomEl.style.background='var(--bg2)';roomEl.style.color='var(--text3)';roomEl.style.cursor='not-allowed';
+      const batchRoomsList=[...new Set([...ecRecs,...roRecs].filter(r=>r.batch&&r.batch.trim().toLowerCase()===batch.trim().toLowerCase()&&r.room).map(r=>r.room))];
+      roomEl.disabled=false;roomEl.style.background='';roomEl.style.color='';roomEl.style.cursor='';
+      const prevVal=roomEl.value;
+      roomEl.innerHTML=batchRoomsList.map(r=>'<option'+(r===prevVal?' selected':'')+'>'+r+'</option>').join('');
+      if(!roomEl.value&&batchRoomsList.length)roomEl.value=batchRoomsList[0];
       let hint=roomEl.closest('.field').querySelector('.room-lock-hint');
       if(!hint){hint=document.createElement('div');hint.className='room-lock-hint';hint.style.cssText='font-size:10px;color:var(--text3);margin-top:3px;font-family:var(--mono);';roomEl.closest('.field').appendChild(hint);}
-      hint.textContent='Room locked — batch is in flower stage';
+      hint.textContent='Only rooms already assigned to this batch are available';
     } else {
+      // Restore full room list for veg-stage batch
+      const fullRooms=['Flower 1','Flower 2','Flower 3','Flower 4','Flower 5','Veg'];
+      const prevVal=roomEl.value;
+      roomEl.innerHTML='<option value="">select room</option>'+fullRooms.map(r=>'<option'+(r===prevVal?' selected':'')+'>'+r+'</option>').join('');
       roomEl.disabled=false;roomEl.style.background='';roomEl.style.color='';roomEl.style.cursor='';
       const hint=roomEl.closest('.field').querySelector('.room-lock-hint');if(hint)hint.remove();
     }
@@ -526,7 +534,6 @@ const VEG_WTYPES=['Hydration','Pre-Charge','Water In','Full Saturation','Feed','
 const FLOWER_WTYPES=['Full Saturation','Feed','Flush','RO Water'];
 function ecRoomChanged(){
   const roomEl=document.getElementById('ec-room');
-  if(roomEl.disabled) return; // room is locked, don't touch anything
   const room=roomEl.value;
   const wtype=document.getElementById('ec-wtype');
   const cur=wtype.value;
@@ -641,7 +648,9 @@ function ecClear(){
     const el=document.getElementById(id);el.readOnly=false;el.style.background='';el.style.color='';el.style.cursor='';
     const h=el.closest('.field').querySelector('.saved-lock-hint');if(h)h.remove();
   });
-  const roomEl=document.getElementById('ec-room');roomEl.disabled=false;roomEl.style.background='';roomEl.style.color='';roomEl.style.cursor='';
+  const roomEl=document.getElementById('ec-room');
+  roomEl.innerHTML='<option value="">select room</option><option>Flower 1</option><option>Flower 2</option><option>Flower 3</option><option>Flower 4</option><option>Flower 5</option><option>Veg</option>';
+  roomEl.disabled=false;roomEl.style.background='';roomEl.style.color='';roomEl.style.cursor='';
   const rh=roomEl.closest('.field').querySelector('.room-lock-hint');if(rh)rh.remove();
   document.querySelectorAll('.ec-drip-ec,.ec-drip-ph').forEach(i=>i.value='');for(let i=1;i<=8;i++)document.getElementById('ec-evt-'+i).value='';['ec-notes','ec-flow'].forEach(id=>document.getElementById(id).value='');document.getElementById('ec-wtype').value='';document.getElementById('ec-total-ml').textContent='-';['ec-avg-ec','ec-avg-ph'].forEach(id=>{document.getElementById(id).textContent='-';document.getElementById(id).className='avg-val';});document.getElementById('ec-batch').value='';document.getElementById('ec-batch-select').value='';document.getElementById('ec-hydration').value='';clearBatchRoomLock('ec');updateBatchRoomsInfo('');const h=document.getElementById('ec-harvest').value;if(h)showClosedWarning('ec',h);applyCascadeLocks();}
 
