@@ -238,7 +238,7 @@ tr:last-child td { border-bottom: none; }
               </select>
             </div>
             <div class="field"><label>Room</label>
-              <select id="ro-room" onchange="applyRoomColor('ro',this.value)">
+              <select id="ro-room" onchange="applyRoomColor('ro',this.value)" disabled style="background:var(--bg2);color:var(--text3);cursor:not-allowed;">
                 <option value="">select room</option>
                 <option>Flower 1</option><option>Flower 2</option>
                 <option>Flower 3</option><option>Flower 4</option>
@@ -427,6 +427,7 @@ function roBatchSelect(){
     hideClosedWarning('ro');roBadge();clearBatchRoomLock('ro');
     // Restore full flower room list
     roomEl.innerHTML='<option value="">select room</option><option>Flower 1</option><option>Flower 2</option><option>Flower 3</option><option>Flower 4</option><option>Flower 5</option>';
+    roomEl.disabled=true;roomEl.style.background='var(--bg2)';roomEl.style.color='var(--text3)';roomEl.style.cursor='not-allowed';
     return;
   }
   applyBatchRoomLock('ro',val);
@@ -440,8 +441,10 @@ function roBatchSelect(){
   if(batchRooms.length>0){
     const prevVal=roomEl.value;
     roomEl.innerHTML='<option value="">select room</option>'+batchRooms.map(r=>'<option'+(r===prevVal?' selected':'')+'>'+r+'</option>').join('');
+    roomEl.disabled=false;roomEl.style.background='';roomEl.style.color='';roomEl.style.cursor='';
   } else {
     roomEl.innerHTML='<option value="">No flower rooms yet</option>';
+    roomEl.disabled=true;roomEl.style.background='var(--bg2)';roomEl.style.color='var(--text3)';roomEl.style.cursor='not-allowed';
   }
   roBadge();
   if(b&&b.harvestDate){showClosedWarning('ro',b.harvestDate);}else{hideClosedWarning('ro');}
