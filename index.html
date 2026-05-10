@@ -757,9 +757,16 @@ async function ecSave(){
 function ecClear(){
   document.getElementById('ec-grower').value='';
   ['ec-hydration','ec-veg','ec-flower'].forEach(id=>{
-    const el=document.getElementById(id);el.readOnly=false;el.disabled=false;el.style.background='';el.style.color='';el.style.cursor='';el.min='';
+    const el=document.getElementById(id);
+    el.readOnly=false;el.value='';el.min='';
     const h=el.closest('.field').querySelector('.saved-lock-hint');if(h)h.remove();
     const vh=el.closest('.field').querySelector('.veg-lock-hint');if(vh)vh.remove();
+    // veg and flower start disabled until unlocked by cascade — hydration can be re-enabled
+    if(id==='ec-veg'||id==='ec-flower'){
+      el.disabled=true;el.style.background='var(--bg2)';el.style.color='var(--text3)';el.style.cursor='not-allowed';
+    } else {
+      el.disabled=false;el.style.background='';el.style.color='';el.style.cursor='';
+    }
   });
   const roomEl=document.getElementById('ec-room');
   roomEl.innerHTML='<option value="">select room</option><option>Flower 1</option><option>Flower 2</option><option>Flower 3</option><option>Flower 4</option><option>Flower 5</option><option>Veg</option>';
