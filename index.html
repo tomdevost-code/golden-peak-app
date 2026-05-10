@@ -793,10 +793,14 @@ async function roSave(){
   const batchVal=document.getElementById('ro-batch').value;
   if(!grower){toast('Please select a grower.');return;}if(!date){toast('Please set a date.');return;}
   if(!batchVal){toast('Please select a batch.');return;}
+  const room=document.getElementById('ro-room').value;
+  if(!room){toast('Please select a room.');return;}
+  const fs=document.getElementById('ro-flower').value;
+  if(!fs){toast('Cannot save a runoff record — no flower start date has been set for this batch.',4000);return;}
   const harvestDate=document.getElementById('ro-harvest').value;
   if(harvestDate&&date>harvestDate){toast('This batch was harvested on '+harvestDate+'. Entry blocked.',3500);return;}
   const vs=document.getElementById('ro-veg').value;
-  const fs=document.getElementById('ro-flower').value,inputEC=null;
+  const inputEC=null;
   const samples=[];let hasData=false;for(let i=1;i<=8;i++){const ec=parseFloat(document.getElementById('ro-ec-'+i).value)||null,ph=parseFloat(document.getElementById('ro-ph-'+i).value)||null;if(ec||ph)hasData=true;samples.push({ec,ph});}
   if(!hasData){toast('Enter at least one sample reading.');return;}
   const ecV=samples.map(s=>s.ec).filter(v=>v),phV=samples.map(s=>s.ph).filter(v=>v);
