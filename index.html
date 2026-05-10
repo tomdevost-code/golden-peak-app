@@ -1135,7 +1135,7 @@ function wastePlantsToggle(){
   plantsEl.style.cursor=isVeg?'':'not-allowed';
   if(!isVeg)plantsEl.value='';
 }
-function wasteSave(){
+async function wasteSave(){
   const grower=document.getElementById('waste-grower').value;
   const date=document.getElementById('waste-date').textContent.trim();
   const batch=document.getElementById('waste-batch-select').value;
