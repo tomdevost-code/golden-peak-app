@@ -325,6 +325,7 @@ tr:last-child td { border-bottom: none; }
         <button class="btn-save" id="sync-pending-btn" onclick="syncPending()" style="margin-top:8px;background:var(--blue);">Sync Pending Records</button>
         <div class="conn-status" id="sync-pending-status"></div>
         <button class="btn-save" onclick="clearPendingRecords()" style="margin-top:8px;background:var(--red);">Clear Pending Records</button>
+        <button class="btn-save" onclick="clearAllLocalData()" style="margin-top:8px;background:#7B0000;">Clear All Local Data</button>
       </div>
       <div class="settings-card">
         <h3>How to get your credentials</h3>
@@ -892,6 +893,15 @@ function migrateRoomNames(){
   }
   [...ecRecs,...roRecs].forEach(fixRoom);
   lsSet('gp-ec',ecRecs);lsSet('gp-ro',roRecs);
+}
+function clearAllLocalData(){
+  if(!confirm('This will permanently delete ALL local records including synced data, batch IDs, and dropdowns. This cannot be undone. Continue?'))return;
+  ecRecs=[];roRecs=[];
+  lsSet('gp-ec',[]);lsSet('gp-ro',[]);
+  populateBatchDropdowns();renderEC();renderRO();
+  ecClear();roClear();
+  updatePendingBadge();
+  toast('All local data cleared.');
 }
 function clearPendingRecords(){
   if(!confirm('This will permanently delete all unsynced records. This cannot be undone. Continue?'))return;
