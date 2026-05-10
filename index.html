@@ -168,8 +168,8 @@ tr:last-child td { border-bottom: none; }
             </div>
             <div class="field"><label>Entry date</label><input type="date" id="ec-date" readonly style="background:var(--bg2);color:var(--text3);cursor:default;" /></div>
             <div class="field"><label>Hydration date</label><input type="date" id="ec-hydration" oninput="ecHydrationChanged()" onchange="ecHydrationChanged()" /></div>
-            <div class="field"><label>Veg start date</label><input type="date" id="ec-veg" oninput="ecVegChanged()" onchange="ecVegChanged()" disabled style="background:var(--bg2);color:var(--text3);cursor:not-allowed;" /></div>
-            <div class="field"><label>Flower start date</label><input type="date" id="ec-flower" oninput="ecFlowerChanged()" onchange="ecFlowerChanged()" disabled style="background:var(--bg2);color:var(--text3);cursor:not-allowed;" /></div>
+            <div class="field"><label>Veg start date</label><input type="date" id="ec-veg" oninput="ecVegChanged()" onchange="ecVegChanged()" readonly style="background:var(--bg2);color:var(--text3);cursor:not-allowed;pointer-events:none;" /></div>
+            <div class="field"><label>Flower start date</label><input type="date" id="ec-flower" oninput="ecFlowerChanged()" onchange="ecFlowerChanged()" readonly style="background:var(--bg2);color:var(--text3);cursor:not-allowed;pointer-events:none;" /></div>
             <div class="field"><label>Harvest date <span style="font-size:10px;color:var(--text3);">(closes batch)</span></label><input type="date" id="ec-harvest" oninput="ecBadge()" /></div>
           </div>
           <div class="day-badge" id="ec-badge"><span style="font-size:12px;color:var(--text3);">Enter veg start date to calculate</span></div>
@@ -519,8 +519,8 @@ function lockSavedDateField(inputId, value, hintText){
   if(locked&&!h){h=document.createElement('div');h.className='saved-lock-hint';h.style.cssText='font-size:10px;color:var(--text3);margin-top:3px;font-family:var(--mono);';h.textContent=hintText;field.appendChild(h);}
   else if(!locked&&h){h.remove();}
 }
-function lockField(inputId,lock,hint){const el=document.getElementById(inputId);el.disabled=lock;el.style.background=lock?'var(--bg2)':'';el.style.color=lock?'var(--text3)':'';el.style.cursor=lock?'not-allowed':'';if(lock&&!el.value)el.value='';const field=el.closest('.field');let h=field.querySelector('.lock-hint');if(lock&&hint&&!h){h=document.createElement('div');h.className='lock-hint';h.style.cssText='font-size:10px;color:var(--text3);margin-top:3px;font-family:var(--mono);';h.textContent=hint;field.appendChild(h);}else if(!lock&&h){h.remove();}}
-function lockVegDate(lock){const vegInput=document.getElementById('ec-veg');vegInput.readOnly=lock;vegInput.disabled=lock;vegInput.style.background=lock?'var(--bg2)':'';vegInput.style.color=lock?'var(--text3)':'';vegInput.style.cursor=lock?'not-allowed':'';const vegField=vegInput.closest('.field');let hint=vegField.querySelector('.lock-hint');if(lock&&!hint){hint=document.createElement('div');hint.className='lock-hint';hint.style.cssText='font-size:10px;color:var(--text3);margin-top:3px;font-family:var(--mono);';hint.textContent='Locked - flower stage started';vegField.appendChild(hint);}else if(!lock&&hint){hint.remove();}}
+function lockField(inputId,lock,hint){const el=document.getElementById(inputId);el.readOnly=lock;el.disabled=false;el.style.background=lock?'var(--bg2)':'';el.style.color=lock?'var(--text3)':'';el.style.cursor=lock?'not-allowed':'';el.style.pointerEvents=lock?'none':'';if(lock&&!el.value)el.value='';const field=el.closest('.field');let h=field.querySelector('.lock-hint');if(lock&&hint&&!h){h=document.createElement('div');h.className='lock-hint';h.style.cssText='font-size:10px;color:var(--text3);margin-top:3px;font-family:var(--mono);';h.textContent=hint;field.appendChild(h);}else if(!lock&&h){h.remove();}}
+function lockVegDate(lock){const vegInput=document.getElementById('ec-veg');vegInput.readOnly=lock;vegInput.disabled=false;vegInput.style.background=lock?'var(--bg2)':'';vegInput.style.color=lock?'var(--text3)':'';vegInput.style.cursor=lock?'not-allowed':'';vegInput.style.pointerEvents=lock?'none':'';const vegField=vegInput.closest('.field');let hint=vegField.querySelector('.lock-hint');if(lock&&!hint){hint=document.createElement('div');hint.className='lock-hint';hint.style.cssText='font-size:10px;color:var(--text3);margin-top:3px;font-family:var(--mono);';hint.textContent='Locked - flower stage started';vegField.appendChild(hint);}else if(!lock&&hint){hint.remove();}}
 function setVegMin(){
   const hyd=document.getElementById('ec-hydration').value;
   const vegEl=document.getElementById('ec-veg');
@@ -618,7 +618,7 @@ function ecRoomChanged(){
 function ecHydrationChanged(){setVegMin();applyCascadeLocks();}
 function applyCascadeLocks(){
   const hyd=document.getElementById('ec-hydration').value;
-  const vegElVal=document.getElementById('ec-veg');const hasVeg=!!(vegElVal.value||vegElVal.getAttribute('value')||vegElVal.defaultValue);
+  const hasVeg=!!document.getElementById('ec-veg').value;
   const hasFlower=!!document.getElementById('ec-flower').value;
   // Lock veg until a hydration RECORD is saved for this batch
   const vegEl=document.getElementById('ec-veg');
@@ -627,10 +627,12 @@ function applyCascadeLocks(){
     const curBatch=document.getElementById('ec-batch').value.trim();
     const hydSaved=curBatch&&ecRecs.some(r=>r.batch&&r.batch.trim().toLowerCase()===curBatch.toLowerCase()&&r.hydrationDate);
     const vegLocked=!hydSaved;
-    vegEl.disabled=vegLocked;
+    vegEl.readOnly=vegLocked;
     vegEl.style.background=vegLocked?'var(--bg2)':'';
     vegEl.style.color=vegLocked?'var(--text3)':'';
     vegEl.style.cursor=vegLocked?'not-allowed':'';
+    vegEl.style.pointerEvents=vegLocked?'none':'';
+    vegEl.disabled=false;
     if(hydSaved&&hyd){
       const _p=hyd.split('-');const _d=new Date(parseInt(_p[0]),parseInt(_p[1])-1,parseInt(_p[2]));_d.setDate(_d.getDate()+1);
       vegEl.min=_d.getFullYear()+'-'+String(_d.getMonth()+1).padStart(2,'0')+'-'+String(_d.getDate()).padStart(2,'0');
@@ -763,9 +765,9 @@ function ecClear(){
     const vh=el.closest('.field').querySelector('.veg-lock-hint');if(vh)vh.remove();
     // veg and flower start disabled until unlocked by cascade — hydration can be re-enabled
     if(id==='ec-veg'||id==='ec-flower'){
-      el.disabled=true;el.style.background='var(--bg2)';el.style.color='var(--text3)';el.style.cursor='not-allowed';
+      el.readOnly=true;el.disabled=false;el.style.background='var(--bg2)';el.style.color='var(--text3)';el.style.cursor='not-allowed';el.style.pointerEvents='none';
     } else {
-      el.disabled=false;el.style.background='';el.style.color='';el.style.cursor='';
+      el.readOnly=false;el.disabled=false;el.style.background='';el.style.color='';el.style.cursor='';el.style.pointerEvents='';
     }
   });
   const roomEl=document.getElementById('ec-room');
