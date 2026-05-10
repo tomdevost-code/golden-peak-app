@@ -43,7 +43,7 @@ html, body { height: 100%; background-color: var(--bg); background-image: url('d
 .page { display: none; }
 .page.active { display: block; }
 .section { margin-bottom: 20px; }
-.section-label { font-size: 10px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 8px; font-family: var(--mono); }
+.section-label { font-size: 13px; font-weight: 700; color: #ffffff; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 8px; font-family: var(--mono); text-shadow: 0 1px 3px rgba(0,0,0,0.5); }
 .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 10px; }
 .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .field { display: flex; flex-direction: column; gap: 4px; }
@@ -482,7 +482,7 @@ function ecBatchLookup(){
       if(!hint){hint=document.createElement('div');hint.className='room-lock-hint';hint.style.cssText='font-size:10px;color:var(--text3);margin-top:3px;font-family:var(--mono);';roomEl.closest('.field').appendChild(hint);}
       hint.textContent='Room locked to Veg until veg start date is saved';
     }
-    applyCascadeLocks();ecBadge();updateBatchRoomsInfo(batch);ecSeqUnlock();
+    applyCascadeLocks();ecBadge();updateBatchRoomsInfo(batch);ecRoomChanged();ecSeqUnlock();
     if(found.harvestDate){showClosedWarning('ec',found.harvestDate);}else{hideClosedWarning('ec');if(found.vegStart)toast('Batch found - dates loaded automatically');}
   } else {
     // New batch — lock to Veg
@@ -560,7 +560,8 @@ function ecSeqUnlock(){
   const batch=document.getElementById('ec-batch').value.trim();
   const batchSel=document.getElementById('ec-batch-select').value;
   const hasBatch=!!(batch||batchSel);
-  const room=document.getElementById('ec-room').value;
+  const _roomEl=document.getElementById('ec-room');
+  const room=_roomEl.value||(_roomEl.options&&_roomEl.options.length>0&&_roomEl.selectedIndex>=0?_roomEl.options[_roomEl.selectedIndex].value:'');
   // Grower selected → unlock batch
   if(grower){
     seqEnable('ec-batch-select');seqEnable('ec-batch');
@@ -706,7 +707,8 @@ function ecAvgs(){setAvg('ec-avg-ec',avg(pens('.ec-drip-ec').filter(v=>v)),EC_LO
 async function ecSave(){
   const grower=document.getElementById('ec-grower').value,date=document.getElementById('ec-date').value,vs=document.getElementById('ec-veg').value;
   if(!grower){toast('Please select a grower.');return;}if(!date){toast('Please set a date.');return;}
-  const room=document.getElementById('ec-room').value;
+  const _roomEl=document.getElementById('ec-room');
+  const room=_roomEl.value||(_roomEl.options&&_roomEl.options.length>0&&_roomEl.selectedIndex>=0?_roomEl.options[_roomEl.selectedIndex].value:'');
   const wtype=document.getElementById('ec-wtype').value;
   if(room&&FLOWER_ROOMS.includes(room)&&wtype&&!FLOWER_WTYPES.includes(wtype)){toast('Watering type "'+wtype+'" is not allowed in '+room+'. Use: Full Saturation, Feed, Flush, or RO Water.',4000);return;}
   const hydrationDate=document.getElementById('ec-hydration').value;
