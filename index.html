@@ -421,13 +421,28 @@ function applyBatchRoomLock(form,batch){}
 function clearBatchRoomLock(form){}
 function roBatchSelect(){
   const val=document.getElementById('ro-batch-select').value;
-  if(!val){document.getElementById('ro-batch').value='';document.getElementById('ro-veg').value='';document.getElementById('ro-flower').value='';document.getElementById('ro-harvest').value='';hideClosedWarning('ro');roBadge();clearBatchRoomLock('ro');return;}
+  const roomEl=document.getElementById('ro-room');
+  if(!val){
+    document.getElementById('ro-batch').value='';document.getElementById('ro-veg').value='';document.getElementById('ro-flower').value='';document.getElementById('ro-harvest').value='';
+    hideClosedWarning('ro');roBadge();clearBatchRoomLock('ro');
+    // Restore full flower room list
+    roomEl.innerHTML='<option value="">select room</option><option>Flower 1</option><option>Flower 2</option><option>Flower 3</option><option>Flower 4</option><option>Flower 5</option>';
+    return;
+  }
   applyBatchRoomLock('ro',val);
   const batches=getECBatches();const b=batches[val];
   document.getElementById('ro-batch').value=val;
   document.getElementById('ro-veg').value=b?b.vegStart:'';
   document.getElementById('ro-flower').value=b?b.flowerStart:'';
   document.getElementById('ro-harvest').value=b?b.harvestDate:'';
+  // Filter room dropdown to only rooms this batch has been recorded in via EC log
+  const batchRooms=[...new Set(ecRecs.filter(r=>r.batch&&r.batch.trim().toLowerCase()===val.trim().toLowerCase()&&r.room&&r.room!=='Veg').map(r=>r.room))];
+  if(batchRooms.length>0){
+    const prevVal=roomEl.value;
+    roomEl.innerHTML='<option value="">select room</option>'+batchRooms.map(r=>'<option'+(r===prevVal?' selected':'')+'>'+r+'</option>').join('');
+  } else {
+    roomEl.innerHTML='<option value="">No flower rooms yet</option>';
+  }
   roBadge();
   if(b&&b.harvestDate){showClosedWarning('ro',b.harvestDate);}else{hideClosedWarning('ro');}
 }
