@@ -644,7 +644,12 @@ function applyCascadeLocks(){
   if(!hydSaved&&!vegSaved&&!flowerSaved){
     // No saved locks — apply normal cascade
     lockField('ec-flower',!hasVeg,'Enter veg start date first');
-    lockVegDate(hasFlower);
+    // Only unlock veg via lockVegDate if hydration record is saved; otherwise keep it locked
+    const _curBatch=document.getElementById('ec-batch').value.trim();
+    const _hydRecSaved=_curBatch&&ecRecs.some(r=>r.batch&&r.batch.trim().toLowerCase()===_curBatch.toLowerCase()&&r.hydrationDate);
+    if(hasFlower) lockVegDate(true);
+    else if(_hydRecSaved) lockVegDate(false);
+    // else: veg stays locked via the hydSaved check above — don't call lockVegDate(false)
     const flowerVal=document.getElementById('ec-flower').value;
   const harvestEl=document.getElementById('ec-harvest');
   if(flowerVal){
