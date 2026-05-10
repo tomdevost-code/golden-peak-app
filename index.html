@@ -169,7 +169,7 @@ tr:last-child td { border-bottom: none; }
             <div class="field"><label>Entry date</label><input type="date" id="ec-date" readonly style="background:var(--bg2);color:var(--text3);cursor:default;" /></div>
             <div class="field"><label>Hydration date</label><input type="date" id="ec-hydration" oninput="ecHydrationChanged()" onchange="ecHydrationChanged()" /></div>
             <div class="field"><label>Veg start date</label><input type="date" id="ec-veg" oninput="ecVegChanged()" onchange="ecVegChanged()" disabled style="background:var(--bg2);color:var(--text3);cursor:not-allowed;" /></div>
-            <div class="field"><label>Flower start date</label><input type="date" id="ec-flower" oninput="ecFlowerChanged()" onchange="ecFlowerChanged()" /></div>
+            <div class="field"><label>Flower start date</label><input type="date" id="ec-flower" oninput="ecFlowerChanged()" onchange="ecFlowerChanged()" disabled style="background:var(--bg2);color:var(--text3);cursor:not-allowed;" /></div>
             <div class="field"><label>Harvest date <span style="font-size:10px;color:var(--text3);">(closes batch)</span></label><input type="date" id="ec-harvest" oninput="ecBadge()" /></div>
           </div>
           <div class="day-badge" id="ec-badge"><span style="font-size:12px;color:var(--text3);">Enter veg start date to calculate</span></div>
@@ -601,6 +601,7 @@ function ecSeqUnlock(){
     seqDisable('ec-hydration','Select a room first');
     ['ec-notes','ec-flow'].forEach(id=>seqDisable(id,'Select a room first'));
     // drip fields intentionally NOT locked — always editable once batch is selected
+    applyCascadeLocks(); // ensure flower stays locked with no veg
   }
 }
 function ecRoomChanged(){
