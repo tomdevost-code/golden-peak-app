@@ -312,6 +312,106 @@ tr:last-child td { border-bottom: none; }
       </div>
     </div>
 
+    <!-- WASTE LOG -->
+    <div class="page" id="page-waste">
+      <div id="waste-room-strip" style="display:none;align-items:center;padding:8px 12px;border-radius:var(--radius-sm);border:1px solid;margin-bottom:12px;"></div>
+      <div class="section">
+        <div class="section-label">Batch Info</div>
+        <div class="card">
+          <div class="g2" style="margin-bottom:10px;">
+            <div class="field"><label>Grower</label>
+              <select id="waste-grower" onchange="wasteSeqUnlock()">
+                <option value="">select grower</option>
+                <option>Jordan Elliott</option><option>Brandon Cail</option><option>Tom Devost</option>
+              </select>
+            </div>
+            <div class="field"><label>Batch ID</label>
+              <select id="waste-batch-select" onchange="wasteBatchSelect()" disabled style="background:var(--bg2);color:var(--text3);cursor:not-allowed;margin-bottom:6px;">
+                <option value="">-- select batch --</option>
+              </select>
+            </div>
+          </div>
+          <div class="g2">
+            <div class="field"><label>Room</label>
+              <select id="waste-room" onchange="applyRoomColor('waste',this.value)" disabled style="background:var(--bg2);color:var(--text3);cursor:not-allowed;">
+                <option value="">select room</option>
+              </select>
+            </div>
+            <div class="field"><label>Date</label>
+              <input type="date" id="waste-date" />
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="section">
+        <div class="section-label">Waste Details</div>
+        <div class="card">
+          <div class="g2" style="margin-bottom:10px;">
+            <div class="field"><label>Waste Type</label>
+              <select id="waste-type" disabled style="background:var(--bg2);color:var(--text3);cursor:not-allowed;">
+                <option value="">select type</option>
+                <option>Vegetative Waste</option>
+                <option>Dry Waste</option>
+              </select>
+            </div>
+            <div class="field"><label>Weight (kg)</label>
+              <input type="number" id="waste-weight" step="0.001" placeholder="0.000" disabled style="background:var(--bg2);color:var(--text3);cursor:not-allowed;" />
+            </div>
+          </div>
+          <div class="g2">
+            <div class="field"><label>Plants Destroyed</label>
+              <input type="number" id="waste-plants" step="1" min="0" placeholder="0" disabled style="background:var(--bg2);color:var(--text3);cursor:not-allowed;" />
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="section">
+        <div class="section-label">Notes</div>
+        <textarea id="waste-notes" rows="2" disabled style="width:100%;font-size:14px;font-family:var(--sans);border-radius:var(--radius-sm);border:1px solid var(--border);padding:10px;background:var(--bg2);color:var(--text3);cursor:not-allowed;outline:none;" placeholder="Additional observations..."></textarea>
+      </div>
+      <!-- Monthly Summary -->
+      <div class="section">
+        <div class="section-label">Monthly Summary</div>
+        <div class="card">
+          <div style="display:flex;gap:8px;margin-bottom:10px;">
+            <select id="waste-summary-month" onchange="renderWaste()" style="flex:1;font-size:13px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;outline:none;">
+              <option value="">This month</option>
+            </select>
+          </div>
+          <div class="g2">
+            <div class="summary-item"><div class="summary-lbl">Total Weight</div><div class="summary-val" id="waste-total-weight">-</div></div>
+            <div class="summary-item"><div class="summary-lbl">Plants Destroyed</div><div class="summary-val" id="waste-total-plants">-</div></div>
+          </div>
+          <div class="g2" style="margin-top:8px;">
+            <div class="summary-item"><div class="summary-lbl">Vegetative</div><div class="summary-val" id="waste-total-veg">-</div></div>
+            <div class="summary-item"><div class="summary-lbl">Dry Waste</div><div class="summary-val" id="waste-total-dry">-</div></div>
+          </div>
+        </div>
+      </div>
+      <button class="btn-primary" id="waste-btn" onclick="wasteSave()">Save Waste Record</button>
+      <button class="btn-secondary" style="width:100%;margin-top:8px;" onclick="wasteClearConfirm()">Clear Form</button>
+      <!-- Waste Log Table -->
+      <div class="section" style="margin-top:20px;">
+        <div class="section-label">Waste Records</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+          <select id="f-waste-grower" onchange="renderWaste()" style="font-size:12px;font-family:var(--sans);color:var(--text);background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;outline:none;">
+            <option value="">All growers</option>
+            <option>Jordan Elliott</option><option>Brandon Cail</option><option>Tom Devost</option>
+          </select>
+          <select id="f-waste-batch" onchange="renderWaste()" style="font-size:12px;font-family:var(--sans);color:var(--text);background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;outline:none;">
+            <option value="">All batches</option>
+          </select>
+          <select id="f-waste-type" onchange="renderWaste()" style="font-size:12px;font-family:var(--sans);color:var(--text);background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;outline:none;">
+            <option value="">All types</option>
+            <option>Vegetative Waste</option><option>Dry Waste</option>
+          </select>
+          <input type="date" id="f-waste-from" onchange="renderWaste()" style="font-size:12px;font-family:var(--mono);color:var(--text);background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;outline:none;" />
+          <input type="date" id="f-waste-to" onchange="renderWaste()" style="font-size:12px;font-family:var(--mono);color:var(--text);background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;outline:none;" />
+        </div>
+        <div id="waste-table"></div>
+      </div>
+    </div>
+
     <!-- SETTINGS -->
     <div class="page" id="page-settings">
       <div class="settings-card">
@@ -359,6 +459,10 @@ tr:last-child td { border-bottom: none; }
       <svg viewBox="0 0 24 24"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
       Report
     </button>
+    <button class="bnav-btn" id="bn-waste" onclick="switchPage('waste',this)">
+      <svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+      Waste
+    </button>
     <button class="bnav-btn" id="bn-settings" onclick="switchPage('settings',this)" style="position:relative;">
       <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
       Settings
@@ -371,11 +475,11 @@ tr:last-child td { border-bottom: none; }
 <script>
 const EC_LO=2.2,EC_HI=2.3,PH_EC_LO=6.2,PH_EC_HI=6.3;
 const RO_PH_LO=6.0,RO_PH_HI=6.5,RO_VAR_LO=0.3,RO_VAR_HI=0.5,RO_VAR_ALERT=1.0;
-let ecRecs=[],roRecs=[],cfg={token:'',base:'',ecTbl:'',roTbl:''};
+let ecRecs=[],roRecs=[],wasteRecs=[],cfg={token:'',base:'',ecTbl:'',roTbl:'',wasteTbl:''};
 
 function lsGet(k){try{return JSON.parse(localStorage.getItem(k)||'null');}catch(e){return null;}}
 function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
-function loadAll(){ecRecs=lsGet('gp-ec')||[];roRecs=lsGet('gp-ro')||[];const s=lsGet('gp-cfg');if(s){cfg=s;applySettings();}}
+function loadAll(){ecRecs=lsGet('gp-ec')||[];roRecs=lsGet('gp-ro')||[];wasteRecs=lsGet('gp-waste')||[];const s=lsGet('gp-cfg');if(s){cfg=s;applySettings();}}
 function atReady(){return cfg.token&&cfg.base&&cfg.ecTbl&&cfg.roTbl;}
 async function atPost(tbl,fields){const r=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+tbl,{method:'POST',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify({fields})});if(!r.ok)throw new Error(r.status);return r.json();}
 function setSyncPill(state,msg){const el=document.getElementById('global-sync');el.className='sync-pill'+(state==='ok'?' ok':state==='err'?' err':state==='ing'?' ing':'');el.textContent=msg;}
@@ -390,14 +494,14 @@ function setAvg(id,val,lo,hi){const el=document.getElementById(id);if(val===null
 function stageLabel(r){if(!r.stage||!r.day)return'<span style="color:var(--text3)">-</span>';return r.stage==='flower'?'<span class="flower-txt">F'+r.day+'</span>':'<span class="veg-txt">V'+r.day+'</span>';}
 function toast(msg,dur){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),dur||2500);}
 
-function switchPage(page,btn){document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.bnav-btn').forEach(b=>b.classList.remove('active'));document.getElementById('page-'+page).classList.add('active');btn.classList.add('active');if(page==='report'){renderEC();renderRO();}}
+function switchPage(page,btn){document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.bnav-btn').forEach(b=>b.classList.remove('active'));document.getElementById('page-'+page).classList.add('active');btn.classList.add('active');if(page==='report'){renderEC();renderRO();}if(page==='waste'){renderWaste();}}
 function switchRepTab(tab,btn){document.getElementById('rep-ec-view').style.display=tab==='ec'?'':'none';document.getElementById('rep-ro-view').style.display=tab==='ro'?'':'none';document.querySelectorAll('.rep-tab').forEach(b=>b.classList.remove('active'));btn.classList.add('active');}
 
 function buildECEvents(){const c=document.getElementById('ec-events-container');c.innerHTML='';for(let i=1;i<=8;i++){c.innerHTML+='<div class="event-row"><div class="event-lbl">Event '+i+'</div><input type="number" id="ec-evt-'+i+'" step="1" min="0" placeholder="-" style="font-size:14px;font-family:var(--mono);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;color:var(--text);outline:none;text-align:center;" oninput="ecTotalML()" /></div>';}}
 function ecTotalML(){let t=0,any=false;for(let i=1;i<=8;i++){const v=parseFloat(document.getElementById('ec-evt-'+i).value);if(!isNaN(v)&&v>0){t+=v;any=true;}}document.getElementById('ec-total-ml').textContent=any?t.toFixed(0)+'ml':'-';}
 function getAllBatches(){const all=[...ecRecs,...roRecs];const seen={};all.forEach(r=>{if(r.batch&&!seen[r.batch]){seen[r.batch]={vegStart:r.vegStart||'',flowerStart:r.flowerStart||'',harvestDate:r.harvestDate||''};}});return seen;}
 function getECBatches(){const seen={};ecRecs.forEach(r=>{if(r.batch&&!seen[r.batch]){seen[r.batch]={vegStart:r.vegStart||'',flowerStart:r.flowerStart||'',harvestDate:r.harvestDate||''};}});return seen;}
-function populateBatchDropdowns(){
+function populateBatchDropdowns(){const _wbd=document.getElementById('waste-batch-select');if(_wbd){const _cur=_wbd.value;const _all=Object.keys(getAllBatches()).sort();_wbd.innerHTML='<option value="">-- select batch --</option>'+_all.map(b=>'<option'+( b===_cur?' selected':'')+'>'+b+'</option>').join('');}_wfb=document.getElementById('f-waste-batch');if(_wfb){const _c=_wfb.value;const _a=Object.keys(getAllBatches()).sort();_wfb.innerHTML='<option value="">All batches</option>'+_a.map(b=>'<option'+(b===_c?' selected':'')+'>'+b+'</option>').join('');};
   const allBatches=getAllBatches();const ecBatches=getECBatches();
   const allIds=Object.keys(allBatches).sort();const ecIds=Object.keys(ecBatches).sort();
   const ecSel=document.getElementById('ec-batch-select');const ecCur=ecSel.value;
@@ -825,7 +929,7 @@ function roClear(){for(let i=1;i<=8;i++){document.getElementById('ro-ec-'+i).val
 
 // Pending badge
 function updatePendingBadge(){
-  const n=(ecRecs.filter(r=>!r.synced).length)+(roRecs.filter(r=>!r.synced).length);
+  const n=(ecRecs.filter(r=>!r.synced).length)+(roRecs.filter(r=>!r.synced).length)+(wasteRecs.filter(r=>!r.synced).length);
   const b=document.getElementById('pending-badge');
   if(n>0){b.textContent=n;b.style.display='block';}else{b.style.display='none';}
 }
@@ -900,8 +1004,8 @@ function migrateRoomNames(){
 }
 function clearAllLocalData(){
   if(!confirm('This will permanently delete ALL local records including synced data, batch IDs, and dropdowns. This cannot be undone. Continue?'))return;
-  ecRecs=[];roRecs=[];
-  lsSet('gp-ec',[]);lsSet('gp-ro',[]);
+  ecRecs=[];roRecs=[];wasteRecs=[];
+  lsSet('gp-ec',[]);lsSet('gp-ro',[]);lsSet('gp-waste',[]);
   populateBatchDropdowns();renderEC();renderRO();
   ecClear();roClear();
   updatePendingBadge();
@@ -965,9 +1069,131 @@ document.getElementById('ro-date').readOnly=true;
 document.getElementById('ro-date').style.background='var(--bg2)';
 document.getElementById('ro-date').style.color='var(--text3)';
 document.getElementById('ro-date').style.cursor='default';
-buildECEvents();buildROSamples();loadAll();populateBatchDropdowns();setVegMin();applyCascadeLocks();updatePendingBadge();ecSeqUnlock();
+buildECEvents();buildROSamples();loadAll();populateBatchDropdowns();setVegMin();applyCascadeLocks();updatePendingBadge();ecSeqUnlock();wasteSeqUnlock();
 // Keep entry dates updated to today on each page load
 setInterval(()=>{const t=localDate();document.getElementById('ec-date').value=t;document.getElementById('ro-date').value=t;},60000);
+
+// ── WASTE LOG ─────────────────────────────────────────────────────────────────
+
+function wasteSeqUnlock(){
+  const grower=document.getElementById('waste-grower').value;
+  const batchSel=document.getElementById('waste-batch-select');
+  const roomEl=document.getElementById('waste-room');
+  const fields=['waste-type','waste-weight','waste-plants','waste-notes'];
+  function disableFields(){fields.forEach(id=>{const el=document.getElementById(id);el.disabled=true;el.style.background='var(--bg2)';el.style.color='var(--text3)';el.style.cursor='not-allowed';});}
+  function enableFields(){fields.forEach(id=>{const el=document.getElementById(id);el.disabled=false;el.style.background='';el.style.color='';el.style.cursor='';});document.getElementById('waste-notes').style.background='';document.getElementById('waste-notes').style.color='';}
+  if(!grower){
+    batchSel.disabled=true;batchSel.style.background='var(--bg2)';batchSel.style.color='var(--text3)';batchSel.style.cursor='not-allowed';
+    roomEl.disabled=true;roomEl.style.background='var(--bg2)';roomEl.style.color='var(--text3)';roomEl.style.cursor='not-allowed';
+    disableFields();return;
+  }
+  batchSel.disabled=false;batchSel.style.background='';batchSel.style.color='';batchSel.style.cursor='';
+  const batch=batchSel.value;
+  if(!batch){
+    roomEl.disabled=true;roomEl.style.background='var(--bg2)';roomEl.style.color='var(--text3)';roomEl.style.cursor='not-allowed';
+    disableFields();return;
+  }
+  // Populate rooms from EC records for this batch
+  const batchRooms=[...new Set(ecRecs.filter(r=>r.batch&&r.batch.trim().toLowerCase()===batch.trim().toLowerCase()&&r.room).map(r=>r.room))];
+  const prevRoom=roomEl.value;
+  roomEl.innerHTML='<option value="">select room</option>'+batchRooms.map(r=>'<option'+(r===prevRoom?' selected':'')+'>'+r+'</option>').join('');
+  roomEl.disabled=false;roomEl.style.background='';roomEl.style.color='';roomEl.style.cursor='';
+  const room=roomEl.value||prevRoom;
+  if(!room){disableFields();return;}
+  enableFields();
+  applyRoomColor('waste',room);
+}
+
+function wasteBatchSelect(){
+  const val=document.getElementById('waste-batch-select').value;
+  wasteSeqUnlock();
+}
+
+async function wasteSave(){
+  const grower=document.getElementById('waste-grower').value;
+  const date=document.getElementById('waste-date').value;
+  const batch=document.getElementById('waste-batch-select').value;
+  const room=document.getElementById('waste-room').value;
+  const type=document.getElementById('waste-type').value;
+  const weight=parseFloat(document.getElementById('waste-weight').value);
+  const plants=parseInt(document.getElementById('waste-plants').value)||0;
+  const notes=document.getElementById('waste-notes').value.trim();
+  if(!grower){toast('Please select a grower.');return;}
+  if(!date){toast('Please set a date.');return;}
+  if(!batch){toast('Please select a batch.');return;}
+  if(!room){toast('Please select a room.');return;}
+  if(!type){toast('Please select a waste type.');return;}
+  if(!weight||weight<=0){toast('Please enter a weight greater than 0.');return;}
+  const rec={id:Date.now(),date,grower,batch,room,type,weight,plants,notes,synced:false};
+  wasteRecs.unshift(rec);lsSet('gp-waste',wasteRecs);
+  populateBatchDropdowns();renderWaste();updatePendingBadge();
+  if(cfg.token&&cfg.base&&cfg.wasteTbl){
+    setSyncPill('ing','Syncing...');document.getElementById('waste-btn').disabled=true;
+    try{
+      const f={'Date':rec.date,'Grower':rec.grower,'Batch ID':rec.batch,'Room':rec.room,'Waste Type':rec.type,'Weight (kg)':rec.weight,'Plants Destroyed':rec.plants||undefined,'Notes':rec.notes||undefined};
+      Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
+      await atPost(cfg.wasteTbl,f);rec.synced=true;lsSet('gp-waste',wasteRecs);setSyncPill('ok','Synced');toast('Saved and synced to Airtable');
+    }catch(e){setSyncPill('err','Sync failed: Waste '+e.message);toast('Saved locally - sync failed.',3500);}
+    document.getElementById('waste-btn').disabled=false;
+  } else {
+    toast('Saved locally.');
+  }
+  wasteClear();
+}
+
+function wasteClear(){
+  document.getElementById('waste-grower').value='';
+  document.getElementById('waste-batch-select').value='';
+  document.getElementById('waste-room').innerHTML='<option value="">select room</option>';
+  document.getElementById('waste-type').value='';
+  document.getElementById('waste-weight').value='';
+  document.getElementById('waste-plants').value='';
+  document.getElementById('waste-notes').value='';
+  document.getElementById('waste-date').value='';
+  document.getElementById('waste-room-strip').style.display='none';
+  wasteSeqUnlock();
+}
+
+function wasteClearConfirm(){if(confirm('Clear the current form? Unsaved data will be lost.'))wasteClear();}
+
+function renderWaste(){
+  populateBatchDropdowns();
+  const growerF=document.getElementById('f-waste-grower').value;
+  const batchF=document.getElementById('f-waste-batch').value;
+  const typeF=document.getElementById('f-waste-type').value;
+  const fromF=document.getElementById('f-waste-from').value;
+  const toF=document.getElementById('f-waste-to').value;
+  // Monthly summary
+  const now=new Date();const yr=now.getFullYear(),mo=now.getMonth();
+  const monthStart=yr+'-'+String(mo+1).padStart(2,'0')+'-01';
+  const nextMo=new Date(yr,mo+1,1);
+  const monthEnd=nextMo.getFullYear()+'-'+String(nextMo.getMonth()+1).padStart(2,'0')+'-01';
+  const monthRecs=wasteRecs.filter(r=>r.date>=monthStart&&r.date<monthEnd);
+  const totalWeight=monthRecs.reduce((s,r)=>s+(r.weight||0),0);
+  const totalPlants=monthRecs.reduce((s,r)=>s+(r.plants||0),0);
+  const vegWeight=monthRecs.filter(r=>r.type==='Vegetative Waste').reduce((s,r)=>s+(r.weight||0),0);
+  const dryWeight=monthRecs.filter(r=>r.type==='Dry Waste').reduce((s,r)=>s+(r.weight||0),0);
+  document.getElementById('waste-total-weight').textContent=totalWeight.toFixed(3)+' kg';
+  document.getElementById('waste-total-plants').textContent=totalPlants;
+  document.getElementById('waste-total-veg').textContent=vegWeight.toFixed(3)+' kg';
+  document.getElementById('waste-total-dry').textContent=dryWeight.toFixed(3)+' kg';
+  // Filter records
+  const data=wasteRecs.filter(r=>{
+    if(growerF&&r.grower!==growerF)return false;
+    if(batchF&&r.batch!==batchF)return false;
+    if(typeF&&r.type!==typeF)return false;
+    if(fromF&&r.date<fromF)return false;
+    if(toF&&r.date>toF)return false;
+    return true;
+  });
+  const tbl=document.getElementById('waste-table');
+  if(!data.length){tbl.innerHTML='<div style="text-align:center;color:var(--text3);padding:20px;font-size:13px;">No waste records found.</div>';return;}
+  tbl.innerHTML='<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:var(--bg2);"><th style="padding:8px 6px;text-align:left;font-family:var(--mono);font-weight:600;font-size:11px;color:var(--text2);">Date</th><th style="padding:8px 6px;text-align:left;">Grower</th><th style="padding:8px 6px;text-align:left;">Batch</th><th style="padding:8px 6px;text-align:left;">Room</th><th style="padding:8px 6px;text-align:left;">Type</th><th style="padding:8px 6px;text-align:right;">Weight</th><th style="padding:8px 6px;text-align:right;">Plants</th></tr></thead><tbody>'+
+    data.map(r=>'<tr style="border-bottom:1px solid var(--border);"><td style="padding:7px 6px;font-family:var(--mono);font-size:11px;">'+r.date+'</td><td style="padding:7px 6px;">'+r.grower+'</td><td style="padding:7px 6px;font-family:var(--mono);">'+r.batch+'</td><td style="padding:7px 6px;">'+roomDot(r.room)+'</td><td style="padding:7px 6px;"><span style="font-size:11px;background:'+(r.type==='Vegetative Waste'?'var(--green-pale)':'var(--amber-pale)')+';color:'+(r.type==='Vegetative Waste'?'var(--green)':'var(--amber)')+';border-radius:20px;padding:2px 8px;">'+r.type+'</span></td><td style="padding:7px 6px;text-align:right;font-family:var(--mono);">'+r.weight.toFixed(3)+' kg</td><td style="padding:7px 6px;text-align:right;font-family:var(--mono);">'+(r.plants||0)+'</td></tr>').join('')+
+    '</tbody></table></div>';
+}
+// ── END WASTE LOG ─────────────────────────────────────────────────────────────
+
 </script>
 </body>
 </html>
