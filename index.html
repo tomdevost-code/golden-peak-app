@@ -43,7 +43,7 @@ html, body { height: 100%; background-color: var(--bg); background-image: url('d
 .page { display: none; }
 .page.active { display: block; }
 .section { margin-bottom: 20px; }
-.section-label { font-size: 13px; font-weight: 700; color: #ffffff; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 8px; font-family: var(--mono); text-shadow: 0 1px 3px rgba(0,0,0,0.5); }
+.section-label { font-size: 15px; font-weight: 700; color: #ffffff; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 8px; font-family: var(--mono); text-shadow: 0 1px 3px rgba(0,0,0,0.5); }
 .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 10px; }
 .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .field { display: flex; flex-direction: column; gap: 4px; }
@@ -177,7 +177,7 @@ tr:last-child td { border-bottom: none; }
         </div>
       </div>
       <div class="section">
-        <div class="section-label">Drip emitter (3 pens)</div>
+        <div class="section-label">Drip emitter / Wand - (3 pens)</div>
         <div class="card">
           <div class="pen-col-headers"><div class="pen-col-h"></div><div class="pen-col-h">EC mS/cm</div><div class="pen-col-h">pH</div></div>
           <div class="pen-row"><div class="pen-lbl">Pen 1</div><input class="pen-input ec-drip-ec" type="number" step="0.01" placeholder="0.00" oninput="ecAvgs()" /><input class="pen-input ec-drip-ph" type="number" step="0.01" placeholder="0.00" oninput="ecAvgs()" /></div>
@@ -482,7 +482,12 @@ function ecBatchLookup(){
       if(!hint){hint=document.createElement('div');hint.className='room-lock-hint';hint.style.cssText='font-size:10px;color:var(--text3);margin-top:3px;font-family:var(--mono);';roomEl.closest('.field').appendChild(hint);}
       hint.textContent='Room locked to Veg until veg start date is saved';
     }
-    applyCascadeLocks();ecBadge();updateBatchRoomsInfo(batch);ecRoomChanged();ecSeqUnlock();
+    applyCascadeLocks();ecBadge();updateBatchRoomsInfo(batch);ecRoomChanged();
+    // Always enable drip fields for existing batch regardless of room lock state
+    document.querySelectorAll('.ec-drip-ec,.ec-drip-ph,.ec-evt-input').forEach(el=>{
+      el.disabled=false;el.style.opacity='';el.style.background='';el.style.color='';el.style.cursor='';
+    });
+    ecSeqUnlock();
     if(found.harvestDate){showClosedWarning('ec',found.harvestDate);}else{hideClosedWarning('ec');if(found.vegStart)toast('Batch found - dates loaded automatically');}
   } else {
     // New batch — lock to Veg
@@ -491,7 +496,11 @@ function ecBatchLookup(){
     let hint=roomEl.closest('.field').querySelector('.room-lock-hint');
     if(!hint){hint=document.createElement('div');hint.className='room-lock-hint';hint.style.cssText='font-size:10px;color:var(--text3);margin-top:3px;font-family:var(--mono);';roomEl.closest('.field').appendChild(hint);}
     hint.textContent='New batches must start in Veg Room';
-    ecRoomChanged();applyCascadeLocks();updateBatchRoomsInfo(batch);ecSeqUnlock();
+    ecRoomChanged();applyCascadeLocks();updateBatchRoomsInfo(batch);
+    document.querySelectorAll('.ec-drip-ec,.ec-drip-ph,.ec-evt-input').forEach(el=>{
+      el.disabled=false;el.style.opacity='';el.style.background='';el.style.color='';el.style.cursor='';
+    });
+    ecSeqUnlock();
   }
 }
 function roBatchLookup(){const batch=document.getElementById('ro-batch').value.trim();if(!batch)return;const found=findBatchDates(batch,[...ecRecs,...roRecs]);if(found){if(found.vegStart)document.getElementById('ro-veg').value=found.vegStart;if(found.flowerStart)document.getElementById('ro-flower').value=found.flowerStart;if(found.harvestDate)document.getElementById('ro-harvest').value=found.harvestDate;roBadge();if(found.harvestDate){showClosedWarning('ro',found.harvestDate);}else{hideClosedWarning('ro');if(found.vegStart)toast('Batch found - dates loaded automatically');}}}
