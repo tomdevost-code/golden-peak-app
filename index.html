@@ -600,7 +600,7 @@ function ecSeqUnlock(){
   } else {
     seqDisable('ec-hydration','Select a room first');
     ['ec-notes','ec-flow'].forEach(id=>seqDisable(id,'Select a room first'));
-    document.querySelectorAll('.ec-drip-ec,.ec-drip-ph').forEach(el=>{el.disabled=true;el.style.opacity='0.4';});
+    // drip fields intentionally NOT locked — always editable once batch is selected
   }
 }
 function ecRoomChanged(){
