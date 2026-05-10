@@ -1069,7 +1069,7 @@ document.getElementById('ro-date').readOnly=true;
 document.getElementById('ro-date').style.background='var(--bg2)';
 document.getElementById('ro-date').style.color='var(--text3)';
 document.getElementById('ro-date').style.cursor='default';
-buildECEvents();buildROSamples();loadAll();populateBatchDropdowns();setVegMin();applyCascadeLocks();updatePendingBadge();ecSeqUnlock();wasteSeqUnlock();document.getElementById('waste-date').value=new Date().toISOString().split('T')[0];
+buildECEvents();buildROSamples();loadAll();populateBatchDropdowns();setVegMin();applyCascadeLocks();updatePendingBadge();ecSeqUnlock();wasteSeqUnlock();document.getElementById('waste-date').textContent=new Date().toISOString().split('T')[0];
 // Keep entry dates updated to today on each page load
 setInterval(()=>{const t=localDate();document.getElementById('ec-date').value=t;document.getElementById('ro-date').value=t;},60000);
 
@@ -1111,7 +1111,7 @@ function wasteBatchSelect(){
 
 async function wasteSave(){
   const grower=document.getElementById('waste-grower').value;
-  const date=document.getElementById('waste-date').value;
+  const date=document.getElementById('waste-date').textContent.trim();
   const batch=document.getElementById('waste-batch-select').value;
   const room=document.getElementById('waste-room').value;
   const type=document.getElementById('waste-type').value;
@@ -1123,7 +1123,7 @@ async function wasteSave(){
   if(!batch){toast('Please select a batch.');return;}
   if(!room){toast('Please select a room.');return;}
   if(!type){toast('Please select a waste type.');return;}
-  if(!weight||weight<=0){toast('Please enter a weight greater than 0.');return;}
+  if(!weight||isNaN(weight)||weight<=0){toast('Please enter a weight greater than 0 kg.');return;}
   const rec={id:Date.now(),date,grower,batch,room,type,weight,plants,notes,synced:false};
   wasteRecs.unshift(rec);lsSet('gp-waste',wasteRecs);
   populateBatchDropdowns();renderWaste();updatePendingBadge();
@@ -1149,7 +1149,7 @@ function wasteClear(){
   document.getElementById('waste-weight').value='';
   document.getElementById('waste-plants').value='';
   document.getElementById('waste-notes').value='';
-  document.getElementById('waste-date').value=new Date().toISOString().split('T')[0];
+  document.getElementById('waste-date').textContent=new Date().toISOString().split('T')[0];
   document.getElementById('waste-room-strip').style.display='none';
   wasteSeqUnlock();
 }
