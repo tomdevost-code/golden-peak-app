@@ -519,7 +519,7 @@ function lockSavedDateField(inputId, value, hintText){
   if(locked&&!h){h=document.createElement('div');h.className='saved-lock-hint';h.style.cssText='font-size:10px;color:var(--text3);margin-top:3px;font-family:var(--mono);';h.textContent=hintText;field.appendChild(h);}
   else if(!locked&&h){h.remove();}
 }
-function lockField(inputId,lock,hint){const el=document.getElementById(inputId);el.disabled=lock;el.style.background=lock?'var(--bg2)':'var(--bg)';el.style.color=lock?'var(--text3)':'var(--text)';el.style.cursor=lock?'not-allowed':'';if(lock&&!el.value)el.value='';const field=el.closest('.field');let h=field.querySelector('.lock-hint');if(lock&&hint&&!h){h=document.createElement('div');h.className='lock-hint';h.style.cssText='font-size:10px;color:var(--text3);margin-top:3px;font-family:var(--mono);';h.textContent=hint;field.appendChild(h);}else if(!lock&&h){h.remove();}}
+function lockField(inputId,lock,hint){const el=document.getElementById(inputId);el.disabled=lock;el.style.background=lock?'var(--bg2)':'';el.style.color=lock?'var(--text3)':'';el.style.cursor=lock?'not-allowed':'';if(lock&&!el.value)el.value='';const field=el.closest('.field');let h=field.querySelector('.lock-hint');if(lock&&hint&&!h){h=document.createElement('div');h.className='lock-hint';h.style.cssText='font-size:10px;color:var(--text3);margin-top:3px;font-family:var(--mono);';h.textContent=hint;field.appendChild(h);}else if(!lock&&h){h.remove();}}
 function lockVegDate(lock){const vegInput=document.getElementById('ec-veg');vegInput.readOnly=lock;vegInput.disabled=lock;vegInput.style.background=lock?'var(--bg2)':'';vegInput.style.color=lock?'var(--text3)':'';vegInput.style.cursor=lock?'not-allowed':'';const vegField=vegInput.closest('.field');let hint=vegField.querySelector('.lock-hint');if(lock&&!hint){hint=document.createElement('div');hint.className='lock-hint';hint.style.cssText='font-size:10px;color:var(--text3);margin-top:3px;font-family:var(--mono);';hint.textContent='Locked - flower stage started';vegField.appendChild(hint);}else if(!lock&&hint){hint.remove();}}
 function setVegMin(){
   const hyd=document.getElementById('ec-hydration').value;
@@ -618,7 +618,7 @@ function ecRoomChanged(){
 function ecHydrationChanged(){setVegMin();applyCascadeLocks();}
 function applyCascadeLocks(){
   const hyd=document.getElementById('ec-hydration').value;
-  const hasVeg=!!document.getElementById('ec-veg').value;
+  const vegElVal=document.getElementById('ec-veg');const hasVeg=!!(vegElVal.value||vegElVal.getAttribute('value')||vegElVal.defaultValue);
   const hasFlower=!!document.getElementById('ec-flower').value;
   // Lock veg until a hydration RECORD is saved for this batch
   const vegEl=document.getElementById('ec-veg');
