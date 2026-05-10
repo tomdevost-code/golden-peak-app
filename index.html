@@ -333,7 +333,7 @@ tr:last-child td { border-bottom: none; }
           </div>
           <div class="g2">
             <div class="field"><label>Room</label>
-              <select id="waste-room" onchange="applyRoomColor('waste',this.value)" disabled style="background:var(--bg2);color:var(--text3);cursor:not-allowed;">
+              <select id="waste-room" onchange="applyRoomColor('waste',this.value);wasteSeqUnlock()" disabled style="background:var(--bg2);color:var(--text3);cursor:not-allowed;">
                 <option value="">select room</option>
               </select>
             </div>
@@ -1069,7 +1069,7 @@ document.getElementById('ro-date').readOnly=true;
 document.getElementById('ro-date').style.background='var(--bg2)';
 document.getElementById('ro-date').style.color='var(--text3)';
 document.getElementById('ro-date').style.cursor='default';
-buildECEvents();buildROSamples();loadAll();populateBatchDropdowns();setVegMin();applyCascadeLocks();updatePendingBadge();ecSeqUnlock();wasteSeqUnlock();
+buildECEvents();buildROSamples();loadAll();populateBatchDropdowns();setVegMin();applyCascadeLocks();updatePendingBadge();ecSeqUnlock();wasteSeqUnlock();document.getElementById('waste-date').value=new Date().toISOString().split('T')[0];
 // Keep entry dates updated to today on each page load
 setInterval(()=>{const t=localDate();document.getElementById('ec-date').value=t;document.getElementById('ro-date').value=t;},60000);
 
@@ -1149,7 +1149,7 @@ function wasteClear(){
   document.getElementById('waste-weight').value='';
   document.getElementById('waste-plants').value='';
   document.getElementById('waste-notes').value='';
-  document.getElementById('waste-date').value='';
+  document.getElementById('waste-date').value=new Date().toISOString().split('T')[0];
   document.getElementById('waste-room-strip').style.display='none';
   wasteSeqUnlock();
 }
