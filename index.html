@@ -254,12 +254,7 @@ tr:last-child td { border-bottom: none; }
           <div class="day-badge" id="ro-badge"><span style="font-size:12px;color:var(--text3);">Select a batch to calculate stage</span></div>
         </div>
       </div>
-      <div class="section">
-        <div class="section-label">Input EC (today's drip emitter average)</div>
-        <div class="card">
-          <div class="field"><label>Input EC (mS/cm)</label><input type="number" id="ro-input-ec" step="0.01" placeholder="2.20" oninput="roCalc()" /></div>
-        </div>
-      </div>
+
       <div class="section">
         <div class="section-label">8 plant samples - averaged EC and pH</div>
         <div class="card"><div class="sample-grid" id="ro-samples"></div></div>
@@ -790,7 +785,7 @@ function ecClear(){
 
 function buildROSamples(){const c=document.getElementById('ro-samples');c.innerHTML='';for(let i=1;i<=8;i++){c.innerHTML+='<div class="sample-item"><div class="sample-num">Sample '+i+'</div><div class="s-lbl">EC (mS/cm)</div><input type="number" class="ro-s-ec s-input" id="ro-ec-'+i+'" step="0.01" placeholder="0.00" oninput="roCalc()" /><div class="s-lbl" style="margin-top:6px;">pH</div><input type="number" class="ro-s-ph s-input" id="ro-ph-'+i+'" step="0.01" placeholder="0.00" oninput="roCalc()" /></div>';}}
 function roBadge(){const d=document.getElementById('ro-date').value,vs=document.getElementById('ro-veg').value,fs=document.getElementById('ro-flower').value,b=document.getElementById('ro-badge');if(!d||!vs){b.innerHTML='<span style="font-size:12px;color:var(--text3);">Enter veg start date to calculate</span>';return;}const{stage,day}=calcStage(vs,fs,d);if(stage&&day)b.innerHTML='<span class="day-pill '+stage+'">'+(stage==='flower'?'Flower Day':'Veg Day')+' '+day+'</span>';else b.innerHTML='<span style="font-size:12px;color:var(--text3);">Check your dates</span>';}
-function roCalc(){const ecV=[],phV=[];for(let i=1;i<=8;i++){const ec=parseFloat(document.getElementById('ro-ec-'+i).value),ph=parseFloat(document.getElementById('ro-ph-'+i).value);if(!isNaN(ec)&&ec>0)ecV.push(ec);if(!isNaN(ph)&&ph>0)phV.push(ph);}const avgEC=avg(ecV),avgPH=avg(phV);document.getElementById('ro-avg-ec').textContent=avgEC!==null?avgEC.toFixed(2):'-';document.getElementById('ro-avg-ph').textContent=avgPH!==null?avgPH.toFixed(2):'-';document.getElementById('ro-count').textContent=ecV.length+'/8';const inputEC=parseFloat(document.getElementById('ro-input-ec').value);const warn=document.getElementById('ro-warn'),ok=document.getElementById('ro-ok');warn.style.display='none';ok.style.display='none';if(avgEC!==null&&!isNaN(inputEC)){const v=Math.round((avgEC-inputEC)*100)/100;document.getElementById('ro-variance').textContent=(v>=0?'+':'')+v.toFixed(2);if(v>RO_VAR_ALERT)warn.style.display='block';else if(v>=RO_VAR_LO&&v<=RO_VAR_HI&&(avgPH===null||(avgPH>=RO_PH_LO&&avgPH<=RO_PH_HI)))ok.style.display='block';}else document.getElementById('ro-variance').textContent='-';}
+function roCalc(){const ecV=[],phV=[];for(let i=1;i<=8;i++){const ec=parseFloat(document.getElementById('ro-ec-'+i).value),ph=parseFloat(document.getElementById('ro-ph-'+i).value);if(!isNaN(ec)&&ec>0)ecV.push(ec);if(!isNaN(ph)&&ph>0)phV.push(ph);}const avgEC=avg(ecV),avgPH=avg(phV);document.getElementById('ro-avg-ec').textContent=avgEC!==null?avgEC.toFixed(2):'-';document.getElementById('ro-avg-ph').textContent=avgPH!==null?avgPH.toFixed(2):'-';document.getElementById('ro-count').textContent=ecV.length+'/8';document.getElementById('ro-variance').textContent='-';}
 
 async function roSave(){
   const grower=document.getElementById('ro-grower').value,date=document.getElementById('ro-date').value;
@@ -800,7 +795,7 @@ async function roSave(){
   const harvestDate=document.getElementById('ro-harvest').value;
   if(harvestDate&&date>harvestDate){toast('This batch was harvested on '+harvestDate+'. Entry blocked.',3500);return;}
   const vs=document.getElementById('ro-veg').value;
-  const fs=document.getElementById('ro-flower').value,inputEC=parseFloat(document.getElementById('ro-input-ec').value)||null;
+  const fs=document.getElementById('ro-flower').value,inputEC=null;
   const samples=[];let hasData=false;for(let i=1;i<=8;i++){const ec=parseFloat(document.getElementById('ro-ec-'+i).value)||null,ph=parseFloat(document.getElementById('ro-ph-'+i).value)||null;if(ec||ph)hasData=true;samples.push({ec,ph});}
   if(!hasData){toast('Enter at least one sample reading.');return;}
   const ecV=samples.map(s=>s.ec).filter(v=>v),phV=samples.map(s=>s.ph).filter(v=>v);
@@ -821,7 +816,7 @@ async function roSave(){
   }else{toast('Entry saved locally');}
   roClear();updatePendingBadge();
 }
-function roClear(){for(let i=1;i<=8;i++){document.getElementById('ro-ec-'+i).value='';document.getElementById('ro-ph-'+i).value='';}['ro-notes','ro-input-ec'].forEach(id=>document.getElementById(id).value='');['ro-avg-ec','ro-avg-ph','ro-variance'].forEach(id=>document.getElementById(id).textContent='-');document.getElementById('ro-count').textContent='0/8';document.getElementById('ro-warn').style.display='none';document.getElementById('ro-ok').style.display='none';document.getElementById('ro-batch-select').value='';document.getElementById('ro-batch').value='';document.getElementById('ro-veg').value='';document.getElementById('ro-flower').value='';document.getElementById('ro-harvest').value='';document.getElementById('ro-badge').innerHTML='<span style="font-size:12px;color:var(--text3);">Select a batch to calculate stage</span>';clearBatchRoomLock('ro');hideClosedWarning('ro');}
+function roClear(){for(let i=1;i<=8;i++){document.getElementById('ro-ec-'+i).value='';document.getElementById('ro-ph-'+i).value='';}['ro-notes'].forEach(id=>document.getElementById(id).value='');['ro-avg-ec','ro-avg-ph','ro-variance'].forEach(id=>document.getElementById(id).textContent='-');document.getElementById('ro-count').textContent='0/8';document.getElementById('ro-warn').style.display='none';document.getElementById('ro-ok').style.display='none';document.getElementById('ro-batch-select').value='';document.getElementById('ro-batch').value='';document.getElementById('ro-veg').value='';document.getElementById('ro-flower').value='';document.getElementById('ro-harvest').value='';document.getElementById('ro-badge').innerHTML='<span style="font-size:12px;color:var(--text3);">Select a batch to calculate stage</span>';clearBatchRoomLock('ro');hideClosedWarning('ro');}
 
 // Pending badge
 function updatePendingBadge(){
