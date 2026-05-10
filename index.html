@@ -510,7 +510,8 @@ function lockSavedDateField(inputId, value, hintText){
   const el=document.getElementById(inputId);
   const locked=!!value;
   el.readOnly=locked;
-  el.disabled=locked;
+  el.disabled=false;
+  el.dataset.savedLock=locked?'1':'0';
   el.style.background=locked?'var(--bg2)':'';
   el.style.color=locked?'var(--text3)':'';
   el.style.cursor=locked?'not-allowed':'';
@@ -653,32 +654,25 @@ function applyCascadeLocks(){
   } else {
     flowerEl.min='';
   }
-  // Only apply cascade locks if not already saved-locked
-  const hydSaved=document.getElementById('ec-hydration').readOnly;
-  const vegSaved=document.getElementById('ec-veg').readOnly;
-  const flowerSaved=document.getElementById('ec-flower').readOnly;
-  if(!hydSaved&&!vegSaved&&!flowerSaved){
-    // No saved locks — apply normal cascade
+  // Track which fields are permanently saved-locked (via lockSavedDateField)
+  const flowerPermLocked=document.getElementById('ec-flower').dataset.savedLock==='1';
+
+  // Always lock/unlock flower based on whether veg has a value
+  if(!flowerPermLocked){
     lockField('ec-flower',!hasVeg,'Enter veg start date first');
-    // Only unlock veg via lockVegDate if hydration record is saved; otherwise keep it locked
-    const _curBatch=document.getElementById('ec-batch').value.trim();
-    const _hydRecSaved=_curBatch&&ecRecs.some(r=>r.batch&&r.batch.trim().toLowerCase()===_curBatch.toLowerCase()&&r.hydrationDate);
-    if(hasFlower) lockVegDate(true);
-    else if(_hydRecSaved) lockVegDate(false);
-    // else: veg stays locked via the hydSaved check above — don't call lockVegDate(false)
-    const flowerVal=document.getElementById('ec-flower').value;
+  }
+
+  // Harvest min and lock
+  const flowerVal=document.getElementById('ec-flower').value;
   const harvestEl=document.getElementById('ec-harvest');
   if(flowerVal){
     const _p=flowerVal.split('-');const _d=new Date(parseInt(_p[0]),parseInt(_p[1])-1,parseInt(_p[2]));_d.setDate(_d.getDate()+1);
     harvestEl.min=_d.getFullYear()+'-'+String(_d.getMonth()+1).padStart(2,'0')+'-'+String(_d.getDate()).padStart(2,'0');
   } else { harvestEl.min=''; }
   lockField('ec-harvest',!hasFlower,'Enter flower start date first');
-  } else {
-    // Saved locks exist — only lock harvest if no flower date
-    lockField('ec-harvest',!hasFlower,'Enter flower start date first');
-    // Keep veg locked if flower is saved
-    if(flowerSaved) lockVegDate(true);
-  }
+
+  // Keep veg locked if flower is perm-locked
+  if(flowerPermLocked) lockVegDate(true);
 }
 function ecVegChanged(){
   const hyd=document.getElementById('ec-hydration').value;
