@@ -363,7 +363,7 @@ tr:last-child td { border-bottom: none; }
         <div class="card">
           <div class="g2" style="margin-bottom:10px;">
             <div class="field"><label>Waste Type</label>
-              <select id="waste-type" disabled style="background:var(--bg2);color:var(--text3);cursor:not-allowed;">
+              <select id="waste-type" disabled style="background:var(--bg2);color:var(--text3);cursor:not-allowed;" onchange="wastePlantsToggle()">
                 <option value="">select type</option>
                 <option>Vegetative Waste</option>
                 <option>Dry Waste</option>
@@ -1094,7 +1094,7 @@ function wasteSeqUnlock(){
   const grower=document.getElementById('waste-grower').value;
   const batchSel=document.getElementById('waste-batch-select');
   const roomEl=document.getElementById('waste-room');
-  const fields=['waste-type','waste-weight','waste-plants','waste-notes'];
+  const fields=['waste-type','waste-weight','waste-notes'];
   function disableFields(){fields.forEach(id=>{const el=document.getElementById(id);el.disabled=true;el.style.background='var(--bg2)';el.style.color='var(--text3)';el.style.cursor='not-allowed';});}
   function enableFields(){fields.forEach(id=>{const el=document.getElementById(id);el.disabled=false;el.style.background='';el.style.color='';el.style.cursor='';});document.getElementById('waste-notes').style.background='';document.getElementById('waste-notes').style.color='';}
   if(!grower){
@@ -1124,7 +1124,18 @@ function wasteBatchSelect(){
   wasteSeqUnlock();
 }
 
-async function wasteSave(){
+async 
+function wastePlantsToggle(){
+  const type=document.getElementById('waste-type').value;
+  const plantsEl=document.getElementById('waste-plants');
+  const isVeg=type==='Vegetative Waste';
+  plantsEl.disabled=!isVeg;
+  plantsEl.style.background=isVeg?'':'var(--bg2)';
+  plantsEl.style.color=isVeg?'':'var(--text3)';
+  plantsEl.style.cursor=isVeg?'':'not-allowed';
+  if(!isVeg)plantsEl.value='';
+}
+function wasteSave(){
   const grower=document.getElementById('waste-grower').value;
   const date=document.getElementById('waste-date').textContent.trim();
   const batch=document.getElementById('waste-batch-select').value;
@@ -1162,7 +1173,7 @@ function wasteClear(){
   document.getElementById('waste-room').innerHTML='<option value="">select room</option>';
   document.getElementById('waste-type').value='';
   document.getElementById('waste-weight').value='';
-  document.getElementById('waste-plants').value='';
+  document.getElementById('waste-plants').value='';document.getElementById('waste-plants').disabled=true;document.getElementById('waste-plants').style.background='var(--bg2)';document.getElementById('waste-plants').style.color='var(--text3)';document.getElementById('waste-plants').style.cursor='not-allowed';
   document.getElementById('waste-notes').value='';
   document.getElementById('waste-date').textContent=new Date().toISOString().split('T')[0];
   document.getElementById('waste-room-strip').style.display='none';
