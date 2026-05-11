@@ -1757,9 +1757,10 @@ async function summaryUpdateBatch(){
   batchRecs[idx].status = status;
   batchRecs[idx].closedDate = closedDate;
   lsSet('gp-batch', batchRecs);
+  summaryPopulateBatches();
   const msg = document.getElementById('summary-update-msg');
   msg.style.display='block'; msg.style.color='var(--green)'; msg.textContent='Batch updated!';
-  summaryPopulateBatches();
+  setTimeout(()=>{ msg.style.display='none'; }, 3000);
   // Sync to Airtable Batch Log
   if(cfg.batchTbl && cfg.token && cfg.base){
     try{
@@ -1791,6 +1792,7 @@ async function summaryAddTransaction(){
   document.getElementById('tx-notes').value = '';
   const msg = document.getElementById('tx-msg');
   msg.style.display='block'; msg.style.color='var(--green)'; msg.textContent='Transaction saved!';
+  setTimeout(()=>{ msg.style.display='none'; }, 3000);
   summaryCalcQty(batchId);
   summaryRenderHistory(batchId);
   updatePendingBadge();
