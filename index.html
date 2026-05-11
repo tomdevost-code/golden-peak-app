@@ -1072,7 +1072,7 @@ async function syncPending(){
   lsSet('gp-ro',roRecs);
   for(const rec of pendingWaste){
     try{
-      const f={'Date':rec.date,'Grower':rec.grower||undefined,'Batch ID':rec.batch||undefined,'Room':rec.room||undefined,'Waste Type':rec.wtype||undefined,'Weight (kg)':rec.weight||undefined,'Plants Destroyed':rec.plants||undefined,'Notes':rec.notes||undefined};
+      const f={'Date':rec.date,'Grower':rec.grower||undefined,'Batch ID':rec.batch||undefined,'Room':rec.room||undefined,'Waste Type':rec.wtype||undefined,'Weight':rec.weight||undefined,'Plants Destroyed':rec.plants||undefined,'Notes':rec.notes||undefined};
       Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
       const wRes=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+cfg.wasteTbl,{method:'POST',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify({fields:f})});
       if(!wRes.ok){const err=await wRes.json();throw new Error('Waste '+wRes.status+': '+(err.error&&err.error.message||JSON.stringify(err)));}
