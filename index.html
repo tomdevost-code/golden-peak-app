@@ -440,6 +440,11 @@ tr:last-child td { border-bottom: none; }
             <input type="text" id="batch-cultivar" placeholder="e.g. Blue Dream" disabled style="background:var(--bg2);color:var(--text3);cursor:not-allowed;" />
           </div>
         </div>
+        <div class="form-row">
+          <div class="field"><label>Mother / Seed ID</label>
+            <input type="text" id="batch-mother" placeholder="e.g. MOM-001 or SEED-042" disabled style="background:var(--bg2);color:var(--text3);cursor:not-allowed;" />
+          </div>
+        </div>
         <button class="btn-save" id="batch-create-btn" onclick="batchCreate()" disabled style="opacity:0.4;cursor:not-allowed;">Create Batch</button>
         <div id="batch-create-msg" style="display:none;margin-top:8px;font-size:13px;"></div>
       </div>
@@ -1351,9 +1356,11 @@ function batchIdCheck(){
   if(val.length >= 3 && !exists){
     btn.disabled = false; btn.style.opacity='1'; btn.style.cursor='pointer';
     cultivar.disabled = false; cultivar.style.background=''; cultivar.style.color=''; cultivar.style.cursor='';
+    const m=document.getElementById('batch-mother');m.disabled=false;m.style.background='';m.style.color='';m.style.cursor='';
   } else {
     btn.disabled = true; btn.style.opacity='0.4'; btn.style.cursor='not-allowed';
     cultivar.disabled = true; cultivar.style.background='var(--bg2)'; cultivar.style.color='var(--text3)'; cultivar.style.cursor='not-allowed';
+    const m=document.getElementById('batch-mother');m.disabled=true;m.style.background='var(--bg2)';m.style.color='var(--text3)';m.style.cursor='not-allowed';
   }
   const msg = document.getElementById('batch-create-msg');
   if(exists){ msg.style.display='block'; msg.style.color='var(--red)'; msg.textContent='Batch ID already exists.'; }
@@ -1365,7 +1372,8 @@ async function batchCreate(){
   const cultivar = document.getElementById('batch-cultivar').value.trim();
   if(!batchId){ toast('Enter a Batch ID.'); return; }
   if(batchRecs.some(r=>r.batchId===batchId)){ toast('Batch ID already exists.'); return; }
-  const rec = { id: Date.now(), batchId, cultivar, createdDate: localDate(), synced: false };
+  const mother = document.getElementById('batch-mother').value.trim();
+  const rec = { id: Date.now(), batchId, cultivar, mother, createdDate: localDate(), synced: false };
   batchRecs.unshift(rec);
   lsSet('gp-batch', batchRecs);
   populateBatchDropdowns();
@@ -1378,6 +1386,7 @@ async function batchCreate(){
   // Reset create form
   document.getElementById('batch-id-input').value = '';
   document.getElementById('batch-cultivar').value = '';
+  document.getElementById('batch-mother').value = '';
   batchIdCheck();
   const msg = document.getElementById('batch-create-msg');
   msg.style.display='block'; msg.style.color='var(--green)'; msg.textContent='Batch '+batchId+' created! Add movement entries below.';
@@ -1386,7 +1395,7 @@ async function batchCreate(){
   // Sync to Airtable
   if(cfg.batchTbl && cfg.token && cfg.base){
     try{
-      const f={'Batch ID':rec.batchId,'Cultivar Name':rec.cultivar||undefined,'Created Date':rec.createdDate};
+      const f={'Batch ID':rec.batchId,'Cultivar Name':rec.cultivar||undefined,'Mother/Seed ID':rec.mother||undefined,'Created Date':rec.createdDate};
       Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
       await atPost(cfg.batchTbl, f);
       rec.synced=true; lsSet('gp-batch',batchRecs); setSyncPill('ok','Synced'); toast('Batch created and synced to Airtable');
@@ -1482,7 +1491,7 @@ function renderBatchLog(){
     const movs = movRecs.filter(r=>r.batchId===b.batchId);
     html += '<div style="margin-bottom:16px;">';
     html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:#f5f5f5;border:1px solid #e0e0e0;border-radius:var(--radius-sm) var(--radius-sm) 0 0;">';
-    html += '<div><span style="font-family:var(--mono);font-weight:700;color:var(--green);">'+b.batchId+'</span>'+(b.cultivar?'<span style="margin-left:10px;font-size:12px;color:#555;">'+b.cultivar+'</span>':'')+'</div>';
+    html += '<div><span style="font-family:var(--mono);font-weight:700;color:var(--green);">'+b.batchId+'</span>'+(b.cultivar?'<span style="margin-left:10px;font-size:12px;color:#555;">'+b.cultivar+'</span>':'')+(b.mother?'<span style="margin-left:8px;font-size:11px;color:var(--text3);font-family:var(--mono);">'+b.mother+'</span>':'')+'</div>';
     html += '<div style="display:flex;gap:8px;align-items:center;"><span style="font-size:11px;color:var(--text3);">Created '+b.createdDate+'</span><button onclick="batchSelectForEntry(this.dataset.id)" data-id="'+b.batchId+'" style="font-size:11px;padding:4px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--green);color:#fff;cursor:pointer;font-family:var(--sans);">+ Entry</button></div>';
     html += '</div>';
     if(movs.length){
