@@ -427,6 +427,92 @@ tr:last-child td { border-bottom: none; }
       </div>
     </div>
 
+    <!-- BATCH LOG -->
+    <div class="page" id="page-batch">
+      <div class="card">
+        <div class="section-label">New Batch</div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:10px;">Tom Devost only — creates the Batch ID used across all forms.</div>
+        <div class="form-row">
+          <div class="field"><label>Batch ID</label>
+            <input type="text" id="batch-id-input" placeholder="e.g. GP-2024-001" style="font-family:var(--mono);text-transform:uppercase;" oninput="this.value=this.value.toUpperCase();batchIdCheck()" />
+          </div>
+          <div class="field"><label>Cultivar Name</label>
+            <input type="text" id="batch-cultivar" placeholder="e.g. Blue Dream" disabled style="background:var(--bg2);color:var(--text3);cursor:not-allowed;" />
+          </div>
+        </div>
+        <button class="btn-save" id="batch-create-btn" onclick="batchCreate()" disabled style="opacity:0.4;cursor:not-allowed;">Create Batch</button>
+        <div id="batch-create-msg" style="display:none;margin-top:8px;font-size:13px;"></div>
+      </div>
+
+      <div class="card" id="batch-movement-card" style="display:none;">
+        <div class="section-label">Add Movement Entry</div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:10px;">Batch: <span id="batch-movement-label" style="font-family:var(--mono);color:var(--green);font-weight:700;"></span></div>
+        <div class="form-row">
+          <div class="field"><label>Grower</label>
+            <select id="batch-mov-grower" onchange="batchMovGrowerChanged()">
+              <option value="">-- select grower --</option>
+              <option>Jordan Elliott</option>
+              <option>Brandon Cail</option>
+              <option>Tom Devost</option>
+            </select>
+          </div>
+          <div class="field"><label>Status</label>
+            <select id="batch-mov-status" disabled style="background:var(--bg2);color:var(--text3);cursor:not-allowed;">
+              <option value="">-- select status --</option>
+              <option>Propagation</option>
+              <option>Vegetative</option>
+              <option>Flowering</option>
+              <option>Harvested</option>
+              <option>Destroyed</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="field"><label>Current Qty</label>
+            <input type="number" id="batch-mov-qty" placeholder="0" min="0" step="1" disabled style="background:var(--bg2);color:var(--text3);cursor:not-allowed;" />
+          </div>
+          <div class="field"><label>Qty Removed for Destruction</label>
+            <input type="number" id="batch-mov-destroyed" placeholder="0" min="0" step="1" disabled style="background:var(--bg2);color:var(--text3);cursor:not-allowed;" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="field"><label>Qty Not Germinated</label>
+            <input type="number" id="batch-mov-notgerm" placeholder="0" min="0" step="1" disabled style="background:var(--bg2);color:var(--text3);cursor:not-allowed;" />
+          </div>
+          <div class="field"><label>Qty Moved for Moms</label>
+            <input type="number" id="batch-mov-moms" placeholder="0" min="0" step="1" disabled style="background:var(--bg2);color:var(--text3);cursor:not-allowed;" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="field"><label>Qty Sold</label>
+            <input type="number" id="batch-mov-sold" placeholder="0" min="0" step="1" disabled style="background:var(--bg2);color:var(--text3);cursor:not-allowed;" />
+          </div>
+          <div class="field"><label>Qty Harvested</label>
+            <input type="number" id="batch-mov-harvested" placeholder="0" min="0" step="1" disabled style="background:var(--bg2);color:var(--text3);cursor:not-allowed;" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="field"><label>Qty Produced</label>
+            <input type="number" id="batch-mov-produced" placeholder="0" min="0" step="1" disabled style="background:var(--bg2);color:var(--text3);cursor:not-allowed;" />
+          </div>
+          <div class="field"><label>Notes</label>
+            <input type="text" id="batch-mov-notes" placeholder="optional" disabled style="background:var(--bg2);color:var(--text3);cursor:not-allowed;" />
+          </div>
+        </div>
+        <button class="btn-save" id="batch-mov-save-btn" onclick="batchMovSave()" disabled style="opacity:0.4;cursor:not-allowed;">Save Entry</button>
+      </div>
+
+      <div class="card">
+        <div class="section-label">Batch Records</div>
+        <div class="filters" style="margin-bottom:8px;">
+          <select id="f-batch-filter" onchange="renderBatchLog()" style="font-size:12px;font-family:var(--sans);color:var(--text);background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;outline:none;">
+            <option value="">All batches</option>
+          </select>
+        </div>
+        <div id="batch-log-table"></div>
+      </div>
+    </div>
+
     <!-- SETTINGS -->
     <div class="page" id="page-settings">
       <div class="settings-card">
@@ -436,6 +522,7 @@ tr:last-child td { border-bottom: none; }
         <div class="sfield"><label>EC Log Table ID</label><input type="text" id="s-ec" placeholder="tblXXXXXXXXXXXXXX" /></div>
         <div class="sfield"><label>Runoff Log Table ID</label><input type="text" id="s-ro" placeholder="tblXXXXXXXXXXXXXX" /></div>
         <div class="sfield"><label>Waste Log Table ID</label><input type="text" id="s-waste" placeholder="tblXXXXXXXXXXXXXX" /></div>
+        <div class="sfield"><label>Batch Log Table ID</label><input type="text" id="s-batch" placeholder="tblXXXXXXXXXXXXXX" /></div>
         <button class="btn-save" onclick="saveSettings()">Save and Test Connection</button>
         <div class="conn-status" id="conn-status"></div>
         <button class="btn-save" id="sync-pending-btn" onclick="syncPending()" style="margin-top:8px;background:var(--blue);">Sync Pending Records</button>
@@ -463,6 +550,10 @@ tr:last-child td { border-bottom: none; }
   </div>
 
   <nav class="bottom-nav">
+    <button class="bnav-btn" id="bn-batch" onclick="switchPage('batch',this)">
+      <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+      Batches
+    </button>
     <button class="bnav-btn active" id="bn-ec" onclick="switchPage('ec',this)">
       <svg viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
       EC Log
@@ -491,11 +582,11 @@ tr:last-child td { border-bottom: none; }
 <script>
 const EC_LO=2.2,EC_HI=2.3,PH_EC_LO=6.2,PH_EC_HI=6.3;
 const RO_PH_LO=6.0,RO_PH_HI=6.5,RO_VAR_LO=0.3,RO_VAR_HI=0.5,RO_VAR_ALERT=1.0;
-let ecRecs=[],roRecs=[],wasteRecs=[],cfg={token:'',base:'',ecTbl:'',roTbl:'',wasteTbl:''};
+let ecRecs=[],roRecs=[],wasteRecs=[],batchRecs=[],cfg={token:'',base:'',ecTbl:'',roTbl:'',wasteTbl:'',batchTbl:''};
 
 function lsGet(k){try{return JSON.parse(localStorage.getItem(k)||'null');}catch(e){return null;}}
 function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
-function loadAll(){ecRecs=lsGet('gp-ec')||[];roRecs=lsGet('gp-ro')||[];wasteRecs=lsGet('gp-waste')||[];wasteRecs.forEach(r=>{if(r.type==='Vegetative waste')r.type='Vegetative Waste';});lsSet('gp-waste',wasteRecs);const s=lsGet('gp-cfg');if(s){cfg=s;applySettings();}}
+function loadAll(){ecRecs=lsGet('gp-ec')||[];roRecs=lsGet('gp-ro')||[];wasteRecs=lsGet('gp-waste')||[];batchRecs=lsGet('gp-batch')||[];wasteRecs.forEach(r=>{if(r.type==='Vegetative waste')r.type='Vegetative Waste';});lsSet('gp-waste',wasteRecs);const s=lsGet('gp-cfg');if(s){cfg=s;applySettings();}}
 function atReady(){return cfg.token&&cfg.base&&cfg.ecTbl&&cfg.roTbl;}
 async function atPost(tbl,fields){const r=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+tbl,{method:'POST',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify({fields})});if(!r.ok)throw new Error(r.status);return r.json();}
 function setSyncPill(state,msg){const el=document.getElementById('global-sync');el.className='sync-pill'+(state==='ok'?' ok':state==='err'?' err':state==='ing'?' ing':'');el.textContent=msg;}
@@ -510,12 +601,12 @@ function setAvg(id,val,lo,hi){const el=document.getElementById(id);if(val===null
 function stageLabel(r){if(!r.stage||!r.day)return'<span style="color:var(--text3)">-</span>';return r.stage==='flower'?'<span class="flower-txt">F'+r.day+'</span>':'<span class="veg-txt">V'+r.day+'</span>';}
 function toast(msg,dur){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),dur||2500);}
 
-function switchPage(page,btn){document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.bnav-btn').forEach(b=>b.classList.remove('active'));document.getElementById('page-'+page).classList.add('active');btn.classList.add('active');if(page==='report'){renderEC();renderRO();}if(page==='waste'){renderWaste();}}
+function switchPage(page,btn){document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.bnav-btn').forEach(b=>b.classList.remove('active'));document.getElementById('page-'+page).classList.add('active');btn.classList.add('active');if(page==='report'){renderEC();renderRO();}if(page==='waste'){renderWaste();}if(page==='batch'){renderBatchLog();}}
 function switchRepTab(tab,btn){document.getElementById('rep-ec-view').style.display=tab==='ec'?'':'none';document.getElementById('rep-ro-view').style.display=tab==='ro'?'':'none';document.getElementById('rep-waste-view').style.display=tab==='waste'?'':'none';document.querySelectorAll('.rep-tab').forEach(b=>b.classList.remove('active'));btn.classList.add('active');if(tab==='waste')renderWasteReport();}
 
 function buildECEvents(){const c=document.getElementById('ec-events-container');c.innerHTML='';for(let i=1;i<=8;i++){c.innerHTML+='<div class="event-row"><div class="event-lbl">Event '+i+'</div><input type="number" id="ec-evt-'+i+'" step="1" min="0" placeholder="-" style="font-size:14px;font-family:var(--mono);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;color:var(--text);outline:none;text-align:center;" oninput="ecTotalML()" /></div>';}}
 function ecTotalML(){let t=0,any=false;for(let i=1;i<=8;i++){const v=parseFloat(document.getElementById('ec-evt-'+i).value);if(!isNaN(v)&&v>0){t+=v;any=true;}}document.getElementById('ec-total-ml').textContent=any?t.toFixed(0)+'ml':'-';}
-function getAllBatches(){const all=[...ecRecs,...roRecs];const seen={};all.forEach(r=>{if(r.batch&&!seen[r.batch]){seen[r.batch]={vegStart:r.vegStart||'',flowerStart:r.flowerStart||'',harvestDate:r.harvestDate||''};}});return seen;}
+function getAllBatches(){const all=[...ecRecs,...roRecs];const seen={};batchRecs.forEach(r=>{if(r.batchId&&!seen[r.batchId]){seen[r.batchId]={vegStart:'',flowerStart:'',harvestDate:''};} });all.forEach(r=>{if(r.batch&&!seen[r.batch]){seen[r.batch]={vegStart:r.vegStart||'',flowerStart:r.flowerStart||'',harvestDate:r.harvestDate||''};}});return seen;}
 function getECBatches(){const seen={};ecRecs.forEach(r=>{if(r.batch&&!seen[r.batch]){seen[r.batch]={vegStart:r.vegStart||'',flowerStart:r.flowerStart||'',harvestDate:r.harvestDate||''};}});return seen;}
 function populateBatchDropdowns(){const _wbd=document.getElementById('waste-batch-select');if(_wbd){const _cur=_wbd.value;const _all=Object.keys(getAllBatches()).sort();_wbd.innerHTML='<option value="">-- select batch --</option>'+_all.map(b=>'<option'+( b===_cur?' selected':'')+'>'+b+'</option>').join('');}_wfb=document.getElementById('f-waste-batch');if(_wfb){const _c=_wfb.value;const _a=Object.keys(getAllBatches()).sort();_wfb.innerHTML='<option value="">All batches</option>'+_a.map(b=>'<option'+(b===_c?' selected':'')+'>'+b+'</option>').join('');};
   const allBatches=getAllBatches();const ecBatches=getECBatches();
@@ -945,7 +1036,7 @@ function roClear(){for(let i=1;i<=8;i++){document.getElementById('ro-ec-'+i).val
 
 // Pending badge
 function updatePendingBadge(){
-  const n=(ecRecs.filter(r=>!r.synced).length)+(roRecs.filter(r=>!r.synced).length)+(wasteRecs.filter(r=>!r.synced).length);
+  const n=(ecRecs.filter(r=>!r.synced).length)+(roRecs.filter(r=>!r.synced).length)+(wasteRecs.filter(r=>!r.synced).length)+(batchRecs.filter(r=>!r.synced).length);
   const b=document.getElementById('pending-badge');
   if(n>0){b.textContent=n;b.style.display='block';}else{b.style.display='none';}
 }
@@ -1020,8 +1111,8 @@ function migrateRoomNames(){
 }
 function clearAllLocalData(){
   if(!confirm('This will permanently delete ALL local records including synced data, batch IDs, and dropdowns. This cannot be undone. Continue?'))return;
-  ecRecs=[];roRecs=[];wasteRecs=[];
-  lsSet('gp-ec',[]);lsSet('gp-ro',[]);lsSet('gp-waste',[]);
+  ecRecs=[];roRecs=[];wasteRecs=[];batchRecs=[];
+  lsSet('gp-ec',[]);lsSet('gp-ro',[]);lsSet('gp-waste',[]);lsSet('gp-batch',[]);
   populateBatchDropdowns();renderEC();renderRO();
   ecClear();roClear();
   updatePendingBadge();
@@ -1085,8 +1176,8 @@ async function syncPending(){
   else if(ok>0){setSyncPill('err','Partial sync');st.style.background='var(--amber-pale)';st.style.color='var(--amber)';st.textContent=ok+' synced, '+fail+' failed. Check connection and retry.';}
   else{setSyncPill('err','Sync failed');st.style.background='var(--red-pale)';st.style.color='var(--red)';st.textContent='Sync failed: '+(lastErr||'Check your Airtable connection.');}
 }
-function applySettings(){document.getElementById('s-token').value=cfg.token||'';document.getElementById('s-base').value=cfg.base||'';document.getElementById('s-ec').value=cfg.ecTbl||'';document.getElementById('s-ro').value=cfg.roTbl||'';document.getElementById('s-waste').value=cfg.wasteTbl||'';setSyncPill(atReady()?'ok':'off',atReady()?'Airtable connected':'Not configured');}
-async function saveSettings(){cfg={token:document.getElementById('s-token').value.trim(),base:document.getElementById('s-base').value.trim(),ecTbl:document.getElementById('s-ec').value.trim(),roTbl:document.getElementById('s-ro').value.trim(),wasteTbl:document.getElementById('s-waste').value.trim()};const st=document.getElementById('conn-status');st.style.display='block';st.style.background='var(--bg2)';st.style.color='var(--text2)';st.textContent='Testing connection...';if(!atReady()){st.textContent='Please fill in all fields.';st.style.background='var(--amber-pale)';st.style.color='var(--amber)';return;}try{const r=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+cfg.ecTbl+'?maxRecords=1',{headers:{'Authorization':'Bearer '+cfg.token}});if(r.ok){lsSet('gp-cfg',cfg);applySettings();st.textContent='Connected! Credentials saved.';st.style.background='var(--green-pale)';st.style.color='var(--green)';}else{st.textContent='Failed ('+r.status+'). Check your credentials.';st.style.background='var(--red-pale)';st.style.color='var(--red)';}}catch(e){st.textContent='Could not reach Airtable. Check internet connection.';st.style.background='var(--red-pale)';st.style.color='var(--red)';}}
+function applySettings(){document.getElementById('s-token').value=cfg.token||'';document.getElementById('s-base').value=cfg.base||'';document.getElementById('s-ec').value=cfg.ecTbl||'';document.getElementById('s-ro').value=cfg.roTbl||'';document.getElementById('s-waste').value=cfg.wasteTbl||'';document.getElementById('s-batch').value=cfg.batchTbl||'';setSyncPill(atReady()?'ok':'off',atReady()?'Airtable connected':'Not configured');}
+async function saveSettings(){cfg={token:document.getElementById('s-token').value.trim(),base:document.getElementById('s-base').value.trim(),ecTbl:document.getElementById('s-ec').value.trim(),roTbl:document.getElementById('s-ro').value.trim(),wasteTbl:document.getElementById('s-waste').value.trim(),batchTbl:document.getElementById('s-batch').value.trim()};const st=document.getElementById('conn-status');st.style.display='block';st.style.background='var(--bg2)';st.style.color='var(--text2)';st.textContent='Testing connection...';if(!atReady()){st.textContent='Please fill in all fields.';st.style.background='var(--amber-pale)';st.style.color='var(--amber)';return;}try{const r=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+cfg.ecTbl+'?maxRecords=1',{headers:{'Authorization':'Bearer '+cfg.token}});if(r.ok){lsSet('gp-cfg',cfg);applySettings();st.textContent='Connected! Credentials saved.';st.style.background='var(--green-pale)';st.style.color='var(--green)';}else{st.textContent='Failed ('+r.status+'). Check your credentials.';st.style.background='var(--red-pale)';st.style.color='var(--red)';}}catch(e){st.textContent='Could not reach Airtable. Check internet connection.';st.style.background='var(--red-pale)';st.style.color='var(--red)';}}
 
 function localDate(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 const today=localDate();
@@ -1247,6 +1338,165 @@ function renderWasteReport(){
   statCards([{l:'Records',v:data.length},{l:'Total Weight',v:totalKg.toFixed(2)+' kg'},{l:'Total Plants',v:totalPlants}],'waste-stat-cards');
   if(!data.length){body.innerHTML='<tr><td colspan="8"><div class="empty">No waste records yet.</div></td></tr>';return;}
   body.innerHTML=data.map(r=>'<tr><td style="font-family:var(--mono);">'+r.date+'</td><td><span class="tag">'+(r.grower||'-')+'</span></td><td style="font-family:var(--mono);color:var(--text3);">'+(r.batch||'-')+'</td><td>'+(r.room||'-')+'</td><td>'+(r.wtype||'-')+'</td><td style="font-family:var(--mono);">'+(r.weight||0)+' kg</td><td style="font-family:var(--mono);">'+(r.plants||0)+'</td><td style="max-width:120px;white-space:normal;font-size:11px;color:var(--text3);">'+(r.notes||'')+'</td></tr>').join('');
+}
+
+// ── BATCH LOG ────────────────────────────────────────────────────────────────
+let activeBatchId = '';
+
+function batchIdCheck(){
+  const val = document.getElementById('batch-id-input').value.trim();
+  const btn = document.getElementById('batch-create-btn');
+  const cultivar = document.getElementById('batch-cultivar');
+  const exists = batchRecs.some(r => r.batchId === val);
+  if(val.length >= 3 && !exists){
+    btn.disabled = false; btn.style.opacity='1'; btn.style.cursor='pointer';
+    cultivar.disabled = false; cultivar.style.background=''; cultivar.style.color=''; cultivar.style.cursor='';
+  } else {
+    btn.disabled = true; btn.style.opacity='0.4'; btn.style.cursor='not-allowed';
+    cultivar.disabled = true; cultivar.style.background='var(--bg2)'; cultivar.style.color='var(--text3)'; cultivar.style.cursor='not-allowed';
+  }
+  const msg = document.getElementById('batch-create-msg');
+  if(exists){ msg.style.display='block'; msg.style.color='var(--red)'; msg.textContent='Batch ID already exists.'; }
+  else { msg.style.display='none'; }
+}
+
+async function batchCreate(){
+  const batchId = document.getElementById('batch-id-input').value.trim().toUpperCase();
+  const cultivar = document.getElementById('batch-cultivar').value.trim();
+  if(!batchId){ toast('Enter a Batch ID.'); return; }
+  if(batchRecs.some(r=>r.batchId===batchId)){ toast('Batch ID already exists.'); return; }
+  const rec = { id: Date.now(), batchId, cultivar, createdDate: localDate(), synced: false };
+  batchRecs.unshift(rec);
+  lsSet('gp-batch', batchRecs);
+  populateBatchDropdowns();
+  populateBatchFilterDropdown();
+  // Show movement card for the new batch
+  activeBatchId = batchId;
+  document.getElementById('batch-movement-label').textContent = batchId;
+  document.getElementById('batch-movement-card').style.display = '';
+  batchMovUnlock();
+  // Reset create form
+  document.getElementById('batch-id-input').value = '';
+  document.getElementById('batch-cultivar').value = '';
+  batchIdCheck();
+  const msg = document.getElementById('batch-create-msg');
+  msg.style.display='block'; msg.style.color='var(--green)'; msg.textContent='Batch '+batchId+' created! Add movement entries below.';
+  renderBatchLog();
+  updatePendingBadge();
+  // Sync to Airtable
+  if(cfg.batchTbl && cfg.token && cfg.base){
+    try{
+      const f={'Batch ID':rec.batchId,'Cultivar Name':rec.cultivar||undefined,'Created Date':rec.createdDate};
+      Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
+      await atPost(cfg.batchTbl, f);
+      rec.synced=true; lsSet('gp-batch',batchRecs); setSyncPill('ok','Synced'); toast('Batch created and synced to Airtable');
+    }catch(e){ setSyncPill('err','Sync error'); toast('Batch saved locally - sync pending'); }
+  } else { toast('Batch '+batchId+' created!'); }
+}
+
+function batchMovUnlock(){
+  const ids = ['batch-mov-status','batch-mov-qty','batch-mov-destroyed','batch-mov-notgerm','batch-mov-moms','batch-mov-sold','batch-mov-harvested','batch-mov-produced','batch-mov-notes'];
+  ids.forEach(id=>{ const el=document.getElementById(id); el.disabled=false; el.style.background=''; el.style.color=''; el.style.cursor=''; });
+}
+
+function batchMovGrowerChanged(){
+  const grower = document.getElementById('batch-mov-grower').value;
+  const btn = document.getElementById('batch-mov-save-btn');
+  if(grower){ btn.disabled=false; btn.style.opacity='1'; btn.style.cursor='pointer'; }
+  else { btn.disabled=true; btn.style.opacity='0.4'; btn.style.cursor='not-allowed'; }
+}
+
+async function batchMovSave(){
+  const grower = document.getElementById('batch-mov-grower').value;
+  if(!grower){ toast('Select a grower.'); return; }
+  if(!activeBatchId){ toast('No active batch.'); return; }
+  const rec = {
+    id: Date.now(),
+    batchId: activeBatchId,
+    grower,
+    date: localDate(),
+    status: document.getElementById('batch-mov-status').value||'',
+    currentQty: parseInt(document.getElementById('batch-mov-qty').value)||0,
+    destroyed: parseInt(document.getElementById('batch-mov-destroyed').value)||0,
+    notGerm: parseInt(document.getElementById('batch-mov-notgerm').value)||0,
+    moms: parseInt(document.getElementById('batch-mov-moms').value)||0,
+    sold: parseInt(document.getElementById('batch-mov-sold').value)||0,
+    harvested: parseInt(document.getElementById('batch-mov-harvested').value)||0,
+    produced: parseInt(document.getElementById('batch-mov-produced').value)||0,
+    notes: document.getElementById('batch-mov-notes').value.trim(),
+    synced: false
+  };
+  // Store movement entries under batchRecs as type:'movement'
+  const movRecs = lsGet('gp-batch-mov')||[];
+  movRecs.unshift(rec);
+  lsSet('gp-batch-mov', movRecs);
+  renderBatchLog();
+  updatePendingBadge();
+  // Reset movement fields
+  ['batch-mov-status','batch-mov-qty','batch-mov-destroyed','batch-mov-notgerm','batch-mov-moms','batch-mov-sold','batch-mov-harvested','batch-mov-produced','batch-mov-notes'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('batch-mov-grower').value='';
+  batchMovGrowerChanged();
+  // Sync
+  if(cfg.batchTbl && cfg.token && cfg.base){
+    try{
+      const f={'Batch ID':rec.batchId,'Grower':rec.grower,'Date':rec.date,'Status':rec.status||undefined,'Current Qty':rec.currentQty||undefined,'Qty Destroyed':rec.destroyed||undefined,'Qty Not Germinated':rec.notGerm||undefined,'Qty Moved for Moms':rec.moms||undefined,'Qty Sold':rec.sold||undefined,'Qty Harvested':rec.harvested||undefined,'Qty Produced':rec.produced||undefined,'Notes':rec.notes||undefined};
+      Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
+      await atPost(cfg.batchTbl, f);
+      rec.synced=true; lsSet('gp-batch-mov',movRecs); setSyncPill('ok','Synced'); toast('Entry saved and synced');
+    }catch(e){ toast('Saved locally - sync pending'); }
+  } else { toast('Entry saved!'); }
+}
+
+function batchSelectForEntry(arg){const batchId=typeof arg==='string'?arg:arg.dataset.id;
+  activeBatchId = batchId;
+  document.getElementById('batch-movement-label').textContent = batchId;
+  document.getElementById('batch-movement-card').style.display = '';
+  batchMovUnlock();
+  document.getElementById('batch-id-input').value = '';
+  batchIdCheck();
+  window.scrollTo({top:0,behavior:'smooth'});
+  const msg = document.getElementById('batch-create-msg');
+  msg.style.display='block'; msg.style.color='var(--green)'; msg.textContent='Adding entry to batch '+batchId;
+}
+
+function populateBatchFilterDropdown(){
+  const sel = document.getElementById('f-batch-filter');
+  if(!sel) return;
+  const cur = sel.value;
+  const ids = [...new Set(batchRecs.map(r=>r.batchId))].sort();
+  sel.innerHTML = '<option value="">All batches</option>' + ids.map(b=>'<option'+(b===cur?' selected':'')+'>'+b+'</option>').join('');
+}
+
+function renderBatchLog(){
+  populateBatchFilterDropdown();
+  const filter = document.getElementById('f-batch-filter')?.value||'';
+  const movRecs = lsGet('gp-batch-mov')||[];
+  const tbl = document.getElementById('batch-log-table');
+  if(!tbl) return;
+  // Show batch summary rows
+  let batches = [...batchRecs];
+  if(filter) batches = batches.filter(b=>b.batchId===filter);
+  if(!batches.length){ tbl.innerHTML='<div style="text-align:center;color:var(--text3);padding:20px;font-size:13px;">No batches yet.</div>'; return; }
+  let html = '';
+  batches.forEach(b=>{
+    const movs = movRecs.filter(r=>r.batchId===b.batchId);
+    html += '<div style="margin-bottom:16px;">';
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:#f5f5f5;border:1px solid #e0e0e0;border-radius:var(--radius-sm) var(--radius-sm) 0 0;">';
+    html += '<div><span style="font-family:var(--mono);font-weight:700;color:var(--green);">'+b.batchId+'</span>'+(b.cultivar?'<span style="margin-left:10px;font-size:12px;color:#555;">'+b.cultivar+'</span>':'')+'</div>';
+    html += '<div style="display:flex;gap:8px;align-items:center;"><span style="font-size:11px;color:var(--text3);">Created '+b.createdDate+'</span><button onclick="batchSelectForEntry(this.dataset.id)" data-id="'+b.batchId+'" style="font-size:11px;padding:4px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--green);color:#fff;cursor:pointer;font-family:var(--sans);">+ Entry</button></div>';
+    html += '</div>';
+    if(movs.length){
+      html += '<div style="overflow-x:auto;background:#fff;border:1px solid #e0e0e0;border-top:none;border-radius:0 0 var(--radius-sm) var(--radius-sm);">';
+      html += '<table style="width:100%;border-collapse:collapse;font-size:12px;background:#fff;">';
+      html += '<thead><tr style="background:#fafafa;"><th style="padding:6px 8px;text-align:left;color:#333;font-size:11px;">Date</th><th style="padding:6px 8px;text-align:left;color:#333;font-size:11px;">Grower</th><th style="padding:6px 8px;text-align:left;color:#333;font-size:11px;">Status</th><th style="padding:6px 8px;text-align:right;color:#333;font-size:11px;">Curr Qty</th><th style="padding:6px 8px;text-align:right;color:#333;font-size:11px;">Destroyed</th><th style="padding:6px 8px;text-align:right;color:#333;font-size:11px;">Not Germ</th><th style="padding:6px 8px;text-align:right;color:#333;font-size:11px;">Moms</th><th style="padding:6px 8px;text-align:right;color:#333;font-size:11px;">Sold</th><th style="padding:6px 8px;text-align:right;color:#333;font-size:11px;">Harvested</th><th style="padding:6px 8px;text-align:right;color:#333;font-size:11px;">Produced</th><th style="padding:6px 8px;text-align:left;color:#333;font-size:11px;">Notes</th></tr></thead>';
+      html += '<tbody>'+movs.map(m=>'<tr style="background:#fff;border-bottom:1px solid #e0e0e0;"><td style="padding:6px 8px;font-family:var(--mono);">'+m.date+'</td><td style="padding:6px 8px;"><span class="tag">'+m.grower+'</span></td><td style="padding:6px 8px;font-size:11px;">'+( m.status||'-')+'</td><td style="padding:6px 8px;text-align:right;font-family:var(--mono);">'+(m.currentQty||0)+'</td><td style="padding:6px 8px;text-align:right;font-family:var(--mono);">'+(m.destroyed||0)+'</td><td style="padding:6px 8px;text-align:right;font-family:var(--mono);">'+(m.notGerm||0)+'</td><td style="padding:6px 8px;text-align:right;font-family:var(--mono);">'+(m.moms||0)+'</td><td style="padding:6px 8px;text-align:right;font-family:var(--mono);">'+(m.sold||0)+'</td><td style="padding:6px 8px;text-align:right;font-family:var(--mono);">'+(m.harvested||0)+'</td><td style="padding:6px 8px;text-align:right;font-family:var(--mono);">'+(m.produced||0)+'</td><td style="padding:6px 8px;font-size:11px;color:var(--text3);max-width:120px;white-space:normal;">'+(m.notes||'')+'</td></tr>').join('')+'</tbody>';
+      html += '</table></div>';
+    } else {
+      html += '<div style="background:#fff;border:1px solid #e0e0e0;border-top:none;border-radius:0 0 var(--radius-sm) var(--radius-sm);padding:12px;text-align:center;font-size:12px;color:var(--text3);">No movement entries yet.</div>';
+    }
+    html += '</div>';
+  });
+  tbl.innerHTML = html;
 }
 </script>
 </body>
