@@ -1043,7 +1043,8 @@ async function syncPending(){
   const btn=document.getElementById('sync-pending-btn');
   const pendingEC=ecRecs.filter(r=>!r.synced);
   const pendingRO=roRecs.filter(r=>!r.synced);
-  const total=pendingEC.length+pendingRO.length;
+  const pendingWaste=wasteRecs.filter(r=>!r.synced);
+  const total=pendingEC.length+pendingRO.length+pendingWaste.length;
   if(!total){st.style.display='block';st.style.background='var(--green-pale)';st.style.color='var(--green)';st.textContent='No pending records - everything is synced.';return;}
   st.style.display='block';st.style.background='var(--bg2)';st.style.color='var(--text2)';st.textContent='Syncing '+total+' record(s)...';
   btn.disabled=true;setSyncPill('ing','Syncing...');
@@ -1069,6 +1070,16 @@ async function syncPending(){
     }catch(e){fail++;lastErr=e.message;}
   }
   lsSet('gp-ro',roRecs);
+  for(const rec of pendingWaste){
+    try{
+      const f={'Date':rec.date,'Grower':rec.grower||undefined,'Batch ID':rec.batch||undefined,'Room':rec.room||undefined,'Waste Type':rec.wtype||undefined,'Weight (kg)':rec.weight||undefined,'Plants Destroyed':rec.plants||undefined,'Notes':rec.notes||undefined};
+      Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
+      const wRes=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+cfg.wasteTbl,{method:'POST',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify({fields:f})});
+      if(!wRes.ok){const err=await wRes.json();throw new Error('Waste '+wRes.status+': '+(err.error&&err.error.message||JSON.stringify(err)));}
+      rec.synced=true;ok++;
+    }catch(e){fail++;lastErr=e.message;}
+  }
+  lsSet('gp-waste',wasteRecs);
   btn.disabled=false;
   if(fail===0){setSyncPill('ok','Synced');st.style.background='var(--green-pale)';st.style.color='var(--green)';st.textContent='Done! '+ok+' record(s) synced to Airtable.';}
   else if(ok>0){setSyncPill('err','Partial sync');st.style.background='var(--amber-pale)';st.style.color='var(--amber)';st.textContent=ok+' synced, '+fail+' failed. Check connection and retry.';}
