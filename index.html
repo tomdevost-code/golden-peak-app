@@ -542,6 +542,131 @@ tr:last-child td { border-bottom: none; }
       <div id="batch-active-list"></div>
     </div>
 
+    <!-- BATCH SUMMARY -->
+    <div class="page" id="page-summary">
+      <!-- Batch selector -->
+      <div class="card" style="margin-bottom:12px;">
+        <div class="section-label">Select Batch</div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <select id="summary-batch-select" onchange="summaryBatchChanged()" style="flex:1;font-size:14px;font-family:var(--mono);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;">
+            <option value="">-- select batch --</option>
+          </select>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text3);white-space:nowrap;">
+            <input type="checkbox" id="summary-show-closed" onchange="summaryPopulateBatches()"> Show closed
+          </label>
+        </div>
+      </div>
+
+      <!-- Batch info (read only) -->
+      <div id="summary-info-card" style="display:none;">
+        <div class="card" style="margin-bottom:12px;">
+          <div class="section-label">Batch Info</div>
+          <div class="g2" style="margin-bottom:8px;">
+            <div class="field"><label>Batch ID</label><div id="si-batchid" style="font-family:var(--mono);font-weight:700;color:var(--green);font-size:16px;padding:6px 0;"></div></div>
+            <div class="field"><label>Cultivar</label><div id="si-cultivar" style="font-size:14px;padding:6px 0;color:var(--text2);"></div></div>
+          </div>
+          <div class="g2" style="margin-bottom:8px;">
+            <div class="field"><label>Mother / Seed ID</label><div id="si-mother" style="font-size:13px;font-family:var(--mono);padding:6px 0;color:var(--text2);"></div></div>
+            <div class="field"><label>Source of Genetics</label><div id="si-genetics" style="font-size:13px;padding:6px 0;color:var(--text2);"></div></div>
+          </div>
+          <div class="field"><label>Created Date</label><div id="si-created" style="font-size:13px;font-family:var(--mono);padding:6px 0;color:var(--text3);"></div></div>
+        </div>
+
+        <!-- Current Quantity highlight -->
+        <div class="card" style="margin-bottom:12px;text-align:center;background:var(--green-pale);border-color:var(--green-light);">
+          <div style="font-size:11px;color:var(--green);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">Current Quantity</div>
+          <div id="si-currentqty" style="font-size:36px;font-weight:700;font-family:var(--mono);color:var(--green);">0</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:4px;">plants</div>
+        </div>
+
+        <!-- Manage Batch -->
+        <div class="card" style="margin-bottom:12px;">
+          <div class="section-label">Manage Batch</div>
+
+          <!-- Rooms -->
+          <div class="field" style="margin-bottom:12px;">
+            <label>Rooms</label>
+            <div id="summary-rooms-wrap" style="display:flex;flex-wrap:wrap;gap:8px;padding:10px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);">
+              <label style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:400;cursor:pointer;"><input type="checkbox" class="summary-room-cb" value="Flower 1"> Flower 1</label>
+              <label style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:400;cursor:pointer;"><input type="checkbox" class="summary-room-cb" value="Flower 2"> Flower 2</label>
+              <label style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:400;cursor:pointer;"><input type="checkbox" class="summary-room-cb" value="Flower 3"> Flower 3</label>
+              <label style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:400;cursor:pointer;"><input type="checkbox" class="summary-room-cb" value="Flower 4"> Flower 4</label>
+              <label style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:400;cursor:pointer;"><input type="checkbox" class="summary-room-cb" value="Flower 5"> Flower 5</label>
+              <label style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:400;cursor:pointer;"><input type="checkbox" class="summary-room-cb" value="Veg"> Veg</label>
+            </div>
+          </div>
+
+          <!-- Plant Phase -->
+          <div class="field" style="margin-bottom:12px;">
+            <label>Plant Phase</label>
+            <select id="summary-phase" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;">
+              <option value="">-- select phase --</option>
+              <option>Seeds</option>
+              <option>Clones</option>
+              <option>Veg</option>
+              <option>Flower</option>
+              <option>Drying</option>
+              <option>Packaged</option>
+              <option>Sold</option>
+            </select>
+          </div>
+
+          <!-- Status -->
+          <div class="field" style="margin-bottom:12px;">
+            <label>Status</label>
+            <select id="summary-status" onchange="summaryStatusChanged()" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;">
+              <option value="Open">Open</option>
+              <option value="Closed">Closed</option>
+            </select>
+          </div>
+
+          <!-- Closed Date (only shows when Closed) -->
+          <div class="field" id="summary-closed-date-wrap" style="display:none;margin-bottom:12px;">
+            <label>Closed Date</label>
+            <input type="date" id="summary-closed-date" style="font-size:14px;font-family:var(--mono);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;" />
+          </div>
+
+          <button class="btn-save" onclick="summaryUpdateBatch()">Save Batch Changes</button>
+          <div id="summary-update-msg" style="display:none;margin-top:8px;font-size:13px;"></div>
+        </div>
+
+        <!-- Add Transaction -->
+        <div class="card" style="margin-bottom:12px;">
+          <div class="section-label">Add Transaction</div>
+          <div style="font-size:12px;color:var(--text3);font-family:var(--mono);background:var(--bg2);border-radius:var(--radius-sm);padding:6px 10px;margin-bottom:12px;">Date: <span id="tx-date-display"></span></div>
+
+          <div class="field" style="margin-bottom:10px;">
+            <label>Transaction Type</label>
+            <select id="tx-type" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;">
+              <option value="">-- select type --</option>
+              <option>Produced/Received</option>
+              <option>Destroyed</option>
+              <option>Moved to Moms</option>
+              <option>Sold</option>
+              <option>Harvested</option>
+            </select>
+          </div>
+
+          <div class="field" style="margin-bottom:10px;">
+            <label>Quantity</label>
+            <input type="number" id="tx-qty" placeholder="0" min="0" step="1" style="font-size:14px;font-family:var(--mono);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;" />
+          </div>
+
+          <div class="field" style="margin-bottom:10px;">
+            <label>Notes</label>
+            <textarea id="tx-notes" rows="2" placeholder="Optional notes..." style="width:100%;font-size:14px;font-family:var(--sans);border-radius:var(--radius-sm);border:1px solid var(--border);padding:8px 10px;background:var(--bg);color:var(--text);outline:none;resize:vertical;"></textarea>
+          </div>
+
+          <button class="btn-save" onclick="summaryAddTransaction()">Save Transaction</button>
+          <div id="tx-msg" style="display:none;margin-top:8px;font-size:13px;"></div>
+        </div>
+
+        <!-- Transaction History -->
+        <div class="section-label">Transaction History</div>
+        <div id="summary-tx-history" style="margin-bottom:20px;"></div>
+      </div>
+    </div>
+
     <!-- SETTINGS -->
     <div class="page" id="page-settings">
       <div class="settings-card">
@@ -552,6 +677,7 @@ tr:last-child td { border-bottom: none; }
         <div class="sfield"><label>Runoff Log Table ID</label><input type="text" id="s-ro" placeholder="tblXXXXXXXXXXXXXX" /></div>
         <div class="sfield"><label>Waste Log Table ID</label><input type="text" id="s-waste" placeholder="tblXXXXXXXXXXXXXX" /></div>
         <div class="sfield"><label>Batch Log Table ID</label><input type="text" id="s-batch" placeholder="tblXXXXXXXXXXXXXX" /></div>
+        <div class="sfield"><label>Batch Transactions Table ID</label><input type="text" id="s-batchtx" placeholder="tblXXXXXXXXXXXXXX" /></div>
         <button class="btn-save" onclick="saveSettings()">Save and Test Connection</button>
         <div class="conn-status" id="conn-status"></div>
         <button class="btn-save" id="sync-pending-btn" onclick="syncPending()" style="margin-top:8px;background:var(--blue);">Sync Pending Records</button>
@@ -583,6 +709,10 @@ tr:last-child td { border-bottom: none; }
       <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
       Batches
     </button>
+    <button class="bnav-btn" id="bn-summary" onclick="switchPage('summary',this)">
+      <svg viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9h6m-6 4h6m-6-8h.01"/></svg>
+      Summary
+    </button>
     <button class="bnav-btn active" id="bn-ec" onclick="switchPage('ec',this)">
       <svg viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
       EC Log
@@ -611,11 +741,11 @@ tr:last-child td { border-bottom: none; }
 <script>
 const EC_LO=2.2,EC_HI=2.3,PH_EC_LO=6.2,PH_EC_HI=6.3;
 const RO_PH_LO=6.0,RO_PH_HI=6.5,RO_VAR_LO=0.3,RO_VAR_HI=0.5,RO_VAR_ALERT=1.0;
-let ecRecs=[],roRecs=[],wasteRecs=[],batchRecs=[],cfg={token:'',base:'',ecTbl:'',roTbl:'',wasteTbl:'',batchTbl:''};
+let ecRecs=[],roRecs=[],wasteRecs=[],batchRecs=[],batchTxRecs=[],cfg={token:'',base:'',ecTbl:'',roTbl:'',wasteTbl:'',batchTbl:'',batchtxTbl:''};
 
 function lsGet(k){try{return JSON.parse(localStorage.getItem(k)||'null');}catch(e){return null;}}
 function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
-function loadAll(){ecRecs=lsGet('gp-ec')||[];roRecs=lsGet('gp-ro')||[];wasteRecs=lsGet('gp-waste')||[];batchRecs=lsGet('gp-batch')||[];wasteRecs.forEach(r=>{if(r.type==='Vegetative waste')r.type='Vegetative Waste';});lsSet('gp-waste',wasteRecs);const s=lsGet('gp-cfg');if(s){cfg=s;applySettings();}}
+function loadAll(){ecRecs=lsGet('gp-ec')||[];roRecs=lsGet('gp-ro')||[];wasteRecs=lsGet('gp-waste')||[];batchRecs=lsGet('gp-batch')||[];batchTxRecs=lsGet('gp-batchtx')||[];wasteRecs.forEach(r=>{if(r.type==='Vegetative waste')r.type='Vegetative Waste';});lsSet('gp-waste',wasteRecs);const s=lsGet('gp-cfg');if(s){cfg=s;applySettings();}}
 function atReady(){return cfg.token&&cfg.base&&cfg.ecTbl&&cfg.roTbl;}
 async function atPost(tbl,fields){const r=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+tbl,{method:'POST',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify({fields})});if(!r.ok)throw new Error(r.status);return r.json();}
 function setSyncPill(state,msg){const el=document.getElementById('global-sync');el.className='sync-pill'+(state==='ok'?' ok':state==='err'?' err':state==='ing'?' ing':'');el.textContent=msg;}
@@ -630,7 +760,7 @@ function setAvg(id,val,lo,hi){const el=document.getElementById(id);if(val===null
 function stageLabel(r){if(!r.stage||!r.day)return'<span style="color:var(--text3)">-</span>';return r.stage==='flower'?'<span class="flower-txt">F'+r.day+'</span>':'<span class="veg-txt">V'+r.day+'</span>';}
 function toast(msg,dur){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),dur||2500);}
 
-function switchPage(page,btn){document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.bnav-btn').forEach(b=>b.classList.remove('active'));document.getElementById('page-'+page).classList.add('active');btn.classList.add('active');if(page==='report'){renderEC();renderRO();}if(page==='waste'){renderWaste();}if(page==='batch'){renderBatchLog();}}
+function switchPage(page,btn){document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.bnav-btn').forEach(b=>b.classList.remove('active'));document.getElementById('page-'+page).classList.add('active');btn.classList.add('active');if(page==='report'){renderEC();renderRO();}if(page==='waste'){renderWaste();}if(page==='batch'){renderBatchLog();}if(page==='summary'){summaryPopulateBatches();}}
 function switchRepTab(tab,btn){document.getElementById('rep-ec-view').style.display=tab==='ec'?'':'none';document.getElementById('rep-ro-view').style.display=tab==='ro'?'':'none';document.getElementById('rep-waste-view').style.display=tab==='waste'?'':'none';document.querySelectorAll('.rep-tab').forEach(b=>b.classList.remove('active'));btn.classList.add('active');if(tab==='waste')renderWasteReport();}
 
 function buildECEvents(){const c=document.getElementById('ec-events-container');c.innerHTML='';for(let i=1;i<=8;i++){c.innerHTML+='<div class="event-row"><div class="event-lbl">Event '+i+'</div><input type="number" id="ec-evt-'+i+'" step="1" min="0" placeholder="-" style="font-size:14px;font-family:var(--mono);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;color:var(--text);outline:none;text-align:center;" oninput="ecTotalML()" /></div>';}}
@@ -1205,8 +1335,8 @@ async function syncPending(){
   else if(ok>0){setSyncPill('err','Partial sync');st.style.background='var(--amber-pale)';st.style.color='var(--amber)';st.textContent=ok+' synced, '+fail+' failed. Check connection and retry.';}
   else{setSyncPill('err','Sync failed');st.style.background='var(--red-pale)';st.style.color='var(--red)';st.textContent='Sync failed: '+(lastErr||'Check your Airtable connection.');}
 }
-function applySettings(){document.getElementById('s-token').value=cfg.token||'';document.getElementById('s-base').value=cfg.base||'';document.getElementById('s-ec').value=cfg.ecTbl||'';document.getElementById('s-ro').value=cfg.roTbl||'';document.getElementById('s-waste').value=cfg.wasteTbl||'';document.getElementById('s-batch').value=cfg.batchTbl||'';setSyncPill(atReady()?'ok':'off',atReady()?'Airtable connected':'Not configured');}
-async function saveSettings(){cfg={token:document.getElementById('s-token').value.trim(),base:document.getElementById('s-base').value.trim(),ecTbl:document.getElementById('s-ec').value.trim(),roTbl:document.getElementById('s-ro').value.trim(),wasteTbl:document.getElementById('s-waste').value.trim(),batchTbl:document.getElementById('s-batch').value.trim()};const st=document.getElementById('conn-status');st.style.display='block';st.style.background='var(--bg2)';st.style.color='var(--text2)';st.textContent='Testing connection...';if(!atReady()){st.textContent='Please fill in all fields.';st.style.background='var(--amber-pale)';st.style.color='var(--amber)';return;}try{const r=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+cfg.ecTbl+'?maxRecords=1',{headers:{'Authorization':'Bearer '+cfg.token}});if(r.ok){lsSet('gp-cfg',cfg);applySettings();st.textContent='Connected! Credentials saved.';st.style.background='var(--green-pale)';st.style.color='var(--green)';}else{st.textContent='Failed ('+r.status+'). Check your credentials.';st.style.background='var(--red-pale)';st.style.color='var(--red)';}}catch(e){st.textContent='Could not reach Airtable. Check internet connection.';st.style.background='var(--red-pale)';st.style.color='var(--red)';}}
+function applySettings(){document.getElementById('s-token').value=cfg.token||'';document.getElementById('s-base').value=cfg.base||'';document.getElementById('s-ec').value=cfg.ecTbl||'';document.getElementById('s-ro').value=cfg.roTbl||'';document.getElementById('s-waste').value=cfg.wasteTbl||'';document.getElementById('s-batch').value=cfg.batchTbl||'';document.getElementById('s-batchtx').value=cfg.batchtxTbl||'';setSyncPill(atReady()?'ok':'off',atReady()?'Airtable connected':'Not configured');}
+async function saveSettings(){cfg={token:document.getElementById('s-token').value.trim(),base:document.getElementById('s-base').value.trim(),ecTbl:document.getElementById('s-ec').value.trim(),roTbl:document.getElementById('s-ro').value.trim(),wasteTbl:document.getElementById('s-waste').value.trim(),batchTbl:document.getElementById('s-batch').value.trim(),batchtxTbl:document.getElementById('s-batchtx').value.trim()};const st=document.getElementById('conn-status');st.style.display='block';st.style.background='var(--bg2)';st.style.color='var(--text2)';st.textContent='Testing connection...';if(!atReady()){st.textContent='Please fill in all fields.';st.style.background='var(--amber-pale)';st.style.color='var(--amber)';return;}try{const r=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+cfg.ecTbl+'?maxRecords=1',{headers:{'Authorization':'Bearer '+cfg.token}});if(r.ok){lsSet('gp-cfg',cfg);applySettings();st.textContent='Connected! Credentials saved.';st.style.background='var(--green-pale)';st.style.color='var(--green)';}else{st.textContent='Failed ('+r.status+'). Check your credentials.';st.style.background='var(--red-pale)';st.style.color='var(--red)';}}catch(e){st.textContent='Could not reach Airtable. Check internet connection.';st.style.background='var(--red-pale)';st.style.color='var(--red)';}}
 
 function localDate(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 const today=localDate();
@@ -1553,6 +1683,165 @@ function renderBatchLog(){
   });
   list.innerHTML = html;
 }
+// ── BATCH SUMMARY ────────────────────────────────────────────────────────────
+function summaryPopulateBatches(){
+  const sel = document.getElementById('summary-batch-select');
+  const showClosed = document.getElementById('summary-show-closed').checked;
+  const cur = sel.value;
+  const batches = batchRecs.filter(b => !b.type && (showClosed || !b.closedDate));
+  sel.innerHTML = '<option value="">-- select batch --</option>' +
+    batches.map(b => '<option value="'+b.batchId+'"'+(b.batchId===cur?' selected':'')+'>'+b.batchId+(b.cultivar?' – '+b.cultivar:'')+(b.closedDate?' [Closed]':'')+'</option>').join('');
+  if(cur && batches.some(b=>b.batchId===cur)) summaryBatchChanged();
+  else if(!cur){ document.getElementById('summary-info-card').style.display='none'; }
+}
+
+function summaryBatchChanged(){
+  const batchId = document.getElementById('summary-batch-select').value;
+  if(!batchId){ document.getElementById('summary-info-card').style.display='none'; return; }
+  const b = batchRecs.find(r=>r.batchId===batchId && !r.type);
+  if(!b) return;
+  document.getElementById('summary-info-card').style.display='';
+  document.getElementById('si-batchid').textContent = b.batchId;
+  document.getElementById('si-cultivar').textContent = b.cultivar||'—';
+  document.getElementById('si-mother').textContent = b.mother||'—';
+  document.getElementById('si-genetics').textContent = b.geneticsSource ? b.geneticsSource+(b.externalCompany?' ('+b.externalCompany+')':'') : '—';
+  document.getElementById('si-created').textContent = b.createdDate||'—';
+  // Rooms
+  const rooms = b.rooms||[];
+  document.querySelectorAll('.summary-room-cb').forEach(cb=>{ cb.checked = rooms.includes(cb.value); });
+  // Phase & Status
+  document.getElementById('summary-phase').value = b.plantPhase||'';
+  document.getElementById('summary-status').value = b.status||'Open';
+  summaryStatusChanged();
+  document.getElementById('summary-closed-date').value = b.closedDate||'';
+  // Today's date for transactions
+  document.getElementById('tx-date-display').textContent = localDate();
+  // Current qty
+  summaryCalcQty(batchId);
+  // History
+  summaryRenderHistory(batchId);
+  // Clear msgs
+  document.getElementById('summary-update-msg').style.display='none';
+  document.getElementById('tx-msg').style.display='none';
+}
+
+function summaryStatusChanged(){
+  const closed = document.getElementById('summary-status').value === 'Closed';
+  document.getElementById('summary-closed-date-wrap').style.display = closed ? '' : 'none';
+}
+
+function summaryCalcQty(batchId){
+  const txs = batchTxRecs.filter(t=>t.batchId===batchId);
+  let qty = 0;
+  txs.forEach(t=>{
+    const q = parseInt(t.qty)||0;
+    if(t.txType==='Produced/Received') qty += q;
+    else qty -= q;
+  });
+  if(qty < 0) qty = 0;
+  document.getElementById('si-currentqty').textContent = qty;
+  return qty;
+}
+
+async function summaryUpdateBatch(){
+  const batchId = document.getElementById('summary-batch-select').value;
+  if(!batchId) return;
+  const idx = batchRecs.findIndex(r=>r.batchId===batchId && !r.type);
+  if(idx < 0) return;
+  const rooms = [...document.querySelectorAll('.summary-room-cb:checked')].map(cb=>cb.value);
+  const plantPhase = document.getElementById('summary-phase').value;
+  const status = document.getElementById('summary-status').value;
+  const closedDate = status==='Closed' ? document.getElementById('summary-closed-date').value : '';
+  batchRecs[idx].rooms = rooms;
+  batchRecs[idx].plantPhase = plantPhase;
+  batchRecs[idx].status = status;
+  batchRecs[idx].closedDate = closedDate;
+  lsSet('gp-batch', batchRecs);
+  const msg = document.getElementById('summary-update-msg');
+  msg.style.display='block'; msg.style.color='var(--green)'; msg.textContent='Batch updated!';
+  summaryPopulateBatches();
+  // Sync to Airtable Batch Log
+  if(cfg.batchTbl && cfg.token && cfg.base){
+    try{
+      const b = batchRecs[idx];
+      // We need to find the Airtable record ID — for now update via patch if we stored it
+      // For simplicity, just note synced=false so pending sync picks it up
+      batchRecs[idx].synced = false;
+      lsSet('gp-batch', batchRecs);
+    }catch(e){}
+  }
+}
+
+async function summaryAddTransaction(){
+  const batchId = document.getElementById('summary-batch-select').value;
+  if(!batchId){ toast('Select a batch first.'); return; }
+  const txType = document.getElementById('tx-type').value;
+  if(!txType){ toast('Select a transaction type.'); return; }
+  const qty = parseInt(document.getElementById('tx-qty').value);
+  if(!qty || qty <= 0){ toast('Enter a valid quantity.'); return; }
+  const notes = document.getElementById('tx-notes').value.trim();
+  const date = localDate();
+  const currentQtyBefore = summaryCalcQty(batchId);
+  const tx = { id: Date.now(), batchId, date, txType, qty, notes, currentQtyBefore, synced: false };
+  batchTxRecs.unshift(tx);
+  lsSet('gp-batchtx', batchTxRecs);
+  // Clear form
+  document.getElementById('tx-type').value = '';
+  document.getElementById('tx-qty').value = '';
+  document.getElementById('tx-notes').value = '';
+  const msg = document.getElementById('tx-msg');
+  msg.style.display='block'; msg.style.color='var(--green)'; msg.textContent='Transaction saved!';
+  summaryCalcQty(batchId);
+  summaryRenderHistory(batchId);
+  updatePendingBadge();
+  // Sync to Airtable
+  if(cfg.batchtxTbl && cfg.token && cfg.base){
+    try{
+      const currentQty = summaryCalcQty(batchId);
+      const f={'Batch ID':tx.batchId,'Date':tx.date,'Transaction Type':tx.txType,'Quantity':tx.qty,'Current Quantity After':currentQty,'Notes':tx.notes||undefined};
+      Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
+      await atPost(cfg.batchtxTbl, f);
+      tx.synced=true; lsSet('gp-batchtx',batchTxRecs); setSyncPill('ok','Synced');
+    }catch(e){ setSyncPill('err','Sync error'); }
+  }
+}
+
+function summaryRenderHistory(batchId){
+  const container = document.getElementById('summary-tx-history');
+  const txs = batchTxRecs.filter(t=>t.batchId===batchId);
+  if(!txs.length){
+    container.innerHTML='<div style="text-align:center;color:var(--text3);padding:20px;font-size:13px;">No transactions yet.</div>';
+    return;
+  }
+  // Compute running qty
+  const sorted = [...txs].reverse(); // oldest first
+  let running = 0;
+  const withQty = sorted.map(t=>{
+    const q = parseInt(t.qty)||0;
+    if(t.txType==='Produced/Received') running += q;
+    else running -= q;
+    if(running < 0) running = 0;
+    return {...t, runningQty: running};
+  }).reverse(); // back to newest first
+  let html = '<div style="overflow-x:auto;background:#fff;border-radius:var(--radius-sm);border:1px solid var(--border);">';
+  html += '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
+  html += '<thead><tr style="background:#f5f5f5;"><th style="padding:6px 8px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Date</th><th style="padding:6px 8px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Type</th><th style="padding:6px 8px;text-align:right;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Qty</th><th style="padding:6px 8px;text-align:right;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Balance</th><th style="padding:6px 8px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Notes</th></tr></thead>';
+  html += '<tbody>'+withQty.map(t=>{
+    const isIn = t.txType==='Produced/Received';
+    const qtyDisplay = (isIn?'+':'-')+t.qty;
+    const qtyColor = isIn ? 'var(--green)' : 'var(--red)';
+    return '<tr style="border-bottom:1px solid var(--bg2);">'+
+      '<td style="padding:6px 8px;font-family:var(--mono);">'+t.date+'</td>'+
+      '<td style="padding:6px 8px;"><span style="font-size:11px;background:var(--bg2);border-radius:20px;padding:2px 8px;color:var(--text2);">'+t.txType+'</span></td>'+
+      '<td style="padding:6px 8px;text-align:right;font-family:var(--mono);font-weight:700;color:'+qtyColor+';">'+qtyDisplay+'</td>'+
+      '<td style="padding:6px 8px;text-align:right;font-family:var(--mono);font-weight:600;">'+t.runningQty+'</td>'+
+      '<td style="padding:6px 8px;font-size:11px;color:var(--text3);max-width:120px;white-space:normal;">'+(t.notes||'')+'</td>'+
+      '</tr>';
+  }).join('')+'</tbody>';
+  html += '</table></div>';
+  container.innerHTML = html;
+}
+
 </script>
 </body>
 </html>
