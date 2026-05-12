@@ -1481,16 +1481,35 @@ function wasteSeqUnlock(){
   roomEl.disabled=false;roomEl.style.background='';roomEl.style.color='';roomEl.style.cursor='';
   const room=roomEl.value||prevRoom;
   if(!room){disableFields();return;}
-  // Guard: a batch with 0 plants assigned cannot have waste recorded against it
-  if(calcBatchQty(batch)<=0){disableFields();return;}
+  // Post-harvest batches (Harvested/Drying/Packaged/Sold) can still record Dry Waste even at qty=0.
+  // Pre-harvest batches require qty>0 to record any waste.
+  const _isPostHarvest = batchRec && ['Harvested','Drying','Packaged','Sold'].includes(batchRec.plantPhase);
+  if(calcBatchQty(batch)<=0 && !_isPostHarvest){disableFields();return;}
+  // Filter waste-type dropdown:
+  //   - Post-harvest → Dry Waste only
+  //   - Otherwise → Vegetative Waste + Dry Waste
+  const _wtEl = document.getElementById('waste-type');
+  const _wtPrev = _wtEl.value;
+  if(_isPostHarvest){
+    _wtEl.innerHTML = '<option value="">select type</option><option>Dry Waste</option>';
+    _wtEl.value = (_wtPrev==='Dry Waste') ? 'Dry Waste' : '';
+  } else {
+    _wtEl.innerHTML = '<option value="">select type</option><option>Vegetative Waste</option><option>Dry Waste</option>';
+    _wtEl.value = _wtPrev;
+  }
   enableFields();
   applyRoomColor('waste',room);
+  wastePlantsToggle();
 }
 
 function wasteBatchSelect(){
   const val=document.getElementById('waste-batch-select').value;
-  if(val && calcBatchQty(val)<=0){
-    toast('Batch '+val+' has 0 plants. Add plants on the Summary page first.',4000);
+  if(val){
+    const _br = batchRecs.find(r=>r.batchId===val && !r.type);
+    const _post = _br && ['Harvested','Drying','Packaged','Sold'].includes(_br.plantPhase);
+    if(calcBatchQty(val)<=0 && !_post){
+      toast('Batch '+val+' has 0 plants. Add plants on the Summary page first.',4000);
+    }
   }
   wasteSeqUnlock();
 }
@@ -1520,9 +1539,18 @@ async function wasteSave(){
   if(!room){toast('Please select a room.');return;}
   if(!type){toast('Please select a waste type.');return;}
   if(!weight||isNaN(weight)||weight<=0){toast('Please enter a weight greater than 0 kg.');return;}
-  // Guard: batch must have at least 1 plant assigned to record any waste
-  if(calcBatchQty(batch)<=0){
+  // Determine post-harvest status for this batch (Harvested/Drying/Packaged/Sold).
+  // Post-harvest batches can record Dry Waste at qty=0; pre-harvest still requires qty>0.
+  const _wsBatchRec = batchRecs.find(r=>r.batchId===batch && !r.type);
+  const _wsPostHarvest = _wsBatchRec && ['Harvested','Drying','Packaged','Sold'].includes(_wsBatchRec.plantPhase);
+  // Guard: pre-harvest batches at qty=0 cannot record any waste
+  if(calcBatchQty(batch)<=0 && !_wsPostHarvest){
     toast('Cannot save: batch '+batch+' has 0 plants assigned.',4500);
+    return;
+  }
+  // Guard: post-harvest batches can only record Dry Waste (no green plants to remove)
+  if(_wsPostHarvest && type!=='Dry Waste'){
+    toast('Harvested batches can only record Dry Waste — Vegetative Waste is not allowed.',5000);
     return;
   }
   // Guard: destroying plants via Vegetative Waste cannot push the batch balance below 0
