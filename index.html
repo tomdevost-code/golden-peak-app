@@ -599,7 +599,7 @@ tr:last-child td { border-bottom: none; }
           <!-- Plant Phase -->
           <div class="field" style="margin-bottom:12px;">
             <label>Plant Phase</label>
-            <select id="summary-phase" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;">
+            <select id="summary-phase" onchange="applyPhaseRoomLock()" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;">
               <option value="">-- select phase --</option>
               <option>Seeds</option>
               <option>Clones</option>
@@ -1441,8 +1441,12 @@ function wasteSeqUnlock(){
     roomEl.disabled=true;roomEl.style.background='var(--bg2)';roomEl.style.color='var(--text3)';roomEl.style.cursor='not-allowed';
     disableFields();return;
   }
-  // Populate rooms from EC records for this batch
-  const batchRooms=[...new Set(ecRecs.filter(r=>r.batch&&r.batch.trim().toLowerCase()===batch.trim().toLowerCase()&&r.room).map(r=>r.room))];
+  // Populate rooms from the batch's declared rooms (Summary page) + any EC-history rooms.
+  // batchRec.rooms is the primary source so new batches with no EC entries still get options.
+  const batchRec=batchRecs.find(r=>r.batchId===batch && !r.type);
+  const declaredRooms=(batchRec&&batchRec.rooms)?batchRec.rooms:[];
+  const ecHistoryRooms=[...new Set(ecRecs.filter(r=>r.batch&&r.batch.trim().toLowerCase()===batch.trim().toLowerCase()&&r.room).map(r=>r.room))];
+  const batchRooms=[...new Set([...declaredRooms,...ecHistoryRooms])];
   const prevRoom=roomEl.value;
   roomEl.innerHTML='<option value="">select room</option>'+batchRooms.map(r=>'<option'+(r===prevRoom?' selected':'')+'>'+r+'</option>').join('');
   roomEl.disabled=false;roomEl.style.background='';roomEl.style.color='';roomEl.style.cursor='';
@@ -1811,6 +1815,7 @@ function summaryBatchChanged(){
   // Phase & Status
   document.getElementById('summary-phase').value = b.plantPhase||'';
   document.getElementById('summary-status').value = b.status||'Open';
+  applyPhaseRoomLock();
   summaryStatusChanged();
   document.getElementById('summary-closed-date').value = b.closedDate||'';
   // Today's date for transactions
@@ -1829,6 +1834,23 @@ function summaryBatchChanged(){
 function summaryStatusChanged(){
   const closed = document.getElementById('summary-status').value === 'Closed';
   document.getElementById('summary-closed-date-wrap').style.display = closed ? '' : 'none';
+}
+function applyPhaseRoomLock(){
+  // Restrict room checkboxes based on the current Plant Phase:
+  //   Clones  → Veg only
+  //   Veg     → all rooms
+  //   Flower  → Flower rooms only (Veg not allowed)
+  //   other phases (Seeds, Drying, Packaged, Sold, blank) → no extra restriction
+  const phase = document.getElementById('summary-phase').value;
+  document.querySelectorAll('.summary-room-cb').forEach(cb=>{
+    let allowed=true;
+    if(phase==='Clones')      allowed = (cb.value==='Veg');
+    else if(phase==='Flower') allowed = (cb.value!=='Veg');
+    cb.disabled = !allowed;
+    if(!allowed) cb.checked=false;
+    const label = cb.closest('label');
+    if(label){label.style.opacity = allowed?'1':'0.4'; label.style.cursor = allowed?'pointer':'not-allowed';}
+  });
 }
 function summaryUpdateTxTypeOptions(batchId){
   // If a batch has no transactions yet, only 'Produced/Received' is selectable.
