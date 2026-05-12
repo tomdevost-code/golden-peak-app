@@ -2073,6 +2073,18 @@ async function summaryAddTransaction(){
   const tx = { id: Date.now(), batchId, date, txType, qty, notes, currentQtyBefore, synced: false };
   batchTxRecs.unshift(tx);
   lsSet('gp-batchtx', batchTxRecs);
+  // Auto-transition: a Harvested transaction moves the batch's plant phase to 'Drying'.
+  // (If qty drops to 0 from this harvest, enforceZeroQtyState below will override to Clones.)
+  let _phaseAutoChanged = false;
+  if(txType === 'Harvested'){
+    const _hi = batchRecs.findIndex(r=>r.batchId===batchId && !r.type);
+    if(_hi >= 0 && batchRecs[_hi].plantPhase !== 'Drying'){
+      batchRecs[_hi].plantPhase = 'Drying';
+      batchRecs[_hi].synced = false;
+      lsSet('gp-batch', batchRecs);
+      _phaseAutoChanged = true;
+    }
+  }
   // Clear form
   document.getElementById('tx-type').value = '';
   document.getElementById('tx-qty').value = '';
@@ -2105,6 +2117,21 @@ async function summaryAddTransaction(){
       await atPost(cfg.batchtxTbl, f);
       tx.synced=true; lsSet('gp-batchtx',batchTxRecs); setSyncPill('ok','Synced');
     }catch(e){ setSyncPill('err','Sync error'); toast('Transaction saved locally - Airtable: '+(e.message||'sync failed'),5000); }
+  }
+  // If the Harvested tx auto-advanced the phase to Drying (or zero-qty re-locked to Clones),
+  // push the batch update to Airtable so the new phase is reflected immediately.
+  if(_phaseAutoChanged && cfg.batchTbl && cfg.token && cfg.base){
+    try{
+      const _bi = batchRecs.findIndex(r=>r.batchId===batchId && !r.type);
+      if(_bi >= 0){
+        await atUpsert(cfg.batchTbl, buildBatchFields(batchRecs[_bi]), ['Batch ID']);
+        batchRecs[_bi].synced = true;
+        lsSet('gp-batch', batchRecs);
+        updatePendingBadge();
+      }
+    }catch(e){
+      // Stay unsynced; Sync Pending will retry
+    }
   }
 }
 
