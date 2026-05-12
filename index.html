@@ -1927,12 +1927,20 @@ function summaryUpdatePhaseOptions(currentPhase, qty){
   sel.innerHTML = '<option value="">-- select phase --</option>' + allowed.map(p=>'<option'+(p===valueToSelect?' selected':'')+'>'+p+'</option>').join('');
 }
 function summaryUpdateTxTypeOptions(batchId){
-  // If a batch has no transactions yet, only 'Produced/Received' is selectable.
+  // Transaction type rules:
+  //   - Plant phase 'Flower' → only Sold, Harvested
+  //   - Else if no transactions yet → only Produced/Received (to seed the batch)
+  //   - Else → all four manual types
   const hasTxs = batchTxRecs.some(t=>t.batchId===batchId);
+  const b = batchRecs.find(r=>r.batchId===batchId && !r.type);
+  const phase = b ? (b.plantPhase||'') : '';
   const sel = document.getElementById('tx-type');
   if(!sel) return;
   const prev = sel.value;
-  const opts = hasTxs ? ['Produced/Received','Moved to Moms','Sold','Harvested'] : ['Produced/Received'];
+  let opts;
+  if(phase==='Flower')      opts = ['Sold','Harvested'];
+  else if(!hasTxs)          opts = ['Produced/Received'];
+  else                      opts = ['Produced/Received','Moved to Moms','Sold','Harvested'];
   sel.innerHTML = '<option value="">-- select type --</option>' + opts.map(o=>'<option'+(o===prev?' selected':'')+'>'+o+'</option>').join('');
 }
 
@@ -1975,6 +1983,7 @@ async function summaryUpdateBatch(){
   batchRecs[idx].closedDate = closedDate;
   lsSet('gp-batch', batchRecs);
   summaryPopulateBatches();
+  summaryUpdateTxTypeOptions(batchId); // refresh tx-type options based on the newly saved phase
   const msg = document.getElementById('summary-update-msg');
   msg.style.display='block'; msg.style.color='var(--green)'; msg.textContent='Batch updated!';
   setTimeout(()=>{ msg.style.display='none'; }, 3000);
@@ -2010,6 +2019,12 @@ async function summaryAddTransaction(){
   // Guard: non-Produced/Received transactions cannot push balance below 0
   if(txType !== 'Produced/Received' && currentQtyBefore - qty < 0){
     toast('Cannot save: balance would go below 0. Current: '+currentQtyBefore+', requested: '+qty+'.',5000);
+    return;
+  }
+  // Guard: in Flower phase, only Sold or Harvested are allowed
+  const _bGuard = batchRecs.find(r=>r.batchId===batchId && !r.type);
+  if(_bGuard && _bGuard.plantPhase==='Flower' && txType!=='Sold' && txType!=='Harvested'){
+    toast('In Flower phase, only Sold or Harvested transactions are allowed.',5000);
     return;
   }
   const tx = { id: Date.now(), batchId, date, txType, qty, notes, currentQtyBefore, synced: false };
