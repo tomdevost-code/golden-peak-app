@@ -1884,25 +1884,40 @@ function summaryStatusChanged(){
   document.getElementById('summary-closed-date-wrap').style.display = closed ? '' : 'none';
 }
 function applyPhaseRoomLock(){
-  // Restrict room checkboxes based on the current Plant Phase:
-  //   Seeds   → Veg only (Veg auto-checked)
-  //   Clones  → Veg only (Veg auto-checked)
-  //   Veg     → all rooms
-  //   Flower  → Flower rooms only (Veg not allowed)
-  //   other phases (Drying, Packaged, Sold, blank) → no extra restriction
-  const phase = document.getElementById('summary-phase').value;
-  const startPhase = (phase==='Clones'||phase==='Seeds');
+  // Room rules combine two layers:
+  //   (1) Visual filter based on the dropdown's current phase:
+  //         Clones/Seeds → Veg only (Veg auto-checked)
+  //         Flower       → Veg not allowed
+  //         Veg          → all rooms
+  //   (2) Hard lock based on the SAVED phase: once a batch has reached Flower (or beyond),
+  //       every room checkbox is disabled — current selections stay visible but cannot be changed.
+  //       This allows moving rooms during the Veg→Flower transition (saved=Veg, dropdown=Flower)
+  //       while preventing edits once Flower is committed.
+  const dropdownPhase = document.getElementById('summary-phase').value;
+  const batchId = document.getElementById('summary-batch-select').value;
+  const b = batchId ? batchRecs.find(r=>r.batchId===batchId && !r.type) : null;
+  const savedPhase = b ? (b.plantPhase||'') : '';
+  const roomsLocked = ['Flower','Drying','Packaged','Sold'].includes(savedPhase);
   document.querySelectorAll('.summary-room-cb').forEach(cb=>{
     let allowed=true;
-    if(startPhase){
+    if(dropdownPhase==='Clones'||dropdownPhase==='Seeds'){
       allowed = (cb.value==='Veg');
       if(cb.value==='Veg') cb.checked = true; // auto-check Veg as the starting room
+      if(!allowed) cb.checked = false;
     }
-    else if(phase==='Flower') allowed = (cb.value!=='Veg');
+    else if(dropdownPhase==='Flower'){
+      if(cb.value==='Veg'){ allowed=false; cb.checked=false; }
+    }
+    // Hard lock: saved phase is Flower or later
+    if(roomsLocked) allowed = false;
     cb.disabled = !allowed;
-    if(!allowed) cb.checked=false;
     const label = cb.closest('label');
-    if(label){label.style.opacity = allowed?'1':'0.4'; label.style.cursor = allowed?'pointer':'not-allowed';}
+    if(label){
+      // Locked-in (disabled but checked) stays at full opacity so the user can see assignments
+      const visible = allowed || cb.checked;
+      label.style.opacity = visible ? '1' : '0.4';
+      label.style.cursor = allowed ? 'pointer' : 'not-allowed';
+    }
   });
 }
 function getAllowedPhases(currentPhase){
@@ -1982,6 +1997,15 @@ async function summaryUpdateBatch(){
   if(calcBatchQty(batchId) <= 0 && plantPhase && plantPhase !== 'Clones'){
     toast('Cannot advance phase: batch has 0 plants. Add a Produced/Received transaction first.',5000);
     return;
+  }
+  // Guard: once a batch is in Flower (or later), the room assignments are locked
+  if(['Flower','Drying','Packaged','Sold'].includes(existingPhase)){
+    const oldRooms = (batchRecs[idx].rooms||[]).slice().sort().join('|');
+    const newRooms = rooms.slice().sort().join('|');
+    if(oldRooms !== newRooms){
+      toast('Cannot change rooms — batch is in '+existingPhase+' phase (rooms locked from Flower onward).',5000);
+      return;
+    }
   }
   batchRecs[idx].rooms = rooms;
   batchRecs[idx].plantPhase = plantPhase;
