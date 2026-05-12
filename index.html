@@ -761,6 +761,46 @@ function calcBatchQty(batchId){
   });
   return Math.max(0,qty);
 }
+async function recordPhaseChangeTx(batchId, fromPhase, toPhase){
+  // Creates a 'Phase Change' transaction in batchTxRecs to audit-trail phase transitions.
+  // qty=0 so it doesn't affect the running balance. Notes describe the transition.
+  if(!batchId || !toPhase || fromPhase === toPhase) return null;
+  const tx = {
+    id: Date.now() + Math.floor(Math.random()*1000),
+    batchId,
+    date: localDate(),
+    txType: 'Phase Change',
+    qty: 0,
+    currentQtyBefore: calcBatchQty(batchId),
+    plantPhase: toPhase,
+    notes: 'Phase changed from ' + (fromPhase || 'unset') + ' to ' + toPhase,
+    synced: false
+  };
+  batchTxRecs.unshift(tx);
+  lsSet('gp-batchtx', batchTxRecs);
+  updatePendingBadge();
+  if(cfg.batchtxTbl && cfg.token && cfg.base){
+    try{
+      const f = {
+        'Batch ID': [tx.batchId],
+        'Date': tx.date,
+        'Transaction Type': tx.txType,
+        'Plant Phase': tx.plantPhase,
+        'Quantity': tx.qty,
+        'Current Quantity After': tx.currentQtyBefore,
+        'Notes': tx.notes
+      };
+      Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
+      await atPost(cfg.batchtxTbl, f);
+      tx.synced = true;
+      lsSet('gp-batchtx', batchTxRecs);
+      updatePendingBadge();
+    }catch(e){
+      // Stay unsynced; Sync Pending will retry
+    }
+  }
+  return tx;
+}
 function enforceZeroQtyState(batchId){
   // Hard rule: when a batch's current quantity is <= 0 AND it hasn't entered the post-harvest lifecycle,
   // its plantPhase MUST be 'Clones' and rooms MUST be ['Veg']. Auto-corrects + marks unsynced.
@@ -1578,8 +1618,14 @@ async function wasteSave(){
     batchTxRecs.unshift(destroyedTx);lsSet('gp-batchtx',batchTxRecs);
   }
   populateBatchDropdowns();renderWaste();updatePendingBadge();
-  // Enforce zero-qty data state if the Destroyed tx brought the balance back to 0
+  // Enforce zero-qty data state if the Destroyed tx brought the balance back to 0.
+  // Capture phase before/after to audit-trail any auto-correction (e.g. Veg → Clones).
+  const _wzBefore = batchRecs.find(r=>r.batchId===rec.batch && !r.type);
+  const _wzPrevPhase = _wzBefore ? _wzBefore.plantPhase : '';
   enforceZeroQtyState(rec.batch);
+  const _wzAfter = batchRecs.find(r=>r.batchId===rec.batch && !r.type);
+  const _wzNewPhase = _wzAfter ? _wzAfter.plantPhase : '';
+  if(_wzPrevPhase !== _wzNewPhase) recordPhaseChangeTx(rec.batch, _wzPrevPhase, _wzNewPhase);
   // If the Summary page is currently showing this batch, refresh its qty + history + tx-type options + phase/room lock
   const _summarySel=document.getElementById('summary-batch-select');
   if(_summarySel && _summarySel.value===rec.batch){
@@ -2072,6 +2118,10 @@ async function summaryUpdateBatch(){
   batchRecs[idx].status = status;
   batchRecs[idx].closedDate = closedDate;
   lsSet('gp-batch', batchRecs);
+  // Record an audit-trail phase change transaction when the saved phase differs from the prior phase
+  if(plantPhase && plantPhase !== existingPhase){
+    recordPhaseChangeTx(batchId, existingPhase, plantPhase);
+  }
   summaryPopulateBatches();
   summaryUpdateTxTypeOptions(batchId); // refresh tx-type options based on the newly saved phase
   const msg = document.getElementById('summary-update-msg');
@@ -2142,11 +2192,14 @@ async function summaryAddTransaction(){
       const _curPhase = batchRecs[_hi].plantPhase || '';
       const _postHarvest = ['Drying','Packaged','Sold'].includes(_curPhase);
       if(!_postHarvest){
+        const _prevPhase = _curPhase;
         batchRecs[_hi].plantPhase = 'Drying';
         batchRecs[_hi].rooms = [];
         batchRecs[_hi].synced = false;
         lsSet('gp-batch', batchRecs);
         _phaseAutoChanged = true;
+        // Audit-trail row for the Flower→Drying transition triggered by a Harvested tx
+        recordPhaseChangeTx(batchId, _prevPhase, 'Drying');
       }
     }
   }
@@ -2161,7 +2214,13 @@ async function summaryAddTransaction(){
   summaryRenderHistory(batchId);
   summaryUpdateTxTypeOptions(batchId);
   // Enforce zero-qty data state (in case the new tx brought qty back to 0, e.g. Sold all)
+  // Capture phase before/after so we can audit-trail any auto-correction (e.g. Veg → Clones at qty=0)
+  const _ezBefore = batchRecs.find(r=>r.batchId===batchId && !r.type);
+  const _ezPrevPhase = _ezBefore ? _ezBefore.plantPhase : '';
   enforceZeroQtyState(batchId);
+  const _ezAfter = batchRecs.find(r=>r.batchId===batchId && !r.type);
+  const _ezNewPhase = _ezAfter ? _ezAfter.plantPhase : '';
+  if(_ezPrevPhase !== _ezNewPhase) recordPhaseChangeTx(batchId, _ezPrevPhase, _ezNewPhase);
   // Refresh phase dropdown + room lock now that qty may have changed (e.g. first Produced/Received unlocks phases)
   const _newQty = calcBatchQty(batchId);
   const _b = batchRecs.find(r=>r.batchId===batchId && !r.type);
@@ -2222,11 +2281,14 @@ function summaryRenderHistory(batchId){
   html += '<thead><tr style="background:#f5f5f5;"><th style="padding:6px 8px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Date</th><th style="padding:6px 8px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Type</th><th style="padding:6px 8px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Phase</th><th style="padding:6px 8px;text-align:right;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Qty</th><th style="padding:6px 8px;text-align:right;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Balance</th><th style="padding:6px 8px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Notes</th></tr></thead>';
   html += '<tbody>'+withQty.map(t=>{
     const isIn = t.txType==='Produced/Received';
-    const qtyDisplay = (isIn?'+':'-')+t.qty;
-    const qtyColor = isIn ? 'var(--green)' : 'var(--red)';
+    const isPhase = t.txType==='Phase Change';
+    const qtyDisplay = isPhase ? '—' : ((isIn?'+':'-')+t.qty);
+    const qtyColor = isPhase ? 'var(--text3)' : (isIn ? 'var(--green)' : 'var(--red)');
+    const typePillBg = isPhase ? 'var(--green-pale)' : 'var(--bg2)';
+    const typePillColor = isPhase ? 'var(--green)' : 'var(--text2)';
     return '<tr style="border-bottom:1px solid var(--bg2);">'+
       '<td style="padding:6px 8px;font-family:var(--mono);">'+t.date+'</td>'+
-      '<td style="padding:6px 8px;"><span style="font-size:11px;background:var(--bg2);border-radius:20px;padding:2px 8px;color:var(--text2);">'+t.txType+'</span></td>'+
+      '<td style="padding:6px 8px;"><span style="font-size:11px;background:'+typePillBg+';border-radius:20px;padding:2px 8px;color:'+typePillColor+';font-weight:'+(isPhase?'600':'400')+';">'+t.txType+'</span></td>'+
       '<td style="padding:6px 8px;font-size:11px;color:var(--green);font-weight:600;">'+(t.plantPhase||'—')+'</td>'+
       '<td style="padding:6px 8px;text-align:right;font-family:var(--mono);font-weight:700;color:'+qtyColor+';">'+qtyDisplay+'</td>'+
       '<td style="padding:6px 8px;text-align:right;font-family:var(--mono);font-weight:600;">'+t.runningQty+'</td>'+
