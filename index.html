@@ -570,6 +570,10 @@ tr:last-child td { border-bottom: none; }
             <div class="field"><label>Source of Genetics</label><div id="si-genetics" style="font-size:13px;padding:6px 0;color:var(--text2);"></div></div>
           </div>
           <div class="field"><label>Created Date</label><div id="si-created" style="font-size:13px;font-family:var(--mono);padding:6px 0;color:var(--text3);"></div></div>
+          <div class="g2" style="margin-top:8px;">
+            <div class="field"><label>Plant Phase</label><div id="si-phase" style="font-size:14px;font-weight:600;padding:6px 0;color:var(--green);"></div></div>
+            <div class="field"><label>Rooms</label><div id="si-rooms" style="font-size:13px;font-family:var(--mono);padding:6px 0;color:var(--text2);"></div></div>
+          </div>
         </div>
 
         <!-- Current Quantity highlight -->
@@ -1550,6 +1554,8 @@ async function wasteSave(){
     if(_bRec){
       summaryUpdatePhaseOptions(_bRec.plantPhase||'', calcBatchQty(rec.batch));
       document.querySelectorAll('.summary-room-cb').forEach(cb=>{ cb.checked = (_bRec.rooms||[]).includes(cb.value); });
+      document.getElementById('si-phase').textContent = _bRec.plantPhase||'—';
+      document.getElementById('si-rooms').textContent = (_bRec.rooms && _bRec.rooms.length) ? _bRec.rooms.join(', ') : '—';
     }
     applyPhaseRoomLock();
   }
@@ -1853,6 +1859,8 @@ function summaryBatchChanged(){
   document.getElementById('si-mother').textContent = b.mother||'—';
   document.getElementById('si-genetics').textContent = b.geneticsSource ? b.geneticsSource+(b.externalCompany?' ('+b.externalCompany+')':'') : '—';
   document.getElementById('si-created').textContent = b.createdDate||'—';
+  document.getElementById('si-phase').textContent = b.plantPhase||'—';
+  document.getElementById('si-rooms').textContent = (b.rooms && b.rooms.length) ? b.rooms.join(', ') : '—';
   // Rooms
   const rooms = b.rooms||[];
   document.querySelectorAll('.summary-room-cb').forEach(cb=>{ cb.checked = rooms.includes(cb.value); });
@@ -2083,6 +2091,8 @@ async function summaryAddTransaction(){
   if(_b){
     summaryUpdatePhaseOptions(_b.plantPhase||'', _newQty);
     document.querySelectorAll('.summary-room-cb').forEach(cb=>{ cb.checked = (_b.rooms||[]).includes(cb.value); });
+    document.getElementById('si-phase').textContent = _b.plantPhase||'—';
+    document.getElementById('si-rooms').textContent = (_b.rooms && _b.rooms.length) ? _b.rooms.join(', ') : '—';
   }
   applyPhaseRoomLock();
   updatePendingBadge();
