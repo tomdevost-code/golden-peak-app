@@ -1980,6 +1980,7 @@ function summaryUpdateTxTypeOptions(batchId){
   const prev = sel.value;
   let opts;
   if(phase==='Flower')      opts = ['Harvested','Sold'];
+  else if(phase==='Drying') opts = ['Harvested'];
   else if(phase==='Clones') opts = hasTxs ? ['Produced/Received','Moved to Moms','Sold'] : ['Produced/Received'];
   else if(!hasTxs)          opts = ['Produced/Received'];
   else                      opts = ['Produced/Received','Moved to Moms','Harvested','Sold'];
@@ -2088,20 +2089,30 @@ async function summaryAddTransaction(){
     toast('Cannot harvest plants while in Clones phase.',5000);
     return;
   }
+  // Guard: in Drying phase, only Harvested transactions are allowed
+  if(_bGuard && _bGuard.plantPhase==='Drying' && txType!=='Harvested'){
+    toast('In Drying phase, only Harvested transactions are allowed.',5000);
+    return;
+  }
   const tx = { id: Date.now(), batchId, date, txType, qty, notes, currentQtyBefore, synced: false };
   batchTxRecs.unshift(tx);
   lsSet('gp-batchtx', batchTxRecs);
   // Auto-transition: a Harvested transaction moves the batch's plant phase to 'Harvested'
-  // and clears its rooms (plants are no longer in a cultivation room).
+  // and clears its rooms — but ONLY if the batch hasn't already entered the post-harvest lifecycle.
+  // In Drying/Packaged/Sold, additional Harvested transactions don't pull the phase backward.
   let _phaseAutoChanged = false;
   if(txType === 'Harvested'){
     const _hi = batchRecs.findIndex(r=>r.batchId===batchId && !r.type);
-    if(_hi >= 0 && (batchRecs[_hi].plantPhase !== 'Harvested' || (batchRecs[_hi].rooms||[]).length>0)){
-      batchRecs[_hi].plantPhase = 'Harvested';
-      batchRecs[_hi].rooms = [];
-      batchRecs[_hi].synced = false;
-      lsSet('gp-batch', batchRecs);
-      _phaseAutoChanged = true;
+    if(_hi >= 0){
+      const _curPhase = batchRecs[_hi].plantPhase || '';
+      const _postHarvest = ['Harvested','Drying','Packaged','Sold'].includes(_curPhase);
+      if(!_postHarvest){
+        batchRecs[_hi].plantPhase = 'Harvested';
+        batchRecs[_hi].rooms = [];
+        batchRecs[_hi].synced = false;
+        lsSet('gp-batch', batchRecs);
+        _phaseAutoChanged = true;
+      }
     }
   }
   // Clear form
