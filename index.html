@@ -1659,7 +1659,10 @@ async function batchCreate(){
   const externalCompany = document.getElementById('batch-external-company').value.trim();
   const notes = document.getElementById('batch-notes').value.trim();
   const isClones = geneticsSource === 'Clones-Internal' || geneticsSource === 'Clones-External';
-  const rec = { id: Date.now(), batchId, cultivar, mother, geneticsSource, externalCompany, notes, createdDate: localDate(), rooms: isClones ? ['Veg'] : [], plantPhase: isClones ? 'Clones' : '', status: 'Open', closedDate: '', synced: false };
+  const isSeeds = geneticsSource === 'Seeds';
+  const initialPhase = isClones ? 'Clones' : (isSeeds ? 'Seeds' : '');
+  const initialRooms = (isClones || isSeeds) ? ['Veg'] : [];
+  const rec = { id: Date.now(), batchId, cultivar, mother, geneticsSource, externalCompany, notes, createdDate: localDate(), rooms: initialRooms, plantPhase: initialPhase, status: 'Open', closedDate: '', synced: false };
   batchRecs.unshift(rec);
   lsSet('gp-batch', batchRecs);
   populateBatchDropdowns();
@@ -1812,8 +1815,8 @@ function summaryBatchChanged(){
   // Rooms
   const rooms = b.rooms||[];
   document.querySelectorAll('.summary-room-cb').forEach(cb=>{ cb.checked = rooms.includes(cb.value); });
-  // Phase & Status
-  document.getElementById('summary-phase').value = b.plantPhase||'';
+  // Phase & Status — rebuild phase dropdown to enforce forward-only sequence
+  summaryUpdatePhaseOptions(b.plantPhase||'');
   document.getElementById('summary-status').value = b.status||'Open';
   applyPhaseRoomLock();
   summaryStatusChanged();
@@ -1837,20 +1840,38 @@ function summaryStatusChanged(){
 }
 function applyPhaseRoomLock(){
   // Restrict room checkboxes based on the current Plant Phase:
+  //   Seeds   → Veg only
   //   Clones  → Veg only
   //   Veg     → all rooms
   //   Flower  → Flower rooms only (Veg not allowed)
-  //   other phases (Seeds, Drying, Packaged, Sold, blank) → no extra restriction
+  //   other phases (Drying, Packaged, Sold, blank) → no extra restriction
   const phase = document.getElementById('summary-phase').value;
   document.querySelectorAll('.summary-room-cb').forEach(cb=>{
     let allowed=true;
-    if(phase==='Clones')      allowed = (cb.value==='Veg');
-    else if(phase==='Flower') allowed = (cb.value!=='Veg');
+    if(phase==='Clones'||phase==='Seeds') allowed = (cb.value==='Veg');
+    else if(phase==='Flower')             allowed = (cb.value!=='Veg');
     cb.disabled = !allowed;
     if(!allowed) cb.checked=false;
     const label = cb.closest('label');
     if(label){label.style.opacity = allowed?'1':'0.4'; label.style.cursor = allowed?'pointer':'not-allowed';}
   });
+}
+function getAllowedPhases(currentPhase){
+  // Plant lifecycle: Seeds OR Clones → Veg → Flower → Drying → Packaged → Sold.
+  // Returns current phase + all phases that can come AFTER it. Plants never move backward.
+  if(!currentPhase) return ['Seeds','Clones','Veg']; // possible starting points
+  if(currentPhase==='Seeds')  return ['Seeds','Veg','Flower','Drying','Packaged','Sold'];
+  if(currentPhase==='Clones') return ['Clones','Veg','Flower','Drying','Packaged','Sold'];
+  const linear = ['Veg','Flower','Drying','Packaged','Sold'];
+  const idx = linear.indexOf(currentPhase);
+  return (idx===-1) ? [currentPhase] : linear.slice(idx);
+}
+function summaryUpdatePhaseOptions(currentPhase){
+  // Rebuild the Plant Phase dropdown to only allow current phase + forward phases.
+  const sel = document.getElementById('summary-phase');
+  if(!sel) return;
+  const allowed = getAllowedPhases(currentPhase);
+  sel.innerHTML = '<option value="">-- select phase --</option>' + allowed.map(p=>'<option'+(p===currentPhase?' selected':'')+'>'+p+'</option>').join('');
 }
 function summaryUpdateTxTypeOptions(batchId){
   // If a batch has no transactions yet, only 'Produced/Received' is selectable.
@@ -1884,6 +1905,12 @@ async function summaryUpdateBatch(){
   const plantPhase = document.getElementById('summary-phase').value;
   const status = document.getElementById('summary-status').value;
   const closedDate = status==='Closed' ? document.getElementById('summary-closed-date').value : '';
+  // Guard: enforce forward-only phase progression
+  const existingPhase = batchRecs[idx].plantPhase || '';
+  if(plantPhase && !getAllowedPhases(existingPhase).includes(plantPhase)){
+    toast('Cannot move plant phase backward (from '+(existingPhase||'unset')+' to '+plantPhase+').',5000);
+    return;
+  }
   batchRecs[idx].rooms = rooms;
   batchRecs[idx].plantPhase = plantPhase;
   batchRecs[idx].status = status;
