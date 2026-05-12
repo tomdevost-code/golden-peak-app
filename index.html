@@ -747,7 +747,7 @@ function lsGet(k){try{return JSON.parse(localStorage.getItem(k)||'null');}catch(
 function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
 function loadAll(){ecRecs=lsGet('gp-ec')||[];roRecs=lsGet('gp-ro')||[];wasteRecs=lsGet('gp-waste')||[];batchRecs=lsGet('gp-batch')||[];batchTxRecs=lsGet('gp-batchtx')||[];wasteRecs.forEach(r=>{if(r.type==='Vegetative waste')r.type='Vegetative Waste';});lsSet('gp-waste',wasteRecs);const s=lsGet('gp-cfg');if(s){cfg=s;applySettings();}}
 function atReady(){return cfg.token&&cfg.base&&cfg.ecTbl&&cfg.roTbl;}
-async function atPost(tbl,fields){const r=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+tbl,{method:'POST',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify({fields,typecast:true})});if(!r.ok)throw new Error(r.status);return r.json();}
+async function atPost(tbl,fields){const body={fields,typecast:true};console.log('Airtable POST →',tbl,body);const r=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+tbl,{method:'POST',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok){let detail='';try{const j=await r.json();detail=j.error&&(j.error.message||j.error.type)||JSON.stringify(j);}catch(_){}console.error('Airtable POST failed',r.status,detail,'body=',body);throw new Error(r.status+(detail?': '+detail:''));}return r.json();}
 function setSyncPill(state,msg){const el=document.getElementById('global-sync');el.className='sync-pill'+(state==='ok'?' ok':state==='err'?' err':state==='ing'?' ing':'');el.textContent=msg;}
 function avg(arr){const v=arr.filter(x=>x!==null&&!isNaN(x)&&x>0);return v.length?Math.round(v.reduce((a,b)=>a+b,0)/v.length*100)/100:null;}
 function pens(sel){return Array.from(document.querySelectorAll(sel)).map(i=>parseFloat(i.value)||null);}
@@ -1129,7 +1129,7 @@ async function ecSave(){
       const f={'Date':rec.date,'Room':rec.room,'Grower':rec.grower,'Batch ID':rec.batch?[rec.batch]:undefined,'Hydration Date':rec.hydrationDate||undefined,'Veg Start Date':rec.vegStart||undefined,'Flower Start Date':rec.flowerStart||undefined,'Harvest Date':rec.harvestDate||undefined,'Watering Type':rec.wtype||undefined,'Drip EC Pen 1':rec.dripEcPens[0]||undefined,'Drip EC Pen 2':rec.dripEcPens[1]||undefined,'Drip EC Pen 3':rec.dripEcPens[2]||undefined,'Drip pH Pen 1':rec.dripPhPens[0]||undefined,'Drip pH Pen 2':rec.dripPhPens[1]||undefined,'Drip pH Pen 3':rec.dripPhPens[2]||undefined,'Event 1 ml/plant':rec.events[0]||undefined,'Event 2 ml/plant':rec.events[1]||undefined,'Event 3 ml/plant':rec.events[2]||undefined,'Event 4 ml/plant':rec.events[3]||undefined,'Event 5 ml/plant':rec.events[4]||undefined,'Event 6 ml/plant':rec.events[5]||undefined,'Event 7 ml/plant':rec.events[6]||undefined,'Event 8 ml/plant':rec.events[7]||undefined,'Flow Meter Reading':rec.flow||undefined,'Notes':rec.notes||undefined};
       Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
       await atPost(cfg.ecTbl,f);rec.synced=true;lsSet('gp-ec',ecRecs);setSyncPill('ok','Synced');toast('Saved and synced to Airtable');
-    }catch(e){setSyncPill('err','Sync failed');toast('Saved locally - Airtable sync failed.',3500);}
+    }catch(e){setSyncPill('err','Sync failed');toast('Saved locally - Airtable: '+(e.message||'sync failed'),5000);}
     document.getElementById('ec-btn').disabled=false;
   }else{toast('Entry saved locally');}
   applyCascadeLocks();ecClear();updatePendingBadge();
@@ -1804,7 +1804,7 @@ async function summaryAddTransaction(){
       Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
       await atPost(cfg.batchtxTbl, f);
       tx.synced=true; lsSet('gp-batchtx',batchTxRecs); setSyncPill('ok','Synced');
-    }catch(e){ setSyncPill('err','Sync error'); }
+    }catch(e){ setSyncPill('err','Sync error'); toast('Transaction saved locally - Airtable: '+(e.message||'sync failed'),5000); }
   }
 }
 
