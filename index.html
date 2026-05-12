@@ -1906,14 +1906,18 @@ function applyPhaseRoomLock(){
   });
 }
 function getAllowedPhases(currentPhase){
-  // Plant lifecycle: Seeds OR Clones → Veg → Flower → Drying → Packaged → Sold.
-  // Returns current phase + all phases that can come AFTER it. Plants never move backward.
-  if(!currentPhase) return ['Seeds','Clones','Veg']; // possible starting points
-  if(currentPhase==='Seeds')  return ['Seeds','Veg','Flower','Drying','Packaged','Sold'];
-  if(currentPhase==='Clones') return ['Clones','Veg','Flower','Drying','Packaged','Sold'];
-  const linear = ['Veg','Flower','Drying','Packaged','Sold'];
-  const idx = linear.indexOf(currentPhase);
-  return (idx===-1) ? [currentPhase] : linear.slice(idx);
+  // Plant lifecycle: Clones → Veg → Flower → Drying → Packaged → Sold.
+  // Strict one-step progression: can only stay at current phase OR advance to the immediate next.
+  // No skipping (e.g. Veg → Drying is blocked). No going backward.
+  const seq = ['Clones','Veg','Flower','Drying','Packaged','Sold'];
+  if(!currentPhase) return ['Clones']; // unset → must start at Clones
+  if(!seq.includes(currentPhase)){
+    // Legacy phase (e.g. 'Seeds') — let user keep it or migrate forward to Clones
+    return [currentPhase, 'Clones'];
+  }
+  const idx = seq.indexOf(currentPhase);
+  if(idx === seq.length-1) return [currentPhase]; // Sold is terminal
+  return [seq[idx], seq[idx+1]];
 }
 function summaryUpdatePhaseOptions(currentPhase, qty){
   // Rebuild the Plant Phase dropdown:
@@ -1929,6 +1933,7 @@ function summaryUpdatePhaseOptions(currentPhase, qty){
 function summaryUpdateTxTypeOptions(batchId){
   // Transaction type rules:
   //   - Plant phase 'Flower' → only Sold, Harvested
+  //   - Plant phase 'Clones' → Produced/Received, Moved to Moms, Sold (no Harvested — clones aren't harvestable)
   //   - Else if no transactions yet → only Produced/Received (to seed the batch)
   //   - Else → all four manual types
   const hasTxs = batchTxRecs.some(t=>t.batchId===batchId);
@@ -1939,6 +1944,7 @@ function summaryUpdateTxTypeOptions(batchId){
   const prev = sel.value;
   let opts;
   if(phase==='Flower')      opts = ['Sold','Harvested'];
+  else if(phase==='Clones') opts = hasTxs ? ['Produced/Received','Moved to Moms','Sold'] : ['Produced/Received'];
   else if(!hasTxs)          opts = ['Produced/Received'];
   else                      opts = ['Produced/Received','Moved to Moms','Sold','Harvested'];
   sel.innerHTML = '<option value="">-- select type --</option>' + opts.map(o=>'<option'+(o===prev?' selected':'')+'>'+o+'</option>').join('');
@@ -2025,6 +2031,11 @@ async function summaryAddTransaction(){
   const _bGuard = batchRecs.find(r=>r.batchId===batchId && !r.type);
   if(_bGuard && _bGuard.plantPhase==='Flower' && txType!=='Sold' && txType!=='Harvested'){
     toast('In Flower phase, only Sold or Harvested transactions are allowed.',5000);
+    return;
+  }
+  // Guard: in Clones phase, Harvested is not allowed (clones aren't harvestable)
+  if(_bGuard && _bGuard.plantPhase==='Clones' && txType==='Harvested'){
+    toast('Cannot harvest plants while in Clones phase.',5000);
     return;
   }
   const tx = { id: Date.now(), batchId, date, txType, qty, notes, currentQtyBefore, synced: false };
