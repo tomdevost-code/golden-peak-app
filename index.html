@@ -748,6 +748,15 @@ function loadAll(){ecRecs=lsGet('gp-ec')||[];roRecs=lsGet('gp-ro')||[];wasteRecs
 function atReady(){return cfg.token&&cfg.base&&cfg.ecTbl&&cfg.roTbl;}
 async function atPost(tbl,fields){const body={fields,typecast:true};console.log('Airtable POST →',tbl,body);const r=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+tbl,{method:'POST',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok){let detail='';try{const j=await r.json();detail=j.error&&(j.error.message||j.error.type)||JSON.stringify(j);}catch(_){}console.error('Airtable POST failed',r.status,detail,'body=',body);throw new Error(r.status+(detail?': '+detail:''));}return r.json();}
 async function atUpsert(tbl,fields,mergeOn){const body={performUpsert:{fieldsToMergeOn:mergeOn},records:[{fields}],typecast:true};console.log('Airtable UPSERT →',tbl,body);const r=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+tbl,{method:'PATCH',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok){let detail='';try{const j=await r.json();detail=j.error&&(j.error.message||j.error.type)||JSON.stringify(j);}catch(_){}console.error('Airtable UPSERT failed',r.status,detail,'body=',body);throw new Error(r.status+(detail?': '+detail:''));}return r.json();}
+function calcBatchQty(batchId){
+  // Pure helper: returns the running balance for a batch (floor 0). No DOM side effects.
+  let qty=0;
+  batchTxRecs.filter(t=>t.batchId===batchId).forEach(t=>{
+    const q=parseInt(t.qty)||0;
+    if(t.txType==='Produced/Received') qty+=q; else qty-=q;
+  });
+  return Math.max(0,qty);
+}
 function buildBatchFields(rec){
   const f={
     'Batch ID':rec.batchId,
@@ -1473,6 +1482,14 @@ async function wasteSave(){
   if(!room){toast('Please select a room.');return;}
   if(!type){toast('Please select a waste type.');return;}
   if(!weight||isNaN(weight)||weight<=0){toast('Please enter a weight greater than 0 kg.');return;}
+  // Guard: destroying plants via Vegetative Waste cannot push the batch balance below 0
+  if(type==='Vegetative Waste' && plants>0){
+    const currentQty=calcBatchQty(batch);
+    if(currentQty-plants<0){
+      toast('Cannot destroy '+plants+' plant(s) — batch balance is only '+currentQty+'.',5000);
+      return;
+    }
+  }
   const rec={id:Date.now(),date,grower,batch,room,type,weight,plants,notes,synced:false};
   wasteRecs.unshift(rec);lsSet('gp-waste',wasteRecs);
   // Auto-create a "Destroyed" Batch Transaction when plants are destroyed via Vegetative Waste
@@ -1485,9 +1502,9 @@ async function wasteSave(){
     batchTxRecs.unshift(destroyedTx);lsSet('gp-batchtx',batchTxRecs);
   }
   populateBatchDropdowns();renderWaste();updatePendingBadge();
-  // If the Summary page is currently showing this batch, refresh its qty + history
+  // If the Summary page is currently showing this batch, refresh its qty + history + tx-type options
   const _summarySel=document.getElementById('summary-batch-select');
-  if(_summarySel && _summarySel.value===rec.batch){summaryCalcQty(rec.batch);summaryRenderHistory(rec.batch);}
+  if(_summarySel && _summarySel.value===rec.batch){summaryCalcQty(rec.batch);summaryRenderHistory(rec.batch);summaryUpdateTxTypeOptions(rec.batch);}
   if(cfg.token&&cfg.base&&cfg.wasteTbl){
     setSyncPill('ing','Syncing...');document.getElementById('waste-btn').disabled=true;
     try{
@@ -1637,7 +1654,8 @@ async function batchCreate(){
   const geneticsSource = document.getElementById('batch-genetics-source').value;
   const externalCompany = document.getElementById('batch-external-company').value.trim();
   const notes = document.getElementById('batch-notes').value.trim();
-  const rec = { id: Date.now(), batchId, cultivar, mother, geneticsSource, externalCompany, notes, createdDate: localDate(), synced: false };
+  const isClones = geneticsSource === 'Clones-Internal' || geneticsSource === 'Clones-External';
+  const rec = { id: Date.now(), batchId, cultivar, mother, geneticsSource, externalCompany, notes, createdDate: localDate(), rooms: isClones ? ['Veg'] : [], plantPhase: isClones ? 'Clones' : '', status: 'Open', closedDate: '', synced: false };
   batchRecs.unshift(rec);
   lsSet('gp-batch', batchRecs);
   populateBatchDropdowns();
@@ -1797,6 +1815,8 @@ function summaryBatchChanged(){
   document.getElementById('summary-closed-date').value = b.closedDate||'';
   // Today's date for transactions
   document.getElementById('tx-date-display').textContent = localDate();
+  // Restrict transaction types: only Produced/Received until at least one tx exists for this batch
+  summaryUpdateTxTypeOptions(batchId);
   // Current qty
   summaryCalcQty(batchId);
   // History
@@ -1809,6 +1829,15 @@ function summaryBatchChanged(){
 function summaryStatusChanged(){
   const closed = document.getElementById('summary-status').value === 'Closed';
   document.getElementById('summary-closed-date-wrap').style.display = closed ? '' : 'none';
+}
+function summaryUpdateTxTypeOptions(batchId){
+  // If a batch has no transactions yet, only 'Produced/Received' is selectable.
+  const hasTxs = batchTxRecs.some(t=>t.batchId===batchId);
+  const sel = document.getElementById('tx-type');
+  if(!sel) return;
+  const prev = sel.value;
+  const opts = hasTxs ? ['Produced/Received','Moved to Moms','Sold','Harvested'] : ['Produced/Received'];
+  sel.innerHTML = '<option value="">-- select type --</option>' + opts.map(o=>'<option'+(o===prev?' selected':'')+'>'+o+'</option>').join('');
 }
 
 function summaryCalcQty(batchId){
@@ -1871,6 +1900,11 @@ async function summaryAddTransaction(){
   const notes = document.getElementById('tx-notes').value.trim();
   const date = localDate();
   const currentQtyBefore = summaryCalcQty(batchId);
+  // Guard: non-Produced/Received transactions cannot push balance below 0
+  if(txType !== 'Produced/Received' && currentQtyBefore - qty < 0){
+    toast('Cannot save: balance would go below 0. Current: '+currentQtyBefore+', requested: '+qty+'.',5000);
+    return;
+  }
   const tx = { id: Date.now(), batchId, date, txType, qty, notes, currentQtyBefore, synced: false };
   batchTxRecs.unshift(tx);
   lsSet('gp-batchtx', batchTxRecs);
@@ -1883,6 +1917,7 @@ async function summaryAddTransaction(){
   setTimeout(()=>{ msg.style.display='none'; }, 3000);
   summaryCalcQty(batchId);
   summaryRenderHistory(batchId);
+  summaryUpdateTxTypeOptions(batchId);
   updatePendingBadge();
   // Sync to Airtable
   if(cfg.batchtxTbl && cfg.token && cfg.base){
