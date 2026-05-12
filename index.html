@@ -757,6 +757,22 @@ function calcBatchQty(batchId){
   });
   return Math.max(0,qty);
 }
+function enforceZeroQtyState(batchId){
+  // Hard rule: when a batch's current quantity is <= 0, its plantPhase MUST be 'Clones'
+  // and rooms MUST be ['Veg']. Auto-corrects the saved record and marks it unsynced.
+  if(calcBatchQty(batchId)>0) return false;
+  const b = batchRecs.find(r=>r.batchId===batchId && !r.type);
+  if(!b) return false;
+  let changed=false;
+  if(b.plantPhase!=='Clones'){ b.plantPhase='Clones'; changed=true; }
+  if(!Array.isArray(b.rooms) || b.rooms.length!==1 || b.rooms[0]!=='Veg'){ b.rooms=['Veg']; changed=true; }
+  if(changed){
+    b.synced=false;
+    lsSet('gp-batch',batchRecs);
+    updatePendingBadge();
+  }
+  return changed;
+}
 function buildBatchFields(rec){
   const f={
     'Batch ID':rec.batchId,
@@ -1522,6 +1538,8 @@ async function wasteSave(){
     batchTxRecs.unshift(destroyedTx);lsSet('gp-batchtx',batchTxRecs);
   }
   populateBatchDropdowns();renderWaste();updatePendingBadge();
+  // Enforce zero-qty data state if the Destroyed tx brought the balance back to 0
+  enforceZeroQtyState(rec.batch);
   // If the Summary page is currently showing this batch, refresh its qty + history + tx-type options + phase/room lock
   const _summarySel=document.getElementById('summary-batch-select');
   if(_summarySel && _summarySel.value===rec.batch){
@@ -1529,7 +1547,10 @@ async function wasteSave(){
     summaryRenderHistory(rec.batch);
     summaryUpdateTxTypeOptions(rec.batch);
     const _bRec=batchRecs.find(r=>r.batchId===rec.batch && !r.type);
-    if(_bRec) summaryUpdatePhaseOptions(_bRec.plantPhase||'', calcBatchQty(rec.batch));
+    if(_bRec){
+      summaryUpdatePhaseOptions(_bRec.plantPhase||'', calcBatchQty(rec.batch));
+      document.querySelectorAll('.summary-room-cb').forEach(cb=>{ cb.checked = (_bRec.rooms||[]).includes(cb.value); });
+    }
     applyPhaseRoomLock();
   }
   if(cfg.token&&cfg.base&&cfg.wasteTbl){
@@ -1681,11 +1702,8 @@ async function batchCreate(){
   const geneticsSource = document.getElementById('batch-genetics-source').value;
   const externalCompany = document.getElementById('batch-external-company').value.trim();
   const notes = document.getElementById('batch-notes').value.trim();
-  const isClones = geneticsSource === 'Clones-Internal' || geneticsSource === 'Clones-External';
-  const isSeeds = geneticsSource === 'Seeds';
-  const initialPhase = isClones ? 'Clones' : (isSeeds ? 'Seeds' : '');
-  const initialRooms = (isClones || isSeeds) ? ['Veg'] : [];
-  const rec = { id: Date.now(), batchId, cultivar, mother, geneticsSource, externalCompany, notes, createdDate: localDate(), rooms: initialRooms, plantPhase: initialPhase, status: 'Open', closedDate: '', synced: false };
+  // All new batches start with qty=0, so the zero-qty rule applies: phase='Clones', rooms=['Veg'].
+  const rec = { id: Date.now(), batchId, cultivar, mother, geneticsSource, externalCompany, notes, createdDate: localDate(), rooms: ['Veg'], plantPhase: 'Clones', status: 'Open', closedDate: '', synced: false };
   batchRecs.unshift(rec);
   lsSet('gp-batch', batchRecs);
   populateBatchDropdowns();
@@ -1838,8 +1856,11 @@ function summaryBatchChanged(){
   // Rooms
   const rooms = b.rooms||[];
   document.querySelectorAll('.summary-room-cb').forEach(cb=>{ cb.checked = rooms.includes(cb.value); });
-  // Phase & Status — rebuild phase dropdown based on current qty and saved phase
+  // Phase & Status — enforce data state when qty=0 (phase must be Clones, room must be Veg)
   const _curQty = calcBatchQty(batchId);
+  enforceZeroQtyState(batchId);
+  // Re-read rooms since enforceZeroQtyState may have changed them
+  document.querySelectorAll('.summary-room-cb').forEach(cb=>{ cb.checked = (b.rooms||[]).includes(cb.value); });
   summaryUpdatePhaseOptions(b.plantPhase||'', _curQty);
   document.getElementById('summary-status').value = b.status||'Open';
   applyPhaseRoomLock();
@@ -2004,10 +2025,15 @@ async function summaryAddTransaction(){
   summaryCalcQty(batchId);
   summaryRenderHistory(batchId);
   summaryUpdateTxTypeOptions(batchId);
+  // Enforce zero-qty data state (in case the new tx brought qty back to 0, e.g. Sold all)
+  enforceZeroQtyState(batchId);
   // Refresh phase dropdown + room lock now that qty may have changed (e.g. first Produced/Received unlocks phases)
   const _newQty = calcBatchQty(batchId);
   const _b = batchRecs.find(r=>r.batchId===batchId && !r.type);
-  if(_b) summaryUpdatePhaseOptions(_b.plantPhase||'', _newQty);
+  if(_b){
+    summaryUpdatePhaseOptions(_b.plantPhase||'', _newQty);
+    document.querySelectorAll('.summary-room-cb').forEach(cb=>{ cb.checked = (_b.rooms||[]).includes(cb.value); });
+  }
   applyPhaseRoomLock();
   updatePendingBadge();
   // Sync to Airtable
