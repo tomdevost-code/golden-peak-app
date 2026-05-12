@@ -1210,7 +1210,7 @@ function roClear(){for(let i=1;i<=8;i++){document.getElementById('ro-ec-'+i).val
 
 // Pending badge
 function updatePendingBadge(){
-  const n=(ecRecs.filter(r=>!r.synced).length)+(roRecs.filter(r=>!r.synced).length)+(wasteRecs.filter(r=>!r.synced).length)+(batchRecs.filter(r=>!r.synced).length);
+  const n=(ecRecs.filter(r=>!r.synced).length)+(roRecs.filter(r=>!r.synced).length)+(wasteRecs.filter(r=>!r.synced).length)+(batchRecs.filter(r=>!r.synced).length)+(batchTxRecs.filter(r=>!r.synced).length);
   const b=document.getElementById('pending-badge');
   if(n>0){b.textContent=n;b.style.display='block';}else{b.style.display='none';}
 }
@@ -1309,7 +1309,8 @@ async function syncPending(){
   const pendingEC=ecRecs.filter(r=>!r.synced);
   const pendingRO=roRecs.filter(r=>!r.synced);
   const pendingWaste=wasteRecs.filter(r=>!r.synced);
-  const total=pendingEC.length+pendingRO.length+pendingWaste.length;
+  const pendingBatchTx=batchTxRecs.filter(r=>!r.synced);
+  const total=pendingEC.length+pendingRO.length+pendingWaste.length+pendingBatchTx.length;
   if(!total){st.style.display='block';st.style.background='var(--green-pale)';st.style.color='var(--green)';st.textContent='No pending records - everything is synced.';return;}
   st.style.display='block';st.style.background='var(--bg2)';st.style.color='var(--text2)';st.textContent='Syncing '+total+' record(s)...';
   btn.disabled=true;setSyncPill('ing','Syncing...');
@@ -1345,6 +1346,24 @@ async function syncPending(){
     }catch(e){fail++;lastErr=e.message;}
   }
   lsSet('gp-waste',wasteRecs);
+  if(cfg.batchtxTbl){
+    for(const tx of pendingBatchTx){
+      try{
+        // Compute Current Quantity After: running balance up to and including this transaction
+        const sorted=batchTxRecs.filter(t=>t.batchId===tx.batchId).sort((a,b)=>(a.id||0)-(b.id||0));
+        let running=0;
+        for(const t of sorted){const q=parseInt(t.qty)||0;if(t.txType==='Produced/Received')running+=q;else running-=q;if(t.id===tx.id)break;}
+        if(running<0)running=0;
+        const f={'Batch ID':tx.batchId?[tx.batchId]:undefined,'Date':tx.date,'Transaction Type':tx.txType,'Quantity':tx.qty,'Current Quantity After':running,'Notes':tx.notes||undefined};
+        Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
+        const txRes=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+cfg.batchtxTbl,{method:'POST',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify({fields:f,typecast:true})});
+        if(!txRes.ok){const err=await txRes.json();throw new Error('Tx '+txRes.status+': '+(err.error&&err.error.message||JSON.stringify(err)));}
+        tx.synced=true;ok++;
+      }catch(e){fail++;lastErr=e.message;}
+    }
+    lsSet('gp-batchtx',batchTxRecs);
+  }
+  updatePendingBadge();
   btn.disabled=false;
   if(fail===0){setSyncPill('ok','Synced');st.style.background='var(--green-pale)';st.style.color='var(--green)';st.textContent='Done! '+ok+' record(s) synced to Airtable.';}
   else if(ok>0){setSyncPill('err','Partial sync');st.style.background='var(--amber-pale)';st.style.color='var(--amber)';st.textContent=ok+' synced, '+fail+' failed. Check connection and retry.';}
