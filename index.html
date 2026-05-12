@@ -162,7 +162,7 @@ tr:last-child td { border-bottom: none; }
                 <option>Jordan Elliott</option><option>Brandon Cail</option><option>Tom Devost</option>
               </select>
             </div>
-            <div class="field"><label>Batch ID</label><select id="ec-batch-select" onchange="ecBatchSelect()" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;margin-bottom:6px;"><option value="">-- select existing batch --</option></select><input type="text" id="ec-batch" placeholder="Or type new batch ID" oninput="ecBatchLookup()" autocomplete="off" /></div>
+            <div class="field"><label>Batch ID</label><select id="ec-batch-select" onchange="ecBatchSelect()" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;"><option value="">-- select batch --</option></select><input type="hidden" id="ec-batch" /></div>
             <div class="field"><label>Room</label>
               <select id="ec-room" onchange="ecRoomChanged()">
                 <option value="">select room</option>
@@ -767,17 +767,33 @@ function buildECEvents(){const c=document.getElementById('ec-events-container');
 function ecTotalML(){let t=0,any=false;for(let i=1;i<=8;i++){const v=parseFloat(document.getElementById('ec-evt-'+i).value);if(!isNaN(v)&&v>0){t+=v;any=true;}}document.getElementById('ec-total-ml').textContent=any?t.toFixed(0)+'ml':'-';}
 function getAllBatches(){const all=[...ecRecs,...roRecs];const seen={};batchRecs.forEach(r=>{if(r.batchId&&!seen[r.batchId]){seen[r.batchId]={vegStart:'',flowerStart:'',harvestDate:''};} });all.forEach(r=>{if(r.batch&&!seen[r.batch]){seen[r.batch]={vegStart:r.vegStart||'',flowerStart:r.flowerStart||'',harvestDate:r.harvestDate||''};}});return seen;}
 function getECBatches(){const seen={};ecRecs.forEach(r=>{if(r.batch&&!seen[r.batch]){seen[r.batch]={vegStart:r.vegStart||'',flowerStart:r.flowerStart||'',harvestDate:r.harvestDate||''};}});return seen;}
-function populateBatchDropdowns(){const _wbd=document.getElementById('waste-batch-select');if(_wbd){const _cur=_wbd.value;const _all=Object.keys(getAllBatches()).sort();_wbd.innerHTML='<option value="">-- select batch --</option>'+_all.map(b=>'<option'+( b===_cur?' selected':'')+'>'+b+'</option>').join('');}_wfb=document.getElementById('f-waste-batch');if(_wfb){const _c=_wfb.value;const _a=Object.keys(getAllBatches()).sort();_wfb.innerHTML='<option value="">All batches</option>'+_a.map(b=>'<option'+(b===_c?' selected':'')+'>'+b+'</option>').join('');};
-  const allBatches=getAllBatches();const ecBatches=getECBatches();
-  const allIds=Object.keys(allBatches).sort();const ecIds=Object.keys(ecBatches).sort();
-  const ecSel=document.getElementById('ec-batch-select');const ecCur=ecSel.value;
-  ecSel.innerHTML='<option value="">-- select existing batch --</option>';
-  allIds.forEach(b=>{const opt=document.createElement('option');opt.value=b;opt.textContent=b+(allBatches[b].harvestDate?' (harvested)':'');if(allBatches[b].harvestDate)opt.style.color='var(--text3)';ecSel.appendChild(opt);});
-  ecSel.value=ecCur;
-  const roSel=document.getElementById('ro-batch-select');const roCur=roSel.value;
-  roSel.innerHTML='<option value="">-- select batch --</option>';
-  ecIds.forEach(b=>{const opt=document.createElement('option');opt.value=b;opt.textContent=b+(ecBatches[b].harvestDate?' (harvested)':'');if(ecBatches[b].harvestDate)opt.style.color='var(--text3)';roSel.appendChild(opt);});
-  roSel.value=roCur;
+function getFormBatchList(){
+  // Single source of truth for form dropdowns: batches created via the Batches form.
+  const list=[];
+  batchRecs.forEach(b=>{
+    if(b.type||!b.batchId) return; // skip legacy movement entries
+    let closed=!!b.closedDate;
+    if(!closed){closed=[...ecRecs,...roRecs].some(r=>r.batch===b.batchId&&r.harvestDate);}
+    list.push({batchId:b.batchId,closed});
+  });
+  return list.sort((a,b)=>a.batchId.localeCompare(b.batchId));
+}
+function populateBatchDropdowns(){
+  const list=getFormBatchList();
+  function fillFormSelect(selId,placeholderText){
+    const sel=document.getElementById(selId);
+    if(!sel) return;
+    const cur=sel.value;
+    sel.innerHTML='<option value="">'+placeholderText+'</option>';
+    list.forEach(b=>{const opt=document.createElement('option');opt.value=b.batchId;opt.textContent=b.batchId+(b.closed?' (harvested)':'');if(b.closed)opt.style.color='var(--text3)';sel.appendChild(opt);});
+    sel.value=cur;
+  }
+  fillFormSelect('ec-batch-select','-- select batch --');
+  fillFormSelect('ro-batch-select','-- select batch --');
+  fillFormSelect('waste-batch-select','-- select batch --');
+  // Report filter: keep showing every batch that has any historical record, including orphans
+  const _wfb=document.getElementById('f-waste-batch');
+  if(_wfb){const _c=_wfb.value;const _a=Object.keys(getAllBatches()).sort();_wfb.innerHTML='<option value="">All batches</option>'+_a.map(b=>'<option'+(b===_c?' selected':'')+'>'+b+'</option>').join('');_wfb.value=_c;}
 }
 function ecBatchSelect(){const val=document.getElementById('ec-batch-select').value;document.getElementById('ec-batch').value=val;ecBatchLookup();ecSeqUnlock();}
 
