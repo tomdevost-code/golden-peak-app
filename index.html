@@ -1870,8 +1870,10 @@ function summaryBatchChanged(){
   // Phase & Status — enforce data state when qty=0 (phase must be Clones, room must be Veg)
   const _curQty = calcBatchQty(batchId);
   enforceZeroQtyState(batchId);
-  // Re-read rooms since enforceZeroQtyState may have changed them
+  // Re-read rooms and Batch Info display since enforceZeroQtyState may have changed them
   document.querySelectorAll('.summary-room-cb').forEach(cb=>{ cb.checked = (b.rooms||[]).includes(cb.value); });
+  document.getElementById('si-phase').textContent = b.plantPhase||'—';
+  document.getElementById('si-rooms').textContent = (b.rooms && b.rooms.length) ? b.rooms.join(', ') : '—';
   summaryUpdatePhaseOptions(b.plantPhase||'', _curQty);
   document.getElementById('summary-status').value = b.status||'Open';
   applyPhaseRoomLock();
@@ -1956,7 +1958,10 @@ function summaryUpdatePhaseOptions(currentPhase, qty){
   //   - Otherwise → only allow current phase + forward phases.
   const sel = document.getElementById('summary-phase');
   if(!sel) return;
-  const noPlants = !qty || qty<=0;
+  // Zero-qty rule only forces Clones for active growing phases. Post-harvest phases
+  // (Harvested, Drying, Packaged, Sold) keep their value even when qty hits 0.
+  const postHarvest = ['Harvested','Drying','Packaged','Sold'].includes(currentPhase);
+  const noPlants = (!qty || qty<=0) && !postHarvest;
   const allowed = noPlants ? ['Clones'] : getAllowedPhases(currentPhase);
   const valueToSelect = noPlants ? 'Clones' : currentPhase;
   sel.innerHTML = '<option value="">-- select phase --</option>' + allowed.map(p=>'<option'+(p===valueToSelect?' selected':'')+'>'+p+'</option>').join('');
@@ -2009,8 +2014,10 @@ async function summaryUpdateBatch(){
     toast('Cannot move plant phase backward (from '+(existingPhase||'unset')+' to '+plantPhase+').',5000);
     return;
   }
-  // Guard: when batch has 0 plants, only 'Clones' phase is allowed (add plants before advancing)
-  if(calcBatchQty(batchId) <= 0 && plantPhase && plantPhase !== 'Clones'){
+  // Guard: when batch has 0 plants AND is in an active growing phase (not post-harvest), only 'Clones' is allowed.
+  // Post-harvest batches (Harvested, Drying, Packaged, Sold) can still progress forward when qty=0.
+  const _existPostHarvest = ['Harvested','Drying','Packaged','Sold'].includes(existingPhase);
+  if(calcBatchQty(batchId) <= 0 && !_existPostHarvest && plantPhase && plantPhase !== 'Clones'){
     toast('Cannot advance phase: batch has 0 plants. Add a Produced/Received transaction first.',5000);
     return;
   }
