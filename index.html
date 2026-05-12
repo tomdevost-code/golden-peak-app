@@ -144,7 +144,7 @@ tr:last-child td { border-bottom: none; }
   <div class="content">
 
     <!-- EC LOG -->
-    <div class="page active" id="page-ec">
+    <div class="page" id="page-ec">
       <div id="ec-room-strip" style="display:none;align-items:center;padding:8px 12px;border-radius:var(--radius-sm);border:1px solid;margin-bottom:12px;"></div>
       <div class="target-strip">
         <div><span class="dot dg"></span>EC 2.2-2.3</div>
@@ -429,6 +429,10 @@ tr:last-child td { border-bottom: none; }
 
     <!-- BATCH LOG -->
     <div class="page" id="page-batch">
+      <!-- Active Batches List (top) -->
+      <div class="section-label">Active Batches</div>
+      <div id="batch-active-list" style="margin-bottom:20px;"></div>
+
       <div class="card">
         <div class="section-label">New Batch</div>
 
@@ -536,14 +540,10 @@ tr:last-child td { border-bottom: none; }
         </div>
         <button class="btn-save" id="batch-mov-save-btn" onclick="batchMovSave()" disabled style="opacity:0.4;cursor:not-allowed;">Save Entry</button>
       </div>
-
-      <!-- Active Batches List -->
-      <div class="section-label" style="margin-top:20px;">Active Batches</div>
-      <div id="batch-active-list"></div>
     </div>
 
     <!-- BATCH SUMMARY -->
-    <div class="page" id="page-summary">
+    <div class="page active" id="page-summary">
       <!-- Batch selector -->
       <div class="card" style="margin-bottom:12px;">
         <div class="section-label">Select Batch</div>
@@ -708,11 +708,11 @@ tr:last-child td { border-bottom: none; }
       <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
       Batches
     </button>
-    <button class="bnav-btn" id="bn-summary" onclick="switchPage('summary',this)">
+    <button class="bnav-btn active" id="bn-summary" onclick="switchPage('summary',this)">
       <svg viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9h6m-6 4h6m-6-8h.01"/></svg>
       Summary
     </button>
-    <button class="bnav-btn active" id="bn-ec" onclick="switchPage('ec',this)">
+    <button class="bnav-btn" id="bn-ec" onclick="switchPage('ec',this)">
       <svg viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
       EC Log
     </button>
@@ -1408,7 +1408,7 @@ document.getElementById('ro-date').readOnly=true;
 document.getElementById('ro-date').style.background='var(--bg2)';
 document.getElementById('ro-date').style.color='var(--text3)';
 document.getElementById('ro-date').style.cursor='default';
-buildECEvents();buildROSamples();loadAll();populateBatchDropdowns();setVegMin();applyCascadeLocks();updatePendingBadge();ecSeqUnlock();wasteSeqUnlock();document.getElementById('waste-date').textContent=new Date().toISOString().split('T')[0];
+buildECEvents();buildROSamples();loadAll();populateBatchDropdowns();setVegMin();applyCascadeLocks();updatePendingBadge();ecSeqUnlock();wasteSeqUnlock();summaryPopulateBatches();document.getElementById('waste-date').textContent=new Date().toISOString().split('T')[0];
 // Keep entry dates updated to today on each page load
 setInterval(()=>{const t=localDate();document.getElementById('ec-date').value=t;document.getElementById('ro-date').value=t;},60000);
 
