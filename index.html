@@ -929,67 +929,57 @@ function ecBatchLookup(){
     const hint=roomEl.closest('.field').querySelector('.room-lock-hint');if(hint)hint.remove();
     return;
   }
+
+  // ── Room dropdown: source from the batch's declared rooms (batchRec.rooms) plus
+  //    any rooms this batch has appeared in via EC/RO history. Always interactive —
+  //    if the batch is in multiple rooms, the grower picks one for this entry.
+  const batchRec = batchRecs.find(r=>r.batchId===batch && !r.type);
+  const declaredRooms = (batchRec && Array.isArray(batchRec.rooms)) ? batchRec.rooms : [];
+  const historyRooms = [...new Set([...ecRecs,...roRecs].filter(r=>r.batch&&r.batch.trim().toLowerCase()===batch.trim().toLowerCase()&&r.room).map(r=>r.room))];
+  const availableRooms = [...new Set([...declaredRooms,...historyRooms])];
+  const prevRoom = roomEl.value;
+  roomEl.disabled=false; roomEl.style.background=''; roomEl.style.color=''; roomEl.style.cursor='';
+  if(availableRooms.length){
+    roomEl.innerHTML = '<option value="">select room</option>' + availableRooms.map(r => '<option'+(r===prevRoom?' selected':'')+'>'+r+'</option>').join('');
+    if(!roomEl.value && availableRooms.length===1) roomEl.value = availableRooms[0];
+    let hint = roomEl.closest('.field').querySelector('.room-lock-hint');
+    if(!hint){
+      hint = document.createElement('div'); hint.className = 'room-lock-hint';
+      hint.style.cssText='font-size:10px;color:var(--text3);margin-top:3px;font-family:var(--mono);';
+      roomEl.closest('.field').appendChild(hint);
+    }
+    hint.textContent = availableRooms.length>1 ? 'This batch is in multiple rooms — pick the one for this entry' : 'Room assigned to this batch';
+  } else {
+    // No declared/historical rooms — fall back to the full list
+    const fullRooms = ['Flower 1','Flower 2','Flower 3','Flower 4','Flower 5','Veg'];
+    roomEl.innerHTML = '<option value="">select room</option>' + fullRooms.map(r => '<option'+(r===prevRoom?' selected':'')+'>'+r+'</option>').join('');
+    const hint = roomEl.closest('.field').querySelector('.room-lock-hint');
+    if(hint) hint.remove();
+  }
+
+  // ── Dates: load from EC/RO records and lock those that are already saved
   const found=findBatchDates(batch,[...ecRecs,...roRecs]);
   if(found){
-    // Load saved dates — veg is NOT auto-populated, grower must enter it explicitly
     if(found.hydrationDate)document.getElementById('ec-hydration').value=found.hydrationDate;
     if(found.flowerStart)document.getElementById('ec-flower').value=found.flowerStart;
     if(found.harvestDate)document.getElementById('ec-harvest').value=found.harvestDate;
-    // Lock any date fields that are already saved
     lockSavedDateField('ec-hydration',found.hydrationDate,'Hydration date is locked once saved');
-    // Veg: populate and lock only if already saved — grower must enter it themselves
     if(found.vegStart){
       document.getElementById('ec-veg').value=found.vegStart;
       lockSavedDateField('ec-veg',found.vegStart,'Veg start date is locked once saved');
     }
     lockSavedDateField('ec-flower',found.flowerStart,'Flower start date is locked once saved');
-    // If flower date is saved, restrict room to only rooms this batch has been in
-    if(found.flowerStart){
-      const batchRoomsList=[...new Set([...ecRecs,...roRecs].filter(r=>r.batch&&r.batch.trim().toLowerCase()===batch.trim().toLowerCase()&&r.room).map(r=>r.room))];
-      roomEl.disabled=false;roomEl.style.background='';roomEl.style.color='';roomEl.style.cursor='';
-      const prevVal=roomEl.value;
-      roomEl.innerHTML=batchRoomsList.map(r=>'<option'+(r===prevVal?' selected':'')+'>'+r+'</option>').join('');
-      if(!roomEl.value&&batchRoomsList.length)roomEl.value=batchRoomsList[0];
-      let hint=roomEl.closest('.field').querySelector('.room-lock-hint');
-      if(!hint){hint=document.createElement('div');hint.className='room-lock-hint';hint.style.cssText='font-size:10px;color:var(--text3);margin-top:3px;font-family:var(--mono);';roomEl.closest('.field').appendChild(hint);}
-      hint.textContent='Only rooms already assigned to this batch are available';
-    } else if(found.vegStart){
-      // Veg start saved — allow any room
-      const fullRooms=['Flower 1','Flower 2','Flower 3','Flower 4','Flower 5','Veg'];
-      const prevVal=roomEl.value;
-      roomEl.innerHTML='<option value="">select room</option>'+fullRooms.map(r=>'<option'+(r===prevVal?' selected':'')+'>'+r+'</option>').join('');
-      roomEl.disabled=false;roomEl.style.background='';roomEl.style.color='';roomEl.style.cursor='';
-      const hint=roomEl.closest('.field').querySelector('.room-lock-hint');if(hint)hint.remove();
-    } else {
-      // Hydration saved but no veg yet — lock room to Veg
-      roomEl.value='Veg';
-      const fullRooms=['Veg'];
-      roomEl.innerHTML=fullRooms.map(r=>'<option>'+r+'</option>').join('');
-      roomEl.disabled=true;roomEl.style.background='var(--bg2)';roomEl.style.color='var(--text3)';roomEl.style.cursor='not-allowed';
-      let hint=roomEl.closest('.field').querySelector('.room-lock-hint');
-      if(!hint){hint=document.createElement('div');hint.className='room-lock-hint';hint.style.cssText='font-size:10px;color:var(--text3);margin-top:3px;font-family:var(--mono);';roomEl.closest('.field').appendChild(hint);}
-      hint.textContent='Room locked to Veg until veg start date is saved';
-    }
-    applyCascadeLocks();ecBadge();updateBatchRoomsInfo(batch);ecRoomChanged();
-    // Always enable drip fields for existing batch regardless of room lock state
-    document.querySelectorAll('.ec-drip-ec,.ec-drip-ph,.ec-evt-input').forEach(el=>{
-      el.disabled=false;el.style.opacity='';el.style.background='';el.style.color='';el.style.cursor='';
-    });
-    ecSeqUnlock();
-    if(found.harvestDate){showClosedWarning('ec',found.harvestDate);}else{hideClosedWarning('ec');if(found.vegStart)toast('Batch found - dates loaded automatically');}
+    if(found.harvestDate){showClosedWarning('ec',found.harvestDate);}
+    else{hideClosedWarning('ec'); if(found.vegStart) toast('Batch found - dates loaded automatically');}
   } else {
-    // New batch — lock to Veg
-    roomEl.value='Veg';roomEl.disabled=true;
-    roomEl.style.background='var(--bg2)';roomEl.style.color='var(--text3)';roomEl.style.cursor='not-allowed';
-    let hint=roomEl.closest('.field').querySelector('.room-lock-hint');
-    if(!hint){hint=document.createElement('div');hint.className='room-lock-hint';hint.style.cssText='font-size:10px;color:var(--text3);margin-top:3px;font-family:var(--mono);';roomEl.closest('.field').appendChild(hint);}
-    hint.textContent='New batches must start in Veg Room';
-    ecRoomChanged();applyCascadeLocks();updateBatchRoomsInfo(batch);
-    document.querySelectorAll('.ec-drip-ec,.ec-drip-ph,.ec-evt-input').forEach(el=>{
-      el.disabled=false;el.style.opacity='';el.style.background='';el.style.color='';el.style.cursor='';
-    });
-    ecSeqUnlock();
+    hideClosedWarning('ec');
   }
+
+  applyCascadeLocks();ecBadge();updateBatchRoomsInfo(batch);ecRoomChanged();
+  document.querySelectorAll('.ec-drip-ec,.ec-drip-ph,.ec-evt-input').forEach(el=>{
+    el.disabled=false;el.style.opacity='';el.style.background='';el.style.color='';el.style.cursor='';
+  });
+  ecSeqUnlock();
 }
 function roBatchLookup(){const batch=document.getElementById('ro-batch').value.trim();if(!batch)return;const found=findBatchDates(batch,[...ecRecs,...roRecs]);if(found){if(found.vegStart)document.getElementById('ro-veg').value=found.vegStart;if(found.flowerStart)document.getElementById('ro-flower').value=found.flowerStart;if(found.harvestDate)document.getElementById('ro-harvest').value=found.harvestDate;roBadge();if(found.harvestDate){showClosedWarning('ro',found.harvestDate);}else{hideClosedWarning('ro');if(found.vegStart)toast('Batch found - dates loaded automatically');}}}
 function showClosedWarning(form,harvestDate){const id=form+'-closed-warning';let el=document.getElementById(id);if(!el){el=document.createElement('div');el.id=id;el.style.cssText='background:var(--red-pale);color:var(--red);border:1px solid var(--red);border-radius:var(--radius-sm);padding:10px 12px;font-size:13px;font-weight:500;margin-bottom:12px;';const badge=document.getElementById(form+'-badge');badge.parentNode.insertBefore(el,badge);}el.textContent='This batch was harvested on '+harvestDate+'. No new entries can be added.';el.style.display='block';document.getElementById(form+'-btn').disabled=true;}
