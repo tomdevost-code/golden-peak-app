@@ -1486,16 +1486,16 @@ function wasteSeqUnlock(){
   const _isPostHarvest = batchRec && ['Harvested','Drying','Packaged','Sold'].includes(batchRec.plantPhase);
   if(calcBatchQty(batch)<=0 && !_isPostHarvest){disableFields();return;}
   // Filter waste-type dropdown:
-  //   - Post-harvest → Dry Waste only
-  //   - Otherwise → Vegetative Waste + Dry Waste
+  //   - Post-harvest (Harvested/Drying/Packaged/Sold) → Dry Waste only
+  //   - Pre-harvest (Clones/Veg/Flower/unset)        → Vegetative Waste only
   const _wtEl = document.getElementById('waste-type');
   const _wtPrev = _wtEl.value;
   if(_isPostHarvest){
     _wtEl.innerHTML = '<option value="">select type</option><option>Dry Waste</option>';
     _wtEl.value = (_wtPrev==='Dry Waste') ? 'Dry Waste' : '';
   } else {
-    _wtEl.innerHTML = '<option value="">select type</option><option>Vegetative Waste</option><option>Dry Waste</option>';
-    _wtEl.value = _wtPrev;
+    _wtEl.innerHTML = '<option value="">select type</option><option>Vegetative Waste</option>';
+    _wtEl.value = (_wtPrev==='Vegetative Waste') ? 'Vegetative Waste' : '';
   }
   enableFields();
   applyRoomColor('waste',room);
@@ -1551,6 +1551,11 @@ async function wasteSave(){
   // Guard: post-harvest batches can only record Dry Waste (no green plants to remove)
   if(_wsPostHarvest && type!=='Dry Waste'){
     toast('Harvested batches can only record Dry Waste — Vegetative Waste is not allowed.',5000);
+    return;
+  }
+  // Guard: pre-harvest batches can only record Vegetative Waste (no dry product yet)
+  if(!_wsPostHarvest && type!=='Vegetative Waste'){
+    toast('Pre-harvest batches can only record Vegetative Waste — Dry Waste applies after harvest.',5000);
     return;
   }
   // Guard: destroying plants via Vegetative Waste cannot push the batch balance below 0
