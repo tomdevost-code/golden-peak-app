@@ -609,6 +609,7 @@ tr:last-child td { border-bottom: none; }
               <option>Clones</option>
               <option>Veg</option>
               <option>Flower</option>
+              <option>Harvested</option>
               <option>Drying</option>
               <option>Packaged</option>
               <option>Sold</option>
@@ -762,11 +763,13 @@ function calcBatchQty(batchId){
   return Math.max(0,qty);
 }
 function enforceZeroQtyState(batchId){
-  // Hard rule: when a batch's current quantity is <= 0, its plantPhase MUST be 'Clones'
-  // and rooms MUST be ['Veg']. Auto-corrects the saved record and marks it unsynced.
+  // Hard rule: when a batch's current quantity is <= 0 AND it hasn't entered the post-harvest lifecycle,
+  // its plantPhase MUST be 'Clones' and rooms MUST be ['Veg']. Auto-corrects + marks unsynced.
+  // Skipped for Harvested/Drying/Packaged/Sold so a fully-harvested batch isn't auto-rolled back to Clones.
   if(calcBatchQty(batchId)>0) return false;
   const b = batchRecs.find(r=>r.batchId===batchId && !r.type);
   if(!b) return false;
+  if(['Harvested','Drying','Packaged','Sold'].includes(b.plantPhase)) return false;
   let changed=false;
   if(b.plantPhase!=='Clones'){ b.plantPhase='Clones'; changed=true; }
   if(!Array.isArray(b.rooms) || b.rooms.length!==1 || b.rooms[0]!=='Veg'){ b.rooms=['Veg']; changed=true; }
@@ -1905,7 +1908,7 @@ function applyPhaseRoomLock(){
   const batchId = document.getElementById('summary-batch-select').value;
   const b = batchId ? batchRecs.find(r=>r.batchId===batchId && !r.type) : null;
   const savedPhase = b ? (b.plantPhase||'') : '';
-  const roomsLocked = ['Flower','Drying','Packaged','Sold'].includes(savedPhase);
+  const roomsLocked = ['Flower','Harvested','Drying','Packaged','Sold'].includes(savedPhase);
   document.querySelectorAll('.summary-room-cb').forEach(cb=>{
     let allowed=true;
     if(dropdownPhase==='Clones'||dropdownPhase==='Seeds'){
@@ -1915,6 +1918,11 @@ function applyPhaseRoomLock(){
     }
     else if(dropdownPhase==='Flower'){
       if(cb.value==='Veg'){ allowed=false; cb.checked=false; }
+    }
+    else if(['Harvested','Drying','Packaged','Sold'].includes(dropdownPhase)){
+      // After harvest there are no cultivation rooms — everything stays unchecked + locked
+      cb.checked = false;
+      allowed = false;
     }
     // Hard lock: saved phase is Flower or later
     if(roomsLocked) allowed = false;
@@ -1929,10 +1937,10 @@ function applyPhaseRoomLock(){
   });
 }
 function getAllowedPhases(currentPhase){
-  // Plant lifecycle: Clones → Veg → Flower → Drying → Packaged → Sold.
+  // Plant lifecycle: Clones → Veg → Flower → Harvested → Drying → Packaged → Sold.
   // Strict one-step progression: can only stay at current phase OR advance to the immediate next.
-  // No skipping (e.g. Veg → Drying is blocked). No going backward.
-  const seq = ['Clones','Veg','Flower','Drying','Packaged','Sold'];
+  // No skipping. No going backward.
+  const seq = ['Clones','Veg','Flower','Harvested','Drying','Packaged','Sold'];
   if(!currentPhase) return ['Clones']; // unset → must start at Clones
   if(!seq.includes(currentPhase)){
     // Legacy phase (e.g. 'Seeds') — let user keep it or migrate forward to Clones
@@ -2007,7 +2015,7 @@ async function summaryUpdateBatch(){
     return;
   }
   // Guard: once a batch is in Flower (or later), the room assignments are locked
-  if(['Flower','Drying','Packaged','Sold'].includes(existingPhase)){
+  if(['Flower','Harvested','Drying','Packaged','Sold'].includes(existingPhase)){
     const oldRooms = (batchRecs[idx].rooms||[]).slice().sort().join('|');
     const newRooms = rooms.slice().sort().join('|');
     if(oldRooms !== newRooms){
@@ -2015,7 +2023,10 @@ async function summaryUpdateBatch(){
       return;
     }
   }
-  batchRecs[idx].rooms = rooms;
+  // When entering Harvested phase, plants are no longer in a cultivation room — force rooms to empty
+  let _roomsForSave = rooms;
+  if(plantPhase === 'Harvested') _roomsForSave = [];
+  batchRecs[idx].rooms = _roomsForSave;
   batchRecs[idx].plantPhase = plantPhase;
   batchRecs[idx].status = status;
   batchRecs[idx].closedDate = closedDate;
@@ -2073,13 +2084,14 @@ async function summaryAddTransaction(){
   const tx = { id: Date.now(), batchId, date, txType, qty, notes, currentQtyBefore, synced: false };
   batchTxRecs.unshift(tx);
   lsSet('gp-batchtx', batchTxRecs);
-  // Auto-transition: a Harvested transaction moves the batch's plant phase to 'Drying'.
-  // (If qty drops to 0 from this harvest, enforceZeroQtyState below will override to Clones.)
+  // Auto-transition: a Harvested transaction moves the batch's plant phase to 'Harvested'
+  // and clears its rooms (plants are no longer in a cultivation room).
   let _phaseAutoChanged = false;
   if(txType === 'Harvested'){
     const _hi = batchRecs.findIndex(r=>r.batchId===batchId && !r.type);
-    if(_hi >= 0 && batchRecs[_hi].plantPhase !== 'Drying'){
-      batchRecs[_hi].plantPhase = 'Drying';
+    if(_hi >= 0 && (batchRecs[_hi].plantPhase !== 'Harvested' || (batchRecs[_hi].rooms||[]).length>0)){
+      batchRecs[_hi].plantPhase = 'Harvested';
+      batchRecs[_hi].rooms = [];
       batchRecs[_hi].synced = false;
       lsSet('gp-batch', batchRecs);
       _phaseAutoChanged = true;
