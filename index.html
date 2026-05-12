@@ -1330,7 +1330,7 @@ async function syncPending(){
   const pendingBatch=batchRecs.filter(r=>!r.synced && !r.type); // skip legacy movement entries
   const pendingBatchTx=batchTxRecs.filter(r=>!r.synced);
   const total=pendingEC.length+pendingRO.length+pendingWaste.length+pendingBatch.length+pendingBatchTx.length;
-  if(!total){st.style.display='block';st.style.background='var(--green-pale)';st.style.color='var(--green)';st.textContent='No pending records - everything is synced.';return;}
+  if(!total){st.style.display='block';st.style.background='var(--green-pale)';st.style.color='var(--green)';st.textContent='No pending records - everything is synced.';updatePendingBadge();return;}
   st.style.display='block';st.style.background='var(--bg2)';st.style.color='var(--text2)';st.textContent='Syncing '+total+' record(s)...';
   btn.disabled=true;setSyncPill('ing','Syncing...');
   let ok=0,fail=0,lastErr='';
