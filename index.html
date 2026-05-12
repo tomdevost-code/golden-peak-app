@@ -1429,7 +1429,19 @@ async function wasteSave(){
   if(!weight||isNaN(weight)||weight<=0){toast('Please enter a weight greater than 0 kg.');return;}
   const rec={id:Date.now(),date,grower,batch,room,type,weight,plants,notes,synced:false};
   wasteRecs.unshift(rec);lsSet('gp-waste',wasteRecs);
+  // Auto-create a "Destroyed" Batch Transaction when plants are destroyed via Vegetative Waste
+  let destroyedTx=null;
+  if(rec.type==='Vegetative Waste' && rec.plants>0){
+    let qtyBefore=0;
+    batchTxRecs.filter(t=>t.batchId===rec.batch).forEach(t=>{const q=parseInt(t.qty)||0;if(t.txType==='Produced/Received')qtyBefore+=q;else qtyBefore-=q;});
+    if(qtyBefore<0)qtyBefore=0;
+    destroyedTx={id:Date.now()+1,batchId:rec.batch,date:rec.date,txType:'Destroyed',qty:rec.plants,notes:'Auto-created from Vegetative Waste record',currentQtyBefore:qtyBefore,synced:false};
+    batchTxRecs.unshift(destroyedTx);lsSet('gp-batchtx',batchTxRecs);
+  }
   populateBatchDropdowns();renderWaste();updatePendingBadge();
+  // If the Summary page is currently showing this batch, refresh its qty + history
+  const _summarySel=document.getElementById('summary-batch-select');
+  if(_summarySel && _summarySel.value===rec.batch){summaryCalcQty(rec.batch);summaryRenderHistory(rec.batch);}
   if(cfg.token&&cfg.base&&cfg.wasteTbl){
     setSyncPill('ing','Syncing...');document.getElementById('waste-btn').disabled=true;
     try{
@@ -1440,6 +1452,15 @@ async function wasteSave(){
     document.getElementById('waste-btn').disabled=false;
   } else {
     toast('Saved locally.');
+  }
+  // Sync the auto-created Destroyed transaction (if any) to Airtable
+  if(destroyedTx && cfg.batchtxTbl && cfg.token && cfg.base){
+    try{
+      let qtyAfter=(destroyedTx.currentQtyBefore||0)-destroyedTx.qty;if(qtyAfter<0)qtyAfter=0;
+      const tf={'Batch ID':[destroyedTx.batchId],'Date':destroyedTx.date,'Transaction Type':destroyedTx.txType,'Quantity':destroyedTx.qty,'Current Quantity After':qtyAfter,'Notes':destroyedTx.notes};
+      Object.keys(tf).forEach(k=>{if(tf[k]===undefined||tf[k]===null||tf[k]==='')delete tf[k];});
+      await atPost(cfg.batchtxTbl,tf);destroyedTx.synced=true;lsSet('gp-batchtx',batchTxRecs);
+    }catch(e){toast('Destroyed transaction not synced: '+(e.message||'error'),4000);}
   }
   wasteClear();
 }
