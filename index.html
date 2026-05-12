@@ -1311,11 +1311,12 @@ function migrateRoomNames(){
   lsSet('gp-ec',ecRecs);lsSet('gp-ro',roRecs);
 }
 function clearAllLocalData(){
-  if(!confirm('This will permanently delete ALL local records including synced data, batch IDs, and dropdowns. This cannot be undone. Continue?'))return;
-  ecRecs=[];roRecs=[];wasteRecs=[];batchRecs=[];
-  lsSet('gp-ec',[]);lsSet('gp-ro',[]);lsSet('gp-waste',[]);lsSet('gp-batch',[]);
+  if(!confirm('This will permanently delete ALL local records including synced data, batch IDs, transactions, and dropdowns. This cannot be undone. Continue?'))return;
+  ecRecs=[];roRecs=[];wasteRecs=[];batchRecs=[];batchTxRecs=[];
+  lsSet('gp-ec',[]);lsSet('gp-ro',[]);lsSet('gp-waste',[]);lsSet('gp-batch',[]);lsSet('gp-batchtx',[]);
   populateBatchDropdowns();renderEC();renderRO();
   ecClear();roClear();
+  summaryPopulateBatches();
   updatePendingBadge();
   toast('All local data cleared.');
 }
@@ -1323,8 +1324,13 @@ function clearPendingRecords(){
   if(!confirm('This will permanently delete all unsynced records. This cannot be undone. Continue?'))return;
   ecRecs=ecRecs.filter(r=>r.synced);
   roRecs=roRecs.filter(r=>r.synced);
-  lsSet('gp-ec',ecRecs);lsSet('gp-ro',roRecs);
+  wasteRecs=wasteRecs.filter(r=>r.synced);
+  batchRecs=batchRecs.filter(r=>r.synced);
+  batchTxRecs=batchTxRecs.filter(r=>r.synced);
+  lsSet('gp-ec',ecRecs);lsSet('gp-ro',roRecs);lsSet('gp-waste',wasteRecs);lsSet('gp-batch',batchRecs);lsSet('gp-batchtx',batchTxRecs);
   populateBatchDropdowns();renderEC();renderRO();
+  summaryPopulateBatches();
+  updatePendingBadge();
   toast('Pending records cleared.');
 }
 async function syncPending(){
@@ -1452,12 +1458,17 @@ function wasteSeqUnlock(){
   roomEl.disabled=false;roomEl.style.background='';roomEl.style.color='';roomEl.style.cursor='';
   const room=roomEl.value||prevRoom;
   if(!room){disableFields();return;}
+  // Guard: a batch with 0 plants assigned cannot have waste recorded against it
+  if(calcBatchQty(batch)<=0){disableFields();return;}
   enableFields();
   applyRoomColor('waste',room);
 }
 
 function wasteBatchSelect(){
   const val=document.getElementById('waste-batch-select').value;
+  if(val && calcBatchQty(val)<=0){
+    toast('Batch '+val+' has 0 plants. Add plants on the Summary page first.',4000);
+  }
   wasteSeqUnlock();
 }
 
@@ -1486,6 +1497,11 @@ async function wasteSave(){
   if(!room){toast('Please select a room.');return;}
   if(!type){toast('Please select a waste type.');return;}
   if(!weight||isNaN(weight)||weight<=0){toast('Please enter a weight greater than 0 kg.');return;}
+  // Guard: batch must have at least 1 plant assigned to record any waste
+  if(calcBatchQty(batch)<=0){
+    toast('Cannot save: batch '+batch+' has 0 plants assigned.',4500);
+    return;
+  }
   // Guard: destroying plants via Vegetative Waste cannot push the batch balance below 0
   if(type==='Vegetative Waste' && plants>0){
     const currentQty=calcBatchQty(batch);
