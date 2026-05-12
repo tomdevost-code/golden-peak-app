@@ -1309,8 +1309,9 @@ async function syncPending(){
   const pendingEC=ecRecs.filter(r=>!r.synced);
   const pendingRO=roRecs.filter(r=>!r.synced);
   const pendingWaste=wasteRecs.filter(r=>!r.synced);
+  const pendingBatch=batchRecs.filter(r=>!r.synced && !r.type); // skip legacy movement entries
   const pendingBatchTx=batchTxRecs.filter(r=>!r.synced);
-  const total=pendingEC.length+pendingRO.length+pendingWaste.length+pendingBatchTx.length;
+  const total=pendingEC.length+pendingRO.length+pendingWaste.length+pendingBatch.length+pendingBatchTx.length;
   if(!total){st.style.display='block';st.style.background='var(--green-pale)';st.style.color='var(--green)';st.textContent='No pending records - everything is synced.';return;}
   st.style.display='block';st.style.background='var(--bg2)';st.style.color='var(--text2)';st.textContent='Syncing '+total+' record(s)...';
   btn.disabled=true;setSyncPill('ing','Syncing...');
@@ -1346,6 +1347,18 @@ async function syncPending(){
     }catch(e){fail++;lastErr=e.message;}
   }
   lsSet('gp-waste',wasteRecs);
+  if(cfg.batchTbl){
+    for(const rec of pendingBatch){
+      try{
+        const f={'Batch ID':rec.batchId,'Cultivar Name':rec.cultivar||undefined,'Mother/Seed ID':rec.mother||undefined,'Source of Genetics':rec.geneticsSource||undefined,'External Clone Company':rec.externalCompany||undefined,'Notes':rec.notes||undefined,'Created Date':rec.createdDate||undefined};
+        Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
+        const bRes=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+cfg.batchTbl,{method:'POST',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify({fields:f,typecast:true})});
+        if(!bRes.ok){const err=await bRes.json();throw new Error('Batch '+bRes.status+': '+(err.error&&err.error.message||JSON.stringify(err)));}
+        rec.synced=true;ok++;
+      }catch(e){fail++;lastErr=e.message;}
+    }
+    lsSet('gp-batch',batchRecs);
+  }
   if(cfg.batchtxTbl){
     for(const tx of pendingBatchTx){
       try{
