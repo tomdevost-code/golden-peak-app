@@ -747,6 +747,24 @@ function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
 function loadAll(){ecRecs=lsGet('gp-ec')||[];roRecs=lsGet('gp-ro')||[];wasteRecs=lsGet('gp-waste')||[];batchRecs=lsGet('gp-batch')||[];batchTxRecs=lsGet('gp-batchtx')||[];wasteRecs.forEach(r=>{if(r.type==='Vegetative waste')r.type='Vegetative Waste';});lsSet('gp-waste',wasteRecs);const s=lsGet('gp-cfg');if(s){cfg=s;applySettings();}}
 function atReady(){return cfg.token&&cfg.base&&cfg.ecTbl&&cfg.roTbl;}
 async function atPost(tbl,fields){const body={fields,typecast:true};console.log('Airtable POST →',tbl,body);const r=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+tbl,{method:'POST',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok){let detail='';try{const j=await r.json();detail=j.error&&(j.error.message||j.error.type)||JSON.stringify(j);}catch(_){}console.error('Airtable POST failed',r.status,detail,'body=',body);throw new Error(r.status+(detail?': '+detail:''));}return r.json();}
+async function atUpsert(tbl,fields,mergeOn){const body={performUpsert:{fieldsToMergeOn:mergeOn},records:[{fields}],typecast:true};console.log('Airtable UPSERT →',tbl,body);const r=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+tbl,{method:'PATCH',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok){let detail='';try{const j=await r.json();detail=j.error&&(j.error.message||j.error.type)||JSON.stringify(j);}catch(_){}console.error('Airtable UPSERT failed',r.status,detail,'body=',body);throw new Error(r.status+(detail?': '+detail:''));}return r.json();}
+function buildBatchFields(rec){
+  const f={
+    'Batch ID':rec.batchId,
+    'Cultivar Name':rec.cultivar||undefined,
+    'Mother/Seed ID':rec.mother||undefined,
+    'Source of Genetics':rec.geneticsSource||undefined,
+    'External Clone Company':rec.externalCompany||undefined,
+    'Notes':rec.notes||undefined,
+    'Created Date':rec.createdDate||undefined,
+    'Rooms':(rec.rooms&&rec.rooms.length)?rec.rooms:undefined,
+    'Plant Phase':rec.plantPhase||undefined,
+    'Status':rec.status||undefined,
+    'Closed Date':rec.closedDate||undefined
+  };
+  Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
+  return f;
+}
 function setSyncPill(state,msg){const el=document.getElementById('global-sync');el.className='sync-pill'+(state==='ok'?' ok':state==='err'?' err':state==='ing'?' ing':'');el.textContent=msg;}
 function avg(arr){const v=arr.filter(x=>x!==null&&!isNaN(x)&&x>0);return v.length?Math.round(v.reduce((a,b)=>a+b,0)/v.length*100)/100:null;}
 function pens(sel){return Array.from(document.querySelectorAll(sel)).map(i=>parseFloat(i.value)||null);}
@@ -1350,10 +1368,7 @@ async function syncPending(){
   if(cfg.batchTbl){
     for(const rec of pendingBatch){
       try{
-        const f={'Batch ID':rec.batchId,'Cultivar Name':rec.cultivar||undefined,'Mother/Seed ID':rec.mother||undefined,'Source of Genetics':rec.geneticsSource||undefined,'External Clone Company':rec.externalCompany||undefined,'Notes':rec.notes||undefined,'Created Date':rec.createdDate||undefined};
-        Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
-        const bRes=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+cfg.batchTbl,{method:'POST',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify({fields:f,typecast:true})});
-        if(!bRes.ok){const err=await bRes.json();throw new Error('Batch '+bRes.status+': '+(err.error&&err.error.message||JSON.stringify(err)));}
+        await atUpsert(cfg.batchTbl, buildBatchFields(rec), ['Batch ID']);
         rec.synced=true;ok++;
       }catch(e){fail++;lastErr=e.message;}
     }
@@ -1643,11 +1658,9 @@ async function batchCreate(){
   // Sync to Airtable
   if(cfg.batchTbl && cfg.token && cfg.base){
     try{
-      const f={'Batch ID':rec.batchId,'Cultivar Name':rec.cultivar||undefined,'Mother/Seed ID':rec.mother||undefined,'Source of Genetics':rec.geneticsSource||undefined,'External Clone Company':rec.externalCompany||undefined,'Notes':rec.notes||undefined,'Created Date':rec.createdDate};
-      Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
-      await atPost(cfg.batchTbl, f);
-      rec.synced=true; lsSet('gp-batch',batchRecs); setSyncPill('ok','Synced'); toast('Batch created and synced to Airtable');
-    }catch(e){ setSyncPill('err','Sync error'); toast('Batch saved locally - sync pending'); }
+      await atUpsert(cfg.batchTbl, buildBatchFields(rec), ['Batch ID']);
+      rec.synced=true; lsSet('gp-batch',batchRecs); setSyncPill('ok','Synced'); toast('Batch created and synced to Airtable'); updatePendingBadge();
+    }catch(e){ setSyncPill('err','Sync error'); toast('Batch saved locally - Airtable: '+(e.message||'sync failed'),5000); }
   } else { toast('Batch '+batchId+' created!'); }
 }
 
@@ -1829,15 +1842,22 @@ async function summaryUpdateBatch(){
   const msg = document.getElementById('summary-update-msg');
   msg.style.display='block'; msg.style.color='var(--green)'; msg.textContent='Batch updated!';
   setTimeout(()=>{ msg.style.display='none'; }, 3000);
-  // Sync to Airtable Batch Log
+  // Sync to Airtable Batch Log via upsert on Batch ID (updates existing record, creates if missing)
   if(cfg.batchTbl && cfg.token && cfg.base){
+    setSyncPill('ing','Syncing...');
     try{
-      const b = batchRecs[idx];
-      // We need to find the Airtable record ID — for now update via patch if we stored it
-      // For simplicity, just note synced=false so pending sync picks it up
+      await atUpsert(cfg.batchTbl, buildBatchFields(batchRecs[idx]), ['Batch ID']);
+      batchRecs[idx].synced = true;
+      lsSet('gp-batch', batchRecs);
+      setSyncPill('ok','Synced');
+      updatePendingBadge();
+    }catch(e){
       batchRecs[idx].synced = false;
       lsSet('gp-batch', batchRecs);
-    }catch(e){}
+      setSyncPill('err','Sync error');
+      updatePendingBadge();
+      toast('Update saved locally - Airtable: '+(e.message||'sync failed'),5000);
+    }
   }
 }
 
