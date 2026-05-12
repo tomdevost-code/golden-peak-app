@@ -1522,9 +1522,16 @@ async function wasteSave(){
     batchTxRecs.unshift(destroyedTx);lsSet('gp-batchtx',batchTxRecs);
   }
   populateBatchDropdowns();renderWaste();updatePendingBadge();
-  // If the Summary page is currently showing this batch, refresh its qty + history + tx-type options
+  // If the Summary page is currently showing this batch, refresh its qty + history + tx-type options + phase/room lock
   const _summarySel=document.getElementById('summary-batch-select');
-  if(_summarySel && _summarySel.value===rec.batch){summaryCalcQty(rec.batch);summaryRenderHistory(rec.batch);summaryUpdateTxTypeOptions(rec.batch);}
+  if(_summarySel && _summarySel.value===rec.batch){
+    summaryCalcQty(rec.batch);
+    summaryRenderHistory(rec.batch);
+    summaryUpdateTxTypeOptions(rec.batch);
+    const _bRec=batchRecs.find(r=>r.batchId===rec.batch && !r.type);
+    if(_bRec) summaryUpdatePhaseOptions(_bRec.plantPhase||'', calcBatchQty(rec.batch));
+    applyPhaseRoomLock();
+  }
   if(cfg.token&&cfg.base&&cfg.wasteTbl){
     setSyncPill('ing','Syncing...');document.getElementById('waste-btn').disabled=true;
     try{
@@ -1831,8 +1838,9 @@ function summaryBatchChanged(){
   // Rooms
   const rooms = b.rooms||[];
   document.querySelectorAll('.summary-room-cb').forEach(cb=>{ cb.checked = rooms.includes(cb.value); });
-  // Phase & Status — rebuild phase dropdown to enforce forward-only sequence
-  summaryUpdatePhaseOptions(b.plantPhase||'');
+  // Phase & Status — rebuild phase dropdown based on current qty and saved phase
+  const _curQty = calcBatchQty(batchId);
+  summaryUpdatePhaseOptions(b.plantPhase||'', _curQty);
   document.getElementById('summary-status').value = b.status||'Open';
   applyPhaseRoomLock();
   summaryStatusChanged();
@@ -1856,16 +1864,20 @@ function summaryStatusChanged(){
 }
 function applyPhaseRoomLock(){
   // Restrict room checkboxes based on the current Plant Phase:
-  //   Seeds   → Veg only
-  //   Clones  → Veg only
+  //   Seeds   → Veg only (Veg auto-checked)
+  //   Clones  → Veg only (Veg auto-checked)
   //   Veg     → all rooms
   //   Flower  → Flower rooms only (Veg not allowed)
   //   other phases (Drying, Packaged, Sold, blank) → no extra restriction
   const phase = document.getElementById('summary-phase').value;
+  const startPhase = (phase==='Clones'||phase==='Seeds');
   document.querySelectorAll('.summary-room-cb').forEach(cb=>{
     let allowed=true;
-    if(phase==='Clones'||phase==='Seeds') allowed = (cb.value==='Veg');
-    else if(phase==='Flower')             allowed = (cb.value!=='Veg');
+    if(startPhase){
+      allowed = (cb.value==='Veg');
+      if(cb.value==='Veg') cb.checked = true; // auto-check Veg as the starting room
+    }
+    else if(phase==='Flower') allowed = (cb.value!=='Veg');
     cb.disabled = !allowed;
     if(!allowed) cb.checked=false;
     const label = cb.closest('label');
@@ -1882,12 +1894,16 @@ function getAllowedPhases(currentPhase){
   const idx = linear.indexOf(currentPhase);
   return (idx===-1) ? [currentPhase] : linear.slice(idx);
 }
-function summaryUpdatePhaseOptions(currentPhase){
-  // Rebuild the Plant Phase dropdown to only allow current phase + forward phases.
+function summaryUpdatePhaseOptions(currentPhase, qty){
+  // Rebuild the Plant Phase dropdown:
+  //   - If batch has 0 plants → lock to 'Clones' (the starting phase) until plants are added.
+  //   - Otherwise → only allow current phase + forward phases.
   const sel = document.getElementById('summary-phase');
   if(!sel) return;
-  const allowed = getAllowedPhases(currentPhase);
-  sel.innerHTML = '<option value="">-- select phase --</option>' + allowed.map(p=>'<option'+(p===currentPhase?' selected':'')+'>'+p+'</option>').join('');
+  const noPlants = !qty || qty<=0;
+  const allowed = noPlants ? ['Clones'] : getAllowedPhases(currentPhase);
+  const valueToSelect = noPlants ? 'Clones' : currentPhase;
+  sel.innerHTML = '<option value="">-- select phase --</option>' + allowed.map(p=>'<option'+(p===valueToSelect?' selected':'')+'>'+p+'</option>').join('');
 }
 function summaryUpdateTxTypeOptions(batchId){
   // If a batch has no transactions yet, only 'Produced/Received' is selectable.
@@ -1925,6 +1941,11 @@ async function summaryUpdateBatch(){
   const existingPhase = batchRecs[idx].plantPhase || '';
   if(plantPhase && !getAllowedPhases(existingPhase).includes(plantPhase)){
     toast('Cannot move plant phase backward (from '+(existingPhase||'unset')+' to '+plantPhase+').',5000);
+    return;
+  }
+  // Guard: when batch has 0 plants, only 'Clones' phase is allowed (add plants before advancing)
+  if(calcBatchQty(batchId) <= 0 && plantPhase && plantPhase !== 'Clones'){
+    toast('Cannot advance phase: batch has 0 plants. Add a Produced/Received transaction first.',5000);
     return;
   }
   batchRecs[idx].rooms = rooms;
@@ -1983,6 +2004,11 @@ async function summaryAddTransaction(){
   summaryCalcQty(batchId);
   summaryRenderHistory(batchId);
   summaryUpdateTxTypeOptions(batchId);
+  // Refresh phase dropdown + room lock now that qty may have changed (e.g. first Produced/Received unlocks phases)
+  const _newQty = calcBatchQty(batchId);
+  const _b = batchRecs.find(r=>r.batchId===batchId && !r.type);
+  if(_b) summaryUpdatePhaseOptions(_b.plantPhase||'', _newQty);
+  applyPhaseRoomLock();
   updatePendingBadge();
   // Sync to Airtable
   if(cfg.batchtxTbl && cfg.token && cfg.base){
