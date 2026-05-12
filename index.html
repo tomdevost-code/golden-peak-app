@@ -1966,10 +1966,10 @@ function summaryUpdateTxTypeOptions(batchId){
   if(!sel) return;
   const prev = sel.value;
   let opts;
-  if(phase==='Flower')      opts = ['Sold','Harvested'];
+  if(phase==='Flower')      opts = ['Harvested','Sold'];
   else if(phase==='Clones') opts = hasTxs ? ['Produced/Received','Moved to Moms','Sold'] : ['Produced/Received'];
   else if(!hasTxs)          opts = ['Produced/Received'];
-  else                      opts = ['Produced/Received','Moved to Moms','Sold','Harvested'];
+  else                      opts = ['Produced/Received','Moved to Moms','Harvested','Sold'];
   sel.innerHTML = '<option value="">-- select type --</option>' + opts.map(o=>'<option'+(o===prev?' selected':'')+'>'+o+'</option>').join('');
 }
 
