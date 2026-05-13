@@ -1103,25 +1103,26 @@ function applyCascadeLocks(){
   const hyd=document.getElementById('ec-hydration').value;
   const hasVeg=!!document.getElementById('ec-veg').value;
   const hasFlower=!!document.getElementById('ec-flower').value;
-  // Lock veg until a hydration RECORD is saved for this batch
+  // Veg unlocks as soon as a hydration date is set — either entered in the current form
+  // OR saved in a prior EC record for this batch. Save validation still requires veg > hydration.
   const vegEl=document.getElementById('ec-veg');
-  const vegHardLocked=vegEl.readOnly; // locked because veg is already saved
+  const vegHardLocked=vegEl.readOnly && vegEl.dataset.savedLock==='1'; // locked because veg is already saved
   if(!vegHardLocked){
     const curBatch=document.getElementById('ec-batch').value.trim();
     const hydSaved=curBatch&&ecRecs.some(r=>r.batch&&r.batch.trim().toLowerCase()===curBatch.toLowerCase()&&r.hydrationDate);
-    const vegLocked=!hydSaved;
+    const vegLocked=!hyd && !hydSaved;
     vegEl.readOnly=vegLocked;
     vegEl.style.background=vegLocked?'var(--bg2)':'';
     vegEl.style.color=vegLocked?'var(--text3)':'';
     vegEl.style.cursor=vegLocked?'not-allowed':'';
     vegEl.style.pointerEvents=vegLocked?'none':'';
     vegEl.disabled=false;
-    if(hydSaved&&hyd){
+    if(hyd){
       const _p=hyd.split('-');const _d=new Date(parseInt(_p[0]),parseInt(_p[1])-1,parseInt(_p[2]));_d.setDate(_d.getDate()+1);
       vegEl.min=_d.getFullYear()+'-'+String(_d.getMonth()+1).padStart(2,'0')+'-'+String(_d.getDate()).padStart(2,'0');
     } else { vegEl.min=''; }
     let vh=vegEl.closest('.field').querySelector('.veg-lock-hint');
-    if(vegLocked&&!vh){vh=document.createElement('div');vh.className='veg-lock-hint';vh.style.cssText='font-size:10px;color:var(--text3);margin-top:3px;font-family:var(--mono);';vh.textContent='Save a hydration record first';vegEl.closest('.field').appendChild(vh);}
+    if(vegLocked&&!vh){vh=document.createElement('div');vh.className='veg-lock-hint';vh.style.cssText='font-size:10px;color:var(--text3);margin-top:3px;font-family:var(--mono);';vh.textContent='Enter a hydration date first';vegEl.closest('.field').appendChild(vh);}
     else if(!vegLocked&&vh){vh.remove();}
   }
   setVegMin();
@@ -1302,13 +1303,14 @@ function updatePendingBadge(){
 function updateBatchRoomsInfo(batch){
   const el=document.getElementById('ec-batch-rooms-info');
   if(!batch){el.style.display='none';return;}
-  const rooms=[...new Set([...ecRecs,...roRecs].filter(r=>r.batch===batch&&r.room&&!r.harvestDate).map(r=>r.room))];
-  if(rooms.length===0){el.style.display='none';return;}
-  const hasFlower=[...ecRecs,...roRecs].some(r=>r.batch&&r.batch.trim().toLowerCase()===batch.trim().toLowerCase()&&r.flowerStart);
-  const displayRooms=hasFlower?rooms.filter(r=>r!=='Veg'):rooms;
-  if(!displayRooms.length){el.style.display='none';return;}
+  // Source from batchRec.rooms (the Summary page's current assignment).
+  // Fall back to EC/RO history only when nothing is declared.
+  const batchRec = batchRecs.find(r=>r.batchId===batch && !r.type);
+  const declared = (batchRec && Array.isArray(batchRec.rooms)) ? batchRec.rooms : [];
+  const rooms = declared.length ? declared : [...new Set([...ecRecs,...roRecs].filter(r=>r.batch===batch&&r.room&&!r.harvestDate).map(r=>r.room))];
+  if(!rooms.length){el.style.display='none';return;}
   el.style.display='block';
-  el.innerHTML='<span style="color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;font-size:10px;">Active rooms: </span>'+displayRooms.map(r=>{const c=getRoomColor(r);const dot=c?'<span style="width:8px;height:8px;border-radius:50%;background:'+c.dot+';display:inline-block;margin-right:4px;vertical-align:middle;"></span>':'';return'<span style="display:inline-block;background:'+(c?c.bg:'var(--amber-pale)')+';color:'+(c?c.text:'var(--amber)')+';border:1px solid '+(c?c.border:'var(--amber)')+';border-radius:20px;padding:1px 8px;font-size:11px;margin:2px 3px;">'+dot+r+'</span>'}).join('');
+  el.innerHTML='<span style="color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;font-size:10px;">Active rooms: </span>'+rooms.map(r=>{const c=getRoomColor(r);const dot=c?'<span style="width:8px;height:8px;border-radius:50%;background:'+c.dot+';display:inline-block;margin-right:4px;vertical-align:middle;"></span>':'';return'<span style="display:inline-block;background:'+(c?c.bg:'var(--amber-pale)')+';color:'+(c?c.text:'var(--amber)')+';border:1px solid '+(c?c.border:'var(--amber)')+';border-radius:20px;padding:1px 8px;font-size:11px;margin:2px 3px;">'+dot+r+'</span>'}).join('');
 }
 
 // Confirm clear helpers
