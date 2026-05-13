@@ -209,7 +209,7 @@ tr:last-child td { border-bottom: none; }
             <select id="ec-wtype">
               <option value="">select type</option>
               <option>Hydration</option><option>Pre-Charge</option><option>Water In</option>
-              <option>Full Saturation</option><option>Feed</option><option>Flush</option><option>RO Water</option>
+              <option>Full Saturation</option><option>Feed</option><option>Flush</option><option>Fade</option><option>RO Water</option>
             </select>
           </div>
           <div class="section-label">ml/plant per event</div>
@@ -1084,15 +1084,18 @@ function applyRoomColor(formPrefix,room){
 }
 function roomDot(room){const c=getRoomColor(room);if(!c)return room;return'<span style="display:inline-flex;align-items:center;gap:5px;"><span style="width:8px;height:8px;border-radius:50%;background:'+c.dot+';display:inline-block;flex-shrink:0;"></span>'+room+'</span>';}
 const VEG_WTYPES=['Hydration','Pre-Charge','Water In','Full Saturation','Feed','Flush','RO Water'];
-const FLOWER_WTYPES=['Full Saturation','Feed','Flush','RO Water'];
-const VEG_FREE_WTYPES=['Full Saturation','Feed','Flush','RO Water']; // post-sequence (any order)
+const FLOWER_WTYPES=['Full Saturation','Feed','Flush','Fade','RO Water'];
+const VEG_FREE_WTYPES=['Full Saturation','Feed','Flush','RO Water']; // Veg post-sequence (no Fade — Flower-only)
 function getAllowedWateringTypes(batch, room){
-  // Flower rooms: any of the 4 free types — no sequence
+  // Phase-based gating takes priority: Flower phase always uses the 5 flower wtypes (incl. Fade)
+  const batchRec = batch ? batchRecs.find(r=>r.batchId===batch && !r.type) : null;
+  const phase = batchRec ? (batchRec.plantPhase||'') : '';
+  if(phase === 'Flower') return FLOWER_WTYPES;
+  // Flower rooms (room-based fallback for any pre-phase or legacy scenario)
   if(FLOWER_ROOMS.includes(room)) return FLOWER_WTYPES;
   if(room !== 'Veg') return VEG_WTYPES; // fallback for unknown room
-  // Veg sequence: Hydration → Pre-Charge → Water In → (then any of the 4 free types)
+  // Veg-room sequence: Hydration → Pre-Charge → Water In → (then VEG_FREE_WTYPES, no Fade)
   if(!batch) return ['Hydration'];
-  const batchRec = batchRecs.find(r=>r.batchId===batch && !r.type);
   const hasHydration = (batchRec && batchRec.hydrationDate) || ecRecs.some(r=>r.batch===batch && r.wtype==='Hydration');
   const hasPreCharge = ecRecs.some(r=>r.batch===batch && r.wtype==='Pre-Charge');
   const hasWaterIn   = ecRecs.some(r=>r.batch===batch && r.wtype==='Water In');
@@ -1316,13 +1319,12 @@ async function ecSave(){
   const _roomEl=document.getElementById('ec-room');
   const room=_roomEl.value||(_roomEl.options&&_roomEl.options.length>0&&_roomEl.selectedIndex>=0?_roomEl.options[_roomEl.selectedIndex].value:'');
   const wtype=document.getElementById('ec-wtype').value;
-  if(room&&FLOWER_ROOMS.includes(room)&&wtype&&!FLOWER_WTYPES.includes(wtype)){toast('Watering type "'+wtype+'" is not allowed in '+room+'. Use: Full Saturation, Feed, Flush, or RO Water.',4000);return;}
-  // Veg-room sequence guard: Hydration → Pre-Charge → Water In → (free)
-  if(room === 'Veg' && wtype){
-    const _batchVal = document.getElementById('ec-batch').value.trim();
-    const _allowedWtypes = getAllowedWateringTypes(_batchVal, room);
+  // Canonical wtype validation — uses the same helper as the dropdown filter
+  if(wtype){
+    const _batchValForWtype = document.getElementById('ec-batch').value.trim();
+    const _allowedWtypes = getAllowedWateringTypes(_batchValForWtype, room);
     if(!_allowedWtypes.includes(wtype)){
-      toast('Watering Type "'+wtype+'" is not allowed at this step. Next step is: '+_allowedWtypes.join(', '),5500);
+      toast('Watering Type "'+wtype+'" is not allowed here. Allowed: '+_allowedWtypes.join(', '),5500);
       return;
     }
   }
