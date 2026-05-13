@@ -227,6 +227,12 @@ tr:last-child td { border-bottom: none; }
       </div>
       <button class="btn-primary" id="ec-btn" onclick="ecSave()">Save EC Entry</button>
       <button class="btn-secondary" style="width:100%;margin-top:8px;" onclick="ecClearConfirm()">Clear Form</button>
+
+      <!-- Recent EC entries for the selected batch + room -->
+      <div class="section" style="margin-top:20px;">
+        <div class="section-label">Recent Entries</div>
+        <div id="ec-recent-list" style="font-size:13px;color:var(--text3);text-align:center;padding:20px;">Select a batch and room to see entries.</div>
+      </div>
     </div>
 
     <!-- RUNOFF -->
@@ -916,7 +922,7 @@ function populateBatchDropdowns(){
   const _wfb=document.getElementById('f-waste-batch');
   if(_wfb){const _c=_wfb.value;const _a=Object.keys(getAllBatches()).sort();_wfb.innerHTML='<option value="">All batches</option>'+_a.map(b=>'<option'+(b===_c?' selected':'')+'>'+b+'</option>').join('');_wfb.value=_c;}
 }
-function ecBatchSelect(){const val=document.getElementById('ec-batch-select').value;document.getElementById('ec-batch').value=val;ecBatchLookup();ecSeqUnlock();ecRoomChanged();}
+function ecBatchSelect(){const val=document.getElementById('ec-batch-select').value;document.getElementById('ec-batch').value=val;ecBatchLookup();ecSeqUnlock();ecRoomChanged();ecRenderRecent(val,document.getElementById('ec-room').value);}
 
 // Batch-room locking helpers
 function saveBatchRoom(batch,room){}
@@ -1158,6 +1164,53 @@ function ecRoomChanged(){
   applyRoomColor('ec',room);
   // Re-evaluate the sequential unlock now that a room is selected
   ecSeqUnlock();
+  // Refresh the recent-entries list at the bottom
+  ecRenderRecent(batch, room);
+}
+function ecRenderRecent(batch, room){
+  const el = document.getElementById('ec-recent-list');
+  if(!el) return;
+  if(!batch || !room){
+    el.style.padding='20px';
+    el.style.textAlign='center';
+    el.innerHTML='<span style="color:var(--text3);">Select a batch and room to see entries.</span>';
+    return;
+  }
+  const recs = ecRecs.filter(r => r.batch && r.batch.trim().toLowerCase()===batch.trim().toLowerCase() && r.room===room)
+                     .sort((a,b)=>(b.id||0)-(a.id||0)); // newest first
+  if(!recs.length){
+    el.style.padding='20px';
+    el.style.textAlign='center';
+    el.innerHTML='<span style="color:var(--text3);">No EC entries yet for '+batch+' / '+room+'.</span>';
+    return;
+  }
+  el.style.padding='0';
+  el.style.textAlign='left';
+  let html = '<div style="overflow-x:auto;background:#fff;border-radius:var(--radius-sm);border:1px solid var(--border);">';
+  html += '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
+  html += '<thead><tr style="background:#f5f5f5;">';
+  ['Date','Watering','EC','pH','ml/plant','Flow (L)','Notes'].forEach(h=>{
+    html += '<th style="padding:6px 8px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">'+h+'</th>';
+  });
+  html += '</tr></thead><tbody>';
+  recs.forEach(r=>{
+    const ec = r.dripEc!=null && r.dripEc!=='' ? r.dripEc : '—';
+    const ph = r.dripPh!=null && r.dripPh!=='' ? r.dripPh : '—';
+    const ml = r.totalML!=null && r.totalML!=='' ? r.totalML : '—';
+    const flow = r.flow!=null && r.flow!=='' ? r.flow : '—';
+    const notes = (r.notes||'').length>40 ? r.notes.slice(0,40)+'…' : (r.notes||'');
+    html += '<tr style="border-bottom:1px solid var(--bg2);">';
+    html += '<td style="padding:6px 8px;font-family:var(--mono);">'+r.date+'</td>';
+    html += '<td style="padding:6px 8px;"><span style="font-size:11px;background:var(--green-pale);color:var(--green);border-radius:20px;padding:2px 8px;">'+(r.wtype||'—')+'</span></td>';
+    html += '<td style="padding:6px 8px;font-family:var(--mono);">'+ec+'</td>';
+    html += '<td style="padding:6px 8px;font-family:var(--mono);">'+ph+'</td>';
+    html += '<td style="padding:6px 8px;font-family:var(--mono);">'+ml+'</td>';
+    html += '<td style="padding:6px 8px;font-family:var(--mono);">'+flow+'</td>';
+    html += '<td style="padding:6px 8px;font-size:11px;color:var(--text3);max-width:140px;">'+notes+'</td>';
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+  el.innerHTML = html;
 }
 function ecHydrationChanged(){setVegMin();applyCascadeLocks();}
 function applyCascadeLocks(){
@@ -1343,6 +1396,8 @@ async function ecSave(){
       // Stay unsynced; Sync Pending will retry
     }
   }
+  // Refresh the recent-entries list before clearing the form (so we use the saved batch+room)
+  ecRenderRecent(rec.batch, rec.room);
   applyCascadeLocks();ecClear();updatePendingBadge();
 }
 function ecClear(){
@@ -1357,6 +1412,8 @@ function ecClear(){
     const el=document.getElementById(id); if(el) el.textContent='—';
   });
   const lifeStrip=document.getElementById('ec-lifecycle-info'); if(lifeStrip) lifeStrip.style.display='none';
+  // Reset the recent-entries list to its empty state
+  ecRenderRecent('','');
   const roomEl=document.getElementById('ec-room');
   roomEl.innerHTML='<option value="">select room</option><option>Flower 1</option><option>Flower 2</option><option>Flower 3</option><option>Flower 4</option><option>Flower 5</option><option>Veg</option>';
   roomEl.disabled=false;roomEl.style.background='';roomEl.style.color='';roomEl.style.cursor='';
