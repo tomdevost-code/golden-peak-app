@@ -172,12 +172,22 @@ tr:last-child td { border-bottom: none; }
               </select>
             </div>
             <div class="field"><label>Entry date</label><input type="date" id="ec-date" readonly style="background:var(--bg2);color:var(--text3);cursor:default;" /></div>
-            <div class="field"><label>Hydration date</label><input type="date" id="ec-hydration" oninput="ecHydrationChanged()" onchange="ecHydrationChanged()" /></div>
-            <div class="field"><label>Veg start date</label><input type="date" id="ec-veg" oninput="ecVegChanged()" onchange="ecVegChanged()" readonly style="background:var(--bg2);color:var(--text3);cursor:not-allowed;pointer-events:none;" /></div>
-            <div class="field"><label>Flower start date</label><input type="date" id="ec-flower" oninput="ecFlowerChanged()" onchange="ecFlowerChanged()" readonly style="background:var(--bg2);color:var(--text3);cursor:not-allowed;pointer-events:none;" /></div>
-            <div class="field"><label>Harvest date <span style="font-size:10px;color:var(--text3);">(closes batch)</span></label><input type="date" id="ec-harvest" oninput="ecBadge()" /></div>
           </div>
-          <div class="day-badge" id="ec-badge"><span style="font-size:12px;color:var(--text3);">Enter veg start date to calculate</span></div>
+          <!-- Lifecycle dates: managed on the Summary page; shown here as read-only context -->
+          <input type="hidden" id="ec-hydration" />
+          <input type="hidden" id="ec-veg" />
+          <input type="hidden" id="ec-flower" />
+          <input type="hidden" id="ec-harvest" />
+          <div id="ec-lifecycle-info" style="display:none;background:var(--green-pale);border:1px solid var(--green-light);border-radius:var(--radius-sm);padding:8px 12px;margin-bottom:10px;">
+            <div style="font-size:10px;color:var(--green);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;">Lifecycle dates (from Summary)</div>
+            <div style="display:flex;flex-wrap:wrap;gap:12px;font-size:11px;font-family:var(--mono);">
+              <span>Hydration: <span id="ec-info-hyd" style="color:var(--text);font-weight:600;">—</span></span>
+              <span>Veg Start: <span id="ec-info-veg" style="color:var(--text);font-weight:600;">—</span></span>
+              <span>Flower Start: <span id="ec-info-flower" style="color:var(--text);font-weight:600;">—</span></span>
+              <span>Harvest: <span id="ec-info-harvest" style="color:var(--text);font-weight:600;">—</span></span>
+            </div>
+          </div>
+          <div class="day-badge" id="ec-badge"><span style="font-size:12px;color:var(--text3);">Select a batch to see day count</span></div>
           <div id="ec-batch-rooms-info" style="display:none;font-size:11px;color:var(--text2);font-family:var(--mono);background:var(--bg2);border-radius:var(--radius-sm);padding:6px 10px;margin-top:6px;"></div>
         </div>
       </div>
@@ -256,6 +266,14 @@ tr:last-child td { border-bottom: none; }
           <input type="hidden" id="ro-veg" />
           <input type="hidden" id="ro-flower" />
           <input type="hidden" id="ro-harvest" />
+          <div id="ro-lifecycle-info" style="display:none;background:var(--green-pale);border:1px solid var(--green-light);border-radius:var(--radius-sm);padding:8px 12px;margin-bottom:10px;">
+            <div style="font-size:10px;color:var(--green);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;">Lifecycle dates (from Summary)</div>
+            <div style="display:flex;flex-wrap:wrap;gap:12px;font-size:11px;font-family:var(--mono);">
+              <span>Veg Start: <span id="ro-info-veg" style="color:var(--text);font-weight:600;">—</span></span>
+              <span>Flower Start: <span id="ro-info-flower" style="color:var(--text);font-weight:600;">—</span></span>
+              <span>Harvest: <span id="ro-info-harvest" style="color:var(--text);font-weight:600;">—</span></span>
+            </div>
+          </div>
           <div class="day-badge" id="ro-badge"><span style="font-size:12px;color:var(--text3);">Select a batch to calculate stage</span></div>
         </div>
       </div>
@@ -587,6 +605,19 @@ tr:last-child td { border-bottom: none; }
         <div class="card" style="margin-bottom:12px;">
           <div class="section-label">Manage Batch</div>
 
+          <!-- Lifecycle Dates -->
+          <div style="margin-bottom:12px;padding:10px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);">
+            <div style="font-size:11px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">Lifecycle Dates</div>
+            <div class="g2" style="margin-bottom:8px;">
+              <div class="field"><label>Hydration</label><input type="date" id="summary-hydration-date" style="font-size:14px;font-family:var(--mono);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;" /></div>
+              <div class="field"><label>Veg Start</label><input type="date" id="summary-veg-start" style="font-size:14px;font-family:var(--mono);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;" /></div>
+            </div>
+            <div class="g2">
+              <div class="field"><label>Flower Start</label><input type="date" id="summary-flower-start" style="font-size:14px;font-family:var(--mono);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;" /></div>
+              <div class="field"><label>Harvest</label><input type="date" id="summary-harvest-date" style="font-size:14px;font-family:var(--mono);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;" /></div>
+            </div>
+          </div>
+
           <!-- Rooms -->
           <div class="field" style="margin-bottom:12px;">
             <label>Rooms</label>
@@ -831,7 +862,11 @@ function buildBatchFields(rec){
     'Rooms':(rec.rooms&&rec.rooms.length)?rec.rooms:undefined,
     'Plant Phase':rec.plantPhase||undefined,
     'Status':rec.status||undefined,
-    'Closed Date':rec.closedDate||undefined
+    'Closed Date':rec.closedDate||undefined,
+    'Hydration Date':rec.hydrationDate||undefined,
+    'Veg Start Date':rec.vegStart||undefined,
+    'Flower Start Date':rec.flowerStart||undefined,
+    'Harvest Date':rec.harvestDate||undefined
   };
   Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
   return f;
@@ -894,20 +929,27 @@ function roBatchSelect(){
   const roomEl=document.getElementById('ro-room');
   if(!val){
     document.getElementById('ro-batch').value='';document.getElementById('ro-veg').value='';document.getElementById('ro-flower').value='';document.getElementById('ro-harvest').value='';
+    ['ro-info-veg','ro-info-flower','ro-info-harvest'].forEach(id=>{const el=document.getElementById(id); if(el) el.textContent='—';});
+    const lifeStrip=document.getElementById('ro-lifecycle-info'); if(lifeStrip) lifeStrip.style.display='none';
     hideClosedWarning('ro');roBadge();clearBatchRoomLock('ro');
-    // Restore full flower room list
     roomEl.innerHTML='<option value="">select room</option><option>Flower 1</option><option>Flower 2</option><option>Flower 3</option><option>Flower 4</option><option>Flower 5</option>';
     roomEl.disabled=true;roomEl.style.background='var(--bg2)';roomEl.style.color='var(--text3)';roomEl.style.cursor='not-allowed';
     return;
   }
   applyBatchRoomLock('ro',val);
-  const batches=getECBatches();const b=batches[val];
+  // Source lifecycle dates from batchRec (managed on Summary)
+  const batchRec = batchRecs.find(r=>r.batchId===val && !r.type);
   document.getElementById('ro-batch').value=val;
-  document.getElementById('ro-veg').value=b?b.vegStart:'';
-  document.getElementById('ro-flower').value=b?b.flowerStart:'';
-  document.getElementById('ro-harvest').value=b?b.harvestDate:'';
-  // Filter room dropdown to only rooms this batch has been recorded in via EC log
-  const batchRooms=[...new Set(ecRecs.filter(r=>r.batch&&r.batch.trim().toLowerCase()===val.trim().toLowerCase()&&r.room&&r.room!=='Veg').map(r=>r.room))];
+  document.getElementById('ro-veg').value=(batchRec && batchRec.vegStart)||'';
+  document.getElementById('ro-flower').value=(batchRec && batchRec.flowerStart)||'';
+  document.getElementById('ro-harvest').value=(batchRec && batchRec.harvestDate)||'';
+  document.getElementById('ro-info-veg').textContent = (batchRec && batchRec.vegStart) || '—';
+  document.getElementById('ro-info-flower').textContent = (batchRec && batchRec.flowerStart) || '—';
+  document.getElementById('ro-info-harvest').textContent = (batchRec && batchRec.harvestDate) || '—';
+  document.getElementById('ro-lifecycle-info').style.display = 'block';
+  // Room dropdown: source from batchRec.rooms (filtered to flower rooms only since runoff only applies to flowering)
+  const declaredRooms = (batchRec && Array.isArray(batchRec.rooms)) ? batchRec.rooms.filter(r=>r!=='Veg') : [];
+  const batchRooms = declaredRooms.length ? declaredRooms : [...new Set(ecRecs.filter(r=>r.batch&&r.batch.trim().toLowerCase()===val.trim().toLowerCase()&&r.room&&r.room!=='Veg').map(r=>r.room))];
   if(batchRooms.length>0){
     const prevVal=roomEl.value;
     roomEl.innerHTML='<option value="">select room</option>'+batchRooms.map(r=>'<option'+(r===prevVal?' selected':'')+'>'+r+'</option>').join('');
@@ -917,7 +959,9 @@ function roBatchSelect(){
     roomEl.disabled=true;roomEl.style.background='var(--bg2)';roomEl.style.color='var(--text3)';roomEl.style.cursor='not-allowed';
   }
   roBadge();
-  if(b&&b.harvestDate){showClosedWarning('ro',b.harvestDate);}else{hideClosedWarning('ro');}
+  // Close warning fires only when batch is manually closed (Status=Closed)
+  if(batchRec && batchRec.status === 'Closed'){ showClosedWarning('ro','Status: Closed'); }
+  else { hideClosedWarning('ro'); }
 }
 function findBatchDates(batch,recs){const match=recs.find(r=>r.batch&&r.batch.trim().toLowerCase()===batch.trim().toLowerCase());return match?{hydrationDate:match.hydrationDate||'',vegStart:match.vegStart||'',flowerStart:match.flowerStart||'',harvestDate:match.harvestDate||''}:null;}
 function isBatchClosed(batch){const found=findBatchDates(batch,[...ecRecs,...roRecs]);return found&&found.harvestDate?found.harvestDate:null;}
@@ -961,23 +1005,23 @@ function ecBatchLookup(){
     if(hint) hint.remove();
   }
 
-  // ── Dates: load from EC/RO records and lock those that are already saved
-  const found=findBatchDates(batch,[...ecRecs,...roRecs]);
-  if(found){
-    if(found.hydrationDate)document.getElementById('ec-hydration').value=found.hydrationDate;
-    if(found.flowerStart)document.getElementById('ec-flower').value=found.flowerStart;
-    if(found.harvestDate)document.getElementById('ec-harvest').value=found.harvestDate;
-    lockSavedDateField('ec-hydration',found.hydrationDate,'Hydration date is locked once saved');
-    if(found.vegStart){
-      document.getElementById('ec-veg').value=found.vegStart;
-      lockSavedDateField('ec-veg',found.vegStart,'Veg start date is locked once saved');
-    }
-    lockSavedDateField('ec-flower',found.flowerStart,'Flower start date is locked once saved');
-    if(found.harvestDate){showClosedWarning('ec',found.harvestDate);}
-    else{hideClosedWarning('ec'); if(found.vegStart) toast('Batch found - dates loaded automatically');}
-  } else {
-    hideClosedWarning('ec');
-  }
+  // ── Dates: load from batchRec (managed on the Summary page) and populate hidden inputs + info strip
+  const _hyd = (batchRec && batchRec.hydrationDate) || '';
+  const _veg = (batchRec && batchRec.vegStart) || '';
+  const _flow = (batchRec && batchRec.flowerStart) || '';
+  const _harv = (batchRec && batchRec.harvestDate) || '';
+  document.getElementById('ec-hydration').value = _hyd;
+  document.getElementById('ec-veg').value = _veg;
+  document.getElementById('ec-flower').value = _flow;
+  document.getElementById('ec-harvest').value = _harv;
+  document.getElementById('ec-info-hyd').textContent = _hyd || '—';
+  document.getElementById('ec-info-veg').textContent = _veg || '—';
+  document.getElementById('ec-info-flower').textContent = _flow || '—';
+  document.getElementById('ec-info-harvest').textContent = _harv || '—';
+  document.getElementById('ec-lifecycle-info').style.display = 'block';
+  // Close warning fires only when the batch is manually closed (Status=Closed), not on harvest date
+  if(batchRec && batchRec.status === 'Closed'){ showClosedWarning('ec', 'Status: Closed'); }
+  else { hideClosedWarning('ec'); }
 
   applyCascadeLocks();ecBadge();updateBatchRoomsInfo(batch);ecRoomChanged();
   document.querySelectorAll('.ec-drip-ec,.ec-drip-ph,.ec-evt-input').forEach(el=>{
@@ -986,7 +1030,7 @@ function ecBatchLookup(){
   ecSeqUnlock();
 }
 function roBatchLookup(){const batch=document.getElementById('ro-batch').value.trim();if(!batch)return;const found=findBatchDates(batch,[...ecRecs,...roRecs]);if(found){if(found.vegStart)document.getElementById('ro-veg').value=found.vegStart;if(found.flowerStart)document.getElementById('ro-flower').value=found.flowerStart;if(found.harvestDate)document.getElementById('ro-harvest').value=found.harvestDate;roBadge();if(found.harvestDate){showClosedWarning('ro',found.harvestDate);}else{hideClosedWarning('ro');if(found.vegStart)toast('Batch found - dates loaded automatically');}}}
-function showClosedWarning(form,harvestDate){const id=form+'-closed-warning';let el=document.getElementById(id);if(!el){el=document.createElement('div');el.id=id;el.style.cssText='background:var(--red-pale);color:var(--red);border:1px solid var(--red);border-radius:var(--radius-sm);padding:10px 12px;font-size:13px;font-weight:500;margin-bottom:12px;';const badge=document.getElementById(form+'-badge');badge.parentNode.insertBefore(el,badge);}el.textContent='This batch was harvested on '+harvestDate+'. No new entries can be added.';el.style.display='block';document.getElementById(form+'-btn').disabled=true;}
+function showClosedWarning(form,reason){const id=form+'-closed-warning';let el=document.getElementById(id);if(!el){el=document.createElement('div');el.id=id;el.style.cssText='background:var(--red-pale);color:var(--red);border:1px solid var(--red);border-radius:var(--radius-sm);padding:10px 12px;font-size:13px;font-weight:500;margin-bottom:12px;';const badge=document.getElementById(form+'-badge');badge.parentNode.insertBefore(el,badge);}el.textContent='This batch is closed' + (reason?' ('+reason+')':'') + '. No new entries can be added.';el.style.display='block';document.getElementById(form+'-btn').disabled=true;}
 function hideClosedWarning(form){const el=document.getElementById(form+'-closed-warning');if(el)el.style.display='none';document.getElementById(form+'-btn').disabled=false;}
 function lockSavedDateField(inputId, value, hintText){
   const el=document.getElementById(inputId);
@@ -1100,6 +1144,9 @@ function ecRoomChanged(){
 }
 function ecHydrationChanged(){setVegMin();applyCascadeLocks();}
 function applyCascadeLocks(){
+  // Lifecycle dates are now managed on the Summary page (hidden inputs on the EC form).
+  // Cascade-lock UI is no longer needed here.
+  if(document.getElementById('ec-hydration').type === 'hidden') return;
   const hyd=document.getElementById('ec-hydration').value;
   const hasVeg=!!document.getElementById('ec-veg').value;
   const hasFlower=!!document.getElementById('ec-flower').value;
@@ -1201,16 +1248,17 @@ async function ecSave(){
   const wtype=document.getElementById('ec-wtype').value;
   if(room&&FLOWER_ROOMS.includes(room)&&wtype&&!FLOWER_WTYPES.includes(wtype)){toast('Watering type "'+wtype+'" is not allowed in '+room+'. Use: Full Saturation, Feed, Flush, or RO Water.',4000);return;}
   const hydrationDate=document.getElementById('ec-hydration').value;
-  if(!hydrationDate){toast('Please enter a hydration date.');return;}
-  if(hydrationDate&&vs){const hd=new Date(hydrationDate+'T00:00:00'),vd=new Date(vs+'T00:00:00');if(vd<=hd){toast('Veg start must be at least 1 day after hydration date.',3000);return;}}
+  if(!hydrationDate){toast('This batch has no Hydration Date. Set it on the Summary page first.',4500);return;}
   const harvestDate=document.getElementById('ec-harvest').value;
   if(hydrationDate&&date<hydrationDate){toast('Entry date cannot be before hydration date ('+hydrationDate+').',3500);return;}
-  if(harvestDate&&date>harvestDate){toast('This batch was harvested on '+harvestDate+'. Entry blocked.',3500);return;}
   // New batch: ensure hydration date exists in a saved record before allowing veg date
   const batchVal2=document.getElementById('ec-batch').value.trim();
-  const existingRecs=[...ecRecs,...roRecs].filter(r=>r.batch&&r.batch.trim().toLowerCase()===batchVal2.trim().toLowerCase());
-  const hasHydrationRecord=existingRecs.some(r=>r.hydrationDate);
-  if(!hasHydrationRecord&&vs){toast('Please save a hydration date record first before adding a veg start date.',4000);return;}
+  // Block writes only when the batch is manually closed (Status=Closed)
+  const _ecBatchRec=batchRecs.find(r=>r.batchId===batchVal2 && !r.type);
+  if(_ecBatchRec && _ecBatchRec.status==='Closed'){
+    toast('This batch is closed (Status=Closed). No new entries.',3500);
+    return;
+  }
   if(!wtype){toast('Please select a watering type.');return;}
   const flowVal=parseFloat(document.getElementById('ec-flow').value);
   if(!flowVal||flowVal<=0){toast('Please enter a flow meter reading.');return;}
@@ -1235,18 +1283,16 @@ async function ecSave(){
 }
 function ecClear(){
   document.getElementById('ec-grower').value='';
-  ['ec-hydration','ec-veg','ec-flower'].forEach(id=>{
+  // Lifecycle date inputs are now hidden (managed on Summary). Just clear the values.
+  ['ec-hydration','ec-veg','ec-flower','ec-harvest'].forEach(id=>{
     const el=document.getElementById(id);
-    el.readOnly=false;el.value='';el.min='';
-    const h=el.closest('.field').querySelector('.saved-lock-hint');if(h)h.remove();
-    const vh=el.closest('.field').querySelector('.veg-lock-hint');if(vh)vh.remove();
-    // veg and flower start disabled until unlocked by cascade — hydration can be re-enabled
-    if(id==='ec-veg'||id==='ec-flower'){
-      el.readOnly=true;el.disabled=false;el.style.background='var(--bg2)';el.style.color='var(--text3)';el.style.cursor='not-allowed';el.style.pointerEvents='none';
-    } else {
-      el.readOnly=false;el.disabled=false;el.style.background='';el.style.color='';el.style.cursor='';el.style.pointerEvents='';
-    }
+    if(el) el.value='';
   });
+  // Reset the lifecycle info strip
+  ['ec-info-hyd','ec-info-veg','ec-info-flower','ec-info-harvest'].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.textContent='—';
+  });
+  const lifeStrip=document.getElementById('ec-lifecycle-info'); if(lifeStrip) lifeStrip.style.display='none';
   const roomEl=document.getElementById('ec-room');
   roomEl.innerHTML='<option value="">select room</option><option>Flower 1</option><option>Flower 2</option><option>Flower 3</option><option>Flower 4</option><option>Flower 5</option><option>Veg</option>';
   roomEl.disabled=false;roomEl.style.background='';roomEl.style.color='';roomEl.style.cursor='';
@@ -1267,7 +1313,12 @@ async function roSave(){
   const fs=document.getElementById('ro-flower').value;
   if(!fs){toast('Cannot save a runoff record — no flower start date has been set for this batch.',4000);return;}
   const harvestDate=document.getElementById('ro-harvest').value;
-  if(harvestDate&&date>harvestDate){toast('This batch was harvested on '+harvestDate+'. Entry blocked.',3500);return;}
+  // Block writes only when the batch is manually closed (Status=Closed)
+  const _roBatchRec=batchRecs.find(r=>r.batchId===batchVal && !r.type);
+  if(_roBatchRec && _roBatchRec.status==='Closed'){
+    toast('This batch is closed (Status=Closed). No new entries.',3500);
+    return;
+  }
   const vs=document.getElementById('ro-veg').value;
   const inputEC=null;
   const samples=[];let hasData=false;for(let i=1;i<=8;i++){const ec=parseFloat(document.getElementById('ro-ec-'+i).value)||null,ph=parseFloat(document.getElementById('ro-ph-'+i).value)||null;if(ec||ph)hasData=true;samples.push({ec,ph});}
@@ -1959,6 +2010,11 @@ function summaryBatchChanged(){
   applyPhaseRoomLock();
   summaryStatusChanged();
   document.getElementById('summary-closed-date').value = b.closedDate||'';
+  // Lifecycle dates
+  document.getElementById('summary-hydration-date').value = b.hydrationDate||'';
+  document.getElementById('summary-veg-start').value = b.vegStart||'';
+  document.getElementById('summary-flower-start').value = b.flowerStart||'';
+  document.getElementById('summary-harvest-date').value = b.harvestDate||'';
   // Today's date for transactions
   document.getElementById('tx-date-display').textContent = localDate();
   // Restrict transaction types: only Produced/Received until at least one tx exists for this batch
@@ -2089,6 +2145,27 @@ async function summaryUpdateBatch(){
   const plantPhase = document.getElementById('summary-phase').value;
   const status = document.getElementById('summary-status').value;
   const closedDate = status==='Closed' ? document.getElementById('summary-closed-date').value : '';
+  const hydrationDate = document.getElementById('summary-hydration-date').value;
+  const vegStart = document.getElementById('summary-veg-start').value;
+  const flowerStart = document.getElementById('summary-flower-start').value;
+  const harvestDate = document.getElementById('summary-harvest-date').value;
+  // Cascade validation: hydration → veg (>+1d) → flower (>+14d) → harvest (>flower)
+  if(vegStart && hydrationDate){
+    const _h=new Date(hydrationDate+'T00:00:00'),_v=new Date(vegStart+'T00:00:00');
+    if(_v <= _h){ toast('Veg Start must be at least 1 day after Hydration Date.',5000); return; }
+  }
+  if(flowerStart && vegStart){
+    const _v=new Date(vegStart+'T00:00:00'),_f=new Date(flowerStart+'T00:00:00');
+    const _diff = (_f-_v)/(1000*60*60*24);
+    if(_diff < 14){ toast('Flower Start must be at least 14 days after Veg Start.',5000); return; }
+  }
+  if(harvestDate && flowerStart){
+    const _f=new Date(flowerStart+'T00:00:00'),_hv=new Date(harvestDate+'T00:00:00');
+    if(_hv <= _f){ toast('Harvest Date must be after Flower Start.',5000); return; }
+  }
+  if(vegStart && !hydrationDate){ toast('Set Hydration Date before Veg Start.',5000); return; }
+  if(flowerStart && !vegStart){ toast('Set Veg Start before Flower Start.',5000); return; }
+  if(harvestDate && !flowerStart){ toast('Set Flower Start before Harvest Date.',5000); return; }
   // Guard: enforce forward-only phase progression
   const existingPhase = batchRecs[idx].plantPhase || '';
   if(plantPhase && !getAllowedPhases(existingPhase).includes(plantPhase)){
@@ -2114,10 +2191,23 @@ async function summaryUpdateBatch(){
   // When entering Drying phase, plants are no longer in a cultivation room — force rooms to empty
   let _roomsForSave = rooms;
   if(plantPhase === 'Drying') _roomsForSave = [];
+  // Auto-set lifecycle dates on phase advance (if not already set):
+  //   Clones → Veg: vegStart = today
+  //   Veg    → Flower: flowerStart = today
+  //   Flower → Drying: harvestDate = today
+  let _autoHydration = hydrationDate, _autoVeg = vegStart, _autoFlower = flowerStart, _autoHarvest = harvestDate;
+  const _t = localDate();
+  if(plantPhase === 'Veg' && existingPhase === 'Clones' && !_autoVeg) _autoVeg = _t;
+  if(plantPhase === 'Flower' && existingPhase === 'Veg' && !_autoFlower) _autoFlower = _t;
+  if(plantPhase === 'Drying' && existingPhase === 'Flower' && !_autoHarvest) _autoHarvest = _t;
   batchRecs[idx].rooms = _roomsForSave;
   batchRecs[idx].plantPhase = plantPhase;
   batchRecs[idx].status = status;
   batchRecs[idx].closedDate = closedDate;
+  batchRecs[idx].hydrationDate = _autoHydration;
+  batchRecs[idx].vegStart = _autoVeg;
+  batchRecs[idx].flowerStart = _autoFlower;
+  batchRecs[idx].harvestDate = _autoHarvest;
   lsSet('gp-batch', batchRecs);
   // Record an audit-trail phase change transaction when the saved phase differs from the prior phase
   if(plantPhase && plantPhase !== existingPhase){
@@ -2196,6 +2286,8 @@ async function summaryAddTransaction(){
         const _prevPhase = _curPhase;
         batchRecs[_hi].plantPhase = 'Drying';
         batchRecs[_hi].rooms = [];
+        // Auto-set harvest date to today if not already set
+        if(!batchRecs[_hi].harvestDate) batchRecs[_hi].harvestDate = localDate();
         batchRecs[_hi].synced = false;
         lsSet('gp-batch', batchRecs);
         _phaseAutoChanged = true;
