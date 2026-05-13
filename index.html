@@ -681,7 +681,7 @@ tr:last-child td { border-bottom: none; }
 
           <div class="field" style="margin-bottom:10px;">
             <label>Quantity</label>
-            <input type="number" id="tx-qty" placeholder="0" min="0" step="1" style="font-size:14px;font-family:var(--mono);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;" />
+            <input type="number" id="tx-qty" placeholder="0" min="0" step="1" onwheel="this.blur()" onkeydown="if(event.key==='ArrowUp'||event.key==='ArrowDown')event.preventDefault();" style="font-size:14px;font-family:var(--mono);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;" />
           </div>
 
           <div class="field" style="margin-bottom:10px;">
