@@ -1690,8 +1690,13 @@ async function wasteSave(){
       document.querySelectorAll('.summary-room-cb').forEach(cb=>{ cb.checked = (_bRec.rooms||[]).includes(cb.value); });
       document.getElementById('si-phase').textContent = _bRec.plantPhase||'—';
       document.getElementById('si-rooms').textContent = (_bRec.rooms && _bRec.rooms.length) ? _bRec.rooms.join(', ') : '—';
+      document.getElementById('summary-hydration-date').value = _bRec.hydrationDate||'';
+      document.getElementById('summary-veg-start').value = _bRec.vegStart||'';
+      document.getElementById('summary-flower-start').value = _bRec.flowerStart||'';
+      document.getElementById('summary-harvest-date').value = _bRec.harvestDate||'';
     }
     applyPhaseRoomLock();
+    applyDateLock(calcBatchQty(rec.batch));
   }
   if(cfg.token&&cfg.base&&cfg.wasteTbl){
     setSyncPill('ing','Syncing...');document.getElementById('waste-btn').disabled=true;
@@ -2015,6 +2020,7 @@ function summaryBatchChanged(){
   document.getElementById('summary-veg-start').value = b.vegStart||'';
   document.getElementById('summary-flower-start').value = b.flowerStart||'';
   document.getElementById('summary-harvest-date').value = b.harvestDate||'';
+  applyDateLock(_curQty);
   // Today's date for transactions
   document.getElementById('tx-date-display').textContent = localDate();
   // Restrict transaction types: only Produced/Received until at least one tx exists for this batch
@@ -2031,6 +2037,35 @@ function summaryBatchChanged(){
 function summaryStatusChanged(){
   const closed = document.getElementById('summary-status').value === 'Closed';
   document.getElementById('summary-closed-date-wrap').style.display = closed ? '' : 'none';
+}
+function applyDateLock(qty){
+  // Lifecycle date inputs are disabled until the batch has at least 1 plant assigned.
+  const lock = !qty || qty <= 0;
+  ['summary-hydration-date','summary-veg-start','summary-flower-start','summary-harvest-date'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(!el) return;
+    el.disabled = lock;
+    el.style.background = lock ? 'var(--bg2)' : '';
+    el.style.color = lock ? 'var(--text3)' : '';
+    el.style.cursor = lock ? 'not-allowed' : '';
+  });
+  // Hint message
+  const wrap = document.getElementById('summary-hydration-date');
+  if(!wrap) return;
+  const card = wrap.closest('div[style*="Lifecycle Dates"]') || wrap.parentElement.parentElement.parentElement;
+  if(!card) return;
+  let hint = card.querySelector('.date-lock-hint');
+  if(lock){
+    if(!hint){
+      hint = document.createElement('div');
+      hint.className = 'date-lock-hint';
+      hint.style.cssText = 'font-size:10px;color:var(--text3);margin-top:6px;font-family:var(--mono);';
+      hint.textContent = 'Add at least 1 plant (Produced/Received) before setting lifecycle dates';
+      card.appendChild(hint);
+    }
+  } else {
+    if(hint) hint.remove();
+  }
 }
 function applyPhaseRoomLock(){
   // Room rules combine two layers:
@@ -2149,6 +2184,16 @@ async function summaryUpdateBatch(){
   const vegStart = document.getElementById('summary-veg-start').value;
   const flowerStart = document.getElementById('summary-flower-start').value;
   const harvestDate = document.getElementById('summary-harvest-date').value;
+  // Guard: cannot set lifecycle dates when the batch has 0 plants assigned
+  const _existHyd = batchRecs[idx].hydrationDate || '';
+  const _existVeg = batchRecs[idx].vegStart || '';
+  const _existFlower = batchRecs[idx].flowerStart || '';
+  const _existHarvest = batchRecs[idx].harvestDate || '';
+  const _settingNewDate = (hydrationDate && !_existHyd) || (vegStart && !_existVeg) || (flowerStart && !_existFlower) || (harvestDate && !_existHarvest);
+  if(calcBatchQty(batchId) <= 0 && _settingNewDate){
+    toast('Cannot set lifecycle dates: batch has no plants. Add a Produced/Received transaction first.',5000);
+    return;
+  }
   // Cascade validation: hydration → veg (>+1d) → flower (>+14d) → harvest (>flower)
   if(vegStart && hydrationDate){
     const _h=new Date(hydrationDate+'T00:00:00'),_v=new Date(vegStart+'T00:00:00');
@@ -2322,8 +2367,13 @@ async function summaryAddTransaction(){
     document.querySelectorAll('.summary-room-cb').forEach(cb=>{ cb.checked = (_b.rooms||[]).includes(cb.value); });
     document.getElementById('si-phase').textContent = _b.plantPhase||'—';
     document.getElementById('si-rooms').textContent = (_b.rooms && _b.rooms.length) ? _b.rooms.join(', ') : '—';
+    document.getElementById('summary-hydration-date').value = _b.hydrationDate||'';
+    document.getElementById('summary-veg-start').value = _b.vegStart||'';
+    document.getElementById('summary-flower-start').value = _b.flowerStart||'';
+    document.getElementById('summary-harvest-date').value = _b.harvestDate||'';
   }
   applyPhaseRoomLock();
+  applyDateLock(_newQty);
   updatePendingBadge();
   // Sync to Airtable
   if(cfg.batchtxTbl && cfg.token && cfg.base){
