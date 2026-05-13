@@ -1310,6 +1310,17 @@ async function ecSave(){
     _hydrationCaptured = true;
     updatePendingBadge();
   }
+  // Auto-advance Clones → Veg when Water In is logged (Veg-sequence completes Hydration → Pre-Charge → Water In)
+  let _vegAdvanced = false;
+  if(wtype === 'Water In' && _ecBatchRec && _ecBatchRec.plantPhase === 'Clones'){
+    _ecBatchRec.plantPhase = 'Veg';
+    if(!_ecBatchRec.vegStart) _ecBatchRec.vegStart = date;
+    _ecBatchRec.synced = false;
+    lsSet('gp-batch', batchRecs);
+    _vegAdvanced = true;
+    recordPhaseChangeTx(batchVal2, 'Clones', 'Veg');
+    updatePendingBadge();
+  }
   if(atReady()){
     setSyncPill('ing','Syncing...');document.getElementById('ec-btn').disabled=true;
     try{
@@ -1319,8 +1330,8 @@ async function ecSave(){
     }catch(e){setSyncPill('err','Sync failed');toast('Saved locally - Airtable: '+(e.message||'sync failed'),5000);}
     document.getElementById('ec-btn').disabled=false;
   }else{toast('Entry saved locally');}
-  // If this entry captured the hydration date on the batch, push the batch update to Airtable
-  if(_hydrationCaptured && cfg.batchTbl && cfg.token && cfg.base){
+  // If this entry captured the hydration date or auto-advanced phase, push the batch update to Airtable
+  if((_hydrationCaptured || _vegAdvanced) && cfg.batchTbl && cfg.token && cfg.base){
     try{
       await atUpsert(cfg.batchTbl, buildBatchFields(_ecBatchRec), ['Batch ID']);
       _ecBatchRec.synced = true;
