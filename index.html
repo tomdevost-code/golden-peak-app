@@ -646,7 +646,6 @@ tr:last-child td { border-bottom: none; }
               <option>Flower</option>
               <option>Drying</option>
               <option>Packaged</option>
-              <option>Sold</option>
             </select>
           </div>
 
@@ -843,7 +842,7 @@ function enforceZeroQtyState(batchId){
   if(calcBatchQty(batchId)>0) return false;
   const b = batchRecs.find(r=>r.batchId===batchId && !r.type);
   if(!b) return false;
-  if(['Drying','Packaged','Sold'].includes(b.plantPhase)) return false;
+  if(['Drying','Packaged'].includes(b.plantPhase)) return false;
   let changed=false;
   if(b.plantPhase!=='Clones'){ b.plantPhase='Clones'; changed=true; }
   if(!Array.isArray(b.rooms) || b.rooms.length!==1 || b.rooms[0]!=='Veg'){ b.rooms=['Veg']; changed=true; }
@@ -1697,7 +1696,7 @@ function wasteSeqUnlock(){
   if(!room){disableFields();return;}
   // Post-harvest batches (Harvested/Drying/Packaged/Sold) can still record Dry Waste even at qty=0.
   // Pre-harvest batches require qty>0 to record any waste.
-  const _isPostHarvest = batchRec && ['Drying','Packaged','Sold'].includes(batchRec.plantPhase);
+  const _isPostHarvest = batchRec && ['Drying','Packaged'].includes(batchRec.plantPhase);
   if(calcBatchQty(batch)<=0 && !_isPostHarvest){disableFields();return;}
   // Filter waste-type dropdown:
   //   - Post-harvest (Harvested/Drying/Packaged/Sold) → Dry Waste only
@@ -1720,7 +1719,7 @@ function wasteBatchSelect(){
   const val=document.getElementById('waste-batch-select').value;
   if(val){
     const _br = batchRecs.find(r=>r.batchId===val && !r.type);
-    const _post = _br && ['Drying','Packaged','Sold'].includes(_br.plantPhase);
+    const _post = _br && ['Drying','Packaged'].includes(_br.plantPhase);
     if(calcBatchQty(val)<=0 && !_post){
       toast('Batch '+val+' has 0 plants. Add plants on the Summary page first.',4000);
     }
@@ -1756,7 +1755,7 @@ async function wasteSave(){
   // Determine post-harvest status for this batch (Harvested/Drying/Packaged/Sold).
   // Post-harvest batches can record Dry Waste at qty=0; pre-harvest still requires qty>0.
   const _wsBatchRec = batchRecs.find(r=>r.batchId===batch && !r.type);
-  const _wsPostHarvest = _wsBatchRec && ['Drying','Packaged','Sold'].includes(_wsBatchRec.plantPhase);
+  const _wsPostHarvest = _wsBatchRec && ['Drying','Packaged'].includes(_wsBatchRec.plantPhase);
   // Guard: pre-harvest batches at qty=0 cannot record any waste
   if(calcBatchQty(batch)<=0 && !_wsPostHarvest){
     toast('Cannot save: batch '+batch+' has 0 plants assigned.',4500);
@@ -2173,7 +2172,7 @@ function applyPhaseRoomLock(){
   const batchId = document.getElementById('summary-batch-select').value;
   const b = batchId ? batchRecs.find(r=>r.batchId===batchId && !r.type) : null;
   const savedPhase = b ? (b.plantPhase||'') : '';
-  const roomsLocked = ['Flower','Drying','Packaged','Sold'].includes(savedPhase);
+  const roomsLocked = ['Flower','Drying','Packaged'].includes(savedPhase);
   document.querySelectorAll('.summary-room-cb').forEach(cb=>{
     let allowed=true;
     if(dropdownPhase==='Clones'||dropdownPhase==='Seeds'){
@@ -2184,7 +2183,7 @@ function applyPhaseRoomLock(){
     else if(dropdownPhase==='Flower'){
       if(cb.value==='Veg'){ allowed=false; cb.checked=false; }
     }
-    else if(['Drying','Packaged','Sold'].includes(dropdownPhase)){
+    else if(['Drying','Packaged'].includes(dropdownPhase)){
       // After harvest there are no cultivation rooms — everything stays unchecked + locked
       cb.checked = false;
       allowed = false;
@@ -2205,7 +2204,7 @@ function getAllowedPhases(currentPhase){
   // Plant lifecycle: Clones → Veg → Flower → Drying → Packaged → Sold.
   // Strict one-step progression: can only stay at current phase OR advance to the immediate next.
   // No skipping. No going backward.
-  const seq = ['Clones','Veg','Flower','Drying','Packaged','Sold'];
+  const seq = ['Clones','Veg','Flower','Drying','Packaged'];
   if(!currentPhase) return ['Clones']; // unset → must start at Clones
   if(!seq.includes(currentPhase)){
     // Legacy phase (e.g. 'Seeds') — let user keep it or migrate forward to Clones
@@ -2223,7 +2222,7 @@ function summaryUpdatePhaseOptions(currentPhase, qty){
   if(!sel) return;
   // Zero-qty rule only forces Clones for active growing phases. Post-harvest phases
   // (Harvested, Drying, Packaged, Sold) keep their value even when qty hits 0.
-  const postHarvest = ['Drying','Packaged','Sold'].includes(currentPhase);
+  const postHarvest = ['Drying','Packaged'].includes(currentPhase);
   const noPlants = (!qty || qty<=0) && !postHarvest;
   const allowed = noPlants ? ['Clones'] : getAllowedPhases(currentPhase);
   const valueToSelect = noPlants ? 'Clones' : currentPhase;
@@ -2286,13 +2285,13 @@ async function summaryUpdateBatch(){
   }
   // Guard: when batch has 0 plants AND is in an active growing phase (not post-harvest), only 'Clones' is allowed.
   // Post-harvest batches (Harvested, Drying, Packaged, Sold) can still progress forward when qty=0.
-  const _existPostHarvest = ['Drying','Packaged','Sold'].includes(existingPhase);
+  const _existPostHarvest = ['Drying','Packaged'].includes(existingPhase);
   if(calcBatchQty(batchId) <= 0 && !_existPostHarvest && plantPhase && plantPhase !== 'Clones'){
     toast('Cannot advance phase: batch has 0 plants. Add a Produced/Received transaction first.',5000);
     return;
   }
   // Guard: once a batch is in Flower (or later), the room assignments are locked
-  if(['Flower','Drying','Packaged','Sold'].includes(existingPhase)){
+  if(['Flower','Drying','Packaged'].includes(existingPhase)){
     const oldRooms = (batchRecs[idx].rooms||[]).slice().sort().join('|');
     const newRooms = rooms.slice().sort().join('|');
     if(oldRooms !== newRooms){
@@ -2394,7 +2393,7 @@ async function summaryAddTransaction(){
     const _hi = batchRecs.findIndex(r=>r.batchId===batchId && !r.type);
     if(_hi >= 0){
       const _curPhase = batchRecs[_hi].plantPhase || '';
-      const _postHarvest = ['Drying','Packaged','Sold'].includes(_curPhase);
+      const _postHarvest = ['Drying','Packaged'].includes(_curPhase);
       if(!_postHarvest){
         const _prevPhase = _curPhase;
         batchRecs[_hi].plantPhase = 'Drying';
