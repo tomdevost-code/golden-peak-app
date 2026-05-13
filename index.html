@@ -592,6 +592,17 @@ tr:last-child td { border-bottom: none; }
             <div class="field"><label>Plant Phase</label><div id="si-phase" style="font-size:14px;font-weight:600;padding:6px 0;color:var(--green);"></div></div>
             <div class="field"><label>Rooms</label><div id="si-rooms" style="font-size:13px;font-family:var(--mono);padding:6px 0;color:var(--text2);"></div></div>
           </div>
+          <div style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--border);">
+            <div style="font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">Lifecycle Dates (auto-set)</div>
+            <div class="g2" style="margin-bottom:6px;">
+              <div class="field"><label>Hydration</label><div id="si-hydration-date" style="font-size:13px;font-family:var(--mono);padding:4px 0;color:var(--text2);">—</div></div>
+              <div class="field"><label>Veg Start</label><div id="si-veg-start" style="font-size:13px;font-family:var(--mono);padding:4px 0;color:var(--text2);">—</div></div>
+            </div>
+            <div class="g2">
+              <div class="field"><label>Flower Start</label><div id="si-flower-start" style="font-size:13px;font-family:var(--mono);padding:4px 0;color:var(--text2);">—</div></div>
+              <div class="field"><label>Harvest</label><div id="si-harvest-date" style="font-size:13px;font-family:var(--mono);padding:4px 0;color:var(--text2);">—</div></div>
+            </div>
+          </div>
         </div>
 
         <!-- Current Quantity highlight -->
@@ -604,19 +615,6 @@ tr:last-child td { border-bottom: none; }
         <!-- Manage Batch -->
         <div class="card" style="margin-bottom:12px;">
           <div class="section-label">Manage Batch</div>
-
-          <!-- Lifecycle Dates -->
-          <div style="margin-bottom:12px;padding:10px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);">
-            <div style="font-size:11px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">Lifecycle Dates</div>
-            <div class="g2" style="margin-bottom:8px;">
-              <div class="field"><label>Hydration</label><input type="date" id="summary-hydration-date" style="font-size:14px;font-family:var(--mono);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;" /></div>
-              <div class="field"><label>Veg Start</label><input type="date" id="summary-veg-start" style="font-size:14px;font-family:var(--mono);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;" /></div>
-            </div>
-            <div class="g2">
-              <div class="field"><label>Flower Start</label><input type="date" id="summary-flower-start" style="font-size:14px;font-family:var(--mono);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;" /></div>
-              <div class="field"><label>Harvest</label><input type="date" id="summary-harvest-date" style="font-size:14px;font-family:var(--mono);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;" /></div>
-            </div>
-          </div>
 
           <!-- Rooms -->
           <div class="field" style="margin-bottom:12px;">
@@ -1247,18 +1245,25 @@ async function ecSave(){
   const room=_roomEl.value||(_roomEl.options&&_roomEl.options.length>0&&_roomEl.selectedIndex>=0?_roomEl.options[_roomEl.selectedIndex].value:'');
   const wtype=document.getElementById('ec-wtype').value;
   if(room&&FLOWER_ROOMS.includes(room)&&wtype&&!FLOWER_WTYPES.includes(wtype)){toast('Watering type "'+wtype+'" is not allowed in '+room+'. Use: Full Saturation, Feed, Flush, or RO Water.',4000);return;}
-  const hydrationDate=document.getElementById('ec-hydration').value;
-  if(!hydrationDate){toast('This batch has no Hydration Date. Set it on the Summary page first.',4500);return;}
-  const harvestDate=document.getElementById('ec-harvest').value;
-  if(hydrationDate&&date<hydrationDate){toast('Entry date cannot be before hydration date ('+hydrationDate+').',3500);return;}
-  // New batch: ensure hydration date exists in a saved record before allowing veg date
+  // Event-driven hydration date:
+  //   - If batchRec already has hydrationDate, use it (any wtype is allowed)
+  //   - If not, only a wtype='Hydration' entry can set it; otherwise refuse
   const batchVal2=document.getElementById('ec-batch').value.trim();
-  // Block writes only when the batch is manually closed (Status=Closed)
   const _ecBatchRec=batchRecs.find(r=>r.batchId===batchVal2 && !r.type);
+  // Block writes when batch is manually closed (Status=Closed)
   if(_ecBatchRec && _ecBatchRec.status==='Closed'){
     toast('This batch is closed (Status=Closed). No new entries.',3500);
     return;
   }
+  const _existingHydration = _ecBatchRec ? (_ecBatchRec.hydrationDate || '') : '';
+  const _willSetHydration = (wtype === 'Hydration' && !_existingHydration);
+  if(!_existingHydration && wtype !== 'Hydration'){
+    toast('This batch has no Hydration Date. First save an EC entry with Watering Type = Hydration.',5500);
+    return;
+  }
+  const hydrationDate = _willSetHydration ? date : _existingHydration;
+  const harvestDate=document.getElementById('ec-harvest').value;
+  if(hydrationDate&&date<hydrationDate){toast('Entry date cannot be before hydration date ('+hydrationDate+').',3500);return;}
   if(!wtype){toast('Please select a watering type.');return;}
   const flowVal=parseFloat(document.getElementById('ec-flow').value);
   if(!flowVal||flowVal<=0){toast('Please enter a flow meter reading.');return;}
@@ -1270,6 +1275,15 @@ async function ecSave(){
   if(!totalML){toast('Enter at least one watering event.');return;}
   const rec={id:Date.now(),date,room:document.getElementById('ec-room').value,grower,batch:document.getElementById('ec-batch').value.trim(),hydrationDate:hydrationDate||null,vegStart:vs,flowerStart:fs,harvestDate:harvestDate||null,stage,day,dripEcPens,dripPhPens,dripEc,dripPh,wtype,events:evts,totalML:totalML||null,flow:parseFloat(document.getElementById('ec-flow').value)||null,notes:document.getElementById('ec-notes').value.trim(),synced:false};
   ecRecs.unshift(rec);lsSet('gp-ec',ecRecs);saveBatchRoom(rec.batch,rec.room);populateBatchDropdowns();
+  // Capture hydration date on the batch if this EC entry is the trigger
+  let _hydrationCaptured = false;
+  if(_willSetHydration && _ecBatchRec){
+    _ecBatchRec.hydrationDate = date;
+    _ecBatchRec.synced = false;
+    lsSet('gp-batch', batchRecs);
+    _hydrationCaptured = true;
+    updatePendingBadge();
+  }
   if(atReady()){
     setSyncPill('ing','Syncing...');document.getElementById('ec-btn').disabled=true;
     try{
@@ -1279,6 +1293,17 @@ async function ecSave(){
     }catch(e){setSyncPill('err','Sync failed');toast('Saved locally - Airtable: '+(e.message||'sync failed'),5000);}
     document.getElementById('ec-btn').disabled=false;
   }else{toast('Entry saved locally');}
+  // If this entry captured the hydration date on the batch, push the batch update to Airtable
+  if(_hydrationCaptured && cfg.batchTbl && cfg.token && cfg.base){
+    try{
+      await atUpsert(cfg.batchTbl, buildBatchFields(_ecBatchRec), ['Batch ID']);
+      _ecBatchRec.synced = true;
+      lsSet('gp-batch', batchRecs);
+      updatePendingBadge();
+    }catch(e){
+      // Stay unsynced; Sync Pending will retry
+    }
+  }
   applyCascadeLocks();ecClear();updatePendingBadge();
 }
 function ecClear(){
@@ -1690,13 +1715,12 @@ async function wasteSave(){
       document.querySelectorAll('.summary-room-cb').forEach(cb=>{ cb.checked = (_bRec.rooms||[]).includes(cb.value); });
       document.getElementById('si-phase').textContent = _bRec.plantPhase||'—';
       document.getElementById('si-rooms').textContent = (_bRec.rooms && _bRec.rooms.length) ? _bRec.rooms.join(', ') : '—';
-      document.getElementById('summary-hydration-date').value = _bRec.hydrationDate||'';
-      document.getElementById('summary-veg-start').value = _bRec.vegStart||'';
-      document.getElementById('summary-flower-start').value = _bRec.flowerStart||'';
-      document.getElementById('summary-harvest-date').value = _bRec.harvestDate||'';
+      document.getElementById('si-hydration-date').textContent = _bRec.hydrationDate || '—';
+      document.getElementById('si-veg-start').textContent = _bRec.vegStart || '—';
+      document.getElementById('si-flower-start').textContent = _bRec.flowerStart || '—';
+      document.getElementById('si-harvest-date').textContent = _bRec.harvestDate || '—';
     }
     applyPhaseRoomLock();
-    applyDateLock(calcBatchQty(rec.batch));
   }
   if(cfg.token&&cfg.base&&cfg.wasteTbl){
     setSyncPill('ing','Syncing...');document.getElementById('waste-btn').disabled=true;
@@ -2015,12 +2039,11 @@ function summaryBatchChanged(){
   applyPhaseRoomLock();
   summaryStatusChanged();
   document.getElementById('summary-closed-date').value = b.closedDate||'';
-  // Lifecycle dates
-  document.getElementById('summary-hydration-date').value = b.hydrationDate||'';
-  document.getElementById('summary-veg-start').value = b.vegStart||'';
-  document.getElementById('summary-flower-start').value = b.flowerStart||'';
-  document.getElementById('summary-harvest-date').value = b.harvestDate||'';
-  applyDateLock(_curQty);
+  // Lifecycle dates (read-only in Batch Info)
+  document.getElementById('si-hydration-date').textContent = b.hydrationDate || '—';
+  document.getElementById('si-veg-start').textContent = b.vegStart || '—';
+  document.getElementById('si-flower-start').textContent = b.flowerStart || '—';
+  document.getElementById('si-harvest-date').textContent = b.harvestDate || '—';
   // Today's date for transactions
   document.getElementById('tx-date-display').textContent = localDate();
   // Restrict transaction types: only Produced/Received until at least one tx exists for this batch
@@ -2037,35 +2060,6 @@ function summaryBatchChanged(){
 function summaryStatusChanged(){
   const closed = document.getElementById('summary-status').value === 'Closed';
   document.getElementById('summary-closed-date-wrap').style.display = closed ? '' : 'none';
-}
-function applyDateLock(qty){
-  // Lifecycle date inputs are disabled until the batch has at least 1 plant assigned.
-  const lock = !qty || qty <= 0;
-  ['summary-hydration-date','summary-veg-start','summary-flower-start','summary-harvest-date'].forEach(id=>{
-    const el = document.getElementById(id);
-    if(!el) return;
-    el.disabled = lock;
-    el.style.background = lock ? 'var(--bg2)' : '';
-    el.style.color = lock ? 'var(--text3)' : '';
-    el.style.cursor = lock ? 'not-allowed' : '';
-  });
-  // Hint message
-  const wrap = document.getElementById('summary-hydration-date');
-  if(!wrap) return;
-  const card = wrap.closest('div[style*="Lifecycle Dates"]') || wrap.parentElement.parentElement.parentElement;
-  if(!card) return;
-  let hint = card.querySelector('.date-lock-hint');
-  if(lock){
-    if(!hint){
-      hint = document.createElement('div');
-      hint.className = 'date-lock-hint';
-      hint.style.cssText = 'font-size:10px;color:var(--text3);margin-top:6px;font-family:var(--mono);';
-      hint.textContent = 'Add at least 1 plant (Produced/Received) before setting lifecycle dates';
-      card.appendChild(hint);
-    }
-  } else {
-    if(hint) hint.remove();
-  }
 }
 function applyPhaseRoomLock(){
   // Room rules combine two layers:
@@ -2180,37 +2174,12 @@ async function summaryUpdateBatch(){
   const plantPhase = document.getElementById('summary-phase').value;
   const status = document.getElementById('summary-status').value;
   const closedDate = status==='Closed' ? document.getElementById('summary-closed-date').value : '';
-  const hydrationDate = document.getElementById('summary-hydration-date').value;
-  const vegStart = document.getElementById('summary-veg-start').value;
-  const flowerStart = document.getElementById('summary-flower-start').value;
-  const harvestDate = document.getElementById('summary-harvest-date').value;
-  // Guard: cannot set lifecycle dates when the batch has 0 plants assigned
-  const _existHyd = batchRecs[idx].hydrationDate || '';
-  const _existVeg = batchRecs[idx].vegStart || '';
-  const _existFlower = batchRecs[idx].flowerStart || '';
-  const _existHarvest = batchRecs[idx].harvestDate || '';
-  const _settingNewDate = (hydrationDate && !_existHyd) || (vegStart && !_existVeg) || (flowerStart && !_existFlower) || (harvestDate && !_existHarvest);
-  if(calcBatchQty(batchId) <= 0 && _settingNewDate){
-    toast('Cannot set lifecycle dates: batch has no plants. Add a Produced/Received transaction first.',5000);
-    return;
-  }
-  // Cascade validation: hydration → veg (>+1d) → flower (>+14d) → harvest (>flower)
-  if(vegStart && hydrationDate){
-    const _h=new Date(hydrationDate+'T00:00:00'),_v=new Date(vegStart+'T00:00:00');
-    if(_v <= _h){ toast('Veg Start must be at least 1 day after Hydration Date.',5000); return; }
-  }
-  if(flowerStart && vegStart){
-    const _v=new Date(vegStart+'T00:00:00'),_f=new Date(flowerStart+'T00:00:00');
-    const _diff = (_f-_v)/(1000*60*60*24);
-    if(_diff < 14){ toast('Flower Start must be at least 14 days after Veg Start.',5000); return; }
-  }
-  if(harvestDate && flowerStart){
-    const _f=new Date(flowerStart+'T00:00:00'),_hv=new Date(harvestDate+'T00:00:00');
-    if(_hv <= _f){ toast('Harvest Date must be after Flower Start.',5000); return; }
-  }
-  if(vegStart && !hydrationDate){ toast('Set Hydration Date before Veg Start.',5000); return; }
-  if(flowerStart && !vegStart){ toast('Set Veg Start before Flower Start.',5000); return; }
-  if(harvestDate && !flowerStart){ toast('Set Flower Start before Harvest Date.',5000); return; }
+  // Lifecycle dates are now event-driven — preserve existing values from the batch record
+  // (they get set automatically by EC Hydration entries, phase changes, and Harvested transactions).
+  const _exHyd = batchRecs[idx].hydrationDate || '';
+  const _exVeg = batchRecs[idx].vegStart || '';
+  const _exFlower = batchRecs[idx].flowerStart || '';
+  const _exHarvest = batchRecs[idx].harvestDate || '';
   // Guard: enforce forward-only phase progression
   const existingPhase = batchRecs[idx].plantPhase || '';
   if(plantPhase && !getAllowedPhases(existingPhase).includes(plantPhase)){
@@ -2240,7 +2209,8 @@ async function summaryUpdateBatch(){
   //   Clones → Veg: vegStart = today
   //   Veg    → Flower: flowerStart = today
   //   Flower → Drying: harvestDate = today
-  let _autoHydration = hydrationDate, _autoVeg = vegStart, _autoFlower = flowerStart, _autoHarvest = harvestDate;
+  // (Hydration date is set separately by EC log Hydration entries — not here.)
+  let _autoVeg = _exVeg, _autoFlower = _exFlower, _autoHarvest = _exHarvest;
   const _t = localDate();
   if(plantPhase === 'Veg' && existingPhase === 'Clones' && !_autoVeg) _autoVeg = _t;
   if(plantPhase === 'Flower' && existingPhase === 'Veg' && !_autoFlower) _autoFlower = _t;
@@ -2249,7 +2219,7 @@ async function summaryUpdateBatch(){
   batchRecs[idx].plantPhase = plantPhase;
   batchRecs[idx].status = status;
   batchRecs[idx].closedDate = closedDate;
-  batchRecs[idx].hydrationDate = _autoHydration;
+  batchRecs[idx].hydrationDate = _exHyd;
   batchRecs[idx].vegStart = _autoVeg;
   batchRecs[idx].flowerStart = _autoFlower;
   batchRecs[idx].harvestDate = _autoHarvest;
@@ -2367,13 +2337,12 @@ async function summaryAddTransaction(){
     document.querySelectorAll('.summary-room-cb').forEach(cb=>{ cb.checked = (_b.rooms||[]).includes(cb.value); });
     document.getElementById('si-phase').textContent = _b.plantPhase||'—';
     document.getElementById('si-rooms').textContent = (_b.rooms && _b.rooms.length) ? _b.rooms.join(', ') : '—';
-    document.getElementById('summary-hydration-date').value = _b.hydrationDate||'';
-    document.getElementById('summary-veg-start').value = _b.vegStart||'';
-    document.getElementById('summary-flower-start').value = _b.flowerStart||'';
-    document.getElementById('summary-harvest-date').value = _b.harvestDate||'';
+    document.getElementById('si-hydration-date').textContent = _b.hydrationDate || '—';
+    document.getElementById('si-veg-start').textContent = _b.vegStart || '—';
+    document.getElementById('si-flower-start').textContent = _b.flowerStart || '—';
+    document.getElementById('si-harvest-date').textContent = _b.harvestDate || '—';
   }
   applyPhaseRoomLock();
-  applyDateLock(_newQty);
   updatePendingBadge();
   // Sync to Airtable
   if(cfg.batchtxTbl && cfg.token && cfg.base){
