@@ -930,13 +930,17 @@ function ecBatchLookup(){
     return;
   }
 
-  // ── Room dropdown: source from the batch's declared rooms (batchRec.rooms) plus
-  //    any rooms this batch has appeared in via EC/RO history. Always interactive —
-  //    if the batch is in multiple rooms, the grower picks one for this entry.
+  // ── Room dropdown: prefer the batch's currently-declared rooms (batchRec.rooms).
+  //    Fall back to EC/RO history only when no rooms are declared on the batch record.
+  //    This keeps old Veg-phase entries from leaking into the dropdown for a Flower-phase batch.
   const batchRec = batchRecs.find(r=>r.batchId===batch && !r.type);
   const declaredRooms = (batchRec && Array.isArray(batchRec.rooms)) ? batchRec.rooms : [];
-  const historyRooms = [...new Set([...ecRecs,...roRecs].filter(r=>r.batch&&r.batch.trim().toLowerCase()===batch.trim().toLowerCase()&&r.room).map(r=>r.room))];
-  const availableRooms = [...new Set([...declaredRooms,...historyRooms])];
+  let availableRooms;
+  if(declaredRooms.length){
+    availableRooms = [...declaredRooms];
+  } else {
+    availableRooms = [...new Set([...ecRecs,...roRecs].filter(r=>r.batch&&r.batch.trim().toLowerCase()===batch.trim().toLowerCase()&&r.room).map(r=>r.room))];
+  }
   const prevRoom = roomEl.value;
   roomEl.disabled=false; roomEl.style.background=''; roomEl.style.color=''; roomEl.style.cursor='';
   if(availableRooms.length){
@@ -1499,12 +1503,17 @@ function wasteSeqUnlock(){
     roomEl.disabled=true;roomEl.style.background='var(--bg2)';roomEl.style.color='var(--text3)';roomEl.style.cursor='not-allowed';
     disableFields();return;
   }
-  // Populate rooms from the batch's declared rooms (Summary page) + any EC-history rooms.
-  // batchRec.rooms is the primary source so new batches with no EC entries still get options.
+  // Populate rooms: prefer batchRec.rooms exclusively when set. Only fall back to EC history
+  // when no rooms are declared (e.g. orphan batch). Avoids stale Veg-era rooms leaking in
+  // when the batch has moved on to Flower rooms.
   const batchRec=batchRecs.find(r=>r.batchId===batch && !r.type);
-  const declaredRooms=(batchRec&&batchRec.rooms)?batchRec.rooms:[];
-  const ecHistoryRooms=[...new Set(ecRecs.filter(r=>r.batch&&r.batch.trim().toLowerCase()===batch.trim().toLowerCase()&&r.room).map(r=>r.room))];
-  const batchRooms=[...new Set([...declaredRooms,...ecHistoryRooms])];
+  const declaredRooms=(batchRec&&Array.isArray(batchRec.rooms))?batchRec.rooms:[];
+  let batchRooms;
+  if(declaredRooms.length){
+    batchRooms = [...declaredRooms];
+  } else {
+    batchRooms = [...new Set(ecRecs.filter(r=>r.batch&&r.batch.trim().toLowerCase()===batch.trim().toLowerCase()&&r.room).map(r=>r.room))];
+  }
   const prevRoom=roomEl.value;
   roomEl.innerHTML='<option value="">select room</option>'+batchRooms.map(r=>'<option'+(r===prevRoom?' selected':'')+'>'+r+'</option>').join('');
   roomEl.disabled=false;roomEl.style.background='';roomEl.style.color='';roomEl.style.cursor='';
