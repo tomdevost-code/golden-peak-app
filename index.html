@@ -625,13 +625,13 @@ tr:last-child td { border-bottom: none; }
           <!-- Rooms -->
           <div class="field" style="margin-bottom:12px;">
             <label>Rooms</label>
-            <div id="summary-rooms-wrap" style="display:flex;flex-wrap:wrap;gap:8px;padding:10px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);">
-              <label style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:400;cursor:pointer;"><input type="checkbox" class="summary-room-cb" value="Flower 1"> Flower 1</label>
-              <label style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:400;cursor:pointer;"><input type="checkbox" class="summary-room-cb" value="Flower 2"> Flower 2</label>
-              <label style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:400;cursor:pointer;"><input type="checkbox" class="summary-room-cb" value="Flower 3"> Flower 3</label>
-              <label style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:400;cursor:pointer;"><input type="checkbox" class="summary-room-cb" value="Flower 4"> Flower 4</label>
-              <label style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:400;cursor:pointer;"><input type="checkbox" class="summary-room-cb" value="Flower 5"> Flower 5</label>
-              <label style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:400;cursor:pointer;"><input type="checkbox" class="summary-room-cb" value="Veg"> Veg</label>
+            <div id="summary-rooms-wrap" style="display:flex;flex-direction:column;gap:6px;padding:10px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);">
+              <div class="summary-room-item" style="display:flex;align-items:center;gap:4px;width:100%;"><label style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:400;cursor:pointer;min-width:80px;"><input type="checkbox" class="summary-room-cb" value="Flower 1" onchange="summaryRoomCheckChanged(this)"> Flower 1</label><input type="number" class="summary-room-count" data-room="Flower 1" min="0" step="1" placeholder="plants" style="display:none;width:80px;font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:var(--mono);background:var(--bg);" onwheel="this.blur()" onkeydown="if(event.key==='ArrowUp'||event.key==='ArrowDown')event.preventDefault();"></div>
+              <div class="summary-room-item" style="display:flex;align-items:center;gap:4px;width:100%;"><label style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:400;cursor:pointer;min-width:80px;"><input type="checkbox" class="summary-room-cb" value="Flower 2" onchange="summaryRoomCheckChanged(this)"> Flower 2</label><input type="number" class="summary-room-count" data-room="Flower 2" min="0" step="1" placeholder="plants" style="display:none;width:80px;font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:var(--mono);background:var(--bg);" onwheel="this.blur()" onkeydown="if(event.key==='ArrowUp'||event.key==='ArrowDown')event.preventDefault();"></div>
+              <div class="summary-room-item" style="display:flex;align-items:center;gap:4px;width:100%;"><label style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:400;cursor:pointer;min-width:80px;"><input type="checkbox" class="summary-room-cb" value="Flower 3" onchange="summaryRoomCheckChanged(this)"> Flower 3</label><input type="number" class="summary-room-count" data-room="Flower 3" min="0" step="1" placeholder="plants" style="display:none;width:80px;font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:var(--mono);background:var(--bg);" onwheel="this.blur()" onkeydown="if(event.key==='ArrowUp'||event.key==='ArrowDown')event.preventDefault();"></div>
+              <div class="summary-room-item" style="display:flex;align-items:center;gap:4px;width:100%;"><label style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:400;cursor:pointer;min-width:80px;"><input type="checkbox" class="summary-room-cb" value="Flower 4" onchange="summaryRoomCheckChanged(this)"> Flower 4</label><input type="number" class="summary-room-count" data-room="Flower 4" min="0" step="1" placeholder="plants" style="display:none;width:80px;font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:var(--mono);background:var(--bg);" onwheel="this.blur()" onkeydown="if(event.key==='ArrowUp'||event.key==='ArrowDown')event.preventDefault();"></div>
+              <div class="summary-room-item" style="display:flex;align-items:center;gap:4px;width:100%;"><label style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:400;cursor:pointer;min-width:80px;"><input type="checkbox" class="summary-room-cb" value="Flower 5" onchange="summaryRoomCheckChanged(this)"> Flower 5</label><input type="number" class="summary-room-count" data-room="Flower 5" min="0" step="1" placeholder="plants" style="display:none;width:80px;font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:var(--mono);background:var(--bg);" onwheel="this.blur()" onkeydown="if(event.key==='ArrowUp'||event.key==='ArrowDown')event.preventDefault();"></div>
+              <label style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:400;cursor:pointer;"><input type="checkbox" class="summary-room-cb" value="Veg" onchange="summaryRoomCheckChanged(this)"> Veg</label>
             </div>
           </div>
 
@@ -863,6 +863,7 @@ function buildBatchFields(rec){
     'Notes':rec.notes||undefined,
     'Created Date':rec.createdDate||undefined,
     'Rooms':(rec.rooms&&rec.rooms.length)?rec.rooms:undefined,
+    'Room Distribution':(rec.roomDistribution && Object.keys(rec.roomDistribution).length) ? JSON.stringify(rec.roomDistribution) : undefined,
     'Plant Phase':rec.plantPhase||undefined,
     'Status':rec.status||undefined,
     'Closed Date':rec.closedDate||undefined,
@@ -2137,8 +2138,23 @@ function summaryBatchChanged(){
   enforceZeroQtyState(batchId);
   // Re-read rooms and Batch Info display since enforceZeroQtyState may have changed them
   document.querySelectorAll('.summary-room-cb').forEach(cb=>{ cb.checked = (b.rooms||[]).includes(cb.value); });
+  // Populate per-Flower-room plant count inputs from batchRec.roomDistribution
+  const _dist = b.roomDistribution || {};
+  document.querySelectorAll('.summary-room-count').forEach(input=>{
+    const r = input.dataset.room;
+    input.value = (_dist[r] != null) ? _dist[r] : '';
+  });
   document.getElementById('si-phase').textContent = b.plantPhase||'—';
-  document.getElementById('si-rooms').textContent = (b.rooms && b.rooms.length) ? b.rooms.join(', ') : '—';
+  // Rooms display: show distribution if present, else just room names
+  if(b.rooms && b.rooms.length){
+    const _parts = b.rooms.map(r=>{
+      const c = _dist[r];
+      return c != null ? (r + ' (' + c + ')') : r;
+    });
+    document.getElementById('si-rooms').textContent = _parts.join(', ');
+  } else {
+    document.getElementById('si-rooms').textContent = '—';
+  }
   summaryUpdatePhaseOptions(b.plantPhase||'', _curQty);
   document.getElementById('summary-status').value = b.status||'Open';
   applyPhaseRoomLock();
@@ -2165,6 +2181,18 @@ function summaryBatchChanged(){
 function summaryStatusChanged(){
   const closed = document.getElementById('summary-status').value === 'Closed';
   document.getElementById('summary-closed-date-wrap').style.display = closed ? '' : 'none';
+}
+function summaryRoomCheckChanged(cb){
+  // Show/hide the corresponding per-Flower-room plant count input
+  if(!cb || cb.value === 'Veg') return;
+  const countInput = document.querySelector('.summary-room-count[data-room="'+cb.value+'"]');
+  if(!countInput) return;
+  if(cb.checked){
+    countInput.style.display = '';
+  } else {
+    countInput.style.display = 'none';
+    countInput.value = '';
+  }
 }
 function applyPhaseRoomLock(){
   // Room rules combine two layers:
@@ -2205,6 +2233,18 @@ function applyPhaseRoomLock(){
       const visible = allowed || cb.checked;
       label.style.opacity = visible ? '1' : '0.4';
       label.style.cursor = allowed ? 'pointer' : 'not-allowed';
+    }
+    // Sync the per-flower-room plant count input: show when checked, hide otherwise.
+    // Disable it when rooms are locked (Flower onward) so the count can't change either.
+    if(cb.value !== 'Veg'){
+      const ci = document.querySelector('.summary-room-count[data-room="'+cb.value+'"]');
+      if(ci){
+        ci.style.display = cb.checked ? '' : 'none';
+        ci.disabled = roomsLocked || !allowed;
+        ci.style.background = ci.disabled ? 'var(--bg2)' : 'var(--bg)';
+        ci.style.color = ci.disabled ? 'var(--text3)' : 'var(--text)';
+        ci.style.cursor = ci.disabled ? 'not-allowed' : '';
+      }
     }
   });
 }
@@ -2253,6 +2293,7 @@ function summaryUpdateTxTypeOptions(batchId){
   else if(phase==='Drying')   opts = ['Sold'];
   else if(phase==='Packaged') opts = ['Sold'];
   else if(phase==='Clones')   opts = hasTxs ? ['Produced/Received','Moved to Moms','Sold'] : ['Produced/Received'];
+  else if(phase==='Veg')      opts = ['Moved to Moms','Harvested','Sold']; // no Produced/Received once in Veg
   else if(!hasTxs)            opts = ['Produced/Received'];
   else                        opts = ['Produced/Received','Moved to Moms','Harvested','Sold'];
   sel.innerHTML = '<option value="">-- select type --</option>' + opts.map(o=>'<option'+(o===prev?' selected':'')+'>'+o+'</option>').join('');
@@ -2277,6 +2318,33 @@ async function summaryUpdateBatch(){
   const idx = batchRecs.findIndex(r=>r.batchId===batchId && !r.type);
   if(idx < 0) return;
   const rooms = [...document.querySelectorAll('.summary-room-cb:checked')].map(cb=>cb.value);
+  // Read per-Flower-room plant distribution
+  const roomDistribution = {};
+  let _distTotal = 0;
+  document.querySelectorAll('.summary-room-count').forEach(input=>{
+    const r = input.dataset.room;
+    const cb = document.querySelector('.summary-room-cb[value="'+r+'"]');
+    if(cb && cb.checked){
+      const cnt = parseInt(input.value) || 0;
+      if(cnt > 0){ roomDistribution[r] = cnt; _distTotal += cnt; }
+    }
+  });
+  // Validation: total assigned plants cannot exceed batch quantity
+  const _bQty = calcBatchQty(batchId);
+  if(_distTotal > 0 && _distTotal > _bQty){
+    toast('Total plants across Flower rooms ('+_distTotal+') exceeds batch quantity ('+_bQty+').',5500);
+    return;
+  }
+  // Validation: if advancing to Flower phase, every checked Flower room must have a count > 0
+  const _flowerRoomsChecked = rooms.filter(r=>r!=='Veg');
+  if(_flowerRoomsChecked.length > 0){
+    for(const fr of _flowerRoomsChecked){
+      if(!roomDistribution[fr] || roomDistribution[fr] <= 0){
+        toast('Enter a plant count for ' + fr + '.',5000);
+        return;
+      }
+    }
+  }
   const plantPhase = document.getElementById('summary-phase').value;
   const status = document.getElementById('summary-status').value;
   const closedDate = status==='Closed' ? document.getElementById('summary-closed-date').value : '';
@@ -2322,6 +2390,8 @@ async function summaryUpdateBatch(){
   if(plantPhase === 'Flower' && existingPhase === 'Veg' && !_autoFlower) _autoFlower = _t;
   if(plantPhase === 'Drying' && existingPhase === 'Flower' && !_autoHarvest) _autoHarvest = _t;
   batchRecs[idx].rooms = _roomsForSave;
+  // When phase becomes Drying/Packaged, clear roomDistribution as well
+  batchRecs[idx].roomDistribution = (plantPhase === 'Drying' || plantPhase === 'Packaged') ? {} : roomDistribution;
   batchRecs[idx].plantPhase = plantPhase;
   batchRecs[idx].status = status;
   batchRecs[idx].closedDate = closedDate;
@@ -2382,6 +2452,11 @@ async function summaryAddTransaction(){
   // Guard: in Clones phase, Harvested is not allowed (clones aren't harvestable)
   if(_bGuard && _bGuard.plantPhase==='Clones' && txType==='Harvested'){
     toast('Cannot harvest plants while in Clones phase.',5000);
+    return;
+  }
+  // Guard: in Veg phase, no more Produced/Received transactions (additions stop once plants leave Clones)
+  if(_bGuard && _bGuard.plantPhase==='Veg' && txType==='Produced/Received'){
+    toast('Cannot add plants once the batch is in Veg phase.',5000);
     return;
   }
   // Guard: in Drying/Packaged phase, only Sold transactions are allowed (no more harvesting or producing)
