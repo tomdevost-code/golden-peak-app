@@ -1156,6 +1156,8 @@ function ecRoomChanged(){
   // If the previously-selected value is no longer in the allowed list, clear it
   if(cur && !opts.includes(cur)) wtype.value='';
   applyRoomColor('ec',room);
+  // Re-evaluate the sequential unlock now that a room is selected
+  ecSeqUnlock();
 }
 function ecHydrationChanged(){setVegMin();applyCascadeLocks();}
 function applyCascadeLocks(){
