@@ -625,12 +625,12 @@ tr:last-child td { border-bottom: none; }
           <!-- Rooms -->
           <div class="field" style="margin-bottom:12px;">
             <label>Rooms</label>
-            <div id="summary-rooms-wrap" style="display:flex;flex-direction:column;gap:6px;padding:10px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);">
-              <div class="summary-room-item" style="display:flex;align-items:center;gap:4px;width:100%;"><label style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:400;cursor:pointer;min-width:80px;"><input type="checkbox" class="summary-room-cb" value="Flower 1" onchange="summaryRoomCheckChanged(this)"> Flower 1</label><input type="number" class="summary-room-count" data-room="Flower 1" min="0" step="1" placeholder="plants" style="display:none;width:80px;font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:var(--mono);background:var(--bg);" onwheel="this.blur()" onkeydown="if(event.key==='ArrowUp'||event.key==='ArrowDown')event.preventDefault();"></div>
-              <div class="summary-room-item" style="display:flex;align-items:center;gap:4px;width:100%;"><label style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:400;cursor:pointer;min-width:80px;"><input type="checkbox" class="summary-room-cb" value="Flower 2" onchange="summaryRoomCheckChanged(this)"> Flower 2</label><input type="number" class="summary-room-count" data-room="Flower 2" min="0" step="1" placeholder="plants" style="display:none;width:80px;font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:var(--mono);background:var(--bg);" onwheel="this.blur()" onkeydown="if(event.key==='ArrowUp'||event.key==='ArrowDown')event.preventDefault();"></div>
-              <div class="summary-room-item" style="display:flex;align-items:center;gap:4px;width:100%;"><label style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:400;cursor:pointer;min-width:80px;"><input type="checkbox" class="summary-room-cb" value="Flower 3" onchange="summaryRoomCheckChanged(this)"> Flower 3</label><input type="number" class="summary-room-count" data-room="Flower 3" min="0" step="1" placeholder="plants" style="display:none;width:80px;font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:var(--mono);background:var(--bg);" onwheel="this.blur()" onkeydown="if(event.key==='ArrowUp'||event.key==='ArrowDown')event.preventDefault();"></div>
-              <div class="summary-room-item" style="display:flex;align-items:center;gap:4px;width:100%;"><label style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:400;cursor:pointer;min-width:80px;"><input type="checkbox" class="summary-room-cb" value="Flower 4" onchange="summaryRoomCheckChanged(this)"> Flower 4</label><input type="number" class="summary-room-count" data-room="Flower 4" min="0" step="1" placeholder="plants" style="display:none;width:80px;font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:var(--mono);background:var(--bg);" onwheel="this.blur()" onkeydown="if(event.key==='ArrowUp'||event.key==='ArrowDown')event.preventDefault();"></div>
-              <div class="summary-room-item" style="display:flex;align-items:center;gap:4px;width:100%;"><label style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:400;cursor:pointer;min-width:80px;"><input type="checkbox" class="summary-room-cb" value="Flower 5" onchange="summaryRoomCheckChanged(this)"> Flower 5</label><input type="number" class="summary-room-count" data-room="Flower 5" min="0" step="1" placeholder="plants" style="display:none;width:80px;font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:var(--mono);background:var(--bg);" onwheel="this.blur()" onkeydown="if(event.key==='ArrowUp'||event.key==='ArrowDown')event.preventDefault();"></div>
+            <div id="summary-rooms-wrap" style="display:grid;grid-template-columns:1fr 1fr;column-gap:10px;row-gap:4px;padding:8px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);">
+              <div class="summary-room-item" style="display:flex;align-items:center;gap:6px;"><label style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:400;cursor:pointer;min-width:80px;"><input type="checkbox" class="summary-room-cb" value="Flower 1" onchange="summaryRoomCheckChanged(this)"> Flower 1</label><input type="number" class="summary-room-count" data-room="Flower 1" min="0" step="1" placeholder="plants" style="display:none;width:60px;font-size:12px;padding:2px 5px;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:var(--mono);background:var(--bg);" onwheel="this.blur()" onkeydown="if(event.key==='ArrowUp'||event.key==='ArrowDown')event.preventDefault();" oninput="summaryUpdateVegLock()"></div>
+              <div class="summary-room-item" style="display:flex;align-items:center;gap:6px;"><label style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:400;cursor:pointer;min-width:80px;"><input type="checkbox" class="summary-room-cb" value="Flower 2" onchange="summaryRoomCheckChanged(this)"> Flower 2</label><input type="number" class="summary-room-count" data-room="Flower 2" min="0" step="1" placeholder="plants" style="display:none;width:60px;font-size:12px;padding:2px 5px;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:var(--mono);background:var(--bg);" onwheel="this.blur()" onkeydown="if(event.key==='ArrowUp'||event.key==='ArrowDown')event.preventDefault();" oninput="summaryUpdateVegLock()"></div>
+              <div class="summary-room-item" style="display:flex;align-items:center;gap:6px;"><label style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:400;cursor:pointer;min-width:80px;"><input type="checkbox" class="summary-room-cb" value="Flower 3" onchange="summaryRoomCheckChanged(this)"> Flower 3</label><input type="number" class="summary-room-count" data-room="Flower 3" min="0" step="1" placeholder="plants" style="display:none;width:60px;font-size:12px;padding:2px 5px;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:var(--mono);background:var(--bg);" onwheel="this.blur()" onkeydown="if(event.key==='ArrowUp'||event.key==='ArrowDown')event.preventDefault();" oninput="summaryUpdateVegLock()"></div>
+              <div class="summary-room-item" style="display:flex;align-items:center;gap:6px;"><label style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:400;cursor:pointer;min-width:80px;"><input type="checkbox" class="summary-room-cb" value="Flower 4" onchange="summaryRoomCheckChanged(this)"> Flower 4</label><input type="number" class="summary-room-count" data-room="Flower 4" min="0" step="1" placeholder="plants" style="display:none;width:60px;font-size:12px;padding:2px 5px;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:var(--mono);background:var(--bg);" onwheel="this.blur()" onkeydown="if(event.key==='ArrowUp'||event.key==='ArrowDown')event.preventDefault();" oninput="summaryUpdateVegLock()"></div>
+              <div class="summary-room-item" style="display:flex;align-items:center;gap:6px;"><label style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:400;cursor:pointer;min-width:80px;"><input type="checkbox" class="summary-room-cb" value="Flower 5" onchange="summaryRoomCheckChanged(this)"> Flower 5</label><input type="number" class="summary-room-count" data-room="Flower 5" min="0" step="1" placeholder="plants" style="display:none;width:60px;font-size:12px;padding:2px 5px;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:var(--mono);background:var(--bg);" onwheel="this.blur()" onkeydown="if(event.key==='ArrowUp'||event.key==='ArrowDown')event.preventDefault();" oninput="summaryUpdateVegLock()"></div>
               <label style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:400;cursor:pointer;"><input type="checkbox" class="summary-room-cb" value="Veg" onchange="summaryRoomCheckChanged(this)"> Veg</label>
             </div>
           </div>
@@ -2158,6 +2158,7 @@ function summaryBatchChanged(){
   summaryUpdatePhaseOptions(b.plantPhase||'', _curQty);
   document.getElementById('summary-status').value = b.status||'Open';
   applyPhaseRoomLock();
+  summaryUpdateVegLock();
   summaryStatusChanged();
   document.getElementById('summary-closed-date').value = b.closedDate||'';
   // Lifecycle dates (read-only in Batch Info)
@@ -2184,14 +2185,45 @@ function summaryStatusChanged(){
 }
 function summaryRoomCheckChanged(cb){
   // Show/hide the corresponding per-Flower-room plant count input
-  if(!cb || cb.value === 'Veg') return;
-  const countInput = document.querySelector('.summary-room-count[data-room="'+cb.value+'"]');
-  if(!countInput) return;
-  if(cb.checked){
-    countInput.style.display = '';
-  } else {
-    countInput.style.display = 'none';
-    countInput.value = '';
+  if(cb && cb.value !== 'Veg'){
+    const countInput = document.querySelector('.summary-room-count[data-room="'+cb.value+'"]');
+    if(countInput){
+      if(cb.checked){
+        countInput.style.display = '';
+      } else {
+        countInput.style.display = 'none';
+        countInput.value = '';
+      }
+    }
+  }
+  // Re-evaluate whether Veg should remain selectable
+  summaryUpdateVegLock();
+}
+function summaryUpdateVegLock(){
+  // Disable + uncheck Veg when the total plants assigned to Flower rooms reaches the batch quantity.
+  // (Once all plants are allocated to Flower, nothing's left in Veg.)
+  let total = 0;
+  document.querySelectorAll('.summary-room-count').forEach(input=>{
+    const r = input.dataset.room;
+    const cb = document.querySelector('.summary-room-cb[value="'+r+'"]');
+    if(cb && cb.checked){ total += parseInt(input.value) || 0; }
+  });
+  const batchId = document.getElementById('summary-batch-select').value;
+  const qty = batchId ? calcBatchQty(batchId) : 0;
+  const vegCb = document.querySelector('.summary-room-cb[value="Veg"]');
+  if(!vegCb) return;
+  const phaseRestricted = ['Flower','Drying','Packaged'].includes(document.getElementById('summary-phase').value);
+  const fullyDistributed = total > 0 && qty > 0 && total >= qty;
+  if(fullyDistributed){
+    vegCb.checked = false;
+    vegCb.disabled = true;
+    const label = vegCb.closest('label');
+    if(label){ label.style.opacity = '0.4'; label.style.cursor = 'not-allowed'; }
+  } else if(!phaseRestricted){
+    // Re-enable Veg unless the phase rule (Flower/Drying/Packaged) has locked it for other reasons
+    vegCb.disabled = false;
+    const label = vegCb.closest('label');
+    if(label){ label.style.opacity = '1'; label.style.cursor = 'pointer'; }
   }
 }
 function applyPhaseRoomLock(){
