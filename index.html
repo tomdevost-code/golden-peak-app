@@ -42,6 +42,23 @@ html, body { height: 100%; background-color: var(--bg); background-image: url('d
 .bnav-btn.active { color: var(--green); }
 .page { display: none; }
 .page.active { display: block; }
+/* On wider screens, dock the EC Recent Entries panel to the right so it stays visible while filling out the form */
+@media (min-width: 1100px){
+  .ec-recent-section{
+    position: fixed;
+    right: 20px;
+    top: 80px;
+    width: 380px;
+    max-height: calc(100vh - 120px);
+    overflow-y: auto;
+    margin-top: 0 !important;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 10px;
+    z-index: 50;
+  }
+}
 .section { margin-bottom: 20px; }
 .section-label { font-size: 15px; font-weight: 700; color: var(--green); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px; padding: 8px 12px; background: var(--green-pale); border-left: 4px solid var(--green); border-radius: var(--radius-sm); font-family: var(--mono); }
 .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 10px; }
@@ -228,10 +245,10 @@ tr:last-child td { border-bottom: none; }
       <button class="btn-primary" id="ec-btn" onclick="ecSave()">Save EC Entry</button>
       <button class="btn-secondary" style="width:100%;margin-top:8px;" onclick="ecClearConfirm()">Clear Form</button>
 
-      <!-- Recent EC entries for the selected batch + room -->
-      <div class="section" style="margin-top:20px;">
+      <!-- Recent EC entries for the selected batch (all rooms, all watering types) -->
+      <div class="section ec-recent-section" style="margin-top:20px;">
         <div class="section-label">Recent Entries</div>
-        <div id="ec-recent-list" style="font-size:13px;color:var(--text3);text-align:center;padding:20px;">Select a batch and room to see entries.</div>
+        <div id="ec-recent-list" style="font-size:13px;color:var(--text3);text-align:center;padding:20px;">Select a batch to see entries.</div>
       </div>
     </div>
 
@@ -618,6 +635,36 @@ tr:last-child td { border-bottom: none; }
           <div style="font-size:11px;color:var(--text3);margin-top:4px;">plants</div>
         </div>
 
+        <!-- Add Transaction -->
+        <div class="card" style="margin-bottom:12px;">
+          <div class="section-label">Add Transaction</div>
+          <div style="font-size:12px;color:var(--text3);font-family:var(--mono);background:var(--bg2);border-radius:var(--radius-sm);padding:6px 10px;margin-bottom:12px;">Date: <span id="tx-date-display"></span></div>
+
+          <div class="field" style="margin-bottom:10px;">
+            <label>Transaction Type</label>
+            <select id="tx-type" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;">
+              <option value="">-- select type --</option>
+              <option>Produced/Received</option>
+              <option>Moved to Moms</option>
+              <option>Sold</option>
+              <option>Harvested</option>
+            </select>
+          </div>
+
+          <div class="field" style="margin-bottom:10px;">
+            <label>Quantity</label>
+            <input type="number" id="tx-qty" placeholder="0" min="0" step="1" onwheel="this.blur()" onkeydown="if(event.key==='ArrowUp'||event.key==='ArrowDown')event.preventDefault();" style="font-size:14px;font-family:var(--mono);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;" />
+          </div>
+
+          <div class="field" style="margin-bottom:10px;">
+            <label>Notes</label>
+            <textarea id="tx-notes" rows="2" placeholder="Optional notes..." style="width:100%;font-size:14px;font-family:var(--sans);border-radius:var(--radius-sm);border:1px solid var(--border);padding:8px 10px;background:var(--bg);color:var(--text);outline:none;resize:vertical;"></textarea>
+          </div>
+
+          <button class="btn-save" onclick="summaryAddTransaction()">Save Transaction</button>
+          <div id="tx-msg" style="display:none;margin-top:8px;font-size:13px;"></div>
+        </div>
+
         <!-- Manage Batch -->
         <div class="card" style="margin-bottom:12px;">
           <div class="section-label">Manage Batch</div>
@@ -666,36 +713,6 @@ tr:last-child td { border-bottom: none; }
 
           <button class="btn-save" onclick="summaryUpdateBatch()">Save Batch Changes</button>
           <div id="summary-update-msg" style="display:none;margin-top:8px;font-size:13px;"></div>
-        </div>
-
-        <!-- Add Transaction -->
-        <div class="card" style="margin-bottom:12px;">
-          <div class="section-label">Add Transaction</div>
-          <div style="font-size:12px;color:var(--text3);font-family:var(--mono);background:var(--bg2);border-radius:var(--radius-sm);padding:6px 10px;margin-bottom:12px;">Date: <span id="tx-date-display"></span></div>
-
-          <div class="field" style="margin-bottom:10px;">
-            <label>Transaction Type</label>
-            <select id="tx-type" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;">
-              <option value="">-- select type --</option>
-              <option>Produced/Received</option>
-              <option>Moved to Moms</option>
-              <option>Sold</option>
-              <option>Harvested</option>
-            </select>
-          </div>
-
-          <div class="field" style="margin-bottom:10px;">
-            <label>Quantity</label>
-            <input type="number" id="tx-qty" placeholder="0" min="0" step="1" onwheel="this.blur()" onkeydown="if(event.key==='ArrowUp'||event.key==='ArrowDown')event.preventDefault();" style="font-size:14px;font-family:var(--mono);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;" />
-          </div>
-
-          <div class="field" style="margin-bottom:10px;">
-            <label>Notes</label>
-            <textarea id="tx-notes" rows="2" placeholder="Optional notes..." style="width:100%;font-size:14px;font-family:var(--sans);border-radius:var(--radius-sm);border:1px solid var(--border);padding:8px 10px;background:var(--bg);color:var(--text);outline:none;resize:vertical;"></textarea>
-          </div>
-
-          <button class="btn-save" onclick="summaryAddTransaction()">Save Transaction</button>
-          <div id="tx-msg" style="display:none;margin-top:8px;font-size:13px;"></div>
         </div>
 
         <!-- Transaction History -->
@@ -1094,7 +1111,9 @@ function getAllowedWateringTypes(batch, room){
   // Flower rooms (room-based fallback for any pre-phase or legacy scenario)
   if(FLOWER_ROOMS.includes(room)) return FLOWER_WTYPES;
   if(room !== 'Veg') return VEG_WTYPES; // fallback for unknown room
-  // Veg-room sequence: Hydration → Pre-Charge → Water In → (then VEG_FREE_WTYPES, no Fade)
+  // Veg-room sequence: Hydration → Pre-Charge → Water In. Free wtypes (Full Sat, Feed, Flush, RO Water)
+  // require the batch to have been moved entirely to Flower rooms (no Veg in rooms). Until then, only
+  // Water In remains available to log additional waterings.
   if(!batch) return ['Hydration'];
   const hasHydration = (batchRec && batchRec.hydrationDate) || ecRecs.some(r=>r.batch===batch && r.wtype==='Hydration');
   const hasPreCharge = ecRecs.some(r=>r.batch===batch && r.wtype==='Pre-Charge');
@@ -1102,7 +1121,9 @@ function getAllowedWateringTypes(batch, room){
   if(!hasHydration) return ['Hydration'];
   if(!hasPreCharge) return ['Pre-Charge'];
   if(!hasWaterIn)   return ['Water In'];
-  return VEG_FREE_WTYPES;
+  // After Water In: only Water In remains for Veg-room batches. Plants must move to Flower rooms
+  // for any of Full Saturation / Feed / Flush / RO Water.
+  return ['Water In'];
 }
 function seqDisable(id,hint){
   const el=document.getElementById(id);if(!el)return;
@@ -1170,21 +1191,21 @@ function ecRoomChanged(){
   // Refresh the recent-entries list at the bottom
   ecRenderRecent(batch, room);
 }
-function ecRenderRecent(batch, room){
+function ecRenderRecent(batch /*, room — ignored: now filters by batch only */){
   const el = document.getElementById('ec-recent-list');
   if(!el) return;
-  if(!batch || !room){
+  if(!batch){
     el.style.padding='20px';
     el.style.textAlign='center';
-    el.innerHTML='<span style="color:var(--text3);">Select a batch and room to see entries.</span>';
+    el.innerHTML='<span style="color:var(--text3);">Select a batch to see entries.</span>';
     return;
   }
-  const recs = ecRecs.filter(r => r.batch && r.batch.trim().toLowerCase()===batch.trim().toLowerCase() && r.room===room)
+  const recs = ecRecs.filter(r => r.batch && r.batch.trim().toLowerCase()===batch.trim().toLowerCase())
                      .sort((a,b)=>(b.id||0)-(a.id||0)); // newest first
   if(!recs.length){
     el.style.padding='20px';
     el.style.textAlign='center';
-    el.innerHTML='<span style="color:var(--text3);">No EC entries yet for '+batch+' / '+room+'.</span>';
+    el.innerHTML='<span style="color:var(--text3);">No EC entries yet for '+batch+'.</span>';
     return;
   }
   el.style.padding='0';
@@ -1192,8 +1213,8 @@ function ecRenderRecent(batch, room){
   let html = '<div style="overflow-x:auto;background:#fff;border-radius:var(--radius-sm);border:1px solid var(--border);">';
   html += '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
   html += '<thead><tr style="background:#f5f5f5;">';
-  ['Date','Watering','EC','pH','ml/plant','Flow (L)','Notes'].forEach(h=>{
-    html += '<th style="padding:6px 8px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">'+h+'</th>';
+  ['Date','Room','Watering','EC','pH','ml/plant','Flow (L)','Notes'].forEach(h=>{
+    html += '<th style="padding:6px 8px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;white-space:nowrap;">'+h+'</th>';
   });
   html += '</tr></thead><tbody>';
   recs.forEach(r=>{
@@ -1203,8 +1224,9 @@ function ecRenderRecent(batch, room){
     const flow = r.flow!=null && r.flow!=='' ? r.flow : '—';
     const notes = (r.notes||'').length>40 ? r.notes.slice(0,40)+'…' : (r.notes||'');
     html += '<tr style="border-bottom:1px solid var(--bg2);">';
-    html += '<td style="padding:6px 8px;font-family:var(--mono);">'+r.date+'</td>';
-    html += '<td style="padding:6px 8px;"><span style="font-size:11px;background:var(--green-pale);color:var(--green);border-radius:20px;padding:2px 8px;">'+(r.wtype||'—')+'</span></td>';
+    html += '<td style="padding:6px 8px;font-family:var(--mono);white-space:nowrap;">'+r.date+'</td>';
+    html += '<td style="padding:6px 8px;font-size:11px;color:var(--text2);white-space:nowrap;">'+(r.room||'—')+'</td>';
+    html += '<td style="padding:6px 8px;"><span style="font-size:11px;background:var(--green-pale);color:var(--green);border-radius:20px;padding:2px 8px;white-space:nowrap;">'+(r.wtype||'—')+'</span></td>';
     html += '<td style="padding:6px 8px;font-family:var(--mono);">'+ec+'</td>';
     html += '<td style="padding:6px 8px;font-family:var(--mono);">'+ph+'</td>';
     html += '<td style="padding:6px 8px;font-family:var(--mono);">'+ml+'</td>';
@@ -1784,6 +1806,7 @@ async function wasteSave(){
   wasteRecs.unshift(rec);lsSet('gp-waste',wasteRecs);
   // Auto-create a "Destroyed" Batch Transaction when plants are destroyed via Vegetative Waste
   let destroyedTx=null;
+  let _distChanged=false;
   if(rec.type==='Vegetative Waste' && rec.plants>0){
     let qtyBefore=0;
     batchTxRecs.filter(t=>t.batchId===rec.batch).forEach(t=>{const q=parseInt(t.qty)||0;if(t.txType==='Produced/Received')qtyBefore+=q;else qtyBefore-=q;});
@@ -1791,6 +1814,13 @@ async function wasteSave(){
     const _dtPhase = _wsBatchRec ? (_wsBatchRec.plantPhase||'') : '';
     destroyedTx={id:Date.now()+1,batchId:rec.batch,date:rec.date,txType:'Destroyed',qty:rec.plants,notes:'Auto-created from Vegetative Waste record',currentQtyBefore:qtyBefore,plantPhase:_dtPhase,synced:false};
     batchTxRecs.unshift(destroyedTx);lsSet('gp-batchtx',batchTxRecs);
+    // Decrement the per-room plant distribution for the room these plants came from
+    if(_wsBatchRec && _wsBatchRec.roomDistribution && _wsBatchRec.roomDistribution[rec.room] != null){
+      _wsBatchRec.roomDistribution[rec.room] = Math.max(0, _wsBatchRec.roomDistribution[rec.room] - rec.plants);
+      _wsBatchRec.synced = false;
+      lsSet('gp-batch', batchRecs);
+      _distChanged = true;
+    }
   }
   populateBatchDropdowns();renderWaste();updatePendingBadge();
   // Enforce zero-qty data state if the Destroyed tx brought the balance back to 0.
@@ -1811,14 +1841,26 @@ async function wasteSave(){
     if(_bRec){
       summaryUpdatePhaseOptions(_bRec.plantPhase||'', calcBatchQty(rec.batch));
       document.querySelectorAll('.summary-room-cb').forEach(cb=>{ cb.checked = (_bRec.rooms||[]).includes(cb.value); });
+      // Refresh per-Flower-room plant count inputs from (possibly decremented) roomDistribution
+      const _wDist = _bRec.roomDistribution || {};
+      document.querySelectorAll('.summary-room-count').forEach(input=>{
+        const r = input.dataset.room;
+        input.value = (_wDist[r] != null) ? _wDist[r] : '';
+      });
       document.getElementById('si-phase').textContent = _bRec.plantPhase||'—';
-      document.getElementById('si-rooms').textContent = (_bRec.rooms && _bRec.rooms.length) ? _bRec.rooms.join(', ') : '—';
+      if(_bRec.rooms && _bRec.rooms.length){
+        const _parts = _bRec.rooms.map(r=>{const c=_wDist[r]; return c!=null ? (r+' ('+c+')') : r;});
+        document.getElementById('si-rooms').textContent = _parts.join(', ');
+      } else {
+        document.getElementById('si-rooms').textContent = '—';
+      }
       document.getElementById('si-hydration-date').textContent = _bRec.hydrationDate || '—';
       document.getElementById('si-veg-start').textContent = _bRec.vegStart || '—';
       document.getElementById('si-flower-start').textContent = _bRec.flowerStart || '—';
       document.getElementById('si-harvest-date').textContent = _bRec.harvestDate || '—';
     }
     applyPhaseRoomLock();
+    summaryUpdateVegLock();
   }
   if(cfg.token&&cfg.base&&cfg.wasteTbl){
     setSyncPill('ing','Syncing...');document.getElementById('waste-btn').disabled=true;
@@ -1839,6 +1881,15 @@ async function wasteSave(){
       Object.keys(tf).forEach(k=>{if(tf[k]===undefined||tf[k]===null||tf[k]==='')delete tf[k];});
       await atPost(cfg.batchtxTbl,tf);destroyedTx.synced=true;lsSet('gp-batchtx',batchTxRecs);
     }catch(e){toast('Destroyed transaction not synced: '+(e.message||'error'),4000);}
+  }
+  // Push the updated batch (with decremented roomDistribution) to Airtable
+  if(_distChanged && cfg.batchTbl && cfg.token && cfg.base){
+    try{
+      await atUpsert(cfg.batchTbl, buildBatchFields(_wsBatchRec), ['Batch ID']);
+      _wsBatchRec.synced = true;
+      lsSet('gp-batch', batchRecs);
+      updatePendingBadge();
+    }catch(e){ /* Sync Pending will retry */ }
   }
   wasteClear();
 }
