@@ -665,6 +665,10 @@ tr:last-child td { border-bottom: none; }
             <label id="tx-qty-label">Quantity</label>
             <input type="number" id="tx-qty" placeholder="0" min="0" step="1" onwheel="this.blur()" onkeydown="if(event.key==='ArrowUp'||event.key==='ArrowDown')event.preventDefault();" style="font-size:14px;font-family:var(--mono);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;" />
           </div>
+          <div class="field" style="margin-bottom:10px;display:none;" id="tx-wet-weight-wrap">
+            <label>Wet Weight (kg)</label>
+            <input type="number" id="tx-wet-weight" placeholder="0.000" min="0" step="0.001" onwheel="this.blur()" onkeydown="if(event.key==='ArrowUp'||event.key==='ArrowDown')event.preventDefault();" style="font-size:14px;font-family:var(--mono);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;" />
+          </div>
 
           <div class="field" style="margin-bottom:10px;">
             <label>Notes</label>
@@ -2648,19 +2652,30 @@ function summaryUpdatePhaseOptions(currentPhase, qty){
   sel.innerHTML = '<option value="">-- select phase --</option>' + allowed.map(p=>'<option'+(p===valueToSelect?' selected':'')+'>'+p+'</option>').join('');
 }
 function txTypeChanged(){
-  // When Sold is selected, the qty field captures Weight in kg (decimal). Otherwise integer count.
+  // Sold → qty field captures Weight (kg). Harvested → qty stays plant count AND a separate Wet Weight field appears.
   const t = document.getElementById('tx-type').value;
   const lbl = document.getElementById('tx-qty-label');
   const inp = document.getElementById('tx-qty');
-  if(!lbl || !inp) return;
+  const wetWrap = document.getElementById('tx-wet-weight-wrap');
+  const wetInp = document.getElementById('tx-wet-weight');
+  if(!lbl || !inp || !wetWrap || !wetInp) return;
   if(t === 'Sold'){
     lbl.textContent = 'Weight (kg)';
     inp.step = '0.001';
     inp.placeholder = '0.000';
+    wetWrap.style.display = 'none';
+    wetInp.value = '';
+  } else if(t === 'Harvested'){
+    lbl.textContent = 'Quantity';
+    inp.step = '1';
+    inp.placeholder = '0';
+    wetWrap.style.display = '';
   } else {
     lbl.textContent = 'Quantity';
     inp.step = '1';
     inp.placeholder = '0';
+    wetWrap.style.display = 'none';
+    wetInp.value = '';
   }
 }
 function summaryUpdateTxTypeOptions(batchId){
@@ -2826,12 +2841,17 @@ async function summaryAddTransaction(){
   if(!batchId){ toast('Select a batch first.'); return; }
   const txType = document.getElementById('tx-type').value;
   if(!txType){ toast('Select a transaction type.'); return; }
-  // Sold transactions capture Weight (kg) instead of plant count
+  // Sold → weight only. Harvested → plant count AND wet weight. Others → plant count only.
   const isSold = (txType === 'Sold');
+  const isHarvested = (txType === 'Harvested');
   const rawVal = document.getElementById('tx-qty').value;
   const qty = isSold ? 0 : (parseInt(rawVal) || 0);
-  const weight = isSold ? (parseFloat(rawVal) || 0) : 0;
-  if(isSold){
+  let weight = isSold ? (parseFloat(rawVal) || 0) : 0;
+  if(isHarvested){
+    weight = parseFloat(document.getElementById('tx-wet-weight').value) || 0;
+    if(!qty || qty <= 0){ toast('Enter a valid quantity.'); return; }
+    if(weight <= 0){ toast('Enter a valid wet weight (kg).'); return; }
+  } else if(isSold){
     if(weight <= 0){ toast('Enter a valid weight (kg).'); return; }
   } else {
     if(!qty || qty <= 0){ toast('Enter a valid quantity.'); return; }
@@ -2897,6 +2917,8 @@ async function summaryAddTransaction(){
   document.getElementById('tx-type').value = '';
   document.getElementById('tx-qty').value = '';
   document.getElementById('tx-notes').value = '';
+  const _wwInp = document.getElementById('tx-wet-weight'); if(_wwInp) _wwInp.value = '';
+  const _wwWrap = document.getElementById('tx-wet-weight-wrap'); if(_wwWrap) _wwWrap.style.display = 'none';
   const msg = document.getElementById('tx-msg');
   msg.style.display='block'; msg.style.color='var(--green)'; msg.textContent='Transaction saved!';
   setTimeout(()=>{ msg.style.display='none'; }, 3000);
@@ -2978,7 +3000,12 @@ function summaryRenderHistory(batchId){
     const isIn = t.txType==='Produced/Received';
     const isPhase = t.txType==='Phase Change';
     const isSold = t.txType==='Sold';
-    const qtyDisplay = isPhase ? '—' : (isSold ? ((t.weight||0).toFixed(3)+' kg') : ((isIn?'+':'-')+t.qty));
+    const isHarvested = t.txType==='Harvested';
+    let qtyDisplay;
+    if(isPhase) qtyDisplay = '—';
+    else if(isSold) qtyDisplay = (t.weight||0).toFixed(3) + ' kg';
+    else if(isHarvested && t.weight) qtyDisplay = '-' + t.qty + ' / ' + (t.weight).toFixed(3) + ' kg';
+    else qtyDisplay = (isIn?'+':'-') + t.qty;
     const qtyColor = isPhase ? 'var(--text3)' : (isSold ? 'var(--text2)' : (isIn ? 'var(--green)' : 'var(--red)'));
     const typePillBg = isPhase ? 'var(--green-pale)' : 'var(--bg2)';
     const typePillColor = isPhase ? 'var(--green)' : 'var(--text2)';
