@@ -763,8 +763,16 @@ tr:last-child td { border-bottom: none; }
         <div class="section-label">Add Bin</div>
         <div class="card">
           <div class="g2" style="margin-bottom:10px;">
-            <div class="field"><label>Tare Weight (kg)</label><input type="number" id="harvest-tare" step="0.001" min="0" placeholder="0.000" onwheel="this.blur()" onkeydown="if(event.key==='ArrowUp'||event.key==='ArrowDown')event.preventDefault();" oninput="harvestNetCalc()" /></div>
+            <div class="field"><label>Bin Number</label>
+              <select id="harvest-bin-num" onchange="harvestBinChanged()">
+                <option value="">-- select bin --</option>
+              </select>
+            </div>
             <div class="field"><label>Total Weight (kg)</label><input type="number" id="harvest-total" step="0.001" min="0" placeholder="0.000" onwheel="this.blur()" onkeydown="if(event.key==='ArrowUp'||event.key==='ArrowDown')event.preventDefault();" oninput="harvestNetCalc()" /></div>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 12px;background:var(--bg2);border-radius:var(--radius-sm);margin-bottom:10px;">
+            <div style="font-size:11px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;">Tare (auto)</div>
+            <div id="harvest-tare-display" style="font-size:14px;font-weight:700;font-family:var(--mono);color:var(--text2);">— kg</div>
           </div>
           <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--green-pale);border-radius:var(--radius-sm);margin-bottom:10px;">
             <div style="font-size:12px;color:var(--green);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;">Net Weight</div>
@@ -979,9 +987,30 @@ function setAvg(id,val,lo,hi){const el=document.getElementById(id);if(val===null
 function stageLabel(r){if(!r.stage||!r.day)return'<span style="color:var(--text3)">-</span>';return r.stage==='flower'?'<span class="flower-txt">F'+r.day+'</span>':'<span class="veg-txt">V'+r.day+'</span>';}
 function toast(msg,dur){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),dur||2500);}
 
-function switchPage(page,btn){document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.bnav-btn').forEach(b=>b.classList.remove('active'));document.getElementById('page-'+page).classList.add('active');btn.classList.add('active');if(page==='report'){renderEC();renderRO();}if(page==='waste'){renderWaste();}if(page==='batch'){renderBatchLog();}if(page==='summary'){summaryPopulateBatches();}if(page==='harvest'){harvestPopulateBatches();harvestRefreshDate();}}
+function switchPage(page,btn){document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.bnav-btn').forEach(b=>b.classList.remove('active'));document.getElementById('page-'+page).classList.add('active');btn.classList.add('active');if(page==='report'){renderEC();renderRO();}if(page==='waste'){renderWaste();}if(page==='batch'){renderBatchLog();}if(page==='summary'){summaryPopulateBatches();}if(page==='harvest'){harvestPopulateBatches();harvestRefreshDate();harvestPopulateBinNumbers();}}
 // ── HARVEST LOG ──────────────────────────────────────────────────────────────
 function harvestRefreshDate(){const t=localDate();const el=document.getElementById('harvest-date'); if(el) el.value=t;}
+function harvestPopulateBinNumbers(){
+  const sel = document.getElementById('harvest-bin-num');
+  if(!sel) return;
+  const cur = sel.value;
+  const keys = Object.keys(BIN_TARES).map(k=>parseInt(k)).sort((a,b)=>a-b);
+  sel.innerHTML = '<option value="">-- select bin --</option>' + keys.map(k=>'<option value="'+k+'"'+(String(k)===cur?' selected':'')+'>Bin '+k+' ('+(BIN_TARES[k]||0).toFixed(3)+' kg)</option>').join('');
+}
+function harvestBinChanged(){
+  const sel = document.getElementById('harvest-bin-num');
+  const disp = document.getElementById('harvest-tare-display');
+  if(!sel || !disp) return;
+  const k = parseInt(sel.value);
+  if(!k || !(k in BIN_TARES)){
+    disp.textContent = '— kg';
+    disp.style.color = 'var(--text2)';
+  } else {
+    disp.textContent = BIN_TARES[k].toFixed(3) + ' kg';
+    disp.style.color = 'var(--green)';
+  }
+  harvestNetCalc();
+}
 function harvestPopulateBatches(){
   // Source: batchRecs in Flower phase (the only phase where harvest happens)
   const sel = document.getElementById('harvest-batch-select');
@@ -1012,11 +1041,12 @@ function harvestSetupChanged(){
   harvestRenderBins();
 }
 function harvestNetCalc(){
-  const t = parseFloat(document.getElementById('harvest-tare').value)||0;
+  const k = parseInt(document.getElementById('harvest-bin-num').value);
+  const t = (k && BIN_TARES[k]) ? BIN_TARES[k] : 0;
   const total = parseFloat(document.getElementById('harvest-total').value)||0;
   const net = total - t;
   const el = document.getElementById('harvest-net');
-  if(net > 0){ el.textContent = net.toFixed(3) + ' kg'; el.style.color = 'var(--green)'; }
+  if(t > 0 && total > 0 && net > 0){ el.textContent = net.toFixed(3) + ' kg'; el.style.color = 'var(--green)'; }
   else { el.textContent = '— kg'; el.style.color = 'var(--text3)'; }
 }
 function harvestRenderBins(){
@@ -1044,7 +1074,7 @@ function harvestRenderBins(){
   list.style.padding = '0';
   let html = '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
   html += '<thead><tr style="background:#f5f5f5;">';
-  ['#','Date','Tare','Total','Net','Notes'].forEach(h=>{
+  ['#','Date','Bin','Tare','Total','Net','Notes'].forEach(h=>{
     html += '<th style="padding:6px 8px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">'+h+'</th>';
   });
   html += '</tr></thead><tbody>';
@@ -1053,6 +1083,7 @@ function harvestRenderBins(){
     html += '<tr style="border-bottom:1px solid var(--bg2);">';
     html += '<td style="padding:6px 8px;font-family:var(--mono);">'+(bins.length-i)+'</td>';
     html += '<td style="padding:6px 8px;font-family:var(--mono);">'+b.date+'</td>';
+    html += '<td style="padding:6px 8px;font-family:var(--mono);">'+(b.binNumber!=null?b.binNumber:'—')+'</td>';
     html += '<td style="padding:6px 8px;font-family:var(--mono);">'+(b.tareWeight||0).toFixed(3)+'</td>';
     html += '<td style="padding:6px 8px;font-family:var(--mono);">'+(b.totalWeight||0).toFixed(3)+'</td>';
     html += '<td style="padding:6px 8px;font-family:var(--mono);font-weight:700;color:var(--green);">'+(b.netWeight||0).toFixed(3)+'</td>';
@@ -1067,23 +1098,26 @@ async function harvestSave(){
   const batch = document.getElementById('harvest-batch-select').value;
   const room = document.getElementById('harvest-room').value;
   const date = document.getElementById('harvest-date').value || localDate();
-  const tareWeight = parseFloat(document.getElementById('harvest-tare').value);
+  const binNumber = parseInt(document.getElementById('harvest-bin-num').value);
+  const tareWeight = (binNumber && BIN_TARES[binNumber]) ? BIN_TARES[binNumber] : 0;
   const totalWeight = parseFloat(document.getElementById('harvest-total').value);
   const notes = document.getElementById('harvest-notes').value.trim();
   if(!grower){ toast('Please select a grower.'); return; }
   if(!batch){ toast('Please select a batch.'); return; }
   if(!room){ toast('Please select a room.'); return; }
-  if(!tareWeight || tareWeight <= 0){ toast('Enter a valid tare weight.'); return; }
+  if(!binNumber || !tareWeight){ toast('Please select a bin number.'); return; }
   if(!totalWeight || totalWeight <= 0){ toast('Enter a valid total weight.'); return; }
   const netWeight = totalWeight - tareWeight;
-  if(netWeight <= 0){ toast('Total weight must exceed tare weight.',4000); return; }
-  const rec = { id: Date.now(), date, grower, batch, room, tareWeight, totalWeight, netWeight: Math.round(netWeight*1000)/1000, notes, synced: false };
+  if(netWeight <= 0){ toast('Total weight must exceed bin tare ('+tareWeight.toFixed(3)+' kg).',4500); return; }
+  const rec = { id: Date.now(), date, grower, batch, room, binNumber, tareWeight, totalWeight, netWeight: Math.round(netWeight*1000)/1000, notes, synced: false };
   harvestRecs.unshift(rec);
   lsSet('gp-harvest', harvestRecs);
   // Clear only the bin entry fields — keep grower/batch/room for the next bin
-  document.getElementById('harvest-tare').value = '';
+  document.getElementById('harvest-bin-num').value = '';
   document.getElementById('harvest-total').value = '';
   document.getElementById('harvest-notes').value = '';
+  const _td = document.getElementById('harvest-tare-display');
+  if(_td){ _td.textContent = '— kg'; _td.style.color = 'var(--text2)'; }
   harvestNetCalc();
   harvestRenderBins();
   updatePendingBadge();
@@ -1097,6 +1131,7 @@ async function harvestSave(){
         'Grower': rec.grower,
         'Batch ID': rec.batch ? [rec.batch] : undefined,
         'Room': rec.room,
+        'Bin Number': rec.binNumber || undefined,
         'Tare Weight (kg)': rec.tareWeight,
         'Total Weight (kg)': rec.totalWeight,
         'Net Weight (kg)': rec.netWeight,
@@ -1308,6 +1343,20 @@ function applyRoomColor(formPrefix,room){
   if(strip){strip.style.display=c?'flex':'none';if(c){strip.style.background=c.bg;strip.style.borderColor=c.border;strip.innerHTML='<span style="width:10px;height:10px;border-radius:50%;background:'+c.dot+';display:inline-block;margin-right:8px;"></span><span style="color:'+c.text+';font-weight:600;font-size:12px;font-family:var(--mono);">'+room+'</span>';}}
 }
 function roomDot(room){const c=getRoomColor(room);if(!c)return room;return'<span style="display:inline-flex;align-items:center;gap:5px;"><span style="width:8px;height:8px;border-radius:50%;background:'+c.dot+';display:inline-block;flex-shrink:0;"></span>'+room+'</span>';}
+// Harvest bin tare weights (kg). EDIT THESE to match the actual weighed-empty tare of each bin.
+// The dropdown on the Harvest page uses these — the user just picks a bin number.
+const BIN_TARES = {
+  1:  2.500,
+  2:  2.500,
+  3:  2.500,
+  4:  2.500,
+  5:  2.500,
+  6:  2.500,
+  7:  2.500,
+  8:  2.500,
+  9:  2.500,
+  10: 2.500
+};
 const VEG_WTYPES=['Hydration','Pre-Charge','Water In','Full Saturation','Feed','Flush','RO Water'];
 const FLOWER_WTYPES=['Full Saturation','Feed','Flush','Fade','RO Water'];
 const VEG_FREE_WTYPES=['Full Saturation','Feed','Flush','RO Water']; // Veg post-sequence (no Fade — Flower-only)
@@ -1882,7 +1931,7 @@ async function syncPending(){
   if(cfg.harvestTbl){
     for(const h of pendingHarvest){
       try{
-        const f = {'Date':h.date,'Grower':h.grower,'Batch ID':h.batch?[h.batch]:undefined,'Room':h.room,'Tare Weight (kg)':h.tareWeight,'Total Weight (kg)':h.totalWeight,'Net Weight (kg)':h.netWeight,'Notes':h.notes||undefined};
+        const f = {'Date':h.date,'Grower':h.grower,'Batch ID':h.batch?[h.batch]:undefined,'Room':h.room,'Bin Number':h.binNumber||undefined,'Tare Weight (kg)':h.tareWeight,'Total Weight (kg)':h.totalWeight,'Net Weight (kg)':h.netWeight,'Notes':h.notes||undefined};
         Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
         const hRes=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+cfg.harvestTbl,{method:'POST',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify({fields:f,typecast:true})});
         if(!hRes.ok){const err=await hRes.json();throw new Error('Harvest '+hRes.status+': '+(err.error&&err.error.message||JSON.stringify(err)));}
