@@ -888,6 +888,28 @@ function loadAll(){ecRecs=lsGet('gp-ec')||[];roRecs=lsGet('gp-ro')||[];wasteRecs
 function atReady(){return cfg.token&&cfg.base&&cfg.ecTbl&&cfg.roTbl;}
 async function atPost(tbl,fields){const body={fields,typecast:true};console.log('Airtable POST →',tbl,body);const r=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+tbl,{method:'POST',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok){let detail='';try{const j=await r.json();detail=j.error&&(j.error.message||j.error.type)||JSON.stringify(j);}catch(_){}console.error('Airtable POST failed',r.status,detail,'body=',body);throw new Error(r.status+(detail?': '+detail:''));}return r.json();}
 async function atUpsert(tbl,fields,mergeOn){const body={performUpsert:{fieldsToMergeOn:mergeOn},records:[{fields}],typecast:true};console.log('Airtable UPSERT →',tbl,body);const r=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+tbl,{method:'PATCH',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok){let detail='';try{const j=await r.json();detail=j.error&&(j.error.message||j.error.type)||JSON.stringify(j);}catch(_){}console.error('Airtable UPSERT failed',r.status,detail,'body=',body);throw new Error(r.status+(detail?': '+detail:''));}return r.json();}
+function calcRoomPlantCount(batchId, room){
+  // Returns the plants currently in the specified room.
+  // - Flower rooms: direct lookup from batchRec.roomDistribution
+  // - Veg: implicit remainder (batch total - sum of flower room distributions, floor 0)
+  const b = batchRecs.find(r=>r.batchId===batchId && !r.type);
+  if(!b) return 0;
+  const totalQty = (function(){
+    let q=0;
+    batchTxRecs.filter(t=>t.batchId===batchId).forEach(t=>{
+      if(t.txType==='Sold') return;
+      const v = parseInt(t.qty)||0;
+      if(t.txType==='Produced/Received') q+=v; else q-=v;
+    });
+    return Math.max(0,q);
+  })();
+  if(room === 'Veg'){
+    const dist = b.roomDistribution || {};
+    const flowerSum = Object.keys(dist).reduce((s,k)=>s + (parseInt(dist[k])||0), 0);
+    return Math.max(0, totalQty - flowerSum);
+  }
+  return Math.max(0, Math.min(totalQty, (b.roomDistribution && parseInt(b.roomDistribution[room]))||0));
+}
 function calcBatchQty(batchId){
   // Pure helper: returns the running plant-count balance for a batch (floor 0). No DOM side effects.
   // Sold transactions track weight, not plant count, so they don't affect this running balance.
@@ -2194,11 +2216,13 @@ async function wasteSave(){
     toast('Pre-harvest batches can only record Vegetative Waste — Dry Waste applies after harvest.',5000);
     return;
   }
-  // Guard: destroying plants via Vegetative Waste cannot push the batch balance below 0
+  // Guard: destroying plants via Vegetative Waste cannot exceed the count IN THAT SPECIFIC ROOM.
+  // (The previous version checked the batch total, which let users destroy more from one room
+  // than that room actually held.)
   if(type==='Vegetative Waste' && plants>0){
-    const currentQty=calcBatchQty(batch);
-    if(currentQty-plants<0){
-      toast('Cannot destroy '+plants+' plant(s) — batch balance is only '+currentQty+'.',5000);
+    const _roomCount = calcRoomPlantCount(batch, room);
+    if(plants > _roomCount){
+      toast('Cannot destroy '+plants+' plant(s) from '+room+' — only '+_roomCount+' plant(s) in that room.',5500);
       return;
     }
   }
