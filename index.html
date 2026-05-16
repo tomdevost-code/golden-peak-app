@@ -1020,13 +1020,22 @@ function harvestBinChanged(){
   harvestNetCalc();
 }
 function harvestPopulateBatches(){
-  // Source: batchRecs in Flower phase (the only phase where harvest happens)
+  // Source: batchRecs in Flower OR Drying phase that still have at least one unharvested flower room.
+  // Multi-day harvest is common: first room harvested → batch in Drying, but other flower rooms
+  // may still have plants waiting to be harvested over later days.
   const sel = document.getElementById('harvest-batch-select');
   if(!sel) return;
   const cur = sel.value;
-  const list = batchRecs.filter(b=>!b.type && b.plantPhase==='Flower').sort((a,b)=>a.batchId.localeCompare(b.batchId));
-  sel.innerHTML = '<option value="">-- select batch --</option>' + list.map(b=>'<option'+(b.batchId===cur?' selected':'')+' value="'+b.batchId+'">'+b.batchId+(b.cultivar?' – '+b.cultivar:'')+'</option>').join('');
-  // Trigger setup change to refresh room dropdown
+  const list = batchRecs.filter(b=>{
+    if(b.type) return false;
+    if(!['Flower','Drying'].includes(b.plantPhase)) return false;
+    // Must have at least one flower room that's still unharvested
+    const rooms = Array.isArray(b.rooms) ? b.rooms.filter(r=>r!=='Veg') : [];
+    if(!rooms.length) return false;
+    const completed = Array.isArray(b.completedHarvests) ? b.completedHarvests : [];
+    return rooms.some(r=>!completed.includes(r));
+  }).sort((a,b)=>a.batchId.localeCompare(b.batchId));
+  sel.innerHTML = '<option value="">-- select batch --</option>' + list.map(b=>'<option'+(b.batchId===cur?' selected':'')+' value="'+b.batchId+'">'+b.batchId+(b.cultivar?' – '+b.cultivar:'')+(b.plantPhase==='Drying'?' (drying)':'')+'</option>').join('');
   harvestSetupChanged();
 }
 function harvestSetupChanged(){
@@ -1155,12 +1164,13 @@ async function harvestComplete(){
   batchRec.harvestedWeights[room] = totalNet;
   batchRec.synced = false;
   lsSet('gp-batch', batchRecs);
-  // If all plants have been harvested across all rooms, advance phase to Drying
+  // First Harvest Complete advances the batch to Drying — additional rooms can still be
+  // harvested over later days while the batch is in Drying. We do NOT clear the rooms array
+  // here, so the remaining unharvested flower rooms keep showing on the Harvest page.
   let _phaseChanged = false;
-  if(calcBatchQty(batch) <= 0 && batchRec.plantPhase === 'Flower'){
+  if(batchRec.plantPhase === 'Flower'){
     const prevPhase = batchRec.plantPhase;
     batchRec.plantPhase = 'Drying';
-    batchRec.rooms = [];
     if(!batchRec.harvestDate) batchRec.harvestDate = localDate();
     lsSet('gp-batch', batchRecs);
     _phaseChanged = true;
@@ -1721,10 +1731,14 @@ async function ecSave(){
     toast('This batch is closed (Status=Closed). No new entries.',3500);
     return;
   }
-  // Block writes once batch has been harvested (Drying/Packaged) — no more EC entries
-  if(_ecBatchRec && ['Drying','Packaged'].includes(_ecBatchRec.plantPhase)){
-    toast('This batch has been harvested ('+_ecBatchRec.plantPhase+' phase). No new EC entries can be added.',5000);
-    return;
+  // Block EC entries only once the batch is FULLY harvested (qty=0 in Drying, or any Packaged).
+  // Multi-day harvest: a batch in Drying with remaining unharvested flower rooms still needs EC logging.
+  if(_ecBatchRec){
+    const _ph = _ecBatchRec.plantPhase;
+    if(_ph === 'Packaged' || (_ph === 'Drying' && calcBatchQty(batchVal2) <= 0)){
+      toast('This batch has been fully harvested ('+_ph+' phase). No new EC entries.',5000);
+      return;
+    }
   }
   const _existingHydration = _ecBatchRec ? (_ecBatchRec.hydrationDate || '') : '';
   const _willSetHydration = (wtype === 'Hydration' && !_existingHydration);
@@ -1830,9 +1844,12 @@ async function roSave(){
     toast('This batch is closed (Status=Closed). No new entries.',3500);
     return;
   }
-  if(_roBatchRec && ['Drying','Packaged'].includes(_roBatchRec.plantPhase)){
-    toast('This batch has been harvested ('+_roBatchRec.plantPhase+' phase). No new runoff entries can be added.',5000);
-    return;
+  if(_roBatchRec){
+    const _rph = _roBatchRec.plantPhase;
+    if(_rph === 'Packaged' || (_rph === 'Drying' && calcBatchQty(batchVal) <= 0)){
+      toast('This batch has been fully harvested ('+_rph+' phase). No new runoff entries.',5000);
+      return;
+    }
   }
   const vs=document.getElementById('ro-veg').value;
   const inputEC=null;
@@ -2789,7 +2806,7 @@ function summaryUpdateTxTypeOptions(batchId){
   const prev = sel.value;
   let opts;
   if(phase==='Flower')        opts = ['Harvested','Sold'];
-  else if(phase==='Drying')   opts = ['Sold'];
+  else if(phase==='Drying')   opts = ['Harvested','Sold']; // multi-day harvest can keep adding Harvested rows
   else if(phase==='Packaged') opts = ['Sold'];
   else if(phase==='Clones')   opts = hasTxs ? ['Produced/Received','Moved to Moms','Sold'] : ['Produced/Received'];
   else if(phase==='Veg')      opts = ['Moved to Moms','Harvested','Sold']; // no Produced/Received once in Veg
@@ -2977,9 +2994,14 @@ async function summaryAddTransaction(){
     toast('Cannot add plants once the batch is in Veg phase.',5000);
     return;
   }
-  // Guard: in Drying/Packaged phase, only Sold transactions are allowed (no more harvesting or producing)
-  if(_bGuard && ['Drying','Packaged'].includes(_bGuard.plantPhase) && txType!=='Sold'){
-    toast('In '+_bGuard.plantPhase+' phase, only Sold transactions are allowed.',5000);
+  // Guard: in Drying phase, only Sold + Harvested are allowed (Harvested supports multi-day harvest).
+  // Packaged phase remains Sold-only.
+  if(_bGuard && _bGuard.plantPhase==='Drying' && txType!=='Sold' && txType!=='Harvested'){
+    toast('In Drying phase, only Sold or Harvested transactions are allowed.',5000);
+    return;
+  }
+  if(_bGuard && _bGuard.plantPhase==='Packaged' && txType!=='Sold'){
+    toast('In Packaged phase, only Sold transactions are allowed.',5000);
     return;
   }
   const _txBatchRec = batchRecs.find(r=>r.batchId===batchId && !r.type);
@@ -2997,19 +3019,16 @@ async function summaryAddTransaction(){
       const _curPhase = batchRecs[_hi].plantPhase || '';
       const _postHarvest = ['Drying','Packaged'].includes(_curPhase);
       if(!_postHarvest){
-        // Only advance Flower → Drying when ALL plants are now harvested out (qty=0).
-        // Partial harvests (some rooms still have plants) keep the batch in Flower.
-        const _remainingQty = calcBatchQty(batchId);
-        if(_remainingQty <= 0){
-          const _prevPhase = _curPhase;
-          batchRecs[_hi].plantPhase = 'Drying';
-          batchRecs[_hi].rooms = [];
-          if(!batchRecs[_hi].harvestDate) batchRecs[_hi].harvestDate = localDate();
-          batchRecs[_hi].synced = false;
-          lsSet('gp-batch', batchRecs);
-          _phaseAutoChanged = true;
-          recordPhaseChangeTx(batchId, _prevPhase, 'Drying');
-        }
+        // First Harvested tx advances the batch to Drying — even if other flower rooms
+        // still hold plants (multi-day harvest is common). Subsequent Harvested txs
+        // are allowed in Drying so the remaining rooms can be harvested over later days.
+        const _prevPhase = _curPhase;
+        batchRecs[_hi].plantPhase = 'Drying';
+        if(!batchRecs[_hi].harvestDate) batchRecs[_hi].harvestDate = localDate();
+        batchRecs[_hi].synced = false;
+        lsSet('gp-batch', batchRecs);
+        _phaseAutoChanged = true;
+        recordPhaseChangeTx(batchId, _prevPhase, 'Drying');
       }
     }
   }
