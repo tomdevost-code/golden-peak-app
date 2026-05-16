@@ -796,6 +796,8 @@ tr:last-child td { border-bottom: none; }
           </div>
           <div id="harvest-bin-list" style="padding:10px 14px;font-size:13px;color:var(--text3);text-align:center;">Select grower, batch, and room to start a harvest session.</div>
         </div>
+        <button class="btn-primary" id="harvest-complete-btn" onclick="harvestComplete()" style="margin-top:12px;background:var(--amber);">Complete Harvest for this Batch / Room</button>
+        <div id="harvest-complete-msg" style="display:none;margin-top:8px;font-size:13px;"></div>
       </div>
     </div>
 
@@ -966,6 +968,8 @@ function buildBatchFields(rec){
     'Created Date':rec.createdDate||undefined,
     'Rooms':(rec.rooms&&rec.rooms.length)?rec.rooms:undefined,
     'Room Distribution':(rec.roomDistribution && Object.keys(rec.roomDistribution).length) ? JSON.stringify(rec.roomDistribution) : undefined,
+    'Completed Harvests':(rec.completedHarvests && rec.completedHarvests.length) ? rec.completedHarvests.join(', ') : undefined,
+    'Harvested Weights':(rec.harvestedWeights && Object.keys(rec.harvestedWeights).length) ? JSON.stringify(rec.harvestedWeights) : undefined,
     'Plant Phase':rec.plantPhase||undefined,
     'Status':rec.status||undefined,
     'Closed Date':rec.closedDate||undefined,
@@ -1059,6 +1063,12 @@ function harvestRenderBins(){
   if(!list || !totalEl) return;
   const batch = document.getElementById('harvest-batch-select').value;
   const room = document.getElementById('harvest-room').value;
+  // Toggle the Save Bin and Complete Harvest buttons based on completion state
+  const isComplete = batch && room && harvestIsRoomComplete(batch, room);
+  const saveBtn = document.getElementById('harvest-btn');
+  const completeBtn = document.getElementById('harvest-complete-btn');
+  if(saveBtn){ saveBtn.disabled = isComplete; saveBtn.style.opacity = isComplete?'0.5':''; saveBtn.style.cursor = isComplete?'not-allowed':''; }
+  if(completeBtn){ completeBtn.disabled = isComplete; completeBtn.style.opacity = isComplete?'0.5':''; completeBtn.style.cursor = isComplete?'not-allowed':''; completeBtn.textContent = isComplete ? 'Harvest Completed for this Batch / Room' : 'Complete Harvest for this Batch / Room'; }
   if(!batch || !room){
     list.style.padding = '14px';
     list.style.textAlign = 'center';
@@ -1097,10 +1107,97 @@ function harvestRenderBins(){
   html += '</tbody></table>';
   list.innerHTML = html;
 }
+function harvestIsRoomComplete(batchId, room){
+  const b = batchRecs.find(r=>r.batchId===batchId && !r.type);
+  return !!(b && Array.isArray(b.completedHarvests) && b.completedHarvests.includes(room));
+}
+async function harvestComplete(){
+  const grower = document.getElementById('harvest-grower').value;
+  const batch = document.getElementById('harvest-batch-select').value;
+  const room = document.getElementById('harvest-room').value;
+  if(!grower){ toast('Please select a grower.'); return; }
+  if(!batch){ toast('Please select a batch.'); return; }
+  if(!room){ toast('Please select a room.'); return; }
+  if(harvestIsRoomComplete(batch, room)){
+    toast('Harvest for '+batch+' / '+room+' is already marked complete.',4500);
+    return;
+  }
+  const bins = harvestRecs.filter(r=>r.batch===batch && r.room===room);
+  if(!bins.length){ toast('Save at least one bin before completing the harvest.',4500); return; }
+  const totalNet = Math.round(bins.reduce((s,b)=>s+(b.netWeight||0),0)*1000)/1000;
+  const idx = batchRecs.findIndex(r=>r.batchId===batch && !r.type);
+  if(idx < 0){ toast('Batch record not found.',4000); return; }
+  const batchRec = batchRecs[idx];
+  const plantsInRoom = (batchRec.roomDistribution && batchRec.roomDistribution[room]) || 0;
+  if(!confirm('Complete harvest for '+batch+' / '+room+'?\nTotal: '+totalNet.toFixed(3)+' kg from '+bins.length+' bin(s), '+plantsInRoom+' plants.\nNo more bins can be added for this batch/room after this.')) return;
+  // Create a Harvested transaction capturing both plant count and total wet weight
+  const tx = {
+    id: Date.now(),
+    batchId: batch,
+    date: localDate(),
+    txType: 'Harvested',
+    qty: plantsInRoom,
+    weight: totalNet,
+    notes: 'Auto-completed from Harvest Log ('+bins.length+' bins from '+room+')',
+    currentQtyBefore: calcBatchQty(batch),
+    plantPhase: batchRec.plantPhase || '',
+    synced: false
+  };
+  batchTxRecs.unshift(tx);
+  lsSet('gp-batchtx', batchTxRecs);
+  // Zero out this room's distribution and mark it as harvest-complete
+  if(!batchRec.roomDistribution) batchRec.roomDistribution = {};
+  batchRec.roomDistribution[room] = 0;
+  if(!Array.isArray(batchRec.completedHarvests)) batchRec.completedHarvests = [];
+  if(!batchRec.completedHarvests.includes(room)) batchRec.completedHarvests.push(room);
+  // Track total harvested weight per room
+  if(!batchRec.harvestedWeights) batchRec.harvestedWeights = {};
+  batchRec.harvestedWeights[room] = totalNet;
+  batchRec.synced = false;
+  lsSet('gp-batch', batchRecs);
+  // If all plants have been harvested across all rooms, advance phase to Drying
+  let _phaseChanged = false;
+  if(calcBatchQty(batch) <= 0 && batchRec.plantPhase === 'Flower'){
+    const prevPhase = batchRec.plantPhase;
+    batchRec.plantPhase = 'Drying';
+    batchRec.rooms = [];
+    if(!batchRec.harvestDate) batchRec.harvestDate = localDate();
+    lsSet('gp-batch', batchRecs);
+    _phaseChanged = true;
+    recordPhaseChangeTx(batch, prevPhase, 'Drying');
+  }
+  updatePendingBadge();
+  toast('Harvest complete: '+totalNet.toFixed(3)+' kg from '+room+'.');
+  // Refresh UI
+  harvestRenderBins();
+  harvestSetupChanged();
+  // Sync the tx
+  if(cfg.batchtxTbl && cfg.token && cfg.base){
+    try{
+      const f = {'Batch ID':[tx.batchId],'Date':tx.date,'Transaction Type':tx.txType,'Plant Phase':tx.plantPhase||undefined,'Quantity':tx.qty,'Weight (kg)':tx.weight||undefined,'Current Quantity After':calcBatchQty(batch),'Notes':tx.notes};
+      Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
+      await atPost(cfg.batchtxTbl, f);
+      tx.synced = true; lsSet('gp-batchtx', batchTxRecs);
+    }catch(e){ /* Sync Pending will retry */ }
+  }
+  // Sync the updated batch (room distribution + completedHarvests + harvestedWeights + maybe new phase/harvest date)
+  if(cfg.batchTbl && cfg.token && cfg.base){
+    try{
+      await atUpsert(cfg.batchTbl, buildBatchFields(batchRec), ['Batch ID']);
+      batchRec.synced = true; lsSet('gp-batch', batchRecs);
+      updatePendingBadge();
+    }catch(e){ /* retry later */ }
+  }
+}
 async function harvestSave(){
   const grower = document.getElementById('harvest-grower').value;
   const batch = document.getElementById('harvest-batch-select').value;
   const room = document.getElementById('harvest-room').value;
+  // Block bin entry once this batch/room's harvest has been marked complete
+  if(batch && room && harvestIsRoomComplete(batch, room)){
+    toast('Harvest is complete for '+batch+' / '+room+' — no more bins.',4500);
+    return;
+  }
   const date = document.getElementById('harvest-date').value || localDate();
   const binNumber = parseInt(document.getElementById('harvest-bin-num').value);
   const tareWeight = (binNumber && BIN_TARES[binNumber]) ? BIN_TARES[binNumber] : 0;
@@ -2900,16 +2997,19 @@ async function summaryAddTransaction(){
       const _curPhase = batchRecs[_hi].plantPhase || '';
       const _postHarvest = ['Drying','Packaged'].includes(_curPhase);
       if(!_postHarvest){
-        const _prevPhase = _curPhase;
-        batchRecs[_hi].plantPhase = 'Drying';
-        batchRecs[_hi].rooms = [];
-        // Auto-set harvest date to today if not already set
-        if(!batchRecs[_hi].harvestDate) batchRecs[_hi].harvestDate = localDate();
-        batchRecs[_hi].synced = false;
-        lsSet('gp-batch', batchRecs);
-        _phaseAutoChanged = true;
-        // Audit-trail row for the Flower→Drying transition triggered by a Harvested tx
-        recordPhaseChangeTx(batchId, _prevPhase, 'Drying');
+        // Only advance Flower → Drying when ALL plants are now harvested out (qty=0).
+        // Partial harvests (some rooms still have plants) keep the batch in Flower.
+        const _remainingQty = calcBatchQty(batchId);
+        if(_remainingQty <= 0){
+          const _prevPhase = _curPhase;
+          batchRecs[_hi].plantPhase = 'Drying';
+          batchRecs[_hi].rooms = [];
+          if(!batchRecs[_hi].harvestDate) batchRecs[_hi].harvestDate = localDate();
+          batchRecs[_hi].synced = false;
+          lsSet('gp-batch', batchRecs);
+          _phaseAutoChanged = true;
+          recordPhaseChangeTx(batchId, _prevPhase, 'Drying');
+        }
       }
     }
   }
