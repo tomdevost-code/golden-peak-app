@@ -638,11 +638,18 @@ tr:last-child td { border-bottom: none; }
           </div>
         </div>
 
-        <!-- Current Quantity highlight -->
-        <div class="card" style="margin-bottom:12px;text-align:center;background:var(--green-pale);border-color:var(--green-light);">
-          <div style="font-size:11px;color:var(--green);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">Current Quantity</div>
-          <div id="si-currentqty" style="font-size:36px;font-weight:700;font-family:var(--mono);color:var(--green);">0</div>
-          <div style="font-size:11px;color:var(--text3);margin-top:4px;">plants</div>
+        <!-- Current Quantity + Current Day highlight -->
+        <div class="g2" style="margin-bottom:12px;">
+          <div class="card" style="text-align:center;background:var(--green-pale);border-color:var(--green-light);">
+            <div style="font-size:11px;color:var(--green);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">Current Quantity</div>
+            <div id="si-currentqty" style="font-size:32px;font-weight:700;font-family:var(--mono);color:var(--green);">0</div>
+            <div style="font-size:11px;color:var(--text3);margin-top:4px;">plants</div>
+          </div>
+          <div class="card" style="text-align:center;background:var(--bg2);border-color:var(--border);">
+            <div style="font-size:11px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">Current Day</div>
+            <div id="si-currentday" style="font-size:32px;font-weight:700;font-family:var(--mono);color:var(--text);">—</div>
+            <div id="si-currentday-label" style="font-size:11px;color:var(--text3);margin-top:4px;">—</div>
+          </div>
         </div>
 
         <!-- Add Transaction -->
@@ -1010,6 +1017,16 @@ function avg(arr){const v=arr.filter(x=>x!==null&&!isNaN(x)&&x>0);return v.lengt
 function pens(sel){return Array.from(document.querySelectorAll(sel)).map(i=>parseFloat(i.value)||null);}
 function daysBetween(s,e){if(!s||!e)return null;const a=new Date(s),b=new Date(e);return isNaN(a)||isNaN(b)?null:Math.floor((b-a)/864e5)+1;}
 function calcStage(vs,fs,d){if(fs&&d>=fs){const fd=daysBetween(fs,d);return{stage:'flower',day:fd>0?fd:null};}if(vs){const vd=daysBetween(vs,d);return{stage:'veg',day:vd>0?vd:null};}return{stage:null,day:null};}
+function calcCloneDay(batchId, dateStr){
+  // Clone day = days since the first Produced/Received transaction for this batch (C1 on the day plants arrived).
+  // Returns null if there's no Produced/Received tx yet.
+  if(!batchId || !dateStr) return null;
+  const txs = batchTxRecs.filter(t=>t.batchId===batchId && t.txType==='Produced/Received').sort((a,b)=>(a.id||0)-(b.id||0));
+  if(!txs.length) return null;
+  const start = txs[0].date;
+  if(!start) return null;
+  return daysBetween(start, dateStr);
+}
 function colorEC(v){if(v===null)return'<span style="color:var(--text3)">-</span>';const s=v.toFixed(2);return v<EC_LO?'<span class="lo">'+s+'</span>':v>EC_HI?'<span class="hi">'+s+'</span>':'<span class="ok">'+s+'</span>';}
 function colorPHec(v){if(v===null)return'<span style="color:var(--text3)">-</span>';const s=v.toFixed(2);return v<PH_EC_LO?'<span class="lo">'+s+'</span>':v>PH_EC_HI?'<span class="hi">'+s+'</span>':'<span class="ok">'+s+'</span>';}
 function colorPHro(v){if(v===null)return'<span style="color:var(--text3)">-</span>';const s=v.toFixed(2);return v<RO_PH_LO?'<span class="lo">'+s+'</span>':v>RO_PH_HI?'<span class="hi">'+s+'</span>':'<span class="ok">'+s+'</span>';}
@@ -1725,7 +1742,25 @@ function ecFlowerChanged(){
   }
   ecBadge();applyCascadeLocks();
 }
-function ecBadge(){const d=document.getElementById('ec-date').value,vs=document.getElementById('ec-veg').value,fs=document.getElementById('ec-flower').value,b=document.getElementById('ec-badge');if(!d||!vs){b.innerHTML='<span style="font-size:12px;color:var(--text3);">Enter veg start date to calculate</span>';return;}const{stage,day}=calcStage(vs,fs,d);if(stage&&day)b.innerHTML='<span class="day-pill '+stage+'">'+(stage==='flower'?'Flower Day':'Veg Day')+' '+day+'</span>';else b.innerHTML='<span style="font-size:12px;color:var(--text3);">Check your dates</span>';}
+function ecBadge(){
+  const d=document.getElementById('ec-date').value;
+  const vs=document.getElementById('ec-veg').value;
+  const fs=document.getElementById('ec-flower').value;
+  const batchId=document.getElementById('ec-batch').value.trim();
+  const b=document.getElementById('ec-badge');
+  if(!d){ b.innerHTML='<span style="font-size:12px;color:var(--text3);">Select a batch</span>'; return; }
+  // Clones phase: show C{day} from first Produced/Received tx
+  if(batchId && !vs){
+    const cd = calcCloneDay(batchId, d);
+    if(cd && cd > 0){ b.innerHTML = '<span class="day-pill veg">Clone Day '+cd+'</span>'; return; }
+    b.innerHTML='<span style="font-size:12px;color:var(--text3);">Add a Produced/Received transaction to start Clone Day count</span>';
+    return;
+  }
+  if(!vs){ b.innerHTML='<span style="font-size:12px;color:var(--text3);">Enter veg start date to calculate</span>'; return; }
+  const{stage,day}=calcStage(vs,fs,d);
+  if(stage&&day) b.innerHTML='<span class="day-pill '+stage+'">'+(stage==='flower'?'Flower Day':'Veg Day')+' '+day+'</span>';
+  else b.innerHTML='<span style="font-size:12px;color:var(--text3);">Check your dates</span>';
+}
 function ecAvgs(){setAvg('ec-avg-ec',avg(pens('.ec-drip-ec').filter(v=>v)),EC_LO,EC_HI);setAvg('ec-avg-ph',avg(pens('.ec-drip-ph').filter(v=>v)),PH_EC_LO,PH_EC_HI);}
 
 async function ecSave(){
@@ -2133,6 +2168,12 @@ function wasteSeqUnlock(){
     batchRooms = [...declaredRooms];
   } else {
     batchRooms = [...new Set(ecRecs.filter(r=>r.batch&&r.batch.trim().toLowerCase()===batch.trim().toLowerCase()&&r.room).map(r=>r.room))];
+  }
+  // For pre-harvest batches (Vegetative Waste only): only show rooms that currently have plants.
+  // For post-harvest batches (Dry Waste only): show all of the batch's rooms regardless of count.
+  const _isPreHarvestForRooms = !batchRec || !['Drying','Packaged'].includes(batchRec.plantPhase);
+  if(_isPreHarvestForRooms){
+    batchRooms = batchRooms.filter(r=>calcRoomPlantCount(batch, r) > 0);
   }
   const prevRoom=roomEl.value;
   roomEl.innerHTML='<option value="">select room</option>'+batchRooms.map(r=>'<option'+(r===prevRoom?' selected':'')+'>'+r+'</option>').join('');
@@ -2647,6 +2688,32 @@ function summaryBatchChanged(){
   document.getElementById('si-harvest-date').textContent = b.harvestDate || '—';
   document.getElementById('si-packaged-date').textContent = b.packagedDate || '—';
   document.getElementById('si-sold-date').textContent = b.soldDate || '—';
+  // Current Day display: clone day in Clones phase, veg/flower day in those phases
+  const _today = localDate();
+  const _dayEl = document.getElementById('si-currentday');
+  const _dayLbl = document.getElementById('si-currentday-label');
+  if(_dayEl && _dayLbl){
+    if(b.plantPhase === 'Clones'){
+      const cd = calcCloneDay(b.batchId, _today);
+      if(cd && cd > 0){ _dayEl.textContent = 'C'+cd; _dayLbl.textContent = 'clone day'; }
+      else { _dayEl.textContent = '—'; _dayLbl.textContent = 'add plants to start'; }
+    } else if(b.plantPhase === 'Veg' && b.vegStart){
+      const vd = daysBetween(b.vegStart, _today);
+      _dayEl.textContent = vd>0 ? ('V'+vd) : '—';
+      _dayLbl.textContent = 'veg day';
+    } else if(b.plantPhase === 'Flower' && b.flowerStart){
+      const fd = daysBetween(b.flowerStart, _today);
+      _dayEl.textContent = fd>0 ? ('F'+fd) : '—';
+      _dayLbl.textContent = 'flower day';
+    } else if(b.plantPhase === 'Drying' && b.harvestDate){
+      const dd = daysBetween(b.harvestDate, _today);
+      _dayEl.textContent = dd>0 ? ('D'+dd) : '—';
+      _dayLbl.textContent = 'drying day';
+    } else {
+      _dayEl.textContent = '—';
+      _dayLbl.textContent = b.plantPhase ? b.plantPhase.toLowerCase() : '—';
+    }
+  }
   // Today's date for transactions
   document.getElementById('tx-date-display').textContent = localDate();
   // Restrict transaction types: only Produced/Received until at least one tx exists for this batch
