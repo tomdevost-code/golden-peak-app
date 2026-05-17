@@ -235,30 +235,29 @@ tr:last-child td { border-bottom: none; }
       </div>
       <div class="section">
         <div class="section-label">Watering</div>
-        <div class="card" style="padding:0;overflow:hidden;">
-          <!-- Header strip: Type | Flow | Total -->
-          <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:1px;background:var(--border);">
-            <div style="background:var(--bg2);padding:8px 10px;">
-              <div style="font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;">Watering type</div>
-              <select id="ec-wtype" style="font-size:14px;font-weight:600;margin-top:2px;border:none;background:transparent;padding:0;width:100%;outline:none;font-family:var(--sans);color:var(--text);cursor:pointer;">
+        <div class="card">
+          <!-- Type + Flow -->
+          <div class="g2" style="margin-bottom:12px;">
+            <div class="field"><label>Watering type</label>
+              <select id="ec-wtype">
                 <option value="">select type</option>
                 <option>Hydration</option><option>Pre-Charge</option><option>Water In</option>
                 <option>Full Saturation</option><option>Feed</option><option>Flush</option><option>Fade</option><option>RO Water</option>
               </select>
             </div>
-            <div style="background:var(--bg2);padding:8px 10px;">
-              <div style="font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;">Flow (L)</div>
-              <input type="number" id="ec-flow" step="0.01" placeholder="0.00" style="font-size:14px;font-weight:600;font-family:var(--mono);margin-top:2px;border:none;background:transparent;padding:0;width:100%;outline:none;color:var(--text);" />
-            </div>
-            <div style="background:var(--green-pale);padding:8px 10px;text-align:right;">
-              <div style="font-size:9px;color:var(--green);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;">Total ml/plant</div>
-              <div id="ec-total-ml" style="font-size:18px;font-weight:700;font-family:var(--mono);color:var(--green);margin-top:2px;line-height:1;">-</div>
+            <div class="field"><label>Flow meter (L)</label>
+              <input type="number" id="ec-flow" step="0.01" placeholder="0.00" />
             </div>
           </div>
-          <!-- Events grid -->
-          <div style="padding:10px;">
-            <div style="font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">ml/plant per event</div>
-            <div id="ec-events-container" style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;"></div>
+          <!-- Events as chips + Add Event pill -->
+          <div style="font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">ml/plant per event</div>
+          <div id="ec-events-container" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-height:32px;"></div>
+          <!-- Hidden source-of-truth inputs (built by buildECEvents) -->
+          <div id="ec-events-state" style="display:none;"></div>
+          <!-- Total -->
+          <div style="display:flex;align-items:center;justify-content:space-between;padding-top:10px;margin-top:12px;border-top:1px solid var(--border);">
+            <div style="font-size:11px;font-weight:600;color:var(--text2);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;">Total ml/plant</div>
+            <div id="ec-total-ml" style="font-size:20px;font-weight:700;font-family:var(--mono);color:var(--green);">-</div>
           </div>
         </div>
       </div>
@@ -1353,17 +1352,140 @@ async function harvestSave(){
 function switchRepTab(tab,btn){document.getElementById('rep-ec-view').style.display=tab==='ec'?'':'none';document.getElementById('rep-ro-view').style.display=tab==='ro'?'':'none';document.getElementById('rep-waste-view').style.display=tab==='waste'?'':'none';document.querySelectorAll('.rep-tab').forEach(b=>b.classList.remove('active'));btn.classList.add('active');if(tab==='waste')renderWasteReport();}
 
 function buildECEvents(){
-  // Compact 4-col grid of event cells. Each cell has a leading "E1"-"E8" label and a borderless input.
-  const c=document.getElementById('ec-events-container');
-  c.innerHTML='';
+  // Create the hidden source-of-truth inputs (#ec-evt-1 .. #ec-evt-8) in the state container.
+  // The visible chip strip is rendered by ecRenderEvents() into #ec-events-container.
+  const state = document.getElementById('ec-events-state');
+  if(!state) return;
+  state.innerHTML = '';
   for(let i=1;i<=8;i++){
-    c.innerHTML += '<div style="display:flex;align-items:center;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;background:var(--bg);">'+
-      '<span style="background:var(--bg2);font-size:10px;color:var(--text3);font-family:var(--mono);padding:5px 7px;flex-shrink:0;">E'+i+'</span>'+
-      '<input type="number" id="ec-evt-'+i+'" step="1" min="0" placeholder="—" oninput="ecTotalML()" style="flex:1;min-width:0;text-align:center;font-family:var(--mono);font-size:13px;border:none;padding:5px 0;background:transparent;outline:none;width:100%;color:var(--text);" />'+
+    state.innerHTML += '<input type="number" id="ec-evt-'+i+'" step="1" min="0">';
+  }
+  ecRenderEvents();
+}
+function ecTotalML(){
+  let t=0,any=false;
+  for(let i=1;i<=8;i++){
+    const el = document.getElementById('ec-evt-'+i);
+    if(!el) continue;
+    const v=parseFloat(el.value);
+    if(!isNaN(v)&&v>0){t+=v;any=true;}
+  }
+  const tot = document.getElementById('ec-total-ml');
+  if(tot) tot.textContent = any ? t.toFixed(0) : '-';
+}
+function ecRenderEvents(){
+  // Read all values, compact them so empty slots are at the end. Render filled slots as chips,
+  // and an "+ Add event" pill at the end if there's room for more.
+  const c = document.getElementById('ec-events-container');
+  if(!c) return;
+  const vals = [];
+  for(let i=1;i<=8;i++){
+    const el = document.getElementById('ec-evt-'+i);
+    if(!el) continue;
+    const v = el.value;
+    if(v !== '' && !isNaN(parseFloat(v)) && parseFloat(v) > 0) vals.push(parseFloat(v));
+  }
+  // Compact: re-assign values to slots 1..N, clear the rest
+  for(let i=1;i<=8;i++){
+    const el = document.getElementById('ec-evt-'+i);
+    if(!el) continue;
+    el.value = (i <= vals.length) ? String(vals[i-1]) : '';
+  }
+  // Build chip HTML
+  let html = '';
+  vals.forEach((v, idx)=>{
+    const slot = idx + 1;
+    html += '<div style="display:flex;align-items:center;gap:5px;background:var(--green-pale);border:1px solid var(--green);color:var(--green);border-radius:20px;padding:4px 10px;font-size:13px;">'+
+      '<span style="font-family:var(--mono);font-size:10px;opacity:0.8;">E'+slot+'</span>'+
+      '<span class="ec-evt-chip-value" data-slot="'+slot+'" onclick="ecEditEventValue(this)" title="Click to edit" style="background:#fff;border-radius:10px;padding:1px 8px;font-family:var(--mono);font-weight:600;font-size:12px;color:var(--green);cursor:text;min-width:24px;text-align:center;display:inline-block;">'+v+'</span>'+
+      '<span onclick="ecRemoveEvent('+slot+')" title="Remove" style="font-size:14px;cursor:pointer;opacity:0.6;line-height:1;margin-left:2px;">×</span>'+
+    '</div>';
+  });
+  if(vals.length < 8){
+    html += '<div onclick="ecAddEvent()" style="display:flex;align-items:center;gap:5px;background:var(--bg2);border:1px dashed var(--border);color:var(--text2);border-radius:20px;padding:3px 12px;font-size:13px;cursor:pointer;user-select:none;">'+
+      '<span style="font-weight:600;color:var(--green);">+</span><span>Add event</span>'+
     '</div>';
   }
+  c.innerHTML = html;
+  ecTotalML();
 }
-function ecTotalML(){let t=0,any=false;for(let i=1;i<=8;i++){const v=parseFloat(document.getElementById('ec-evt-'+i).value);if(!isNaN(v)&&v>0){t+=v;any=true;}}document.getElementById('ec-total-ml').textContent=any?t.toFixed(0):'-';}
+function ecAddEvent(){
+  // Find the next empty slot (after compaction, that's slot = vals.length + 1) and open it for editing.
+  let next = 0;
+  for(let i=1;i<=8;i++){
+    const el = document.getElementById('ec-evt-'+i);
+    if(el && el.value === ''){ next = i; break; }
+  }
+  if(!next) return;
+  // Render a temporary chip with an editable input in that slot. We don't write a value yet —
+  // if the user blurs with no value, the chip vanishes; otherwise it commits.
+  const c = document.getElementById('ec-events-container');
+  if(!c) return;
+  // Re-render filled chips first, then append an open editor chip
+  let html = '';
+  for(let i=1;i<next;i++){
+    const v = parseFloat(document.getElementById('ec-evt-'+i).value);
+    html += '<div style="display:flex;align-items:center;gap:5px;background:var(--green-pale);border:1px solid var(--green);color:var(--green);border-radius:20px;padding:4px 10px;font-size:13px;">'+
+      '<span style="font-family:var(--mono);font-size:10px;opacity:0.8;">E'+i+'</span>'+
+      '<span class="ec-evt-chip-value" data-slot="'+i+'" onclick="ecEditEventValue(this)" style="background:#fff;border-radius:10px;padding:1px 8px;font-family:var(--mono);font-weight:600;font-size:12px;color:var(--green);cursor:text;min-width:24px;text-align:center;display:inline-block;">'+v+'</span>'+
+      '<span onclick="ecRemoveEvent('+i+')" style="font-size:14px;cursor:pointer;opacity:0.6;line-height:1;margin-left:2px;">×</span>'+
+    '</div>';
+  }
+  html += '<div style="display:flex;align-items:center;gap:5px;background:var(--green-pale);border:1px solid var(--green);color:var(--green);border-radius:20px;padding:4px 10px;font-size:13px;">'+
+    '<span style="font-family:var(--mono);font-size:10px;opacity:0.8;">E'+next+'</span>'+
+    '<input id="ec-evt-active-editor" type="number" min="0" step="1" placeholder="ml" style="width:55px;font-family:var(--mono);font-size:12px;padding:1px 6px;border:1px solid var(--green);border-radius:10px;text-align:center;background:#fff;color:var(--green);outline:none;font-weight:600;">'+
+  '</div>';
+  c.innerHTML = html;
+  const editor = document.getElementById('ec-evt-active-editor');
+  if(editor){
+    editor.onkeydown = (e)=>{
+      if(e.key === 'Enter') editor.blur();
+      if(e.key === 'Escape'){ editor.value=''; editor.blur(); }
+      if(e.key === 'ArrowUp' || e.key === 'ArrowDown') e.preventDefault();
+    };
+    editor.onwheel = ()=>editor.blur();
+    editor.onblur = ()=>{
+      const v = parseFloat(editor.value);
+      const slot = document.getElementById('ec-evt-'+next);
+      if(slot){ slot.value = (!isNaN(v) && v > 0) ? String(v) : ''; }
+      ecRenderEvents();
+    };
+    editor.focus();
+  }
+}
+function ecEditEventValue(span){
+  // Swap a filled value badge for an inline editor. On blur, write back to the hidden input.
+  const slot = span.dataset.slot;
+  const inp = document.getElementById('ec-evt-'+slot);
+  if(!inp) return;
+  const cur = inp.value;
+  const editor = document.createElement('input');
+  editor.type = 'number';
+  editor.min = '0';
+  editor.step = '1';
+  editor.value = cur;
+  editor.placeholder = 'ml';
+  editor.style.cssText = 'width:55px;font-family:var(--mono);font-size:12px;padding:1px 6px;border:1px solid var(--green);border-radius:10px;text-align:center;background:#fff;color:var(--green);outline:none;font-weight:600;';
+  editor.onkeydown = (e)=>{
+    if(e.key === 'Enter') editor.blur();
+    if(e.key === 'Escape'){ editor.value = cur; editor.blur(); }
+    if(e.key === 'ArrowUp' || e.key === 'ArrowDown') e.preventDefault();
+  };
+  editor.onwheel = ()=>editor.blur();
+  editor.onblur = ()=>{
+    const v = parseFloat(editor.value);
+    inp.value = (!isNaN(v) && v > 0) ? String(v) : '';
+    ecRenderEvents();
+  };
+  span.replaceWith(editor);
+  editor.focus();
+  editor.select();
+}
+function ecRemoveEvent(slot){
+  const inp = document.getElementById('ec-evt-'+slot);
+  if(inp) inp.value = '';
+  ecRenderEvents();
+}
 function getAllBatches(){const all=[...ecRecs,...roRecs];const seen={};batchRecs.forEach(r=>{if(r.batchId&&!seen[r.batchId]){seen[r.batchId]={vegStart:'',flowerStart:'',harvestDate:''};} });all.forEach(r=>{if(r.batch&&!seen[r.batch]){seen[r.batch]={vegStart:r.vegStart||'',flowerStart:r.flowerStart||'',harvestDate:r.harvestDate||''};}});return seen;}
 function getECBatches(){const seen={};ecRecs.forEach(r=>{if(r.batch&&!seen[r.batch]){seen[r.batch]={vegStart:r.vegStart||'',flowerStart:r.flowerStart||'',harvestDate:r.harvestDate||''};}});return seen;}
 function getFormBatchList(){
@@ -1975,7 +2097,7 @@ function ecClear(){
   roomEl.innerHTML='<option value="">select room</option><option>Flower 1</option><option>Flower 2</option><option>Flower 3</option><option>Flower 4</option><option>Flower 5</option><option>Veg</option>';
   roomEl.disabled=false;roomEl.style.background='';roomEl.style.color='';roomEl.style.cursor='';
   const rh=roomEl.closest('.field').querySelector('.room-lock-hint');if(rh)rh.remove();
-  document.querySelectorAll('.ec-drip-ec,.ec-drip-ph').forEach(i=>i.value='');for(let i=1;i<=8;i++)document.getElementById('ec-evt-'+i).value='';['ec-notes','ec-flow'].forEach(id=>document.getElementById(id).value='');document.getElementById('ec-wtype').value='';document.getElementById('ec-total-ml').textContent='-';['ec-avg-ec','ec-avg-ph'].forEach(id=>{document.getElementById(id).textContent='-';document.getElementById(id).className='avg-val';});document.getElementById('ec-batch').value='';document.getElementById('ec-batch-select').value='';document.getElementById('ec-hydration').value='';document.getElementById('ec-harvest').value='';clearBatchRoomLock('ec');updateBatchRoomsInfo('');document.getElementById('ec-room-strip').style.display='none';document.getElementById('ec-badge').innerHTML='<span style="font-size:12px;color:var(--text3);">Enter veg start date to calculate</span>';hideClosedWarning('ec');applyCascadeLocks();ecSeqUnlock();window.scrollTo({top:0,behavior:'smooth'});}
+  document.querySelectorAll('.ec-drip-ec,.ec-drip-ph').forEach(i=>i.value='');for(let i=1;i<=8;i++)document.getElementById('ec-evt-'+i).value='';ecRenderEvents();['ec-notes','ec-flow'].forEach(id=>document.getElementById(id).value='');document.getElementById('ec-wtype').value='';document.getElementById('ec-total-ml').textContent='-';['ec-avg-ec','ec-avg-ph'].forEach(id=>{document.getElementById(id).textContent='-';document.getElementById(id).className='avg-val';});document.getElementById('ec-batch').value='';document.getElementById('ec-batch-select').value='';document.getElementById('ec-hydration').value='';document.getElementById('ec-harvest').value='';clearBatchRoomLock('ec');updateBatchRoomsInfo('');document.getElementById('ec-room-strip').style.display='none';document.getElementById('ec-badge').innerHTML='<span style="font-size:12px;color:var(--text3);">Enter veg start date to calculate</span>';hideClosedWarning('ec');applyCascadeLocks();ecSeqUnlock();window.scrollTo({top:0,behavior:'smooth'});}
 
 function buildROSamples(){const c=document.getElementById('ro-samples');c.innerHTML='';for(let i=1;i<=8;i++){c.innerHTML+='<div class="sample-item"><div class="sample-num">Sample '+i+'</div><div class="s-lbl">EC (mS/cm)</div><input type="number" class="ro-s-ec s-input" id="ro-ec-'+i+'" step="0.01" placeholder="0.00" oninput="roCalc()" /><div class="s-lbl" style="margin-top:6px;">pH</div><input type="number" class="ro-s-ph s-input" id="ro-ph-'+i+'" step="0.01" placeholder="0.00" oninput="roCalc()" /></div>';}}
 function roBadge(){const d=document.getElementById('ro-date').value,vs=document.getElementById('ro-veg').value,fs=document.getElementById('ro-flower').value,b=document.getElementById('ro-badge');if(!d||!vs){b.innerHTML='<span style="font-size:12px;color:var(--text3);">Enter veg start date to calculate</span>';return;}const{stage,day}=calcStage(vs,fs,d);if(stage&&day)b.innerHTML='<span class="day-pill '+stage+'">'+(stage==='flower'?'Flower Day':'Veg Day')+' '+day+'</span>';else b.innerHTML='<span style="font-size:12px;color:var(--text3);">Check your dates</span>';}
