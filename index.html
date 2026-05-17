@@ -1523,26 +1523,28 @@ const FLOWER_WTYPES=['Full Saturation','Feed','Flush','Fade','RO Water'];
 const VEG_FREE_WTYPES=['Full Saturation','Feed','Flush','RO Water']; // Veg post-sequence (no Fade — Flower-only)
 function getAllowedWateringTypes(batch, room){
   // Watering-type rules combine phase + room:
-  //   Flower phase + any Flower room → all 5 wtypes (Full Sat, Feed, Flush, Fade, RO Water)
-  //   Veg phase   + Flower room    → 4 free wtypes (no Fade — that's Flower-phase only)
-  //   Any phase   + Veg room       → strict starting sequence: Hydration → Pre-Charge → Water In
-  //                                  After Water In, only Water In remains in Veg room
-  //                                  (plants must move to a Flower room for the free wtypes)
+  //   Flower room (any phase) → free wtypes (Full Saturation, Feed, Flush, RO Water).
+  //                             Fade is added when the batch is in Flower phase.
+  //   Veg room                → strict starting sequence: Hydration → Pre-Charge → Water In.
+  //                             Each step is one-per-(batch+room): once logged, it disappears
+  //                             from the dropdown for that (batch, room) pair. After all three
+  //                             are done, the Veg room dropdown is empty — plants must move
+  //                             to a Flower room for the free wtypes.
   const batchRec = batch ? batchRecs.find(r=>r.batchId===batch && !r.type) : null;
   const phase = batchRec ? (batchRec.plantPhase||'') : '';
   if(FLOWER_ROOMS.includes(room)){
     return (phase === 'Flower') ? FLOWER_WTYPES : VEG_FREE_WTYPES;
   }
   if(room !== 'Veg') return VEG_WTYPES; // fallback for unknown room
-  // Veg room: enforce the prep sequence
+  // Veg room: enforce the strict, one-per-(batch+room) prep sequence.
   if(!batch) return ['Hydration'];
-  const hasHydration = (batchRec && batchRec.hydrationDate) || ecRecs.some(r=>r.batch===batch && r.wtype==='Hydration');
-  const hasPreCharge = ecRecs.some(r=>r.batch===batch && r.wtype==='Pre-Charge');
-  const hasWaterIn   = ecRecs.some(r=>r.batch===batch && r.wtype==='Water In');
+  const hasHydration = (batchRec && batchRec.hydrationDate) || ecRecs.some(r=>r.batch===batch && r.room===room && r.wtype==='Hydration');
+  const hasPreCharge = ecRecs.some(r=>r.batch===batch && r.room===room && r.wtype==='Pre-Charge');
+  const hasWaterIn   = ecRecs.some(r=>r.batch===batch && r.room===room && r.wtype==='Water In');
   if(!hasHydration) return ['Hydration'];
   if(!hasPreCharge) return ['Pre-Charge'];
   if(!hasWaterIn)   return ['Water In'];
-  return ['Water In'];
+  return []; // all three sequential steps done — plants must move to a Flower room
 }
 function seqDisable(id,hint){
   const el=document.getElementById(id);if(!el)return;
@@ -1601,7 +1603,13 @@ function ecRoomChanged(){
   const wtype=document.getElementById('ec-wtype');
   const cur=wtype.value;
   const opts=getAllowedWateringTypes(batch, room);
-  wtype.innerHTML='<option value="">select type</option>'+opts.map(o=>'<option'+(o===cur?' selected':'')+'>'+o+'</option>').join('');
+  // If no wtypes are available (Veg room: all 3 sequential steps done), show a placeholder
+  // explaining the user needs to move plants to a Flower room.
+  if(!opts.length){
+    wtype.innerHTML='<option value="">no wtypes — move plants to a Flower room</option>';
+  } else {
+    wtype.innerHTML='<option value="">select type</option>'+opts.map(o=>'<option'+(o===cur?' selected':'')+'>'+o+'</option>').join('');
+  }
   // If the previously-selected value is no longer in the allowed list, clear it
   if(cur && !opts.includes(cur)) wtype.value='';
   applyRoomColor('ec',room);
