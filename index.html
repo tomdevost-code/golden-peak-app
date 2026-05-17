@@ -2496,10 +2496,11 @@ async function batchCreate(){
   const notes = document.getElementById('batch-notes').value.trim();
   // All new batches start with qty=0, so the zero-qty rule applies: phase='Clones', rooms=['Veg'].
   const _created = localDate();
-  // Clones-Internal: cloneDate is the batch's createdDate. Clones-External: clone date is captured later
-  // when the Produced/Received transaction is saved (the user enters the arrival date).
-  const _cloneDate = (geneticsSource === 'Clones-Internal') ? _created : '';
-  const rec = { id: Date.now(), batchId, cultivar, mother, geneticsSource, externalCompany, notes, createdDate: _created, cloneDate: _cloneDate, rooms: ['Veg'], plantPhase: 'Clones', status: 'Open', closedDate: '', synced: false };
+  // cloneDate is left empty at batch creation for both Clones-Internal and Clones-External.
+  // It's captured when the first Produced/Received transaction is saved:
+  //   - Clones-Internal: cloneDate = the transaction's date (today), set silently with no UI input.
+  //   - Clones-External: cloneDate = the value the user enters into the conditional Clone Date input.
+  const rec = { id: Date.now(), batchId, cultivar, mother, geneticsSource, externalCompany, notes, createdDate: _created, cloneDate: '', rooms: ['Veg'], plantPhase: 'Clones', status: 'Open', closedDate: '', synced: false };
   batchRecs.unshift(rec);
   lsSet('gp-batch', batchRecs);
   populateBatchDropdowns();
@@ -3138,19 +3139,28 @@ async function summaryAddTransaction(){
   }
   const _txBatchRec = batchRecs.find(r=>r.batchId===batchId && !r.type);
   const _txPhase = _txBatchRec ? (_txBatchRec.plantPhase||'') : '';
-  // Capture Clone Date for Clones-External on the first Produced/Received tx
+  // Capture Clone Date on the first Produced/Received tx (when cloneDate isn't already set).
+  //   - Clones-Internal: cloneDate = the transaction's date (today), set silently.
+  //   - Clones-External: cloneDate = the value the user entered in the conditional Clone Date input.
   let _cloneDateCaptured = false;
-  if(txType === 'Produced/Received' && _txBatchRec && _txBatchRec.geneticsSource === 'Clones-External' && !_txBatchRec.cloneDate){
-    const _cdEl = document.getElementById('tx-clone-date');
-    const _cdVal = _cdEl ? _cdEl.value : '';
-    if(!_cdVal){ toast('Enter the Clone Date (when the external clones arrived).',5000); return; }
-    // Persist on the batch record
-    const _bi = batchRecs.findIndex(r=>r.batchId===batchId && !r.type);
-    if(_bi >= 0){
-      batchRecs[_bi].cloneDate = _cdVal;
-      batchRecs[_bi].synced = false;
-      lsSet('gp-batch', batchRecs);
-      _cloneDateCaptured = true;
+  if(txType === 'Produced/Received' && _txBatchRec && !_txBatchRec.cloneDate){
+    let _cdToSet = '';
+    if(_txBatchRec.geneticsSource === 'Clones-External'){
+      const _cdEl = document.getElementById('tx-clone-date');
+      const _cdVal = _cdEl ? _cdEl.value : '';
+      if(!_cdVal){ toast('Enter the Clone Date (when the external clones arrived).',5000); return; }
+      _cdToSet = _cdVal;
+    } else if(_txBatchRec.geneticsSource === 'Clones-Internal'){
+      _cdToSet = date; // the transaction's date — today
+    }
+    if(_cdToSet){
+      const _bi = batchRecs.findIndex(r=>r.batchId===batchId && !r.type);
+      if(_bi >= 0){
+        batchRecs[_bi].cloneDate = _cdToSet;
+        batchRecs[_bi].synced = false;
+        lsSet('gp-batch', batchRecs);
+        _cloneDateCaptured = true;
+      }
     }
   }
   const tx = { id: Date.now(), batchId, date, txType, qty, weight, notes, currentQtyBefore, plantPhase: _txPhase, synced: false };
