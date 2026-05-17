@@ -2699,31 +2699,7 @@ function summaryBatchChanged(){
   document.getElementById('si-packaged-date').textContent = b.packagedDate || '—';
   document.getElementById('si-sold-date').textContent = b.soldDate || '—';
   // Current Day display: clone day in Clones phase, veg/flower day in those phases
-  const _today = localDate();
-  const _dayEl = document.getElementById('si-currentday');
-  const _dayLbl = document.getElementById('si-currentday-label');
-  if(_dayEl && _dayLbl){
-    if(b.plantPhase === 'Clones'){
-      const cd = calcCloneDay(b.batchId, _today);
-      if(cd && cd > 0){ _dayEl.textContent = 'C'+cd; _dayLbl.textContent = 'clone day'; }
-      else { _dayEl.textContent = '—'; _dayLbl.textContent = 'add plants to start'; }
-    } else if(b.plantPhase === 'Veg' && b.vegStart){
-      const vd = daysBetween(b.vegStart, _today);
-      _dayEl.textContent = vd>0 ? ('V'+vd) : '—';
-      _dayLbl.textContent = 'veg day';
-    } else if(b.plantPhase === 'Flower' && b.flowerStart){
-      const fd = daysBetween(b.flowerStart, _today);
-      _dayEl.textContent = fd>0 ? ('F'+fd) : '—';
-      _dayLbl.textContent = 'flower day';
-    } else if(b.plantPhase === 'Drying' && b.harvestDate){
-      const dd = daysBetween(b.harvestDate, _today);
-      _dayEl.textContent = dd>0 ? ('D'+dd) : '—';
-      _dayLbl.textContent = 'drying day';
-    } else {
-      _dayEl.textContent = '—';
-      _dayLbl.textContent = b.plantPhase ? b.plantPhase.toLowerCase() : '—';
-    }
-  }
+  summaryRefreshCurrentDay(b.batchId);
   // Today's date for transactions
   document.getElementById('tx-date-display').textContent = localDate();
   // Restrict transaction types: only Produced/Received until at least one tx exists for this batch
@@ -2739,6 +2715,37 @@ function summaryBatchChanged(){
   document.getElementById('tx-msg').style.display='none';
 }
 
+function summaryRefreshCurrentDay(batchId){
+  // Refreshes the "Current Day" badge on the Summary Batch Info card.
+  // Clones → C{day} from cloneDate; Veg → V{day} from vegStart; Flower → F{day} from flowerStart;
+  // Drying → D{day} from harvestDate. Falls back to '—' with the phase name as the label.
+  const _dayEl = document.getElementById('si-currentday');
+  const _dayLbl = document.getElementById('si-currentday-label');
+  if(!_dayEl || !_dayLbl) return;
+  const b = batchRecs.find(r=>r.batchId===batchId && !r.type);
+  if(!b){ _dayEl.textContent = '—'; _dayLbl.textContent = '—'; return; }
+  const _today = localDate();
+  if(b.plantPhase === 'Clones'){
+    const cd = calcCloneDay(b.batchId, _today);
+    if(cd && cd > 0){ _dayEl.textContent = 'C'+cd; _dayLbl.textContent = 'clone day'; }
+    else { _dayEl.textContent = '—'; _dayLbl.textContent = 'add plants to start'; }
+  } else if(b.plantPhase === 'Veg' && b.vegStart){
+    const vd = daysBetween(b.vegStart, _today);
+    _dayEl.textContent = vd>0 ? ('V'+vd) : '—';
+    _dayLbl.textContent = 'veg day';
+  } else if(b.plantPhase === 'Flower' && b.flowerStart){
+    const fd = daysBetween(b.flowerStart, _today);
+    _dayEl.textContent = fd>0 ? ('F'+fd) : '—';
+    _dayLbl.textContent = 'flower day';
+  } else if(b.plantPhase === 'Drying' && b.harvestDate){
+    const dd = daysBetween(b.harvestDate, _today);
+    _dayEl.textContent = dd>0 ? ('D'+dd) : '—';
+    _dayLbl.textContent = 'drying day';
+  } else {
+    _dayEl.textContent = '—';
+    _dayLbl.textContent = b.plantPhase ? b.plantPhase.toLowerCase() : '—';
+  }
+}
 function summaryStatusChanged(){
   const closed = document.getElementById('summary-status').value === 'Closed';
   document.getElementById('summary-closed-date-wrap').style.display = closed ? '' : 'none';
@@ -3223,6 +3230,9 @@ async function summaryAddTransaction(){
     document.getElementById('si-veg-start').textContent = _b.vegStart || '—';
     document.getElementById('si-flower-start').textContent = _b.flowerStart || '—';
     document.getElementById('si-harvest-date').textContent = _b.harvestDate || '—';
+    // Refresh Current Day — a new Produced/Received tx may have just set cloneDate (Clones-Internal silent
+    // capture or Clones-External user-entered), and a Harvested tx may have set harvestDate.
+    summaryRefreshCurrentDay(batchId);
   }
   applyPhaseRoomLock();
   updatePendingBadge();
