@@ -293,7 +293,7 @@ tr:last-child td { border-bottom: none; }
               </select>
             </div>
             <div class="field"><label>Room</label>
-              <select id="ro-room" onchange="applyRoomColor('ro',this.value)" disabled style="background:var(--bg2);color:var(--text3);cursor:not-allowed;">
+              <select id="ro-room" onchange="roRoomChanged()" disabled style="background:var(--bg2);color:var(--text3);cursor:not-allowed;">
                 <option value="">select room</option>
                 <option>Flower 1</option><option>Flower 2</option>
                 <option>Flower 3</option><option>Flower 4</option>
@@ -315,6 +315,14 @@ tr:last-child td { border-bottom: none; }
             </div>
           </div>
           <div class="day-badge" id="ro-badge"><span style="font-size:12px;color:var(--text3);">Select a batch to calculate stage</span></div>
+          <!-- Runoff history (inline in Batch info card, collapsible). Filters by batch + room. -->
+          <div id="ro-history-section" style="display:none;margin-top:8px;border-top:1px dashed var(--border);padding-top:8px;">
+            <button type="button" id="ro-history-toggle" onclick="roHistoryToggle()" style="width:100%;display:flex;align-items:center;justify-content:space-between;background:transparent;border:none;padding:0;cursor:pointer;font-family:var(--mono);font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;outline:none;">
+              <span>Runoff History <span id="ro-history-count" style="color:var(--green);font-weight:600;"></span></span>
+              <span id="ro-history-caret" style="font-size:10px;">▼</span>
+            </button>
+            <div id="ro-history-list" style="font-size:13px;color:var(--text3);text-align:center;padding:0;display:none;margin-top:6px;"></div>
+          </div>
         </div>
       </div>
 
@@ -1560,6 +1568,81 @@ function roBatchSelect(){
   // Close warning fires only when batch is manually closed (Status=Closed)
   if(batchRec && batchRec.status === 'Closed'){ showClosedWarning('ro','Status: Closed'); }
   else { hideClosedWarning('ro'); }
+  // Refresh the runoff history for the new batch (room may already be picked)
+  roRenderHistory(val, document.getElementById('ro-room').value);
+}
+function roRoomChanged(){
+  // ro-room dropdown change handler: keeps the room colour strip in sync AND refreshes the history.
+  const room = document.getElementById('ro-room').value;
+  applyRoomColor('ro', room);
+  const batch = document.getElementById('ro-batch-select').value;
+  roRenderHistory(batch, room);
+}
+function roHistoryToggle(){
+  // Toggle the runoff-history list visibility + caret direction.
+  const list = document.getElementById('ro-history-list');
+  const caret = document.getElementById('ro-history-caret');
+  if(!list || !caret) return;
+  const isOpen = list.style.display !== 'none';
+  list.style.display = isOpen ? 'none' : '';
+  caret.textContent = isOpen ? '▼' : '▲';
+}
+function roRenderHistory(batch, room){
+  // Renders runoff entries for the given (batch, room). Hides the section when either is missing.
+  const section = document.getElementById('ro-history-section');
+  const el = document.getElementById('ro-history-list');
+  const countEl = document.getElementById('ro-history-count');
+  if(!section || !el) return;
+  if(!batch || !room){
+    section.style.display = 'none';
+    return;
+  }
+  section.style.display = '';
+  const recs = roRecs
+    .filter(r => r.batch && r.batch.trim().toLowerCase()===batch.trim().toLowerCase() && r.room === room)
+    .sort((a,b)=>{
+      if(a.date < b.date) return 1;
+      if(a.date > b.date) return -1;
+      return (b.id||0) - (a.id||0);
+    });
+  if(countEl) countEl.textContent = '('+recs.length+')';
+  if(!recs.length){
+    el.style.padding='12px';
+    el.style.textAlign='center';
+    el.innerHTML='<span style="color:var(--text3);">No runoff entries yet for '+batch+' / '+room+'.</span>';
+    return;
+  }
+  el.style.padding='0';
+  el.style.textAlign='left';
+  let html = '<div style="border:1px solid var(--border);border-radius:var(--radius-sm);background:#fff;overflow-x:auto;">';
+  html += '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
+  html += '<thead><tr style="background:#f5f5f5;">'+
+    '<th style="padding:6px 10px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);white-space:nowrap;">Date</th>'+
+    '<th style="padding:6px 10px;text-align:center;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);white-space:nowrap;">Avg EC</th>'+
+    '<th style="padding:6px 10px;text-align:center;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);white-space:nowrap;">Avg pH</th>'+
+    '<th style="padding:6px 10px;text-align:center;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);white-space:nowrap;">Variance</th>'+
+    '<th style="padding:6px 10px;text-align:center;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);white-space:nowrap;">Samples</th>'+
+  '</tr></thead><tbody>';
+  recs.forEach(r => {
+    const ec = (r.avgEC != null && !isNaN(parseFloat(r.avgEC))) ? parseFloat(r.avgEC).toFixed(2) : '—';
+    const ph = (r.avgPH != null && !isNaN(parseFloat(r.avgPH))) ? parseFloat(r.avgPH).toFixed(2) : '—';
+    const variance = (r.variance != null && !isNaN(parseFloat(r.variance))) ? parseFloat(r.variance).toFixed(2) : '—';
+    const sampleCount = Array.isArray(r.samples) ? r.samples.filter(s => s && (s.ec || s.ph)).length : 0;
+    // Alert highlight when variance > RO_VAR_ALERT (1.0)
+    const alert = (r.variance != null && !isNaN(parseFloat(r.variance)) && parseFloat(r.variance) > 1.0);
+    const varStyle = alert
+      ? 'padding:6px 10px;font-family:var(--mono);text-align:center;border-top:1px solid var(--border);border-left:1px solid var(--border);background:var(--red-pale);color:var(--red);font-weight:700;'
+      : 'padding:6px 10px;font-family:var(--mono);text-align:center;border-top:1px solid var(--border);border-left:1px solid var(--border);background:var(--bg2);';
+    html += '<tr>'+
+      '<td style="padding:6px 10px;font-family:var(--mono);border-top:1px solid var(--border);white-space:nowrap;">'+(r.date||'—')+(alert?' <span title="Variance >1.0 alert" style="color:var(--red);font-size:10px;">⚠</span>':'')+'</td>'+
+      '<td style="padding:6px 10px;font-family:var(--mono);text-align:center;border-top:1px solid var(--border);border-left:1px solid var(--border);background:var(--bg2);">'+ec+'</td>'+
+      '<td style="padding:6px 10px;font-family:var(--mono);text-align:center;border-top:1px solid var(--border);border-left:1px solid var(--border);background:var(--bg2);">'+ph+'</td>'+
+      '<td style="'+varStyle+'">'+variance+'</td>'+
+      '<td style="padding:6px 10px;font-family:var(--mono);text-align:center;border-top:1px solid var(--border);border-left:1px solid var(--border);color:var(--text3);">'+sampleCount+'/8</td>'+
+    '</tr>';
+  });
+  html += '</tbody></table></div>';
+  el.innerHTML = html;
 }
 function findBatchDates(batch,recs){const match=recs.find(r=>r.batch&&r.batch.trim().toLowerCase()===batch.trim().toLowerCase());return match?{hydrationDate:match.hydrationDate||'',vegStart:match.vegStart||'',flowerStart:match.flowerStart||'',harvestDate:match.harvestDate||''}:null;}
 function isBatchClosed(batch){const found=findBatchDates(batch,[...ecRecs,...roRecs]);return found&&found.harvestDate?found.harvestDate:null;}
@@ -2187,7 +2270,7 @@ async function roSave(){
   }else{toast('Entry saved locally');}
   roClear();updatePendingBadge();
 }
-function roClear(){for(let i=1;i<=8;i++){document.getElementById('ro-ec-'+i).value='';document.getElementById('ro-ph-'+i).value='';}['ro-notes'].forEach(id=>document.getElementById(id).value='');['ro-avg-ec','ro-avg-ph','ro-variance'].forEach(id=>document.getElementById(id).textContent='-');document.getElementById('ro-count').textContent='0/8';document.getElementById('ro-warn').style.display='none';document.getElementById('ro-ok').style.display='none';document.getElementById('ro-batch-select').value='';document.getElementById('ro-batch').value='';document.getElementById('ro-veg').value='';document.getElementById('ro-flower').value='';document.getElementById('ro-harvest').value='';document.getElementById('ro-badge').innerHTML='<span style="font-size:12px;color:var(--text3);">Select a batch to calculate stage</span>';clearBatchRoomLock('ro');hideClosedWarning('ro');}
+function roClear(){for(let i=1;i<=8;i++){document.getElementById('ro-ec-'+i).value='';document.getElementById('ro-ph-'+i).value='';}['ro-notes'].forEach(id=>document.getElementById(id).value='');['ro-avg-ec','ro-avg-ph','ro-variance'].forEach(id=>document.getElementById(id).textContent='-');document.getElementById('ro-count').textContent='0/8';document.getElementById('ro-warn').style.display='none';document.getElementById('ro-ok').style.display='none';document.getElementById('ro-batch-select').value='';document.getElementById('ro-batch').value='';document.getElementById('ro-veg').value='';document.getElementById('ro-flower').value='';document.getElementById('ro-harvest').value='';document.getElementById('ro-badge').innerHTML='<span style="font-size:12px;color:var(--text3);">Select a batch to calculate stage</span>';clearBatchRoomLock('ro');hideClosedWarning('ro');roRenderHistory('','');}
 
 // Pending badge
 function updatePendingBadge(){
