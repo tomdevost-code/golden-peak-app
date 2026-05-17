@@ -624,16 +624,20 @@ tr:last-child td { border-bottom: none; }
           <div style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--border);">
             <div style="font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">Lifecycle Dates (auto-set)</div>
             <div class="g2" style="margin-bottom:6px;">
+              <div class="field"><label>Clone Date</label><div id="si-clone-date" style="font-size:13px;font-family:var(--mono);padding:4px 0;color:var(--text2);">—</div></div>
               <div class="field"><label>Hydration</label><div id="si-hydration-date" style="font-size:13px;font-family:var(--mono);padding:4px 0;color:var(--text2);">—</div></div>
-              <div class="field"><label>Veg Start</label><div id="si-veg-start" style="font-size:13px;font-family:var(--mono);padding:4px 0;color:var(--text2);">—</div></div>
             </div>
             <div class="g2" style="margin-bottom:6px;">
+              <div class="field"><label>Veg Start</label><div id="si-veg-start" style="font-size:13px;font-family:var(--mono);padding:4px 0;color:var(--text2);">—</div></div>
               <div class="field"><label>Flower Start</label><div id="si-flower-start" style="font-size:13px;font-family:var(--mono);padding:4px 0;color:var(--text2);">—</div></div>
+            </div>
+            <div class="g2" style="margin-bottom:6px;">
               <div class="field"><label>Harvest</label><div id="si-harvest-date" style="font-size:13px;font-family:var(--mono);padding:4px 0;color:var(--text2);">—</div></div>
+              <div class="field"><label>Package Date</label><div id="si-packaged-date" style="font-size:13px;font-family:var(--mono);padding:4px 0;color:var(--text2);">—</div></div>
             </div>
             <div class="g2">
-              <div class="field"><label>Package Date</label><div id="si-packaged-date" style="font-size:13px;font-family:var(--mono);padding:4px 0;color:var(--text2);">—</div></div>
               <div class="field"><label>Sold Date</label><div id="si-sold-date" style="font-size:13px;font-family:var(--mono);padding:4px 0;color:var(--text2);">—</div></div>
+              <div></div>
             </div>
           </div>
         </div>
@@ -2692,6 +2696,7 @@ function summaryBatchChanged(){
   summaryStatusChanged();
   document.getElementById('summary-closed-date').value = b.closedDate||'';
   // Lifecycle dates (read-only in Batch Info)
+  document.getElementById('si-clone-date').textContent = b.cloneDate || '—';
   document.getElementById('si-hydration-date').textContent = b.hydrationDate || '—';
   document.getElementById('si-veg-start').textContent = b.vegStart || '—';
   document.getElementById('si-flower-start').textContent = b.flowerStart || '—';
@@ -3226,6 +3231,7 @@ async function summaryAddTransaction(){
     document.querySelectorAll('.summary-room-cb').forEach(cb=>{ cb.checked = (_b.rooms||[]).includes(cb.value); });
     document.getElementById('si-phase').textContent = _b.plantPhase||'—';
     document.getElementById('si-rooms').textContent = (_b.rooms && _b.rooms.length) ? _b.rooms.join(', ') : '—';
+    document.getElementById('si-clone-date').textContent = _b.cloneDate || '—';
     document.getElementById('si-hydration-date').textContent = _b.hydrationDate || '—';
     document.getElementById('si-veg-start').textContent = _b.vegStart || '—';
     document.getElementById('si-flower-start').textContent = _b.flowerStart || '—';
