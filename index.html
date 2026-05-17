@@ -676,6 +676,10 @@ tr:last-child td { border-bottom: none; }
             <label>Wet Weight (kg)</label>
             <input type="number" id="tx-wet-weight" placeholder="0.000" min="0" step="0.001" onwheel="this.blur()" onkeydown="if(event.key==='ArrowUp'||event.key==='ArrowDown')event.preventDefault();" style="font-size:14px;font-family:var(--mono);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;" />
           </div>
+          <div class="field" style="margin-bottom:10px;display:none;" id="tx-clone-date-wrap">
+            <label>Clone Date <span style="color:var(--text3);font-weight:400;">(when clones arrived)</span></label>
+            <input type="date" id="tx-clone-date" style="font-size:14px;font-family:var(--mono);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;" />
+          </div>
 
           <div class="field" style="margin-bottom:10px;">
             <label>Notes</label>
@@ -995,6 +999,7 @@ function buildBatchFields(rec){
     'External Clone Company':rec.externalCompany||undefined,
     'Notes':rec.notes||undefined,
     'Created Date':rec.createdDate||undefined,
+    'Clone Date':rec.cloneDate||undefined,
     'Rooms':(rec.rooms&&rec.rooms.length)?rec.rooms:undefined,
     'Room Distribution':(rec.roomDistribution && Object.keys(rec.roomDistribution).length) ? JSON.stringify(rec.roomDistribution) : undefined,
     'Completed Harvests':(rec.completedHarvests && rec.completedHarvests.length) ? rec.completedHarvests.join(', ') : undefined,
@@ -1018,14 +1023,14 @@ function pens(sel){return Array.from(document.querySelectorAll(sel)).map(i=>pars
 function daysBetween(s,e){if(!s||!e)return null;const a=new Date(s),b=new Date(e);return isNaN(a)||isNaN(b)?null:Math.floor((b-a)/864e5)+1;}
 function calcStage(vs,fs,d){if(fs&&d>=fs){const fd=daysBetween(fs,d);return{stage:'flower',day:fd>0?fd:null};}if(vs){const vd=daysBetween(vs,d);return{stage:'veg',day:vd>0?vd:null};}return{stage:null,day:null};}
 function calcCloneDay(batchId, dateStr){
-  // Clone day = days since the first Produced/Received transaction for this batch (C1 on the day plants arrived).
-  // Returns null if there's no Produced/Received tx yet.
+  // Clone day = days since batchRec.cloneDate (C1 on the day the clones arrived / were taken).
+  //   - Clones-Internal: cloneDate is set at batch creation (= createdDate).
+  //   - Clones-External: cloneDate is captured when the first Produced/Received transaction is saved.
+  // Returns null if cloneDate is not yet set.
   if(!batchId || !dateStr) return null;
-  const txs = batchTxRecs.filter(t=>t.batchId===batchId && t.txType==='Produced/Received').sort((a,b)=>(a.id||0)-(b.id||0));
-  if(!txs.length) return null;
-  const start = txs[0].date;
-  if(!start) return null;
-  return daysBetween(start, dateStr);
+  const b = batchRecs.find(r=>r.batchId===batchId && !r.type);
+  if(!b || !b.cloneDate) return null;
+  return daysBetween(b.cloneDate, dateStr);
 }
 function colorEC(v){if(v===null)return'<span style="color:var(--text3)">-</span>';const s=v.toFixed(2);return v<EC_LO?'<span class="lo">'+s+'</span>':v>EC_HI?'<span class="hi">'+s+'</span>':'<span class="ok">'+s+'</span>';}
 function colorPHec(v){if(v===null)return'<span style="color:var(--text3)">-</span>';const s=v.toFixed(2);return v<PH_EC_LO?'<span class="lo">'+s+'</span>':v>PH_EC_HI?'<span class="hi">'+s+'</span>':'<span class="ok">'+s+'</span>';}
@@ -2490,7 +2495,11 @@ async function batchCreate(){
   const externalCompany = document.getElementById('batch-external-company').value.trim();
   const notes = document.getElementById('batch-notes').value.trim();
   // All new batches start with qty=0, so the zero-qty rule applies: phase='Clones', rooms=['Veg'].
-  const rec = { id: Date.now(), batchId, cultivar, mother, geneticsSource, externalCompany, notes, createdDate: localDate(), rooms: ['Veg'], plantPhase: 'Clones', status: 'Open', closedDate: '', synced: false };
+  const _created = localDate();
+  // Clones-Internal: cloneDate is the batch's createdDate. Clones-External: clone date is captured later
+  // when the Produced/Received transaction is saved (the user enters the arrival date).
+  const _cloneDate = (geneticsSource === 'Clones-Internal') ? _created : '';
+  const rec = { id: Date.now(), batchId, cultivar, mother, geneticsSource, externalCompany, notes, createdDate: _created, cloneDate: _cloneDate, rooms: ['Veg'], plantPhase: 'Clones', status: 'Open', closedDate: '', synced: false };
   batchRecs.unshift(rec);
   lsSet('gp-batch', batchRecs);
   populateBatchDropdowns();
@@ -2718,6 +2727,8 @@ function summaryBatchChanged(){
   document.getElementById('tx-date-display').textContent = localDate();
   // Restrict transaction types: only Produced/Received until at least one tx exists for this batch
   summaryUpdateTxTypeOptions(batchId);
+  // Re-evaluate Clone Date input visibility against the newly selected batch's geneticsSource
+  txTypeChanged();
   // Current qty
   summaryCalcQty(batchId);
   // History
@@ -2863,6 +2874,8 @@ function txTypeChanged(){
   const inp = document.getElementById('tx-qty');
   const wetWrap = document.getElementById('tx-wet-weight-wrap');
   const wetInp = document.getElementById('tx-wet-weight');
+  const cloneWrap = document.getElementById('tx-clone-date-wrap');
+  const cloneInp = document.getElementById('tx-clone-date');
   if(!lbl || !inp || !wetWrap || !wetInp) return;
   if(t === 'Sold'){
     lbl.textContent = 'Weight (kg)';
@@ -2881,6 +2894,23 @@ function txTypeChanged(){
     inp.placeholder = '0';
     wetWrap.style.display = 'none';
     wetInp.value = '';
+  }
+  // Clone Date input: shown only when:
+  //   - txType is Produced/Received
+  //   - the batch's geneticsSource is Clones-External
+  //   - batchRec.cloneDate is not yet set (only the first Produced/Received captures the clone date)
+  if(cloneWrap && cloneInp){
+    let show = false;
+    if(t === 'Produced/Received'){
+      const _bid = document.getElementById('summary-batch-select').value;
+      const _b = _bid ? batchRecs.find(r=>r.batchId===_bid && !r.type) : null;
+      if(_b && _b.geneticsSource === 'Clones-External' && !_b.cloneDate){
+        show = true;
+      }
+    }
+    cloneWrap.style.display = show ? '' : 'none';
+    if(!show) cloneInp.value = '';
+    else if(!cloneInp.value) cloneInp.value = localDate();
   }
 }
 function summaryUpdateTxTypeOptions(batchId){
@@ -3108,6 +3138,21 @@ async function summaryAddTransaction(){
   }
   const _txBatchRec = batchRecs.find(r=>r.batchId===batchId && !r.type);
   const _txPhase = _txBatchRec ? (_txBatchRec.plantPhase||'') : '';
+  // Capture Clone Date for Clones-External on the first Produced/Received tx
+  let _cloneDateCaptured = false;
+  if(txType === 'Produced/Received' && _txBatchRec && _txBatchRec.geneticsSource === 'Clones-External' && !_txBatchRec.cloneDate){
+    const _cdEl = document.getElementById('tx-clone-date');
+    const _cdVal = _cdEl ? _cdEl.value : '';
+    if(!_cdVal){ toast('Enter the Clone Date (when the external clones arrived).',5000); return; }
+    // Persist on the batch record
+    const _bi = batchRecs.findIndex(r=>r.batchId===batchId && !r.type);
+    if(_bi >= 0){
+      batchRecs[_bi].cloneDate = _cdVal;
+      batchRecs[_bi].synced = false;
+      lsSet('gp-batch', batchRecs);
+      _cloneDateCaptured = true;
+    }
+  }
   const tx = { id: Date.now(), batchId, date, txType, qty, weight, notes, currentQtyBefore, plantPhase: _txPhase, synced: false };
   batchTxRecs.unshift(tx);
   lsSet('gp-batchtx', batchTxRecs);
@@ -3140,6 +3185,8 @@ async function summaryAddTransaction(){
   document.getElementById('tx-notes').value = '';
   const _wwInp = document.getElementById('tx-wet-weight'); if(_wwInp) _wwInp.value = '';
   const _wwWrap = document.getElementById('tx-wet-weight-wrap'); if(_wwWrap) _wwWrap.style.display = 'none';
+  const _cdInp = document.getElementById('tx-clone-date'); if(_cdInp) _cdInp.value = '';
+  const _cdWrap = document.getElementById('tx-clone-date-wrap'); if(_cdWrap) _cdWrap.style.display = 'none';
   const msg = document.getElementById('tx-msg');
   msg.style.display='block'; msg.style.color='var(--green)'; msg.textContent='Transaction saved!';
   setTimeout(()=>{ msg.style.display='none'; }, 3000);
@@ -3180,8 +3227,9 @@ async function summaryAddTransaction(){
     }catch(e){ setSyncPill('err','Sync error'); toast('Transaction saved locally - Airtable: '+(e.message||'sync failed'),5000); }
   }
   // If the Harvested tx auto-advanced the phase to Drying (or zero-qty re-locked to Clones),
-  // push the batch update to Airtable so the new phase is reflected immediately.
-  if(_phaseAutoChanged && cfg.batchTbl && cfg.token && cfg.base){
+  // or the Clone Date was just captured on a Clones-External Produced/Received tx,
+  // push the batch update to Airtable so the change is reflected immediately.
+  if((_phaseAutoChanged || _cloneDateCaptured) && cfg.batchTbl && cfg.token && cfg.base){
     try{
       const _bi = batchRecs.findIndex(r=>r.batchId===batchId && !r.type);
       if(_bi >= 0){
