@@ -2858,19 +2858,28 @@ function summaryRenderRoomChips(){
     const checked = cb.checked;
     const disabled = cb.disabled;
     const c = ROOM_CHIP_COLORS[r];
+    // Veg is implicit: only show in Active when it actually has plants. Never show in the Add list
+    // (you don't "add" plants to Veg manually — they live there as the remainder).
+    if(r === 'Veg'){
+      if(!checked) return;
+      const veg = batchId ? calcRoomPlantCount(batchId, 'Veg') : 0;
+      if(veg === 0) return; // hide entirely when fully distributed to Flower rooms
+      activeCount++;
+      const opacity = disabled ? '0.6' : '1';
+      activeHtml += '<div style="display:flex;align-items:center;gap:6px;background:'+c.bg+';border:1px solid '+c.border+';color:'+c.border+';border-radius:20px;padding:4px 10px;font-size:13px;opacity:'+opacity+';">'+
+        '<span style="width:8px;height:8px;border-radius:50%;background:'+c.dot+';"></span>'+
+        '<span>Veg</span>'+
+        '<span id="summary-veg-remainder" style="background:#fff;border-radius:10px;padding:1px 8px;font-family:var(--mono);font-weight:600;font-size:11px;color:'+c.dot+';">'+veg+'</span>'+
+      '</div>';
+      return;
+    }
     if(checked){
       activeCount++;
-      let countHtml = '';
-      if(r === 'Veg'){
-        const veg = batchId ? calcRoomPlantCount(batchId, 'Veg') : 0;
-        countHtml = '<span id="summary-veg-remainder" style="background:#fff;border-radius:10px;padding:1px 8px;font-family:var(--mono);font-weight:600;font-size:11px;color:'+c.dot+';">'+veg+'</span>';
-      } else {
-        const countInput = document.querySelector('#summary-rooms-state .summary-room-count[data-room="'+r+'"]');
-        const val = countInput ? (countInput.value || '') : '';
-        const disp = val !== '' ? val : '—';
-        countHtml = '<span class="summary-chip-count" data-room="'+r+'" style="background:#fff;border-radius:10px;padding:1px 8px;font-family:var(--mono);font-weight:600;font-size:11px;color:'+c.dot+';cursor:text;min-width:24px;text-align:center;display:inline-block;" onclick="summaryEditChipCount(this)" title="Click to edit count">'+disp+'</span>';
-      }
-      const removeHtml = (r === 'Veg' || disabled) ? '' : '<span style="font-size:14px;cursor:pointer;opacity:0.6;line-height:1;margin-left:2px;" onclick="summaryToggleRoom(\''+r+'\')" title="Remove room">×</span>';
+      const countInput = document.querySelector('#summary-rooms-state .summary-room-count[data-room="'+r+'"]');
+      const val = countInput ? (countInput.value || '') : '';
+      const disp = val !== '' ? val : '—';
+      const countHtml = '<span class="summary-chip-count" data-room="'+r+'" style="background:#fff;border-radius:10px;padding:1px 8px;font-family:var(--mono);font-weight:600;font-size:11px;color:'+c.dot+';cursor:text;min-width:24px;text-align:center;display:inline-block;" onclick="summaryEditChipCount(this)" title="Click to edit count">'+disp+'</span>';
+      const removeHtml = disabled ? '' : '<span style="font-size:14px;cursor:pointer;opacity:0.6;line-height:1;margin-left:2px;" onclick="summaryToggleRoom(\''+r+'\')" title="Remove room">×</span>';
       const opacity = disabled ? '0.6' : '1';
       activeHtml += '<div style="display:flex;align-items:center;gap:6px;background:'+c.bg+';border:1px solid '+c.border+';color:'+c.border+';border-radius:20px;padding:4px 10px;font-size:13px;opacity:'+opacity+';">'+
         '<span style="width:8px;height:8px;border-radius:50%;background:'+c.dot+';"></span>'+
