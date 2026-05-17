@@ -214,7 +214,7 @@ tr:last-child td { border-bottom: none; }
           <!-- Recent EC entries (inline in Batch info card, collapsible) -->
           <div id="ec-recent-section" style="display:none;margin-top:8px;border-top:1px dashed var(--border);padding-top:8px;">
             <button type="button" id="ec-recent-toggle" onclick="ecRecentToggle()" style="width:100%;display:flex;align-items:center;justify-content:space-between;background:transparent;border:none;padding:0;cursor:pointer;font-family:var(--mono);font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;outline:none;">
-              <span>Recent Entries <span id="ec-recent-count" style="color:var(--green);font-weight:600;"></span></span>
+              <span>Waterings History <span id="ec-recent-count" style="color:var(--green);font-weight:600;"></span></span>
               <span id="ec-recent-caret" style="font-size:10px;">▼</span>
             </button>
             <div id="ec-recent-list" style="font-size:13px;color:var(--text3);text-align:center;padding:0;display:none;margin-top:6px;"></div>
@@ -1810,58 +1810,98 @@ function ecRecentToggle(){
   list.style.display = isOpen ? 'none' : '';
   caret.textContent = isOpen ? '▼' : '▲';
 }
-function ecRenderRecent(batch /*, room — ignored: now filters by batch only */){
+// Color palette for watering type pills in the history view
+const WTYPE_COLORS = {
+  'Hydration':  {bg:'#FCE5D6',fg:'#E67E22'},
+  'Pre-Charge': {bg:'#FCE5D6',fg:'#E67E22'},
+  'Water In':   {bg:'#FCE5D6',fg:'#E67E22'},
+  'Full Saturation':{bg:'#E0F2E5',fg:'#1f8a4c'},
+  'Feed':       {bg:'#E0F2E5',fg:'#1f8a4c'},
+  'Flush':      {bg:'#E3F2FD',fg:'#1565c0'},
+  'Fade':       {bg:'#EFE3F4',fg:'#8E44AD'},
+  'RO Water':   {bg:'#E3F2FD',fg:'#1565c0'}
+};
+
+function ecRenderRecent(batch /*, room — ignored: filters by batch only */){
+  // Daily rollup of waterings for this batch — one row per (date, watering type) pair, so a Feed
+  // and a Flush on the same day appear as two separate rows. Rooms within a group are aggregated.
   const section = document.getElementById('ec-recent-section');
   const el = document.getElementById('ec-recent-list');
   const countEl = document.getElementById('ec-recent-count');
   if(!el || !section) return;
-  // Hide the whole section when no batch is selected — there's nothing to show
   if(!batch){
     section.style.display = 'none';
     return;
   }
   section.style.display = '';
-  const recs = ecRecs.filter(r => r.batch && r.batch.trim().toLowerCase()===batch.trim().toLowerCase())
-                     .sort((a,b)=>(b.id||0)-(a.id||0)); // newest first
-  if(countEl) countEl.textContent = '('+recs.length+')';
+  const recs = ecRecs.filter(r => r.batch && r.batch.trim().toLowerCase()===batch.trim().toLowerCase());
   if(!recs.length){
+    if(countEl) countEl.textContent = '(0)';
     el.style.padding='12px';
     el.style.textAlign='center';
     el.innerHTML='<span style="color:var(--text3);">No EC entries yet for '+batch+'.</span>';
     return;
   }
-  // Show only the last 5 entries to keep the section compact. The full list is on the Reports page.
-  const recent = recs.slice(0, 5);
+  // Group by (date, wtype). Aggregate avg EC/pH (over non-null pen averages), sum ml/plant + flow.
+  const groups = {};
+  recs.forEach(r => {
+    const key = (r.date||'') + '|' + (r.wtype||'—');
+    if(!groups[key]){
+      groups[key] = {date:r.date, wtype:r.wtype||'—', rooms:new Set(), ecVals:[], phVals:[], mlSum:0, flowSum:0, count:0, hasMl:false, hasFlow:false};
+    }
+    const g = groups[key];
+    if(r.room) g.rooms.add(r.room);
+    if(r.dripEc != null && r.dripEc !== '' && !isNaN(parseFloat(r.dripEc))) g.ecVals.push(parseFloat(r.dripEc));
+    if(r.dripPh != null && r.dripPh !== '' && !isNaN(parseFloat(r.dripPh))) g.phVals.push(parseFloat(r.dripPh));
+    if(r.totalML != null && r.totalML !== '' && !isNaN(parseFloat(r.totalML))){ g.mlSum += parseFloat(r.totalML); g.hasMl = true; }
+    if(r.flow != null && r.flow !== '' && !isNaN(parseFloat(r.flow))){ g.flowSum += parseFloat(r.flow); g.hasFlow = true; }
+    g.count++;
+  });
+  // Convert to sorted array — date desc, then wtype asc
+  const rows = Object.values(groups).sort((a,b)=>{
+    if(a.date < b.date) return 1;
+    if(a.date > b.date) return -1;
+    return (a.wtype||'').localeCompare(b.wtype||'');
+  });
+  if(countEl) countEl.textContent = '('+rows.length+' day'+(rows.length===1?'':'s')+')';
+  const avg = arr => arr.length ? (arr.reduce((s,v)=>s+v,0)/arr.length) : null;
+  // Render
   el.style.padding='0';
   el.style.textAlign='left';
-  let html = '<div style="overflow-x:auto;background:#fff;border-radius:var(--radius-sm);border:1px solid var(--border);">';
-  html += '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
-  html += '<thead><tr style="background:#f5f5f5;">';
-  ['Date','Room','Watering','EC','pH','ml/plant','Flow (L)','Notes'].forEach(h=>{
-    html += '<th style="padding:6px 8px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;white-space:nowrap;">'+h+'</th>';
+  let html = '<div style="border:1px solid var(--border);border-radius:var(--radius-sm);background:#fff;overflow:hidden;">';
+  // Header row
+  html += '<div style="display:grid;grid-template-columns:auto 1fr auto auto auto auto;gap:0;font-size:9px;text-transform:uppercase;color:var(--text3);font-family:var(--mono);background:#f5f5f5;padding:6px 10px;align-items:center;">'+
+    '<span>Date</span>'+
+    '<span style="margin-left:10px;">Type / Room(s)</span>'+
+    '<span style="text-align:right;padding-right:8px;">EC</span>'+
+    '<span style="text-align:right;padding-right:8px;">pH</span>'+
+    '<span style="text-align:right;padding-right:8px;">ml</span>'+
+    '<span style="text-align:right;">Flow (L)</span>'+
+  '</div>';
+  rows.forEach(g => {
+    const c = WTYPE_COLORS[g.wtype] || {bg:'var(--bg2)',fg:'var(--text2)'};
+    const ecAvg = avg(g.ecVals);
+    const phAvg = avg(g.phVals);
+    const ecStr = ecAvg != null ? ecAvg.toFixed(2) : '—';
+    const phStr = phAvg != null ? phAvg.toFixed(2) : '—';
+    const mlStr = g.hasMl ? g.mlSum.toFixed(0) : '—';
+    const flowStr = g.hasFlow ? g.flowSum.toFixed(1) : '—';
+    const roomList = [...g.rooms];
+    const roomDisp = roomList.length === 0 ? '' : (roomList.length === 1 ? roomList[0] : roomList.join(', '));
+    const countBadge = g.count > 1 ? ' <span style="color:var(--text3);font-family:var(--mono);font-size:10px;">'+g.count+'×</span>' : '';
+    html += '<div style="display:grid;grid-template-columns:auto 1fr auto auto auto auto;gap:0;padding:6px 10px;border-top:1px solid var(--border);font-size:12px;align-items:center;">'+
+      '<span style="font-family:var(--mono);">'+(g.date||'—')+'</span>'+
+      '<span style="margin-left:10px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">'+
+        '<span style="background:'+c.bg+';color:'+c.fg+';padding:1px 8px;border-radius:8px;font-size:10px;font-weight:600;white-space:nowrap;">'+g.wtype+'</span>'+
+        (roomDisp ? '<span style="font-size:10px;color:var(--text3);font-family:var(--mono);">'+roomDisp+'</span>' : '')+
+        countBadge+
+      '</span>'+
+      '<span style="font-family:var(--mono);text-align:right;padding-right:8px;">'+ecStr+'</span>'+
+      '<span style="font-family:var(--mono);text-align:right;padding-right:8px;">'+phStr+'</span>'+
+      '<span style="font-family:var(--mono);text-align:right;padding-right:8px;">'+mlStr+'</span>'+
+      '<span style="font-family:var(--mono);text-align:right;">'+flowStr+'</span>'+
+    '</div>';
   });
-  html += '</tr></thead><tbody>';
-  recent.forEach(r=>{
-    const ec = r.dripEc!=null && r.dripEc!=='' ? r.dripEc : '—';
-    const ph = r.dripPh!=null && r.dripPh!=='' ? r.dripPh : '—';
-    const ml = r.totalML!=null && r.totalML!=='' ? r.totalML : '—';
-    const flow = r.flow!=null && r.flow!=='' ? r.flow : '—';
-    const notes = (r.notes||'').length>40 ? r.notes.slice(0,40)+'…' : (r.notes||'');
-    html += '<tr style="border-bottom:1px solid var(--bg2);">';
-    html += '<td style="padding:6px 8px;font-family:var(--mono);white-space:nowrap;">'+r.date+'</td>';
-    html += '<td style="padding:6px 8px;font-size:11px;color:var(--text2);white-space:nowrap;">'+(r.room||'—')+'</td>';
-    html += '<td style="padding:6px 8px;"><span style="font-size:11px;background:var(--green-pale);color:var(--green);border-radius:20px;padding:2px 8px;white-space:nowrap;">'+(r.wtype||'—')+'</span></td>';
-    html += '<td style="padding:6px 8px;font-family:var(--mono);">'+ec+'</td>';
-    html += '<td style="padding:6px 8px;font-family:var(--mono);">'+ph+'</td>';
-    html += '<td style="padding:6px 8px;font-family:var(--mono);">'+ml+'</td>';
-    html += '<td style="padding:6px 8px;font-family:var(--mono);">'+flow+'</td>';
-    html += '<td style="padding:6px 8px;font-size:11px;color:var(--text3);max-width:140px;">'+notes+'</td>';
-    html += '</tr>';
-  });
-  html += '</tbody></table>';
-  if(recs.length > 5){
-    html += '<div style="padding:6px 10px;font-size:11px;color:var(--text3);font-family:var(--mono);text-align:center;background:var(--bg2);">Showing 5 of '+recs.length+' entries — see Reports page for full history</div>';
-  }
   html += '</div>';
   el.innerHTML = html;
 }
