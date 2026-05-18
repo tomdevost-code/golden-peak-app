@@ -3771,13 +3771,15 @@ function summaryUpdateTxTypeOptions(batchId){
   if(!sel) return;
   const prev = sel.value;
   let opts;
-  if(phase==='Flower')        opts = ['Harvested','Sold'];
-  else if(phase==='Drying')   opts = ['Harvested','Sold']; // multi-day harvest can keep adding Harvested rows
+  // Sold is allowed ONLY in Veg phase (living plants sold for cloning/transplant) or Packaged
+  // phase (dried + packaged flower). Other phases can't generate a Sold transaction.
+  if(phase==='Flower')        opts = ['Harvested'];
+  else if(phase==='Drying')   opts = ['Harvested']; // additional Harvested rows allowed (multi-day)
   else if(phase==='Packaged') opts = ['Sold'];
-  else if(phase==='Clones')   opts = hasTxs ? ['Produced/Received','Moved to Moms','Sold'] : ['Produced/Received'];
+  else if(phase==='Clones')   opts = hasTxs ? ['Produced/Received','Moved to Moms'] : ['Produced/Received'];
   else if(phase==='Veg')      opts = ['Moved to Moms','Harvested','Sold']; // no Produced/Received once in Veg
   else if(!hasTxs)            opts = ['Produced/Received'];
-  else                        opts = ['Produced/Received','Moved to Moms','Harvested','Sold'];
+  else                        opts = ['Produced/Received','Moved to Moms','Harvested'];
   // Drop Sold from the list if this batch already has a Sold tx (only one allowed)
   if(hasSold) opts = opts.filter(o=>o!=='Sold');
   // Drop Harvested from the list if this batch already has a Harvested tx — it's auto-created
@@ -3965,10 +3967,10 @@ async function summaryAddTransaction(){
     toast('Cannot save: balance would go below 0. Current: '+currentQtyBefore+', requested: '+qty+'.',5000);
     return;
   }
-  // Guard: in Flower phase, only Sold or Harvested are allowed
+  // Guard: in Flower phase, only Harvested is allowed
   const _bGuard = batchRecs.find(r=>r.batchId===batchId && !r.type);
-  if(_bGuard && _bGuard.plantPhase==='Flower' && txType!=='Sold' && txType!=='Harvested'){
-    toast('In Flower phase, only Sold or Harvested transactions are allowed.',5000);
+  if(_bGuard && _bGuard.plantPhase==='Flower' && txType!=='Harvested'){
+    toast('In Flower phase, only Harvested transactions are allowed.',5000);
     return;
   }
   // Guard: in Clones phase, Harvested is not allowed (clones aren't harvestable)
@@ -3981,14 +3983,19 @@ async function summaryAddTransaction(){
     toast('Cannot add plants once the batch is in Veg phase.',5000);
     return;
   }
-  // Guard: in Drying phase, only Sold + Harvested are allowed (Harvested supports multi-day harvest).
-  // Packaged phase remains Sold-only.
-  if(_bGuard && _bGuard.plantPhase==='Drying' && txType!=='Sold' && txType!=='Harvested'){
-    toast('In Drying phase, only Sold or Harvested transactions are allowed.',5000);
+  // Guard: in Drying phase, only Harvested rows are allowed (multi-day harvest). No Sold yet —
+  // the batch must be Packaged (post-drying complete) before it can be sold.
+  if(_bGuard && _bGuard.plantPhase==='Drying' && txType!=='Harvested'){
+    toast('In Drying phase, only Harvested transactions are allowed. Complete Post-Drying before selling.',5500);
     return;
   }
   if(_bGuard && _bGuard.plantPhase==='Packaged' && txType!=='Sold'){
     toast('In Packaged phase, only Sold transactions are allowed.',5000);
+    return;
+  }
+  // Sold is only allowed in Veg (living plants for resale) or Packaged (dried + packaged flower).
+  if(_bGuard && txType==='Sold' && !['Veg','Packaged'].includes(_bGuard.plantPhase)){
+    toast('Sold transactions are only allowed for batches in Veg or Packaged phase.',5500);
     return;
   }
   const _txBatchRec = batchRecs.find(r=>r.batchId===batchId && !r.type);
