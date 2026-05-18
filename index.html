@@ -656,8 +656,8 @@ tr:last-child td { border-bottom: none; }
               <div class="field"><label>Package Date</label><div id="si-packaged-date" style="font-size:13px;font-family:var(--mono);padding:4px 0;color:var(--text2);">—</div></div>
             </div>
             <div class="g2">
-              <div class="field"><label>Sold Date</label><div id="si-sold-date" style="font-size:13px;font-family:var(--mono);padding:4px 0;color:var(--text2);">—</div></div>
               <div class="field"><label>Delivered Date</label><div id="si-delivered-date" style="font-size:13px;font-family:var(--mono);padding:4px 0;color:var(--text2);">—</div></div>
+              <div class="field"><label>Sold Date</label><div id="si-sold-date" style="font-size:13px;font-family:var(--mono);padding:4px 0;color:var(--text2);">—</div></div>
             </div>
           </div>
         </div>
@@ -674,44 +674,6 @@ tr:last-child td { border-bottom: none; }
             <div id="si-currentday" style="font-size:32px;font-weight:700;font-family:var(--mono);color:var(--text);">—</div>
             <div id="si-currentday-label" style="font-size:11px;color:var(--text3);margin-top:4px;">—</div>
           </div>
-        </div>
-
-        <!-- Add Transaction -->
-        <div class="card" style="margin-bottom:12px;">
-          <div class="section-label">Add Transaction</div>
-          <div style="font-size:12px;color:var(--text3);font-family:var(--mono);background:var(--bg2);border-radius:var(--radius-sm);padding:6px 10px;margin-bottom:12px;">Date: <span id="tx-date-display"></span></div>
-
-          <div class="field" style="margin-bottom:10px;">
-            <label>Transaction Type</label>
-            <select id="tx-type" onchange="txTypeChanged()" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;">
-              <option value="">-- select type --</option>
-              <option>Produced/Received</option>
-              <option>Moved to Moms</option>
-              <option>Sold</option>
-              <option>Harvested</option>
-            </select>
-          </div>
-
-          <div class="field" style="margin-bottom:10px;">
-            <label id="tx-qty-label">Quantity</label>
-            <input type="number" id="tx-qty" placeholder="0" min="0" step="1" onwheel="this.blur()" onkeydown="if(event.key==='ArrowUp'||event.key==='ArrowDown')event.preventDefault();" style="font-size:14px;font-family:var(--mono);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;" />
-          </div>
-          <div class="field" style="margin-bottom:10px;display:none;" id="tx-wet-weight-wrap">
-            <label>Wet Weight (kg) <span style="color:var(--text3);font-weight:400;font-size:11px;">(auto-filled from Harvest Log)</span></label>
-            <input type="number" id="tx-wet-weight" placeholder="0.000" min="0" step="0.001" readonly style="font-size:14px;font-family:var(--mono);color:var(--text2);background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;cursor:not-allowed;" />
-          </div>
-          <div class="field" style="margin-bottom:10px;display:none;" id="tx-clone-date-wrap">
-            <label>Cloning Date</label>
-            <input type="date" id="tx-clone-date" style="font-size:14px;font-family:var(--mono);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;" />
-          </div>
-
-          <div class="field" style="margin-bottom:10px;">
-            <label>Notes</label>
-            <textarea id="tx-notes" rows="2" placeholder="Optional notes..." style="width:100%;font-size:14px;font-family:var(--sans);border-radius:var(--radius-sm);border:1px solid var(--border);padding:8px 10px;background:var(--bg);color:var(--text);outline:none;resize:vertical;"></textarea>
-          </div>
-
-          <button class="btn-save" onclick="summaryAddTransaction()">Save Transaction</button>
-          <div id="tx-msg" style="display:none;margin-top:8px;font-size:13px;"></div>
         </div>
 
         <!-- Manage Batch -->
@@ -762,6 +724,7 @@ tr:last-child td { border-bottom: none; }
               <option>Flower</option>
               <option>Drying</option>
               <option>Packaged</option>
+              <option>Delivered</option>
             </select>
           </div>
 
@@ -774,12 +737,6 @@ tr:last-child td { border-bottom: none; }
             </select>
           </div>
 
-          <!-- Delivered Date (date the clones / seeds were physically delivered to Golden Peak) -->
-          <div class="field" style="margin-bottom:12px;">
-            <label>Delivered Date</label>
-            <input type="date" id="summary-delivered-date" style="font-size:14px;font-family:var(--mono);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;" />
-          </div>
-
           <!-- Closed Date (only shows when Closed) -->
           <div class="field" id="summary-closed-date-wrap" style="display:none;margin-bottom:12px;">
             <label>Closed Date</label>
@@ -788,6 +745,44 @@ tr:last-child td { border-bottom: none; }
 
           <button class="btn-save" onclick="summaryUpdateBatch()">Save Batch Changes</button>
           <div id="summary-update-msg" style="display:none;margin-top:8px;font-size:13px;"></div>
+        </div>
+
+        <!-- Add Transaction -->
+        <div class="card" style="margin-bottom:12px;">
+          <div class="section-label">Add Transaction</div>
+          <div style="font-size:12px;color:var(--text3);font-family:var(--mono);background:var(--bg2);border-radius:var(--radius-sm);padding:6px 10px;margin-bottom:12px;">Date: <span id="tx-date-display"></span></div>
+
+          <div class="field" style="margin-bottom:10px;">
+            <label>Transaction Type</label>
+            <select id="tx-type" onchange="txTypeChanged()" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;">
+              <option value="">-- select type --</option>
+              <option>Produced/Received</option>
+              <option>Moved to Moms</option>
+              <option>Sold</option>
+              <option>Harvested</option>
+            </select>
+          </div>
+
+          <div class="field" style="margin-bottom:10px;">
+            <label id="tx-qty-label">Quantity</label>
+            <input type="number" id="tx-qty" placeholder="0" min="0" step="1" onwheel="this.blur()" onkeydown="if(event.key==='ArrowUp'||event.key==='ArrowDown')event.preventDefault();" style="font-size:14px;font-family:var(--mono);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;" />
+          </div>
+          <div class="field" style="margin-bottom:10px;display:none;" id="tx-wet-weight-wrap">
+            <label>Wet Weight (kg) <span style="color:var(--text3);font-weight:400;font-size:11px;">(auto-filled from Harvest Log)</span></label>
+            <input type="number" id="tx-wet-weight" placeholder="0.000" min="0" step="0.001" readonly style="font-size:14px;font-family:var(--mono);color:var(--text2);background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;cursor:not-allowed;" />
+          </div>
+          <div class="field" style="margin-bottom:10px;display:none;" id="tx-clone-date-wrap">
+            <label>Cloning Date</label>
+            <input type="date" id="tx-clone-date" style="font-size:14px;font-family:var(--mono);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;" />
+          </div>
+
+          <div class="field" style="margin-bottom:10px;">
+            <label>Notes</label>
+            <textarea id="tx-notes" rows="2" placeholder="Optional notes..." style="width:100%;font-size:14px;font-family:var(--sans);border-radius:var(--radius-sm);border:1px solid var(--border);padding:8px 10px;background:var(--bg);color:var(--text);outline:none;resize:vertical;"></textarea>
+          </div>
+
+          <button class="btn-save" onclick="summaryAddTransaction()">Save Transaction</button>
+          <div id="tx-msg" style="display:none;margin-top:8px;font-size:13px;"></div>
         </div>
 
         <!-- Transaction History -->
@@ -3395,8 +3390,6 @@ function summaryBatchChanged(){
   summaryUpdateVegLock();
   summaryStatusChanged();
   document.getElementById('summary-closed-date').value = b.closedDate||'';
-  const _delivEl = document.getElementById('summary-delivered-date');
-  if(_delivEl) _delivEl.value = b.deliveredDate || '';
   // Lifecycle dates (read-only in Batch Info)
   document.getElementById('si-clone-date').textContent = b.cloneDate || '—';
   document.getElementById('si-hydration-date').textContent = b.hydrationDate || '—';
@@ -3429,11 +3422,10 @@ function summaryBatchChanged(){
 }
 
 function applyDeliveredLock(b){
-  // When batchRec.deliveredDate is set: lock Plant Phase + Delivered Date inputs (and the tx-type
-  // dropdown is already filtered to just Sold). When it's unset: unlock both.
-  const delivered = !!(b && b.deliveredDate);
+  // Once the batch is in Delivered phase (deliveredDate auto-set), lock the Plant Phase dropdown
+  // and the tx-type dropdown. Status stays editable so the user can flip to Closed.
+  const delivered = !!(b && b.plantPhase === 'Delivered');
   const phaseEl = document.getElementById('summary-phase');
-  const delivEl = document.getElementById('summary-delivered-date');
   const txTypeEl = document.getElementById('tx-type');
   if(phaseEl){
     phaseEl.disabled = delivered;
@@ -3441,17 +3433,14 @@ function applyDeliveredLock(b){
     phaseEl.style.color = delivered ? 'var(--text3)' : '';
     phaseEl.style.cursor = delivered ? 'not-allowed' : '';
   }
-  if(delivEl){
-    delivEl.readOnly = delivered;
-    delivEl.style.background = delivered ? 'var(--bg2)' : '';
-    delivEl.style.color = delivered ? 'var(--text3)' : '';
-    delivEl.style.cursor = delivered ? 'not-allowed' : '';
-  }
   if(txTypeEl){
-    txTypeEl.disabled = delivered;
-    txTypeEl.style.background = delivered ? 'var(--bg2)' : '';
-    txTypeEl.style.color = delivered ? 'var(--text3)' : '';
-    txTypeEl.style.cursor = delivered ? 'not-allowed' : '';
+    // Once Sold has been recorded after delivery, there's nothing left for the user to do but Close.
+    const hasSold = b && batchTxRecs.some(t => t.batchId === b.batchId && t.txType === 'Sold');
+    const lockTx = delivered && hasSold;
+    txTypeEl.disabled = lockTx;
+    txTypeEl.style.background = lockTx ? 'var(--bg2)' : '';
+    txTypeEl.style.color = lockTx ? 'var(--text3)' : '';
+    txTypeEl.style.cursor = lockTx ? 'not-allowed' : '';
   }
 }
 
@@ -3651,7 +3640,7 @@ function summaryUpdateVegLock(){
   // Toggle Veg checkbox availability
   const vegCb = document.querySelector('.summary-room-cb[value="Veg"]');
   if(!vegCb) return;
-  const phaseRestricted = ['Flower','Drying','Packaged'].includes(document.getElementById('summary-phase').value);
+  const phaseRestricted = ['Flower','Drying','Packaged','Delivered'].includes(document.getElementById('summary-phase').value);
   const fullyDistributed = total > 0 && qty > 0 && total >= qty;
   if(fullyDistributed){
     vegCb.checked = false;
@@ -3679,7 +3668,7 @@ function applyPhaseRoomLock(){
   const batchId = document.getElementById('summary-batch-select').value;
   const b = batchId ? batchRecs.find(r=>r.batchId===batchId && !r.type) : null;
   const savedPhase = b ? (b.plantPhase||'') : '';
-  const roomsLocked = ['Flower','Drying','Packaged'].includes(savedPhase);
+  const roomsLocked = ['Flower','Drying','Packaged','Delivered'].includes(savedPhase);
   document.querySelectorAll('.summary-room-cb').forEach(cb=>{
     let allowed=true;
     if(dropdownPhase==='Clones'||dropdownPhase==='Seeds'){
@@ -3690,7 +3679,7 @@ function applyPhaseRoomLock(){
     else if(dropdownPhase==='Flower'){
       if(cb.value==='Veg'){ allowed=false; cb.checked=false; }
     }
-    else if(['Drying','Packaged'].includes(dropdownPhase)){
+    else if(['Drying','Packaged','Delivered'].includes(dropdownPhase)){
       // After harvest there are no cultivation rooms — everything stays unchecked + locked
       cb.checked = false;
       allowed = false;
@@ -3717,18 +3706,21 @@ function applyPhaseRoomLock(){
   summaryRenderRoomChips();
 }
 function getAllowedPhases(currentPhase){
-  // Plant lifecycle: Clones → Veg → Flower → Drying → Packaged → Sold.
-  // Strict one-step progression: can only stay at current phase OR advance to the immediate next.
-  // No skipping. No going backward.
-  const seq = ['Clones','Veg','Flower','Drying','Packaged'];
-  if(!currentPhase) return ['Clones']; // unset → must start at Clones
-  if(!seq.includes(currentPhase)){
-    // Legacy phase (e.g. 'Seeds') — let user keep it or migrate forward to Clones
-    return [currentPhase, 'Clones'];
+  // Plant lifecycle with two branches at Veg (for living-clone sales) and a single Delivered
+  // terminal phase that catches Packaged sales too:
+  //   Clones → Veg → (Flower → Drying → Packaged → Delivered) OR (Delivered, for clones sold)
+  // Strict forward progression only — no skipping, no going backward.
+  if(!currentPhase) return ['Clones'];
+  switch(currentPhase){
+    case 'Clones':   return ['Clones','Veg'];
+    case 'Veg':      return ['Veg','Flower','Delivered'];
+    case 'Flower':   return ['Flower','Drying'];
+    case 'Drying':   return ['Drying','Packaged'];
+    case 'Packaged': return ['Packaged','Delivered'];
+    case 'Delivered':return ['Delivered']; // terminal — only Close remains
+    case 'Seeds':    return ['Seeds','Clones']; // legacy migration path
+    default:         return [currentPhase, 'Clones'];
   }
-  const idx = seq.indexOf(currentPhase);
-  if(idx === seq.length-1) return [currentPhase]; // Sold is terminal
-  return [seq[idx], seq[idx+1]];
 }
 function batchHasWaterInForAllRooms(batchId){
   // Returns true once every active room of the batch has at least one 'Water In' EC entry recorded.
@@ -3751,7 +3743,7 @@ function summaryUpdatePhaseOptions(currentPhase, qty){
   const batchId = document.getElementById('summary-batch-select').value;
   // Zero-qty rule only forces Clones for active growing phases. Post-harvest phases
   // (Harvested, Drying, Packaged, Sold) keep their value even when qty hits 0.
-  const postHarvest = ['Drying','Packaged'].includes(currentPhase);
+  const postHarvest = ['Drying','Packaged','Delivered'].includes(currentPhase);
   const noPlants = (!qty || qty<=0) && !postHarvest;
   // Water-In gate: only relevant while the batch is still in Clones phase (the gate that prevents
   // manually skipping to Veg/Flower/etc. without first watering them in).
@@ -3834,16 +3826,12 @@ function summaryUpdateTxTypeOptions(batchId){
   // phase (dried + packaged flower). Other phases can't generate a Sold transaction.
   if(phase==='Flower')        opts = ['Harvested'];
   else if(phase==='Drying')   opts = ['Harvested']; // additional Harvested rows allowed (multi-day)
-  else if(phase==='Packaged') opts = ['Sold'];
+  else if(phase==='Packaged') opts = []; // nothing yet — user advances to Delivered first
+  else if(phase==='Delivered')opts = ['Sold']; // post-delivery: record the sale, then Close
   else if(phase==='Clones')   opts = hasTxs ? ['Produced/Received','Moved to Moms'] : ['Produced/Received'];
-  else if(phase==='Veg')      opts = ['Moved to Moms','Harvested','Sold']; // no Produced/Received once in Veg
+  else if(phase==='Veg')      opts = ['Moved to Moms','Harvested']; // no Sold direct from Veg — advance to Delivered first
   else if(!hasTxs)            opts = ['Produced/Received'];
   else                        opts = ['Produced/Received','Moved to Moms','Harvested'];
-  // Once a Delivered Date is set, the batch is on its way out — only Sold remains (and only
-  // until that Sold tx has been saved). After Sold is done the only thing left is to Close.
-  if(b && b.deliveredDate){
-    opts = ['Sold'];
-  }
   // Drop Sold from the list if this batch already has a Sold tx (only one allowed)
   if(hasSold) opts = opts.filter(o=>o!=='Sold');
   // Drop Harvested from the list if this batch already has a Harvested tx — it's auto-created
@@ -3918,7 +3906,7 @@ async function summaryUpdateBatch(){
   }
   // Guard: when batch has 0 plants AND is in an active growing phase (not post-harvest), only 'Clones' is allowed.
   // Post-harvest batches (Harvested, Drying, Packaged, Sold) can still progress forward when qty=0.
-  const _existPostHarvest = ['Drying','Packaged'].includes(existingPhase);
+  const _existPostHarvest = ['Drying','Packaged','Delivered'].includes(existingPhase);
   if(calcBatchQty(batchId) <= 0 && !_existPostHarvest && plantPhase && plantPhase !== 'Clones'){
     toast('Cannot advance phase: batch has 0 plants. Add a Produced/Received transaction first.',5000);
     return;
@@ -3935,8 +3923,8 @@ async function summaryUpdateBatch(){
   }
   // Post-harvest phases never have rooms — plants are no longer in a cultivation room.
   let _roomsForSave = rooms;
-  if(plantPhase === 'Drying' || plantPhase === 'Packaged') _roomsForSave = [];
-  if(existingPhase === 'Drying' || existingPhase === 'Packaged') _roomsForSave = [];
+  if(['Drying','Packaged','Delivered'].includes(plantPhase)) _roomsForSave = [];
+  if(['Drying','Packaged','Delivered'].includes(existingPhase)) _roomsForSave = [];
   // Auto-set lifecycle dates on phase advance (if not already set):
   //   Clones → Veg: vegStart = today
   //   Veg    → Flower: flowerStart = today
@@ -3944,14 +3932,18 @@ async function summaryUpdateBatch(){
   // (Hydration date is set separately by EC log Hydration entries — not here.)
   let _autoVeg = _exVeg, _autoFlower = _exFlower, _autoHarvest = _exHarvest;
   let _autoPackaged = batchRecs[idx].packagedDate || '';
+  let _autoDelivered = batchRecs[idx].deliveredDate || '';
   const _t = localDate();
   if(plantPhase === 'Veg' && existingPhase === 'Clones' && !_autoVeg) _autoVeg = _t;
   if(plantPhase === 'Flower' && existingPhase === 'Veg' && !_autoFlower) _autoFlower = _t;
   if(plantPhase === 'Drying' && existingPhase === 'Flower' && !_autoHarvest) _autoHarvest = _t;
   if(plantPhase === 'Packaged' && existingPhase === 'Drying' && !_autoPackaged) _autoPackaged = _t;
+  // Delivered phase reachable from Veg (clone sales) or Packaged (flower sales). Stamp today
+  // as the Delivered Date when the phase advances to Delivered for the first time.
+  if(plantPhase === 'Delivered' && existingPhase !== 'Delivered' && !_autoDelivered) _autoDelivered = _t;
   batchRecs[idx].rooms = _roomsForSave;
   // When phase becomes Drying/Packaged, clear roomDistribution as well
-  batchRecs[idx].roomDistribution = (plantPhase === 'Drying' || plantPhase === 'Packaged') ? {} : roomDistribution;
+  batchRecs[idx].roomDistribution = ['Drying','Packaged','Delivered'].includes(plantPhase) ? {} : roomDistribution;
   batchRecs[idx].plantPhase = plantPhase;
   batchRecs[idx].status = status;
   batchRecs[idx].closedDate = closedDate;
@@ -3960,9 +3952,8 @@ async function summaryUpdateBatch(){
   batchRecs[idx].flowerStart = _autoFlower;
   batchRecs[idx].harvestDate = _autoHarvest;
   batchRecs[idx].packagedDate = _autoPackaged;
-  // Delivered Date — user-entered (when clones / seeds physically arrived at Golden Peak)
-  const _deliveredVal = (document.getElementById('summary-delivered-date')?.value || '');
-  batchRecs[idx].deliveredDate = _deliveredVal;
+  // Delivered Date is auto-set when phase advances to Delivered (above). No user input.
+  batchRecs[idx].deliveredDate = _autoDelivered;
   // soldDate is set when the batch's Status is set to Closed (treated as "fully sold off")
   if(status === 'Closed' && !batchRecs[idx].soldDate) batchRecs[idx].soldDate = (closedDate || _t);
   lsSet('gp-batch', batchRecs);
@@ -4056,19 +4047,24 @@ async function summaryAddTransaction(){
     toast('Cannot add plants once the batch is in Veg phase.',5000);
     return;
   }
-  // Guard: in Drying phase, only Harvested rows are allowed (multi-day harvest). No Sold yet —
-  // the batch must be Packaged (post-drying complete) before it can be sold.
+  // Guard: in Drying phase, only Harvested rows are allowed (multi-day harvest).
   if(_bGuard && _bGuard.plantPhase==='Drying' && txType!=='Harvested'){
-    toast('In Drying phase, only Harvested transactions are allowed. Complete Post-Drying before selling.',5500);
+    toast('In Drying phase, only Harvested transactions are allowed. Complete Post-Drying first.',5500);
     return;
   }
-  if(_bGuard && _bGuard.plantPhase==='Packaged' && txType!=='Sold'){
-    toast('In Packaged phase, only Sold transactions are allowed.',5000);
+  // Guard: in Packaged phase, no transactions yet — user must advance to Delivered first.
+  if(_bGuard && _bGuard.plantPhase==='Packaged'){
+    toast('Advance Plant Phase to "Delivered" before recording a Sold transaction.',5500);
     return;
   }
-  // Sold is only allowed in Veg (living plants for resale) or Packaged (dried + packaged flower).
-  if(_bGuard && txType==='Sold' && !['Veg','Packaged'].includes(_bGuard.plantPhase)){
-    toast('Sold transactions are only allowed for batches in Veg or Packaged phase.',5500);
+  // Sold is only allowed in Delivered phase (batch has been physically delivered to the customer).
+  if(_bGuard && txType==='Sold' && _bGuard.plantPhase!=='Delivered'){
+    toast('Sold transactions are only allowed after the batch is set to Delivered phase.',5500);
+    return;
+  }
+  // In Delivered phase, the only allowed tx type is Sold.
+  if(_bGuard && _bGuard.plantPhase==='Delivered' && txType!=='Sold'){
+    toast('In Delivered phase, only Sold transactions are allowed.',5000);
     return;
   }
   const _txBatchRec = batchRecs.find(r=>r.batchId===batchId && !r.type);
@@ -4108,7 +4104,7 @@ async function summaryAddTransaction(){
     const _hi = batchRecs.findIndex(r=>r.batchId===batchId && !r.type);
     if(_hi >= 0){
       const _curPhase = batchRecs[_hi].plantPhase || '';
-      const _postHarvest = ['Drying','Packaged'].includes(_curPhase);
+      const _postHarvest = ['Drying','Packaged','Delivered'].includes(_curPhase);
       if(!_postHarvest){
         // First Harvested tx advances the batch to Drying — even if other flower rooms
         // still hold plants (multi-day harvest is common). Subsequent Harvested txs
