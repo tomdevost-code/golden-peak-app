@@ -697,8 +697,8 @@ tr:last-child td { border-bottom: none; }
             <input type="number" id="tx-qty" placeholder="0" min="0" step="1" onwheel="this.blur()" onkeydown="if(event.key==='ArrowUp'||event.key==='ArrowDown')event.preventDefault();" style="font-size:14px;font-family:var(--mono);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;" />
           </div>
           <div class="field" style="margin-bottom:10px;display:none;" id="tx-wet-weight-wrap">
-            <label>Wet Weight (kg)</label>
-            <input type="number" id="tx-wet-weight" placeholder="0.000" min="0" step="0.001" onwheel="this.blur()" onkeydown="if(event.key==='ArrowUp'||event.key==='ArrowDown')event.preventDefault();" style="font-size:14px;font-family:var(--mono);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;" />
+            <label>Wet Weight (kg) <span style="color:var(--text3);font-weight:400;font-size:11px;">(auto-filled from Harvest Log)</span></label>
+            <input type="number" id="tx-wet-weight" placeholder="0.000" min="0" step="0.001" readonly style="font-size:14px;font-family:var(--mono);color:var(--text2);background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;cursor:not-allowed;" />
           </div>
           <div class="field" style="margin-bottom:10px;display:none;" id="tx-clone-date-wrap">
             <label>Clone Date <span style="color:var(--text3);font-weight:400;">(when clones arrived)</span></label>
@@ -1324,50 +1324,78 @@ async function harvestComplete(){
   const batchRec = batchRecs[idx];
   const plantsInRoom = (batchRec.roomDistribution && batchRec.roomDistribution[room]) || 0;
   if(!confirm('Complete harvest for '+batch+' / '+room+'?\nTotal: '+totalNet.toFixed(3)+' kg from '+bins.length+' bin(s), '+plantsInRoom+' plants.\nNo more bins can be added for this batch/room after this.')) return;
-  // Create a Harvested transaction capturing both plant count and total wet weight
-  const tx = {
-    id: Date.now(),
-    batchId: batch,
-    date: localDate(),
-    txType: 'Harvested',
-    qty: plantsInRoom,
-    weight: totalNet,
-    notes: 'Auto-completed from Harvest Log ('+bins.length+' bins from '+room+')',
-    currentQtyBefore: calcBatchQty(batch),
-    plantPhase: batchRec.plantPhase || '',
-    synced: false
-  };
-  batchTxRecs.unshift(tx);
-  lsSet('gp-batchtx', batchTxRecs);
-  // Zero out this room's distribution and mark it as harvest-complete
-  if(!batchRec.roomDistribution) batchRec.roomDistribution = {};
-  batchRec.roomDistribution[room] = 0;
-  if(!Array.isArray(batchRec.completedHarvests)) batchRec.completedHarvests = [];
-  if(!batchRec.completedHarvests.includes(room)) batchRec.completedHarvests.push(room);
-  // Track total harvested weight per room
+  // Track per-room harvest data (weights AND plant counts) before zeroing the live distribution.
   if(!batchRec.harvestedWeights) batchRec.harvestedWeights = {};
   batchRec.harvestedWeights[room] = totalNet;
+  if(!batchRec.harvestedPlants) batchRec.harvestedPlants = {};
+  batchRec.harvestedPlants[room] = plantsInRoom;
+  // Mark room as harvest-complete
+  if(!Array.isArray(batchRec.completedHarvests)) batchRec.completedHarvests = [];
+  if(!batchRec.completedHarvests.includes(room)) batchRec.completedHarvests.push(room);
+  // Zero out this room's live distribution
+  if(!batchRec.roomDistribution) batchRec.roomDistribution = {};
+  batchRec.roomDistribution[room] = 0;
   batchRec.synced = false;
-  lsSet('gp-batch', batchRecs);
-  // First Harvest Complete advances the batch to Drying — additional rooms can still be
-  // harvested over later days while the batch is in Drying. We do NOT clear the rooms array
-  // here, so the remaining unharvested flower rooms keep showing on the Harvest page.
+  // First Harvest Complete advances the batch from Flower → Drying. Additional rooms can still
+  // be harvested over later days while the batch is in Drying.
   let _phaseChanged = false;
   if(batchRec.plantPhase === 'Flower'){
     const prevPhase = batchRec.plantPhase;
     batchRec.plantPhase = 'Drying';
     if(!batchRec.harvestDate) batchRec.harvestDate = localDate();
-    lsSet('gp-batch', batchRecs);
     _phaseChanged = true;
     recordPhaseChangeTx(batch, prevPhase, 'Drying');
   }
+  lsSet('gp-batch', batchRecs);
+  // Detect "final room" — every flower room is either completed or has 0 plants currently.
+  const allFlowerRooms = (batchRec.rooms || []).filter(r => r !== 'Veg');
+  const remainingRooms = allFlowerRooms.filter(r => {
+    if(batchRec.completedHarvests.includes(r)) return false;
+    const p = (batchRec.roomDistribution && batchRec.roomDistribution[r]) || 0;
+    return p > 0;
+  });
+  const isFinalRoom = remainingRooms.length === 0;
+  // If this is the final room, create ONE consolidated Harvested transaction for the whole batch.
+  // Plant count = sum of original plants across all harvested rooms.
+  // Weight       = sum of all per-room harvest weights (from harvestedWeights).
+  let tx = null;
+  if(isFinalRoom){
+    // Guard: don't create a duplicate Harvested tx if one already exists for this batch
+    const alreadyHasHarvested = batchTxRecs.some(t => t.batchId === batch && t.txType === 'Harvested');
+    if(!alreadyHasHarvested){
+      const totalPlants = Object.values(batchRec.harvestedPlants).reduce((s,p)=> s + (parseInt(p)||0), 0);
+      const totalWeight = Math.round(Object.values(batchRec.harvestedWeights).reduce((s,w)=> s + (parseFloat(w)||0), 0) * 1000) / 1000;
+      tx = {
+        id: Date.now(),
+        batchId: batch,
+        date: localDate(),
+        txType: 'Harvested',
+        qty: totalPlants,
+        weight: totalWeight,
+        notes: 'Auto-completed from Harvest Log ('+allFlowerRooms.join(', ')+')',
+        currentQtyBefore: calcBatchQty(batch),
+        plantPhase: batchRec.plantPhase || '',
+        synced: false
+      };
+      batchTxRecs.unshift(tx);
+      lsSet('gp-batchtx', batchTxRecs);
+    }
+  }
   updatePendingBadge();
-  toast('Harvest complete: '+totalNet.toFixed(3)+' kg from '+room+'.');
+  if(isFinalRoom){
+    const totalAll = Math.round(Object.values(batchRec.harvestedWeights).reduce((s,w)=>s+(parseFloat(w)||0),0)*1000)/1000;
+    toast('Final room harvested! Total wet weight: '+totalAll.toFixed(3)+' kg. Harvested tx added on Summary.',5000);
+  } else {
+    toast('Harvest complete: '+totalNet.toFixed(3)+' kg from '+room+'.');
+  }
   // Refresh UI
   harvestRenderBins();
   harvestSetupChanged();
-  // Sync the tx
-  if(cfg.batchtxTbl && cfg.token && cfg.base){
+  // Refresh Summary if it's open on this batch (so the new Harvested tx + Current Day are visible)
+  const _sumSel = document.getElementById('summary-batch-select');
+  if(_sumSel && _sumSel.value === batch){ summaryBatchChanged(); }
+  // Sync the new tx if one was created
+  if(tx && cfg.batchtxTbl && cfg.token && cfg.base){
     try{
       const f = {'Batch ID':[tx.batchId],'Date':tx.date,'Transaction Type':tx.txType,'Plant Phase':tx.plantPhase||undefined,'Quantity':tx.qty,'Weight (kg)':tx.weight||undefined,'Current Quantity After':calcBatchQty(batch),'Notes':tx.notes};
       Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
@@ -3752,6 +3780,10 @@ function summaryUpdateTxTypeOptions(batchId){
   else                        opts = ['Produced/Received','Moved to Moms','Harvested','Sold'];
   // Drop Sold from the list if this batch already has a Sold tx (only one allowed)
   if(hasSold) opts = opts.filter(o=>o!=='Sold');
+  // Drop Harvested from the list if this batch already has a Harvested tx — it's auto-created
+  // by the Harvest Log when the final room is completed, so there's no need to add another.
+  const hasHarvested = batchTxRecs.some(t=>t.batchId===batchId && t.txType==='Harvested');
+  if(hasHarvested) opts = opts.filter(o=>o!=='Harvested');
   sel.innerHTML = '<option value="">-- select type --</option>' + opts.map(o=>'<option'+(o===prev?' selected':'')+'>'+o+'</option>').join('');
   autoSelectIfSingle('tx-type');
 }
