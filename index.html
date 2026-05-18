@@ -3885,18 +3885,20 @@ async function summaryUpdateBatch(){
     toast('Cannot advance phase: batch has 0 plants. Add a Produced/Received transaction first.',5000);
     return;
   }
-  // Guard: once a batch is in Flower (or later), the room assignments are locked
-  if(['Flower','Drying','Packaged'].includes(existingPhase)){
+  // Guard: while the batch is in Flower phase, the room assignments are locked. Drying and
+  // Packaged batches always have empty rooms (auto-cleared on phase advance) so no comparison.
+  if(existingPhase === 'Flower'){
     const oldRooms = (batchRecs[idx].rooms||[]).slice().sort().join('|');
     const newRooms = rooms.slice().sort().join('|');
     if(oldRooms !== newRooms){
-      toast('Cannot change rooms — batch is in '+existingPhase+' phase (rooms locked from Flower onward).',5000);
+      toast('Cannot change rooms — batch is in Flower phase (rooms locked once flowering starts).',5000);
       return;
     }
   }
-  // When entering Drying phase, plants are no longer in a cultivation room — force rooms to empty
+  // Post-harvest phases never have rooms — plants are no longer in a cultivation room.
   let _roomsForSave = rooms;
-  if(plantPhase === 'Drying') _roomsForSave = [];
+  if(plantPhase === 'Drying' || plantPhase === 'Packaged') _roomsForSave = [];
+  if(existingPhase === 'Drying' || existingPhase === 'Packaged') _roomsForSave = [];
   // Auto-set lifecycle dates on phase advance (if not already set):
   //   Clones → Veg: vegStart = today
   //   Veg    → Flower: flowerStart = today
