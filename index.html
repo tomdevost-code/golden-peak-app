@@ -657,7 +657,7 @@ tr:last-child td { border-bottom: none; }
             </div>
             <div class="g2">
               <div class="field"><label>Sold Date</label><div id="si-sold-date" style="font-size:13px;font-family:var(--mono);padding:4px 0;color:var(--text2);">—</div></div>
-              <div></div>
+              <div class="field"><label>Delivered Date</label><div id="si-delivered-date" style="font-size:13px;font-family:var(--mono);padding:4px 0;color:var(--text2);">—</div></div>
             </div>
           </div>
         </div>
@@ -3405,6 +3405,8 @@ function summaryBatchChanged(){
   document.getElementById('si-harvest-date').textContent = b.harvestDate || '—';
   document.getElementById('si-packaged-date').textContent = b.packagedDate || '—';
   document.getElementById('si-sold-date').textContent = b.soldDate || '—';
+  const _siDeliv = document.getElementById('si-delivered-date');
+  if(_siDeliv) _siDeliv.textContent = b.deliveredDate || '—';
   // Current Day display: clone day in Clones phase, veg/flower day in those phases
   summaryRefreshCurrentDay(b.batchId);
   // Today's date for transactions
@@ -3417,9 +3419,40 @@ function summaryBatchChanged(){
   summaryCalcQty(batchId);
   // History
   summaryRenderHistory(batchId);
+  // Post-delivery lockdown: once a Delivered Date is set the batch is on its way out — Plant Phase
+  // and Delivered Date inputs are locked, and the tx-type dropdown is restricted to Sold (above).
+  // Status stays editable so the user can Close the batch.
+  applyDeliveredLock(b);
   // Clear msgs
   document.getElementById('summary-update-msg').style.display='none';
   document.getElementById('tx-msg').style.display='none';
+}
+
+function applyDeliveredLock(b){
+  // When batchRec.deliveredDate is set: lock Plant Phase + Delivered Date inputs (and the tx-type
+  // dropdown is already filtered to just Sold). When it's unset: unlock both.
+  const delivered = !!(b && b.deliveredDate);
+  const phaseEl = document.getElementById('summary-phase');
+  const delivEl = document.getElementById('summary-delivered-date');
+  const txTypeEl = document.getElementById('tx-type');
+  if(phaseEl){
+    phaseEl.disabled = delivered;
+    phaseEl.style.background = delivered ? 'var(--bg2)' : '';
+    phaseEl.style.color = delivered ? 'var(--text3)' : '';
+    phaseEl.style.cursor = delivered ? 'not-allowed' : '';
+  }
+  if(delivEl){
+    delivEl.readOnly = delivered;
+    delivEl.style.background = delivered ? 'var(--bg2)' : '';
+    delivEl.style.color = delivered ? 'var(--text3)' : '';
+    delivEl.style.cursor = delivered ? 'not-allowed' : '';
+  }
+  if(txTypeEl){
+    txTypeEl.disabled = delivered;
+    txTypeEl.style.background = delivered ? 'var(--bg2)' : '';
+    txTypeEl.style.color = delivered ? 'var(--text3)' : '';
+    txTypeEl.style.cursor = delivered ? 'not-allowed' : '';
+  }
 }
 
 function summaryRefreshCurrentDay(batchId){
@@ -3806,6 +3839,11 @@ function summaryUpdateTxTypeOptions(batchId){
   else if(phase==='Veg')      opts = ['Moved to Moms','Harvested','Sold']; // no Produced/Received once in Veg
   else if(!hasTxs)            opts = ['Produced/Received'];
   else                        opts = ['Produced/Received','Moved to Moms','Harvested'];
+  // Once a Delivered Date is set, the batch is on its way out — only Sold remains (and only
+  // until that Sold tx has been saved). After Sold is done the only thing left is to Close.
+  if(b && b.deliveredDate){
+    opts = ['Sold'];
+  }
   // Drop Sold from the list if this batch already has a Sold tx (only one allowed)
   if(hasSold) opts = opts.filter(o=>o!=='Sold');
   // Drop Harvested from the list if this batch already has a Harvested tx — it's auto-created
@@ -3934,6 +3972,10 @@ async function summaryUpdateBatch(){
   }
   summaryPopulateBatches();
   summaryUpdateTxTypeOptions(batchId); // refresh tx-type options based on the newly saved phase
+  // Refresh the Batch Info Delivered Date display + apply post-delivery lockdown if needed
+  const _siDeliv = document.getElementById('si-delivered-date');
+  if(_siDeliv) _siDeliv.textContent = batchRecs[idx].deliveredDate || '—';
+  applyDeliveredLock(batchRecs[idx]);
   const msg = document.getElementById('summary-update-msg');
   msg.style.display='block'; msg.style.color='var(--green)'; msg.textContent='Batch updated!';
   setTimeout(()=>{ msg.style.display='none'; }, 3000);
