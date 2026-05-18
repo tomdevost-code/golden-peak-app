@@ -701,7 +701,7 @@ tr:last-child td { border-bottom: none; }
             <input type="number" id="tx-wet-weight" placeholder="0.000" min="0" step="0.001" readonly style="font-size:14px;font-family:var(--mono);color:var(--text2);background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;cursor:not-allowed;" />
           </div>
           <div class="field" style="margin-bottom:10px;display:none;" id="tx-clone-date-wrap">
-            <label>Clone Date <span style="color:var(--text3);font-weight:400;">(when clones arrived)</span></label>
+            <label>Cloning Date</label>
             <input type="date" id="tx-clone-date" style="font-size:14px;font-family:var(--mono);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;" />
           </div>
 
@@ -772,6 +772,12 @@ tr:last-child td { border-bottom: none; }
               <option value="Open">Open</option>
               <option value="Closed">Closed</option>
             </select>
+          </div>
+
+          <!-- Delivered Date (date the clones / seeds were physically delivered to Golden Peak) -->
+          <div class="field" style="margin-bottom:12px;">
+            <label>Delivered Date</label>
+            <input type="date" id="summary-delivered-date" style="font-size:14px;font-family:var(--mono);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;" />
           </div>
 
           <!-- Closed Date (only shows when Closed) -->
@@ -1124,6 +1130,7 @@ function buildBatchFields(rec){
     'Notes':rec.notes||undefined,
     'Created Date':rec.createdDate||undefined,
     'Clone Date':rec.cloneDate||undefined,
+    'Delivered Date':rec.deliveredDate||undefined,
     'Rooms':(rec.rooms&&rec.rooms.length)?rec.rooms:undefined,
     'Room Distribution':(rec.roomDistribution && Object.keys(rec.roomDistribution).length) ? JSON.stringify(rec.roomDistribution) : undefined,
     'Completed Harvests':(rec.completedHarvests && rec.completedHarvests.length) ? rec.completedHarvests.join(', ') : undefined,
@@ -3388,6 +3395,8 @@ function summaryBatchChanged(){
   summaryUpdateVegLock();
   summaryStatusChanged();
   document.getElementById('summary-closed-date').value = b.closedDate||'';
+  const _delivEl = document.getElementById('summary-delivered-date');
+  if(_delivEl) _delivEl.value = b.deliveredDate || '';
   // Lifecycle dates (read-only in Batch Info)
   document.getElementById('si-clone-date').textContent = b.cloneDate || '—';
   document.getElementById('si-hydration-date').textContent = b.hydrationDate || '—';
@@ -3688,18 +3697,35 @@ function getAllowedPhases(currentPhase){
   if(idx === seq.length-1) return [currentPhase]; // Sold is terminal
   return [seq[idx], seq[idx+1]];
 }
+function batchHasWaterInForAllRooms(batchId){
+  // Returns true once every active room of the batch has at least one 'Water In' EC entry recorded.
+  // "Active rooms" = rooms with plants in them (getActiveRooms). For a Clones-phase batch that's
+  // typically just Veg. If the batch has no active rooms yet, returns false.
+  const b = batchRecs.find(r=>r.batchId===batchId && !r.type);
+  if(!b) return false;
+  const rooms = getActiveRooms(batchId);
+  if(!rooms.length) return false;
+  return rooms.every(room => ecRecs.some(r => r.batch === batchId && r.room === room && r.wtype === 'Water In'));
+}
 function summaryUpdatePhaseOptions(currentPhase, qty){
   // Rebuild the Plant Phase dropdown:
   //   - If batch has 0 plants → lock to 'Clones' (the starting phase) until plants are added.
+  //   - If batch hasn't had 'Water In' logged in every active room yet → lock to 'Clones' too.
+  //     (Clones don't graduate to Veg until they've been watered in.)
   //   - Otherwise → only allow current phase + forward phases.
   const sel = document.getElementById('summary-phase');
   if(!sel) return;
+  const batchId = document.getElementById('summary-batch-select').value;
   // Zero-qty rule only forces Clones for active growing phases. Post-harvest phases
   // (Harvested, Drying, Packaged, Sold) keep their value even when qty hits 0.
   const postHarvest = ['Drying','Packaged'].includes(currentPhase);
   const noPlants = (!qty || qty<=0) && !postHarvest;
-  const allowed = noPlants ? ['Clones'] : getAllowedPhases(currentPhase);
-  const valueToSelect = noPlants ? 'Clones' : currentPhase;
+  // Water-In gate: only relevant while the batch is still in Clones phase (the gate that prevents
+  // manually skipping to Veg/Flower/etc. without first watering them in).
+  const waterInGate = (currentPhase === 'Clones') && batchId && !batchHasWaterInForAllRooms(batchId);
+  const lockToClones = noPlants || waterInGate;
+  const allowed = lockToClones ? ['Clones'] : getAllowedPhases(currentPhase);
+  const valueToSelect = lockToClones ? 'Clones' : currentPhase;
   sel.innerHTML = '<option value="">-- select phase --</option>' + allowed.map(p=>'<option'+(p===valueToSelect?' selected':'')+'>'+p+'</option>').join('');
 }
 function txTypeChanged(){
@@ -3894,6 +3920,9 @@ async function summaryUpdateBatch(){
   batchRecs[idx].flowerStart = _autoFlower;
   batchRecs[idx].harvestDate = _autoHarvest;
   batchRecs[idx].packagedDate = _autoPackaged;
+  // Delivered Date — user-entered (when clones / seeds physically arrived at Golden Peak)
+  const _deliveredVal = (document.getElementById('summary-delivered-date')?.value || '');
+  batchRecs[idx].deliveredDate = _deliveredVal;
   // soldDate is set when the batch's Status is set to Closed (treated as "fully sold off")
   if(status === 'Closed' && !batchRecs[idx].soldDate) batchRecs[idx].soldDate = (closedDate || _t);
   lsSet('gp-batch', batchRecs);
@@ -4158,7 +4187,7 @@ function summaryRenderHistory(batchId){
     let qtyDisplay;
     if(isPhase) qtyDisplay = '—';
     else if(isSold) qtyDisplay = (t.weight||0).toFixed(3) + ' kg';
-    else if(isHarvested && t.weight) qtyDisplay = '-' + t.qty + ' / ' + (t.weight).toFixed(3) + ' kg';
+    else if(isHarvested) qtyDisplay = ((t.weight||0)).toFixed(3) + ' kg'; // Post Harvest Weight
     else qtyDisplay = (isIn?'+':'-') + t.qty;
     const qtyColor = isPhase ? 'var(--text3)' : (isSold ? 'var(--text2)' : (isIn ? 'var(--green)' : 'var(--red)'));
     const typePillBg = isPhase ? 'var(--green-pale)' : 'var(--bg2)';
