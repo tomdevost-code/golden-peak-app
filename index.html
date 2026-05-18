@@ -1143,6 +1143,20 @@ function buildBatchFields(rec){
   return f;
 }
 function setSyncPill(state,msg){const el=document.getElementById('global-sync');el.className='sync-pill'+(state==='ok'?' ok':state==='err'?' err':state==='ing'?' ing':'');el.textContent=msg;}
+
+// If a <select> has exactly one non-placeholder option, auto-select it and fire its change handler.
+// Skips disabled selects and selects with a non-empty current value. Use after re-populating dropdowns.
+function autoSelectIfSingle(selectId){
+  const sel = document.getElementById(selectId);
+  if(!sel) return;
+  if(sel.disabled) return;
+  if(sel.value) return; // user already picked something
+  const opts = Array.from(sel.options).filter(o => o.value && !o.disabled);
+  if(opts.length === 1){
+    sel.value = opts[0].value;
+    sel.dispatchEvent(new Event('change', {bubbles:true}));
+  }
+}
 function avg(arr){const v=arr.filter(x=>x!==null&&!isNaN(x)&&x>0);return v.length?Math.round(v.reduce((a,b)=>a+b,0)/v.length*100)/100:null;}
 function pens(sel){return Array.from(document.querySelectorAll(sel)).map(i=>parseFloat(i.value)||null);}
 function daysBetween(s,e){if(!s||!e)return null;const a=new Date(s),b=new Date(e);return isNaN(a)||isNaN(b)?null:Math.floor((b-a)/864e5)+1;}
@@ -1205,6 +1219,7 @@ function harvestPopulateBatches(){
     return rooms.some(r=>!completed.includes(r));
   }).sort((a,b)=>a.batchId.localeCompare(b.batchId));
   sel.innerHTML = '<option value="">-- select batch --</option>' + list.map(b=>'<option'+(b.batchId===cur?' selected':'')+' value="'+b.batchId+'">'+b.batchId+(b.cultivar?' – '+b.cultivar:'')+(b.plantPhase==='Drying'?' (drying)':'')+'</option>').join('');
+  autoSelectIfSingle('harvest-batch-select');
   harvestSetupChanged();
 }
 function harvestSetupChanged(){
@@ -1223,6 +1238,7 @@ function harvestSetupChanged(){
     roomEl.innerHTML = '<option value="">batch has no Flower rooms</option>';
   } else {
     roomEl.innerHTML = '<option value="">-- select room --</option>' + rooms.map(r=>'<option'+(r===prevRoom?' selected':'')+'>'+r+'</option>').join('');
+    autoSelectIfSingle('harvest-room');
   }
   harvestRenderBins();
 }
@@ -1443,6 +1459,8 @@ function postDryPopulateBatches(){
     eligible.map(id => '<option'+(id===cur?' selected':'')+'>'+id+'</option>').join('');
   if(!eligible.length){
     sel.innerHTML = '<option value="">No batches in Drying phase</option>';
+  } else {
+    autoSelectIfSingle('postdry-batch-select');
   }
 }
 function postDryNextBinNum(batchId){
@@ -1802,6 +1820,11 @@ function populateBatchDropdowns(){
   fillFormSelect('waste-batch-select','-- select batch --');
   // Post-Drying batch dropdown filters by Drying phase — handled separately
   if(typeof postDryPopulateBatches === 'function') postDryPopulateBatches();
+  // Auto-pick if only one batch exists
+  autoSelectIfSingle('ec-batch-select');
+  autoSelectIfSingle('ro-batch-select');
+  autoSelectIfSingle('waste-batch-select');
+  autoSelectIfSingle('postdry-batch-select');
   // Report filter: keep showing every batch that has any historical record, including orphans
   const _wfb=document.getElementById('f-waste-batch');
   if(_wfb){const _c=_wfb.value;const _a=Object.keys(getAllBatches()).sort();_wfb.innerHTML='<option value="">All batches</option>'+_a.map(b=>'<option'+(b===_c?' selected':'')+'>'+b+'</option>').join('');_wfb.value=_c;}
@@ -1842,6 +1865,7 @@ function roBatchSelect(){
     const prevVal=roomEl.value;
     roomEl.innerHTML='<option value="">select room</option>'+batchRooms.map(r=>'<option'+(r===prevVal?' selected':'')+'>'+r+'</option>').join('');
     roomEl.disabled=false;roomEl.style.background='';roomEl.style.color='';roomEl.style.cursor='';
+    autoSelectIfSingle('ro-room');
   } else {
     roomEl.innerHTML='<option value="">No flower rooms yet</option>';
     roomEl.disabled=true;roomEl.style.background='var(--bg2)';roomEl.style.color='var(--text3)';roomEl.style.cursor='not-allowed';
@@ -1960,7 +1984,7 @@ function ecBatchLookup(){
   roomEl.disabled=false; roomEl.style.background=''; roomEl.style.color=''; roomEl.style.cursor='';
   if(availableRooms.length){
     roomEl.innerHTML = '<option value="">select room</option>' + availableRooms.map(r => '<option'+(r===prevRoom?' selected':'')+'>'+r+'</option>').join('');
-    if(!roomEl.value && availableRooms.length===1) roomEl.value = availableRooms[0];
+    if(!roomEl.value && availableRooms.length===1){ roomEl.value = availableRooms[0]; roomEl.dispatchEvent(new Event('change',{bubbles:true})); }
     let hint = roomEl.closest('.field').querySelector('.room-lock-hint');
     if(!hint){
       hint = document.createElement('div'); hint.className = 'room-lock-hint';
@@ -2165,6 +2189,8 @@ function ecRoomChanged(){
   ecSeqUnlock();
   // Refresh the recent-entries list at the bottom
   ecRenderRecent(batch, room);
+  // If only one watering type is allowed for this (batch, room), auto-pick it
+  autoSelectIfSingle('ec-wtype');
 }
 function ecRecentToggle(){
   // Toggle the recent-entries list visibility + caret direction.
@@ -2207,26 +2233,29 @@ function ecRenderRecent(batch /*, room — ignored: filters by batch only */){
     el.innerHTML='<span style="color:var(--text3);">No EC entries yet for '+batch+'.</span>';
     return;
   }
-  // Group by (date, wtype). Aggregate avg EC/pH (over non-null pen averages), sum ml/plant + flow.
+  // Group by (date, wtype, room). Each distinct room on a given (date, type) gets its own row.
+  // Aggregate avg EC/pH within the group, sum ml/plant + flow.
   const groups = {};
   recs.forEach(r => {
-    const key = (r.date||'') + '|' + (r.wtype||'—');
+    const room = r.room || '—';
+    const key = (r.date||'') + '|' + (r.wtype||'—') + '|' + room;
     if(!groups[key]){
-      groups[key] = {date:r.date, wtype:r.wtype||'—', rooms:new Set(), ecVals:[], phVals:[], mlSum:0, flowSum:0, count:0, hasMl:false, hasFlow:false};
+      groups[key] = {date:r.date, wtype:r.wtype||'—', room, ecVals:[], phVals:[], mlSum:0, flowSum:0, count:0, hasMl:false, hasFlow:false};
     }
     const g = groups[key];
-    if(r.room) g.rooms.add(r.room);
     if(r.dripEc != null && r.dripEc !== '' && !isNaN(parseFloat(r.dripEc))) g.ecVals.push(parseFloat(r.dripEc));
     if(r.dripPh != null && r.dripPh !== '' && !isNaN(parseFloat(r.dripPh))) g.phVals.push(parseFloat(r.dripPh));
     if(r.totalML != null && r.totalML !== '' && !isNaN(parseFloat(r.totalML))){ g.mlSum += parseFloat(r.totalML); g.hasMl = true; }
     if(r.flow != null && r.flow !== '' && !isNaN(parseFloat(r.flow))){ g.flowSum += parseFloat(r.flow); g.hasFlow = true; }
     g.count++;
   });
-  // Convert to sorted array — date desc, then wtype asc
+  // Convert to sorted array — date desc, then wtype asc, then room asc
   const rows = Object.values(groups).sort((a,b)=>{
     if(a.date < b.date) return 1;
     if(a.date > b.date) return -1;
-    return (a.wtype||'').localeCompare(b.wtype||'');
+    const tw = (a.wtype||'').localeCompare(b.wtype||'');
+    if(tw) return tw;
+    return (a.room||'').localeCompare(b.room||'');
   });
   if(countEl) countEl.textContent = '('+rows.length+' day'+(rows.length===1?'':'s')+')';
   const avg = arr => arr.length ? (arr.reduce((s,v)=>s+v,0)/arr.length) : null;
@@ -2249,15 +2278,13 @@ function ecRenderRecent(batch /*, room — ignored: filters by batch only */){
     const ecStr = ecAvg != null ? ecAvg.toFixed(2) : '—';
     const phStr = phAvg != null ? phAvg.toFixed(2) : '—';
     const mlStr = g.hasMl ? g.mlSum.toFixed(0) : '—';
-    const roomList = [...g.rooms];
-    const roomDisp = roomList.length === 0 ? '' : (roomList.length === 1 ? roomList[0] : roomList.join(', '));
     const countBadge = g.count > 1 ? ' <span style="color:var(--text3);font-family:var(--mono);font-size:10px;">'+g.count+'×</span>' : '';
     html += '<tr>'+
       '<td style="padding:6px 10px;font-family:var(--mono);border-top:1px solid var(--border);white-space:nowrap;">'+(g.date||'—')+'</td>'+
       '<td style="padding:6px 10px;border-top:1px solid var(--border);border-left:1px solid var(--border);">'+
         '<span style="display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;">'+
           '<span style="background:'+c.bg+';color:'+c.fg+';padding:1px 8px;border-radius:8px;font-size:10px;font-weight:600;white-space:nowrap;">'+g.wtype+'</span>'+
-          (roomDisp ? '<span style="font-size:10px;color:var(--text3);font-family:var(--mono);">'+roomDisp+'</span>' : '')+
+          (g.room && g.room !== '—' ? '<span style="font-size:10px;color:var(--text3);font-family:var(--mono);">'+g.room+'</span>' : '')+
           countBadge+
         '</span>'+
       '</td>'+
@@ -2837,6 +2864,9 @@ function wasteSeqUnlock(){
   enableFields();
   applyRoomColor('waste',room);
   wastePlantsToggle();
+  // If the Room or Waste Type dropdown has only one valid option, auto-pick it.
+  autoSelectIfSingle('waste-room');
+  autoSelectIfSingle('waste-type');
 }
 
 function wasteBatchSelect(){
@@ -3665,6 +3695,15 @@ function txTypeChanged(){
     inp.step = '1';
     inp.placeholder = '0';
     wetWrap.style.display = '';
+    // Auto-fill wet weight with the sum of Harvest Log net weights across all rooms for this batch.
+    // Only writes if the wet-weight input is currently empty so we don't overwrite a user edit.
+    const _wwBatch = document.getElementById('summary-batch-select').value;
+    if(_wwBatch && wetInp && !wetInp.value){
+      const _hSum = harvestRecs
+        .filter(h => h.batch === _wwBatch)
+        .reduce((s, h) => s + (parseFloat(h.netWeight) || 0), 0);
+      if(_hSum > 0) wetInp.value = (Math.round(_hSum * 1000) / 1000).toFixed(3);
+    }
   } else {
     lbl.textContent = 'Quantity';
     inp.step = '1';
@@ -3714,6 +3753,7 @@ function summaryUpdateTxTypeOptions(batchId){
   // Drop Sold from the list if this batch already has a Sold tx (only one allowed)
   if(hasSold) opts = opts.filter(o=>o!=='Sold');
   sel.innerHTML = '<option value="">-- select type --</option>' + opts.map(o=>'<option'+(o===prev?' selected':'')+'>'+o+'</option>').join('');
+  autoSelectIfSingle('tx-type');
 }
 
 function summaryCalcQty(batchId){
@@ -3872,8 +3912,13 @@ async function summaryAddTransaction(){
   let weight = isSold ? (parseFloat(rawVal) || 0) : 0;
   if(isHarvested){
     weight = parseFloat(document.getElementById('tx-wet-weight').value) || 0;
-    if(!qty || qty <= 0){ toast('Enter a valid quantity.'); return; }
     if(weight <= 0){ toast('Enter a valid wet weight (kg).'); return; }
+    // Qty is required only for the first Harvested tx (when batch is still in Flower phase). Once
+    // the batch is in Drying phase, additional Harvested rows can be recorded with weight only —
+    // they just track per-room dry weights without further reducing the plant balance.
+    const _hRec = batchRecs.find(r=>r.batchId===batchId && !r.type);
+    const _inDrying = _hRec && _hRec.plantPhase === 'Drying';
+    if(!_inDrying && (!qty || qty <= 0)){ toast('Enter a valid quantity.'); return; }
   } else if(isSold){
     if(weight <= 0){ toast('Enter a valid weight (kg).'); return; }
   } else {
@@ -3882,8 +3927,9 @@ async function summaryAddTransaction(){
   const notes = document.getElementById('tx-notes').value.trim();
   const date = localDate();
   const currentQtyBefore = summaryCalcQty(batchId);
-  // Guard: non-Produced/Received transactions cannot push balance below 0 (skip for Sold — weight doesn't affect plant count)
-  if(!isSold && txType !== 'Produced/Received' && currentQtyBefore - qty < 0){
+  // Guard: non-Produced/Received transactions cannot push balance below 0. Skip the guard when
+  // qty is 0 (weight-only Harvested rows in Drying phase) and for Sold (weight, not plant count).
+  if(!isSold && txType !== 'Produced/Received' && qty > 0 && currentQtyBefore - qty < 0){
     toast('Cannot save: balance would go below 0. Current: '+currentQtyBefore+', requested: '+qty+'.',5000);
     return;
   }
