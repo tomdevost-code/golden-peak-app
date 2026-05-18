@@ -2536,9 +2536,31 @@ async function ecSave(){
       // Stay unsynced; Sync Pending will retry
     }
   }
-  // Refresh the recent-entries list before clearing the form (so we use the saved batch+room)
-  ecRenderRecent(rec.batch, rec.room);
-  applyCascadeLocks();ecClear();updatePendingBadge();
+  // Soft refresh: keep grower/batch/room selected so the user can log the next entry quickly,
+  // but clear all the per-entry inputs and re-render the dynamic displays (history, badge,
+  // lifecycle strip, watering-type dropdown) so they reflect the just-saved data.
+  ecRefreshAfterSave(rec.batch, rec.room);
+  applyCascadeLocks();
+  updatePendingBadge();
+}
+function ecRefreshAfterSave(batch, room){
+  // Clear pen readings, events, wtype, notes, flow, totals
+  document.querySelectorAll('.ec-drip-ec, .ec-drip-ph').forEach(i => i.value='');
+  for(let i=1;i<=8;i++){ const el=document.getElementById('ec-evt-'+i); if(el) el.value=''; }
+  if(typeof ecRenderEvents === 'function') ecRenderEvents();
+  ['ec-notes','ec-flow'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
+  const _wt = document.getElementById('ec-wtype'); if(_wt) _wt.value='';
+  const _tot = document.getElementById('ec-total-ml'); if(_tot) _tot.textContent='-';
+  ['ec-avg-ec','ec-avg-ph'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(el){ el.textContent='-'; el.className='avg-val'; }
+  });
+  // Re-run batch/room context refreshes — these update the day badge, lifecycle info strip,
+  // active-rooms chip strip, watering history table, and the watering-type dropdown.
+  if(typeof ecBatchLookup === 'function') ecBatchLookup();
+  if(typeof updateBatchRoomsInfo === 'function') updateBatchRoomsInfo(batch);
+  if(typeof ecRoomChanged === 'function') ecRoomChanged();
+  if(typeof ecRenderRecent === 'function') ecRenderRecent(batch, room);
 }
 function ecClear(){
   document.getElementById('ec-grower').value='';
