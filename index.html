@@ -1057,9 +1057,11 @@ function calcBatchQty(batchId){
   });
   return Math.max(0,qty);
 }
-async function recordPhaseChangeTx(batchId, fromPhase, toPhase){
+async function recordPhaseChangeTx(batchId, fromPhase, toPhase, weight){
   // Creates a 'Phase Change' transaction in batchTxRecs to audit-trail phase transitions.
   // qty=0 so it doesn't affect the running balance. Notes describe the transition.
+  // Optional `weight` is captured for milestone phases (e.g. Drying → Packaged stamps the total
+  // post-drying weight) and rendered in the Qty column of the transaction history.
   if(!batchId || !toPhase || fromPhase === toPhase) return null;
   const tx = {
     id: Date.now() + Math.floor(Math.random()*1000),
@@ -1067,6 +1069,7 @@ async function recordPhaseChangeTx(batchId, fromPhase, toPhase){
     date: localDate(),
     txType: 'Phase Change',
     qty: 0,
+    weight: (typeof weight === 'number' && weight > 0) ? Math.round(weight*1000)/1000 : 0,
     currentQtyBefore: calcBatchQty(batchId),
     plantPhase: toPhase,
     notes: 'Phase changed from ' + (fromPhase || 'unset') + ' to ' + toPhase,
@@ -1083,6 +1086,7 @@ async function recordPhaseChangeTx(batchId, fromPhase, toPhase){
         'Transaction Type': tx.txType,
         'Plant Phase': tx.plantPhase,
         'Quantity': tx.qty,
+        'Weight (kg)': tx.weight || undefined,
         'Current Quantity After': tx.currentQtyBefore,
         'Notes': tx.notes
       };
@@ -1097,14 +1101,23 @@ async function recordPhaseChangeTx(batchId, fromPhase, toPhase){
   }
   return tx;
 }
+function getDisplayPhase(batchRec){
+  // What to render in the Batch Info "Plant Phase" cell. Mostly mirrors batchRec.plantPhase,
+  // but once a Sold transaction has been recorded for the batch we display 'Sold' instead so the
+  // user sees the final business state (the underlying plant phase stays 'Delivered').
+  if(!batchRec) return '—';
+  const hasSold = batchTxRecs.some(t => t.batchId === batchRec.batchId && t.txType === 'Sold');
+  if(hasSold) return 'Sold';
+  return batchRec.plantPhase || '—';
+}
 function enforceZeroQtyState(batchId){
   // Hard rule: when a batch's current quantity is <= 0 AND it hasn't entered the post-harvest lifecycle,
   // its plantPhase MUST be 'Clones' and rooms MUST be ['Veg']. Auto-corrects + marks unsynced.
-  // Skipped for Harvested/Drying/Packaged/Sold so a fully-harvested batch isn't auto-rolled back to Clones.
+  // Skipped for Drying/Packaged/Delivered so a fully-harvested OR delivered batch isn't rolled back.
   if(calcBatchQty(batchId)>0) return false;
   const b = batchRecs.find(r=>r.batchId===batchId && !r.type);
   if(!b) return false;
-  if(['Drying','Packaged'].includes(b.plantPhase)) return false;
+  if(['Drying','Packaged','Delivered'].includes(b.plantPhase)) return false;
   let changed=false;
   if(b.plantPhase!=='Clones'){ b.plantPhase='Clones'; changed=true; }
   if(!Array.isArray(b.rooms) || b.rooms.length!==1 || b.rooms[0]!=='Veg'){ b.rooms=['Veg']; changed=true; }
@@ -1659,7 +1672,9 @@ async function postDryComplete(){
   if(!batchRecs[idx].packagedDate) batchRecs[idx].packagedDate = today;
   batchRecs[idx].synced = false;
   lsSet('gp-batch', batchRecs);
-  recordPhaseChangeTx(batch, _prevPhase, 'Packaged');
+  // Stamp the total post-drying weight on the Drying → Packaged phase-change tx so it's visible
+  // in the Summary transaction history's Qty column (same treatment as Harvested wet weight).
+  recordPhaseChangeTx(batch, _prevPhase, 'Packaged', batchRecs[idx].postDryingWeight);
   const msg = document.getElementById('postdry-complete-msg');
   if(msg){
     msg.style.display = 'block';
@@ -3046,7 +3061,7 @@ async function wasteSave(){
         const r = input.dataset.room;
         input.value = (_wDist[r] != null) ? _wDist[r] : '';
       });
-      document.getElementById('si-phase').textContent = _bRec.plantPhase||'—';
+      document.getElementById('si-phase').textContent = getDisplayPhase(_bRec);
       const _wActiveRooms = getActiveRooms(rec.batch);
       if(_wActiveRooms.length){
         const _parts = _wActiveRooms.map(r=>{
@@ -3391,7 +3406,7 @@ function summaryBatchChanged(){
   document.getElementById('si-mother').textContent = b.mother||'—';
   document.getElementById('si-genetics').textContent = b.geneticsSource ? b.geneticsSource+(b.externalCompany?' ('+b.externalCompany+')':'') : '—';
   document.getElementById('si-created').textContent = b.createdDate||'—';
-  document.getElementById('si-phase').textContent = b.plantPhase||'—';
+  document.getElementById('si-phase').textContent = getDisplayPhase(b);
   document.getElementById('si-rooms').textContent = (b.rooms && b.rooms.length) ? b.rooms.join(', ') : '—';
   // Rooms
   const rooms = b.rooms||[];
@@ -3407,7 +3422,7 @@ function summaryBatchChanged(){
     const r = input.dataset.room;
     input.value = (_dist[r] != null && _dist[r] !== 0) ? _dist[r] : (_dist[r] === 0 ? '0' : '');
   });
-  document.getElementById('si-phase').textContent = b.plantPhase||'—';
+  document.getElementById('si-phase').textContent = getDisplayPhase(b);
   // Rooms display: show only ACTIVE rooms (plant count > 0). Veg drops out once all plants
   // have been allocated to Flower rooms.
   const _activeRooms = getActiveRooms(b.batchId);
@@ -4188,7 +4203,7 @@ async function summaryAddTransaction(){
   if(_b){
     summaryUpdatePhaseOptions(_b.plantPhase||'', _newQty);
     document.querySelectorAll('.summary-room-cb').forEach(cb=>{ cb.checked = (_b.rooms||[]).includes(cb.value); });
-    document.getElementById('si-phase').textContent = _b.plantPhase||'—';
+    document.getElementById('si-phase').textContent = getDisplayPhase(_b);
     const _txActiveRooms = getActiveRooms(batchId);
     const _txDist = _b.roomDistribution || {};
     if(_txActiveRooms.length){
@@ -4266,7 +4281,7 @@ function summaryRenderHistory(batchId){
     const isSold = t.txType==='Sold';
     const isHarvested = t.txType==='Harvested';
     let qtyDisplay;
-    if(isPhase) qtyDisplay = '—';
+    if(isPhase) qtyDisplay = (t.weight && t.weight > 0) ? (t.weight.toFixed(3) + ' kg') : '—'; // post-dry weight on Packaged phase change
     else if(isSold) qtyDisplay = (t.weight||0).toFixed(3) + ' kg';
     else if(isHarvested) qtyDisplay = ((t.weight||0)).toFixed(3) + ' kg'; // Post Harvest Weight
     else qtyDisplay = (isIn?'+':'-') + t.qty;
