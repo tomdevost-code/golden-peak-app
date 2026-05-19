@@ -4024,6 +4024,23 @@ async function summaryUpdateBatch(){
   const _siDeliv = document.getElementById('si-delivered-date');
   if(_siDeliv) _siDeliv.textContent = batchRecs[idx].deliveredDate || '—';
   applyDeliveredLock(batchRecs[idx]);
+  // If the EC Log is currently showing the same batch, refresh its dynamic content so the room
+  // dropdown, lifecycle info strip, day badge, active-rooms chip strip, watering-type dropdown,
+  // and waterings history all reflect the just-saved batch state.
+  const _ecBatchSel = document.getElementById('ec-batch-select');
+  if(_ecBatchSel && _ecBatchSel.value === batchId){
+    const _ecRoomVal = document.getElementById('ec-room').value;
+    if(typeof ecBatchLookup === 'function') ecBatchLookup();
+    if(typeof updateBatchRoomsInfo === 'function') updateBatchRoomsInfo(batchId);
+    if(typeof ecRoomChanged === 'function') ecRoomChanged();
+    if(typeof ecRenderRecent === 'function') ecRenderRecent(batchId, _ecRoomVal);
+    if(typeof ecSeqUnlock === 'function') ecSeqUnlock();
+  }
+  // Same idea for the Runoff page
+  const _roBatchSel = document.getElementById('ro-batch-select');
+  if(_roBatchSel && _roBatchSel.value === batchId){
+    if(typeof roBatchSelect === 'function') roBatchSelect();
+  }
   const msg = document.getElementById('summary-update-msg');
   msg.style.display='block'; msg.style.color='var(--green)'; msg.textContent='Batch updated!';
   setTimeout(()=>{ msg.style.display='none'; }, 3000);
