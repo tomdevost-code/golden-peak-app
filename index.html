@@ -660,6 +660,22 @@ tr:last-child td { border-bottom: none; }
               <div class="field"><label>Sold Date</label><div id="si-sold-date" style="font-size:13px;font-family:var(--mono);padding:4px 0;color:var(--text2);">—</div></div>
             </div>
           </div>
+          <!-- Batch Totals: harvest / post-dry / sold weights + destroyed plant count + veg waste -->
+          <div style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--border);">
+            <div style="font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">Batch Totals</div>
+            <div class="g2" style="margin-bottom:6px;">
+              <div class="field"><label>Harvest Weight</label><div id="si-harvest-weight" style="font-size:13px;font-family:var(--mono);padding:4px 0;color:var(--text2);">—</div></div>
+              <div class="field"><label>Post-Dry Weight</label><div id="si-postdry-weight" style="font-size:13px;font-family:var(--mono);padding:4px 0;color:var(--text2);">—</div></div>
+            </div>
+            <div class="g2" style="margin-bottom:6px;">
+              <div class="field"><label>Sold Weight</label><div id="si-sold-weight" style="font-size:13px;font-family:var(--mono);padding:4px 0;color:var(--text2);">—</div></div>
+              <div class="field"><label>Plants Destroyed</label><div id="si-destroyed-count" style="font-size:13px;font-family:var(--mono);padding:4px 0;color:var(--text2);">—</div></div>
+            </div>
+            <div class="g2">
+              <div class="field"><label>Veg Waste Weight</label><div id="si-vegwaste-weight" style="font-size:13px;font-family:var(--mono);padding:4px 0;color:var(--text2);">—</div></div>
+              <div></div>
+            </div>
+          </div>
         </div>
 
         <!-- Current Quantity + Current Day highlight -->
@@ -763,13 +779,18 @@ tr:last-child td { border-bottom: none; }
             </select>
           </div>
 
-          <div class="field" style="margin-bottom:10px;">
-            <label id="tx-qty-label">Quantity</label>
-            <input type="number" id="tx-qty" placeholder="0" min="0" step="1" onwheel="this.blur()" onkeydown="if(event.key==='ArrowUp'||event.key==='ArrowDown')event.preventDefault();" style="font-size:14px;font-family:var(--mono);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;" />
+          <!-- Plant Count: shown only for Produced/Received and Moved to Moms (the tx types that
+               actually count plants moving in/out of the batch). Harvested has its qty derived from
+               the Harvest Log room data, and Sold uses Weight (kg) instead. -->
+          <div class="field" style="margin-bottom:10px;display:none;" id="tx-plant-count-wrap">
+            <label>Plant Count</label>
+            <input type="number" id="tx-plant-count" placeholder="0" min="0" step="1" onwheel="this.blur()" onkeydown="if(event.key==='ArrowUp'||event.key==='ArrowDown')event.preventDefault();" style="font-size:14px;font-family:var(--mono);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;" />
           </div>
+          <!-- Weight: shown for Sold (user enters sale weight) and for Harvested (auto-filled,
+               read-only — comes from the Harvest Log total). Hidden for everything else. -->
           <div class="field" style="margin-bottom:10px;display:none;" id="tx-wet-weight-wrap">
-            <label>Wet Weight (kg) <span style="color:var(--text3);font-weight:400;font-size:11px;">(auto-filled from Harvest Log)</span></label>
-            <input type="number" id="tx-wet-weight" placeholder="0.000" min="0" step="0.001" readonly style="font-size:14px;font-family:var(--mono);color:var(--text2);background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;cursor:not-allowed;" />
+            <label id="tx-wet-weight-label">Weight (kg)</label>
+            <input type="number" id="tx-wet-weight" placeholder="0.000" min="0" step="0.001" style="font-size:14px;font-family:var(--mono);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;" />
           </div>
           <div class="field" style="margin-bottom:10px;display:none;" id="tx-clone-date-wrap">
             <label>Cloning Date</label>
@@ -1100,6 +1121,41 @@ async function recordPhaseChangeTx(batchId, fromPhase, toPhase, weight){
     }
   }
   return tx;
+}
+function summaryRefreshBatchTotals(batchId){
+  // Populates the Batch Totals block in the Batch Info card with:
+  //   • Harvest weight       = sum of weight on Harvested transactions for this batch
+  //   • Post-Dry weight       = batchRec.postDryingWeight (set on Complete Post-Drying)
+  //   • Sold weight           = sum of weight on Sold transactions for this batch
+  //   • Plants destroyed      = sum of qty on Destroyed transactions for this batch
+  //   • Veg waste weight      = sum of weight on 'Vegetative Waste' records for this batch
+  const setText = (id, val) => { const el=document.getElementById(id); if(el) el.textContent = val; };
+  if(!batchId){
+    ['si-harvest-weight','si-postdry-weight','si-sold-weight','si-destroyed-count','si-vegwaste-weight']
+      .forEach(id => setText(id, '—'));
+    return;
+  }
+  const b = batchRecs.find(r => r.batchId === batchId && !r.type);
+  const harvestSum = batchTxRecs
+    .filter(t => t.batchId === batchId && t.txType === 'Harvested')
+    .reduce((s,t) => s + (parseFloat(t.weight)||0), 0);
+  const soldSum = batchTxRecs
+    .filter(t => t.batchId === batchId && t.txType === 'Sold')
+    .reduce((s,t) => s + (parseFloat(t.weight)||0), 0);
+  const destroyedSum = batchTxRecs
+    .filter(t => t.batchId === batchId && t.txType === 'Destroyed')
+    .reduce((s,t) => s + (parseInt(t.qty)||0), 0);
+  const vegWasteSum = wasteRecs
+    .filter(r => r.batch === batchId && r.type === 'Vegetative Waste')
+    .reduce((s,r) => s + (parseFloat(r.weight)||0), 0);
+  const postDry = (b && b.postDryingWeight) ? parseFloat(b.postDryingWeight) : 0;
+  const fmtKg = v => (v > 0 ? v.toFixed(3) + ' kg' : '—');
+  const fmtCount = v => (v > 0 ? String(v) + ' plants' : '—');
+  setText('si-harvest-weight', fmtKg(harvestSum));
+  setText('si-postdry-weight', fmtKg(postDry));
+  setText('si-sold-weight', fmtKg(soldSum));
+  setText('si-destroyed-count', fmtCount(destroyedSum));
+  setText('si-vegwaste-weight', fmtKg(vegWasteSum));
 }
 function getDisplayPhase(batchRec){
   // What to render in the Batch Info "Plant Phase" cell. Mostly mirrors batchRec.plantPhase,
@@ -3052,6 +3108,7 @@ async function wasteSave(){
     summaryCalcQty(rec.batch);
     summaryRenderHistory(rec.batch);
     summaryUpdateTxTypeOptions(rec.batch);
+    summaryRefreshBatchTotals(rec.batch);
     const _bRec=batchRecs.find(r=>r.batchId===rec.batch && !r.type);
     if(_bRec){
       summaryUpdatePhaseOptions(_bRec.plantPhase||'', calcBatchQty(rec.batch));
@@ -3454,6 +3511,8 @@ function summaryBatchChanged(){
   if(_siDeliv) _siDeliv.textContent = b.deliveredDate || '—';
   // Current Day display: clone day in Clones phase, veg/flower day in those phases
   summaryRefreshCurrentDay(b.batchId);
+  // Batch Totals (harvest, post-dry, sold, destroyed plants, veg waste)
+  summaryRefreshBatchTotals(b.batchId);
   // Today's date for transactions
   document.getElementById('tx-date-display').textContent = localDate();
   // Restrict transaction types: only Produced/Received until at least one tx exists for this batch
@@ -3811,28 +3870,48 @@ function summaryUpdatePhaseOptions(currentPhase, qty){
   sel.innerHTML = '<option value="">-- select phase --</option>' + allowed.map(p=>'<option'+(p===valueToSelect?' selected':'')+'>'+p+'</option>').join('');
 }
 function txTypeChanged(){
-  // Sold → qty field captures Weight (kg). Harvested → qty stays plant count AND a separate Wet Weight field appears.
+  // Per tx type, show the right input:
+  //   Produced/Received, Moved to Moms → Plant Count (integer)
+  //   Sold → Weight (kg) (user-entered)
+  //   Harvested → Wet Weight (kg) (read-only, auto-filled from Harvest Log totals)
   const t = document.getElementById('tx-type').value;
-  const lbl = document.getElementById('tx-qty-label');
-  const inp = document.getElementById('tx-qty');
+  const pcWrap = document.getElementById('tx-plant-count-wrap');
+  const pcInp = document.getElementById('tx-plant-count');
   const wetWrap = document.getElementById('tx-wet-weight-wrap');
   const wetInp = document.getElementById('tx-wet-weight');
+  const wetLbl = document.getElementById('tx-wet-weight-label');
   const cloneWrap = document.getElementById('tx-clone-date-wrap');
   const cloneInp = document.getElementById('tx-clone-date');
-  if(!lbl || !inp || !wetWrap || !wetInp) return;
-  if(t === 'Sold'){
-    lbl.textContent = 'Weight (kg)';
-    inp.step = '0.001';
-    inp.placeholder = '0.000';
-    wetWrap.style.display = 'none';
+  if(!pcWrap || !pcInp || !wetWrap || !wetInp || !wetLbl) return;
+  // Default: hide both, clear values
+  pcWrap.style.display = 'none';
+  wetWrap.style.display = 'none';
+  if(t === 'Produced/Received' || t === 'Moved to Moms'){
+    pcWrap.style.display = '';
     wetInp.value = '';
-  } else if(t === 'Harvested'){
-    lbl.textContent = 'Quantity';
-    inp.step = '1';
-    inp.placeholder = '0';
+    // Plant Count input editable
+    pcInp.readOnly = false;
+    pcInp.style.background = 'var(--bg)';
+    pcInp.style.color = 'var(--text)';
+    pcInp.style.cursor = '';
+  } else if(t === 'Sold'){
     wetWrap.style.display = '';
+    wetLbl.textContent = 'Weight (kg)';
+    wetInp.value = '';
+    wetInp.readOnly = false;
+    wetInp.style.background = 'var(--bg)';
+    wetInp.style.color = 'var(--text)';
+    wetInp.style.cursor = '';
+    pcInp.value = '';
+  } else if(t === 'Harvested'){
+    wetWrap.style.display = '';
+    wetLbl.innerHTML = 'Wet Weight (kg) <span style="color:var(--text3);font-weight:400;font-size:11px;">(auto-filled from Harvest Log)</span>';
+    wetInp.readOnly = true;
+    wetInp.style.background = 'var(--bg2)';
+    wetInp.style.color = 'var(--text2)';
+    wetInp.style.cursor = 'not-allowed';
+    pcInp.value = '';
     // Auto-fill wet weight with the sum of Harvest Log net weights across all rooms for this batch.
-    // Only writes if the wet-weight input is currently empty so we don't overwrite a user edit.
     const _wwBatch = document.getElementById('summary-batch-select').value;
     if(_wwBatch && wetInp && !wetInp.value){
       const _hSum = harvestRecs
@@ -3841,10 +3920,7 @@ function txTypeChanged(){
       if(_hSum > 0) wetInp.value = (Math.round(_hSum * 1000) / 1000).toFixed(3);
     }
   } else {
-    lbl.textContent = 'Quantity';
-    inp.step = '1';
-    inp.placeholder = '0';
-    wetWrap.style.display = 'none';
+    pcInp.value = '';
     wetInp.value = '';
   }
   // Clone Date input: shown only when:
@@ -4079,22 +4155,20 @@ async function summaryAddTransaction(){
       return;
     }
   }
-  const rawVal = document.getElementById('tx-qty').value;
-  const qty = isSold ? 0 : (parseInt(rawVal) || 0);
-  let weight = isSold ? (parseFloat(rawVal) || 0) : 0;
+  // Read inputs based on tx type:
+  //   Produced/Received, Moved to Moms → plant-count input
+  //   Sold                              → wet-weight input (relabeled as Weight (kg))
+  //   Harvested                          → wet-weight input (auto-filled, read-only)
+  const _pcVal = document.getElementById('tx-plant-count').value;
+  const _wwVal = document.getElementById('tx-wet-weight').value;
+  const qty = (isSold || isHarvested) ? 0 : (parseInt(_pcVal) || 0);
+  let weight = (isSold || isHarvested) ? (parseFloat(_wwVal) || 0) : 0;
   if(isHarvested){
-    weight = parseFloat(document.getElementById('tx-wet-weight').value) || 0;
     if(weight <= 0){ toast('Enter a valid wet weight (kg).'); return; }
-    // Qty is required only for the first Harvested tx (when batch is still in Flower phase). Once
-    // the batch is in Drying phase, additional Harvested rows can be recorded with weight only —
-    // they just track per-room dry weights without further reducing the plant balance.
-    const _hRec = batchRecs.find(r=>r.batchId===batchId && !r.type);
-    const _inDrying = _hRec && _hRec.plantPhase === 'Drying';
-    if(!_inDrying && (!qty || qty <= 0)){ toast('Enter a valid quantity.'); return; }
   } else if(isSold){
     if(weight <= 0){ toast('Enter a valid weight (kg).'); return; }
   } else {
-    if(!qty || qty <= 0){ toast('Enter a valid quantity.'); return; }
+    if(!qty || qty <= 0){ toast('Enter a valid plant count.'); return; }
   }
   const notes = document.getElementById('tx-notes').value.trim();
   const date = localDate();
@@ -4195,7 +4269,8 @@ async function summaryAddTransaction(){
   }
   // Clear form
   document.getElementById('tx-type').value = '';
-  document.getElementById('tx-qty').value = '';
+  const _pcInp = document.getElementById('tx-plant-count'); if(_pcInp) _pcInp.value = '';
+  const _pcWrap = document.getElementById('tx-plant-count-wrap'); if(_pcWrap) _pcWrap.style.display = 'none';
   document.getElementById('tx-notes').value = '';
   const _wwInp = document.getElementById('tx-wet-weight'); if(_wwInp) _wwInp.value = '';
   const _wwWrap = document.getElementById('tx-wet-weight-wrap'); if(_wwWrap) _wwWrap.style.display = 'none';
@@ -4241,6 +4316,8 @@ async function summaryAddTransaction(){
     // Refresh Current Day — a new Produced/Received tx may have just set cloneDate (Clones-Internal silent
     // capture or Clones-External user-entered), and a Harvested tx may have set harvestDate.
     summaryRefreshCurrentDay(batchId);
+    // Refresh Batch Totals — new tx may have changed harvest/sold/destroyed totals
+    summaryRefreshBatchTotals(batchId);
   }
   applyPhaseRoomLock();
   updatePendingBadge();
@@ -4301,7 +4378,12 @@ function summaryRenderHistory(batchId){
     let qtyDisplay;
     if(isPhase) qtyDisplay = (t.weight && t.weight > 0) ? (t.weight.toFixed(3) + ' kg') : '—'; // post-dry weight on Packaged phase change
     else if(isSold) qtyDisplay = (t.weight||0).toFixed(3) + ' kg';
-    else if(isHarvested) qtyDisplay = ((t.weight||0)).toFixed(3) + ' kg'; // Post Harvest Weight
+    else if(isHarvested){
+      // Plant count from the room(s) during flower + wet weight, side by side
+      const _q = parseInt(t.qty)||0;
+      const _w = (t.weight||0).toFixed(3) + ' kg';
+      qtyDisplay = _q > 0 ? (_q + ' plants / ' + _w) : _w;
+    }
     else qtyDisplay = (isIn?'+':'-') + t.qty;
     const qtyColor = isPhase ? 'var(--text3)' : (isSold ? 'var(--text2)' : (isIn ? 'var(--green)' : 'var(--red)'));
     const typePillBg = isPhase ? 'var(--green-pale)' : 'var(--bg2)';
