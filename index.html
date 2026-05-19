@@ -1036,14 +1036,21 @@ function atReady(){return cfg.token&&cfg.base&&cfg.ecTbl&&cfg.roTbl;}
 async function atPost(tbl,fields){const body={fields,typecast:true};console.log('Airtable POST →',tbl,body);const r=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+tbl,{method:'POST',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok){let detail='';try{const j=await r.json();detail=j.error&&(j.error.message||j.error.type)||JSON.stringify(j);}catch(_){}console.error('Airtable POST failed',r.status,detail,'body=',body);throw new Error(r.status+(detail?': '+detail:''));}return r.json();}
 async function atUpsert(tbl,fields,mergeOn){const body={performUpsert:{fieldsToMergeOn:mergeOn},records:[{fields}],typecast:true};console.log('Airtable UPSERT →',tbl,body);const r=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+tbl,{method:'PATCH',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok){let detail='';try{const j=await r.json();detail=j.error&&(j.error.message||j.error.type)||JSON.stringify(j);}catch(_){}console.error('Airtable UPSERT failed',r.status,detail,'body=',body);throw new Error(r.status+(detail?': '+detail:''));}return r.json();}
 function getActiveRooms(batchId){
-  // Returns the rooms currently holding plants for this batch. Filters batchRec.rooms by
-  // calcRoomPlantCount > 0 once the batch has been distributed (roomDistribution has entries);
-  // pre-distribution all declared rooms are returned (Veg implicit count equals batch total).
+  // Returns the rooms currently holding plants for this batch. Veg is ALWAYS included whenever
+  // it holds plants (the implicit remainder = batch total − sum of flower-room counts), even if
+  // Veg was unchecked from batchRec.rooms (e.g. during a manual phase advance to Flower while
+  // some plants were still unallocated).
+  // Pre-distribution all declared rooms are returned (implicit Veg count = batch total).
   const b = batchRecs.find(r=>r.batchId===batchId && !r.type);
-  if(!b || !b.rooms) return [];
+  if(!b) return [];
+  const declared = Array.isArray(b.rooms) ? [...b.rooms] : [];
   const distributed = b.roomDistribution && Object.keys(b.roomDistribution).length > 0;
-  if(!distributed) return [...b.rooms];
-  return b.rooms.filter(r => calcRoomPlantCount(batchId, r) > 0);
+  if(!distributed) return declared;
+  // Keep non-Veg rooms with plants > 0
+  const result = declared.filter(r => r !== 'Veg' && calcRoomPlantCount(batchId, r) > 0);
+  // Always include Veg if it has unallocated plants — regardless of batchRec.rooms membership
+  if(calcRoomPlantCount(batchId, 'Veg') > 0 && !result.includes('Veg')) result.push('Veg');
+  return result;
 }
 function calcRoomPlantCount(batchId, room){
   // Returns the plants currently in the specified room.
@@ -2073,12 +2080,14 @@ function ecBatchLookup(){
   } else {
     availableRooms = [...new Set([...ecRecs,...roRecs].filter(r=>r.batch&&r.batch.trim().toLowerCase()===batch.trim().toLowerCase()&&r.room).map(r=>r.room))];
   }
-  // Hide Veg from the dropdown once all plants have been allocated to Flower rooms (Veg count = 0).
-  // We keep Veg in the list if the batch hasn't been distributed yet (no roomDistribution data),
-  // because in that case the implicit Veg count equals the batch total.
+  // Veg handling: include Veg when it has unallocated plants (implicit remainder > 0), even if
+  // Veg was removed from batchRec.rooms during a phase advance. Hide Veg when count is 0.
   if(batchRec && batchRec.roomDistribution && Object.keys(batchRec.roomDistribution).length){
-    if(calcRoomPlantCount(batch, 'Veg') === 0){
+    const vegCount = calcRoomPlantCount(batch, 'Veg');
+    if(vegCount === 0){
       availableRooms = availableRooms.filter(r => r !== 'Veg');
+    } else if(!availableRooms.includes('Veg')){
+      availableRooms.push('Veg');
     }
   }
   const prevRoom = roomEl.value;
@@ -2977,6 +2986,11 @@ function wasteSeqUnlock(){
   const _isPreHarvestForRooms = !batchRec || !['Drying','Packaged'].includes(batchRec.plantPhase);
   if(_isPreHarvestForRooms){
     batchRooms = batchRooms.filter(r=>calcRoomPlantCount(batch, r) > 0);
+    // Veg holds unallocated plants as the implicit remainder. Include Veg whenever it has
+    // plants even if it was removed from batchRec.rooms (e.g. on phase advance to Flower).
+    if(calcRoomPlantCount(batch, 'Veg') > 0 && !batchRooms.includes('Veg')){
+      batchRooms.push('Veg');
+    }
   }
   const prevRoom=roomEl.value;
   roomEl.innerHTML='<option value="">select room</option>'+batchRooms.map(r=>'<option'+(r===prevRoom?' selected':'')+'>'+r+'</option>').join('');
