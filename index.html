@@ -1745,6 +1745,15 @@ async function postDryComplete(){
   // Drying → Packaged, sets Package Date, records a Phase Change tx, and syncs.
   const batch = document.getElementById('postdry-batch-select').value;
   if(!batch){ toast('Select a batch first.'); return; }
+  // Rule: a batch cannot be packaged unless it has been harvested. We enforce this by checking
+  // for at least one Harvested transaction AND a stamped harvestDate on the batch record.
+  const _batchRec = batchRecs.find(r => r.batchId === batch && !r.type);
+  const _hasHarvest = (_batchRec && _batchRec.harvestDate) ||
+                      batchTxRecs.some(t => t.batchId === batch && t.txType === 'Harvested');
+  if(!_hasHarvest){
+    toast('Cannot package — '+batch+' has not been harvested yet. Complete a harvest first.',5500);
+    return;
+  }
   const recs = postDryRecs.filter(r => r.batch === batch);
   if(!recs.length){
     toast('No containers logged for '+batch+'. Add at least one before completing.',5000);
@@ -4090,6 +4099,17 @@ async function summaryUpdateBatch(){
   if(calcBatchQty(batchId) <= 0 && !_existPostHarvest && plantPhase && plantPhase !== 'Clones'){
     toast('Cannot advance phase: batch has 0 plants. Add a Produced/Received transaction first.',5000);
     return;
+  }
+  // Guard: a batch cannot be set to 'Packaged' unless it has been harvested (has a stamped
+  // harvestDate OR at least one Harvested tx). Normally this is handled by Complete Post-Drying,
+  // but if the dropdown ever offers it manually we block here too.
+  if(plantPhase === 'Packaged'){
+    const _hasHarvest = (batchRecs[idx].harvestDate) ||
+                        batchTxRecs.some(t => t.batchId === batchId && t.txType === 'Harvested');
+    if(!_hasHarvest){
+      toast('Cannot set phase to Packaged — '+batchId+' has not been harvested yet.',5500);
+      return;
+    }
   }
   // Guard: while the batch is in Flower phase, the room assignments are locked. Drying and
   // Packaged batches always have empty rooms (auto-cleared on phase advance) so no comparison.
