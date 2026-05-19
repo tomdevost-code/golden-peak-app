@@ -2143,17 +2143,17 @@ function getAllowedWateringTypes(batch, room){
   //   Flower room (any phase) → free wtypes (Full Saturation, Feed, Flush, RO Water).
   //                             Fade is added when the batch is in Flower phase.
   //   Veg room                → strict starting sequence: Hydration → Pre-Charge → Water In.
-  //                             Each step is one-per-(batch+room): once logged, it disappears
-  //                             from the dropdown for that (batch, room) pair. After all three
-  //                             are done, the Veg room dropdown is empty — plants must move
-  //                             to a Flower room for the free wtypes.
+  //                             Each step is one-per-(batch+room) and disappears from the
+  //                             dropdown after it's been logged. Once the full sequence is done,
+  //                             the free wtypes (Full Saturation, Feed, Flush, RO Water) become
+  //                             available so plants can continue to be fed while still in Veg.
   const batchRec = batch ? batchRecs.find(r=>r.batchId===batch && !r.type) : null;
   const phase = batchRec ? (batchRec.plantPhase||'') : '';
   if(FLOWER_ROOMS.includes(room)){
     return (phase === 'Flower') ? FLOWER_WTYPES : VEG_FREE_WTYPES;
   }
   if(room !== 'Veg') return VEG_WTYPES; // fallback for unknown room
-  // Veg room: enforce the strict, one-per-(batch+room) prep sequence.
+  // Veg room: enforce the strict, one-per-(batch+room) prep sequence first.
   if(!batch) return ['Hydration'];
   const hasHydration = (batchRec && batchRec.hydrationDate) || ecRecs.some(r=>r.batch===batch && r.room===room && r.wtype==='Hydration');
   const hasPreCharge = ecRecs.some(r=>r.batch===batch && r.room===room && r.wtype==='Pre-Charge');
@@ -2161,7 +2161,8 @@ function getAllowedWateringTypes(batch, room){
   if(!hasHydration) return ['Hydration'];
   if(!hasPreCharge) return ['Pre-Charge'];
   if(!hasWaterIn)   return ['Water In'];
-  return []; // all three sequential steps done — plants must move to a Flower room
+  // Prep sequence complete — allow the free wtypes in Veg room.
+  return VEG_FREE_WTYPES;
 }
 function seqDisable(id,hint){
   const el=document.getElementById(id);if(!el)return;
