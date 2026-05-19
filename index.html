@@ -2526,6 +2526,10 @@ async function ecSave(){
     recordPhaseChangeTx(batchVal2, 'Clones', 'Veg');
     updatePendingBadge();
   }
+  // Veg → Flower stays manual — plants can be physically in a flower room while the batch is
+  // still in Veg phase (pre-flower transition window). The user advances to Flower from the
+  // Summary page when ready.
+  let _flowerAdvanced = false;
   if(atReady()){
     setSyncPill('ing','Syncing...');document.getElementById('ec-btn').disabled=true;
     try{
@@ -2536,7 +2540,7 @@ async function ecSave(){
     document.getElementById('ec-btn').disabled=false;
   }else{toast('Entry saved locally');}
   // If this entry captured the hydration date or auto-advanced phase, push the batch update to Airtable
-  if((_hydrationCaptured || _vegAdvanced) && cfg.batchTbl && cfg.token && cfg.base){
+  if((_hydrationCaptured || _vegAdvanced || _flowerAdvanced) && cfg.batchTbl && cfg.token && cfg.base){
     try{
       await atUpsert(cfg.batchTbl, buildBatchFields(_ecBatchRec), ['Batch ID']);
       _ecBatchRec.synced = true;
@@ -3738,19 +3742,25 @@ function applyPhaseRoomLock(){
   summaryRenderRoomChips();
 }
 function getAllowedPhases(currentPhase){
-  // Plant lifecycle — single linear path. Delivered is reachable only from Packaged (no Veg
-  // shortcut). Strict forward progression — no skipping, no going backward.
-  //   Clones → Veg → Flower → Drying → Packaged → Delivered → (Closed via Status)
+  // Plant lifecycle — single linear path: Clones → Veg → Flower → Drying → Packaged → Delivered.
+  // Every transition except Packaged → Delivered is event-driven, so the dropdown only offers a
+  // forward option in the one place the user actually triggers a phase change manually.
+  //   Clones → Veg          — auto on Water-In EC entry
+  //   Veg    → Flower       — MANUAL (user advances when they flip lights to 12/12)
+  //   Flower → Drying       — auto on first Complete Harvest
+  //   Drying → Packaged     — auto on Complete Post-Drying
+  //   Packaged → Delivered  — MANUAL (user advances when product is delivered)
+  //   Delivered → (Closed)  — via Status, not a phase change
   if(!currentPhase) return ['Clones'];
   switch(currentPhase){
-    case 'Clones':   return ['Clones','Veg'];
-    case 'Veg':      return ['Veg','Flower'];
-    case 'Flower':   return ['Flower','Drying'];
-    case 'Drying':   return ['Drying','Packaged'];
-    case 'Packaged': return ['Packaged','Delivered'];
-    case 'Delivered':return ['Delivered']; // terminal — only Close remains
+    case 'Clones':   return ['Clones'];
+    case 'Veg':      return ['Veg','Flower']; // manual transition
+    case 'Flower':   return ['Flower'];
+    case 'Drying':   return ['Drying'];
+    case 'Packaged': return ['Packaged','Delivered']; // manual transition
+    case 'Delivered':return ['Delivered']; // terminal — only Close (via Status) remains
     case 'Seeds':    return ['Seeds','Clones']; // legacy migration path
-    default:         return [currentPhase, 'Clones'];
+    default:         return [currentPhase];
   }
 }
 function batchHasWaterInForAllRooms(batchId){
