@@ -178,13 +178,13 @@ tr:last-child td { border-bottom: none; }
         <div class="section-label">Batch info</div>
         <div class="card">
           <div class="g2" style="margin-bottom:10px;">
+            <div class="field"><label>Batch ID</label><select id="ec-batch-select" onchange="ecBatchSelect()" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;"><option value="">-- select batch --</option></select><input type="hidden" id="ec-batch" /></div>
             <div class="field"><label>Grower</label>
               <select id="ec-grower" onchange="ecSeqUnlock()">
                 <option value="">select grower</option>
                 <option>Jordan Elliott</option><option>Brandon Cail</option><option>Tom Devost</option>
               </select>
             </div>
-            <div class="field"><label>Batch ID</label><select id="ec-batch-select" onchange="ecBatchSelect()" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;"><option value="">-- select batch --</option></select><input type="hidden" id="ec-batch" /></div>
             <div class="field"><label>Room</label>
               <select id="ec-room" onchange="ecRoomChanged()">
                 <option value="">select room</option>
@@ -2159,43 +2159,53 @@ function seqEnable(id){
   const f=el.closest('.field');if(f){const h=f.querySelector('.seq-hint');if(h)h.remove();}
 }
 function ecSeqUnlock(){
+  // New order: Batch → Grower → Room → rest of form.
+  // Batch is always enabled (user picks first). The waterings history populates on batch select
+  // even before the grower is chosen — that part is wired in ecBatchSelect/ecBatchLookup.
   const grower=document.getElementById('ec-grower').value;
   const batch=document.getElementById('ec-batch').value.trim();
   const batchSel=document.getElementById('ec-batch-select').value;
   const hasBatch=!!(batch||batchSel);
   const _roomEl=document.getElementById('ec-room');
   const room=_roomEl.value||(_roomEl.options&&_roomEl.options.length>0&&_roomEl.selectedIndex>=0?_roomEl.options[_roomEl.selectedIndex].value:'');
-  // Grower selected → unlock batch
-  if(grower){
-    seqEnable('ec-batch-select');seqEnable('ec-batch');
-  } else {
-    seqDisable('ec-batch-select','Select a grower first');seqDisable('ec-batch','Select a grower first');
-    seqDisable('ec-room','Select a grower first');
-    return;
-  }
-  // Batch selected → unlock room (unless it's locked to Veg for a new batch)
-  if(hasBatch){
-    const roomEl=document.getElementById('ec-room');
-    const isNewBatchLocked=roomEl.closest('.field').querySelector('.room-lock-hint');
-    if(!isNewBatchLocked) seqEnable('ec-room');
-  } else {
+  // Batch is always selectable (the first step). Lock grower / room / form fields until a batch
+  // is picked.
+  seqEnable('ec-batch-select');seqEnable('ec-batch');
+  if(!hasBatch){
+    seqDisable('ec-grower','Select a batch first');
     seqDisable('ec-room','Select a batch first');
+    seqDisable('ec-hydration','Select a batch first');
+    seqDisable('ec-wtype','Select a batch first');
+    ['ec-notes','ec-flow'].forEach(id=>seqDisable(id,'Select a batch first'));
+    applyCascadeLocks();
     return;
   }
+  // Batch selected → unlock grower
+  seqEnable('ec-grower');
+  if(!grower){
+    seqDisable('ec-room','Select a grower next');
+    seqDisable('ec-hydration','Select a grower next');
+    seqDisable('ec-wtype','Select a grower next');
+    ['ec-notes','ec-flow'].forEach(id=>seqDisable(id,'Select a grower next'));
+    applyCascadeLocks();
+    return;
+  }
+  // Grower selected → unlock room (unless it's locked to Veg for a new batch)
+  const roomEl=document.getElementById('ec-room');
+  const isNewBatchLocked=roomEl.closest('.field').querySelector('.room-lock-hint');
+  if(!isNewBatchLocked) seqEnable('ec-room');
   // Room selected → unlock rest of form
-  // Also check roomEl directly in case it's disabled (locked to Veg) but has a value
   const roomEl2=document.getElementById('ec-room');
   const effectiveRoom=room||(roomEl2.disabled&&roomEl2.options[roomEl2.selectedIndex]?roomEl2.options[roomEl2.selectedIndex].value:'');
   if(effectiveRoom){
     seqEnable('ec-hydration');seqEnable('ec-wtype');
     ['ec-notes','ec-flow'].forEach(id=>seqEnable(id));
     document.querySelectorAll('.ec-drip-ec,.ec-drip-ph,.ec-evt-input').forEach(el=>{el.disabled=false;el.style.opacity='';el.style.background='';el.style.color='';el.style.cursor='';});
-    applyCascadeLocks(); // re-apply date cascade on top
+    applyCascadeLocks();
   } else {
     seqDisable('ec-hydration','Select a room first');
     ['ec-notes','ec-flow'].forEach(id=>seqDisable(id,'Select a room first'));
-    // drip fields intentionally NOT locked — always editable once batch is selected
-    applyCascadeLocks(); // ensure flower stays locked with no veg
+    applyCascadeLocks();
   }
 }
 function ecRoomChanged(){
@@ -3728,14 +3738,13 @@ function applyPhaseRoomLock(){
   summaryRenderRoomChips();
 }
 function getAllowedPhases(currentPhase){
-  // Plant lifecycle with two branches at Veg (for living-clone sales) and a single Delivered
-  // terminal phase that catches Packaged sales too:
-  //   Clones → Veg → (Flower → Drying → Packaged → Delivered) OR (Delivered, for clones sold)
-  // Strict forward progression only — no skipping, no going backward.
+  // Plant lifecycle — single linear path. Delivered is reachable only from Packaged (no Veg
+  // shortcut). Strict forward progression — no skipping, no going backward.
+  //   Clones → Veg → Flower → Drying → Packaged → Delivered → (Closed via Status)
   if(!currentPhase) return ['Clones'];
   switch(currentPhase){
     case 'Clones':   return ['Clones','Veg'];
-    case 'Veg':      return ['Veg','Flower','Delivered'];
+    case 'Veg':      return ['Veg','Flower'];
     case 'Flower':   return ['Flower','Drying'];
     case 'Drying':   return ['Drying','Packaged'];
     case 'Packaged': return ['Packaged','Delivered'];
