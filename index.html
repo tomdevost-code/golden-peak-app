@@ -3846,10 +3846,26 @@ function applyPhaseRoomLock(){
     else if(dropdownPhase==='Flower'){
       if(cb.value==='Veg'){ allowed=false; cb.checked=false; }
     }
-    else if(['Drying','Packaged','Delivered'].includes(dropdownPhase)){
-      // After harvest there are no cultivation rooms — everything stays unchecked + locked
+    else if(['Packaged','Delivered'].includes(dropdownPhase)){
+      // After packaging there are no cultivation rooms — everything stays unchecked + locked
       cb.checked = false;
       allowed = false;
+    }
+    else if(dropdownPhase === 'Drying'){
+      // Multi-day harvest: rooms with plants > 0 stay CHECKED and visible (locked from editing)
+      // so the user can see what's still flowering. Veg is force-unchecked. Harvested rooms
+      // (count = 0) stay unchecked too.
+      if(cb.value === 'Veg'){
+        cb.checked = false;
+        allowed = false;
+      } else if(b){
+        const _cnt = calcRoomPlantCount(b.batchId, cb.value);
+        cb.checked = _cnt > 0;
+        allowed = false; // locked either way
+      } else {
+        cb.checked = false;
+        allowed = false;
+      }
     }
     // Hard lock: saved phase is Flower or later
     if(roomsLocked) allowed = false;
@@ -4121,10 +4137,15 @@ async function summaryUpdateBatch(){
       return;
     }
   }
-  // Post-harvest phases never have rooms — plants are no longer in a cultivation room.
+  // Packaged / Delivered: no cultivation rooms — plants are no longer in a room. Force empty.
+  // Drying: multi-day harvest may still hold plants in unharvested flower rooms — preserve the
+  // existing rooms array (don't let a Manage Batch save wipe it).
   let _roomsForSave = rooms;
-  if(['Drying','Packaged','Delivered'].includes(plantPhase)) _roomsForSave = [];
-  if(['Drying','Packaged','Delivered'].includes(existingPhase)) _roomsForSave = [];
+  if(['Packaged','Delivered'].includes(plantPhase)) _roomsForSave = [];
+  if(['Packaged','Delivered'].includes(existingPhase)) _roomsForSave = [];
+  if(plantPhase === 'Drying' || existingPhase === 'Drying'){
+    _roomsForSave = (batchRecs[idx].rooms && batchRecs[idx].rooms.length) ? batchRecs[idx].rooms.slice() : rooms;
+  }
   // Auto-set lifecycle dates on phase advance (if not already set):
   //   Clones → Veg: vegStart = today
   //   Veg    → Flower: flowerStart = today
@@ -4143,7 +4164,15 @@ async function summaryUpdateBatch(){
   if(plantPhase === 'Delivered' && existingPhase !== 'Delivered' && !_autoDelivered) _autoDelivered = _t;
   batchRecs[idx].rooms = _roomsForSave;
   // When phase becomes Drying/Packaged, clear roomDistribution as well
-  batchRecs[idx].roomDistribution = ['Drying','Packaged','Delivered'].includes(plantPhase) ? {} : roomDistribution;
+  // Packaged / Delivered: clear roomDistribution. Drying: preserve the existing distribution so
+  // remaining unharvested rooms still show their plant counts during multi-day harvest.
+  if(['Packaged','Delivered'].includes(plantPhase)){
+    batchRecs[idx].roomDistribution = {};
+  } else if(plantPhase === 'Drying' || existingPhase === 'Drying'){
+    // keep existing — do not overwrite from the (locked) form inputs
+  } else {
+    batchRecs[idx].roomDistribution = roomDistribution;
+  }
   batchRecs[idx].plantPhase = plantPhase;
   batchRecs[idx].status = status;
   batchRecs[idx].closedDate = closedDate;
