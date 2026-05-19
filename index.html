@@ -1164,14 +1164,42 @@ function summaryRefreshBatchTotals(batchId){
   setText('si-destroyed-count', fmtCount(destroyedSum));
   setText('si-vegwaste-weight', fmtKg(vegWasteSum));
 }
+function formatBatchRoomsForDisplay(batchRec){
+  // Returns a comma-separated string of all the batch's flower rooms with their current plant
+  // counts, including rooms that have been harvested (count = 0). Veg is appended only when it
+  // still holds unallocated plants. Used by the Summary Batch Info "Rooms" line so multi-day
+  // harvest is visible at a glance.
+  if(!batchRec) return '—';
+  const declared = Array.isArray(batchRec.rooms) ? [...batchRec.rooms] : [];
+  const completed = Array.isArray(batchRec.completedHarvests) ? batchRec.completedHarvests : [];
+  // Union of all flower rooms the batch ever held (declared + completed)
+  const allFlowerRooms = Array.from(new Set([
+    ...declared.filter(r => r !== 'Veg'),
+    ...completed
+  ]));
+  // Stable order: Flower 1, Flower 2, ... by name
+  allFlowerRooms.sort();
+  const parts = allFlowerRooms.map(r => r + ' (' + (calcRoomPlantCount(batchRec.batchId, r) || 0) + ')');
+  // Append Veg only if it still has unallocated plants
+  const vegCount = calcRoomPlantCount(batchRec.batchId, 'Veg');
+  if(vegCount > 0) parts.push('Veg (' + vegCount + ')');
+  return parts.length ? parts.join(', ') : '—';
+}
 function getDisplayPhase(batchRec){
-  // What to render in the Batch Info "Plant Phase" cell. Mostly mirrors batchRec.plantPhase,
-  // but once a Sold transaction has been recorded for the batch we display 'Sold' instead so the
-  // user sees the final business state (the underlying plant phase stays 'Delivered').
+  // What to render in the Batch Info "Plant Phase" cell. Mostly mirrors batchRec.plantPhase, with
+  // two overrides:
+  //   • Once a Sold transaction is recorded → 'Sold' (final business state).
+  //   • During multi-day harvest (batch in Drying but flower rooms still hold plants) →
+  //     'Drying/Flower' to reflect that some rooms are drying while others are still flowering.
   if(!batchRec) return '—';
   const hasSold = batchTxRecs.some(t => t.batchId === batchRec.batchId && t.txType === 'Sold');
   if(hasSold) return 'Sold';
-  return batchRec.plantPhase || '—';
+  const phase = batchRec.plantPhase || '—';
+  if(phase === 'Drying' && Array.isArray(batchRec.rooms)){
+    const stillFlowering = batchRec.rooms.some(r => r !== 'Veg' && calcRoomPlantCount(batchRec.batchId, r) > 0);
+    if(stillFlowering) return 'Drying / Flower';
+  }
+  return phase;
 }
 function enforceZeroQtyState(batchId){
   // Hard rule: when a batch's current quantity is <= 0 AND it hasn't entered the post-harvest lifecycle,
@@ -2391,6 +2419,7 @@ function ecRenderRecent(batch /*, room — ignored: filters by batch only */){
     '<th style="padding:6px 10px;text-align:center;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);white-space:nowrap;">EC</th>'+
     '<th style="padding:6px 10px;text-align:center;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);white-space:nowrap;">pH</th>'+
     '<th style="padding:6px 10px;text-align:center;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);white-space:nowrap;">ml</th>'+
+    '<th style="padding:6px 10px;text-align:center;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);white-space:nowrap;">Flow (L)</th>'+
   '</tr></thead><tbody>';
   rows.forEach(g => {
     const c = WTYPE_COLORS[g.wtype] || {bg:'var(--bg2)',fg:'var(--text2)'};
@@ -2399,6 +2428,7 @@ function ecRenderRecent(batch /*, room — ignored: filters by batch only */){
     const ecStr = ecAvg != null ? ecAvg.toFixed(2) : '—';
     const phStr = phAvg != null ? phAvg.toFixed(2) : '—';
     const mlStr = g.hasMl ? g.mlSum.toFixed(0) : '—';
+    const flowStr = g.hasFlow ? g.flowSum.toFixed(2) : '—';
     const countBadge = g.count > 1 ? ' <span style="color:var(--text3);font-family:var(--mono);font-size:10px;">'+g.count+'×</span>' : '';
     html += '<tr>'+
       '<td style="padding:6px 10px;font-family:var(--mono);border-top:1px solid var(--border);white-space:nowrap;">'+(g.date||'—')+'</td>'+
@@ -2412,6 +2442,7 @@ function ecRenderRecent(batch /*, room — ignored: filters by batch only */){
       '<td style="padding:6px 10px;font-family:var(--mono);text-align:center;border-top:1px solid var(--border);border-left:1px solid var(--border);background:var(--bg2);">'+ecStr+'</td>'+
       '<td style="padding:6px 10px;font-family:var(--mono);text-align:center;border-top:1px solid var(--border);border-left:1px solid var(--border);background:var(--bg2);">'+phStr+'</td>'+
       '<td style="padding:6px 10px;font-family:var(--mono);text-align:center;border-top:1px solid var(--border);border-left:1px solid var(--border);background:var(--bg2);">'+mlStr+'</td>'+
+      '<td style="padding:6px 10px;font-family:var(--mono);text-align:center;border-top:1px solid var(--border);border-left:1px solid var(--border);background:var(--bg2);">'+flowStr+'</td>'+
     '</tr>';
   });
   html += '</tbody></table></div>';
@@ -2546,6 +2577,24 @@ async function ecSave(){
     if(!_allowedWtypes.includes(wtype)){
       toast('Watering Type "'+wtype+'" is not allowed here. Allowed: '+_allowedWtypes.join(', '),5500);
       return;
+    }
+  }
+  // Flow-meter validation: each new reading for this (batch, room) must be strictly greater than
+  // every prior reading. The meter is logically scoped per (batch, room) — once the batch is
+  // harvested and a new batch enters the same room the comparison naturally starts fresh.
+  const _flowValRaw = document.getElementById('ec-flow').value;
+  const _flowVal = parseFloat(_flowValRaw);
+  if(_flowValRaw !== '' && !isNaN(_flowVal) && _flowVal > 0){
+    const _batchValForFlow = document.getElementById('ec-batch').value.trim();
+    const _priorFlows = ecRecs
+      .filter(r => r.batch === _batchValForFlow && r.room === room && r.flow != null && !isNaN(parseFloat(r.flow)) && parseFloat(r.flow) > 0)
+      .map(r => parseFloat(r.flow));
+    if(_priorFlows.length){
+      const _maxPrev = Math.max(..._priorFlows);
+      if(_flowVal <= _maxPrev){
+        toast('Flow meter reading must be higher than the previous ('+_maxPrev.toFixed(2)+' L) for '+_batchValForFlow+' / '+room+'.',5500);
+        return;
+      }
     }
   }
   // Event-driven hydration date:
@@ -3134,16 +3183,7 @@ async function wasteSave(){
         input.value = (_wDist[r] != null) ? _wDist[r] : '';
       });
       document.getElementById('si-phase').textContent = getDisplayPhase(_bRec);
-      const _wActiveRooms = getActiveRooms(rec.batch);
-      if(_wActiveRooms.length){
-        const _parts = _wActiveRooms.map(r=>{
-          const c = (r === 'Veg') ? calcRoomPlantCount(rec.batch, 'Veg') : _wDist[r];
-          return c != null ? (r+' ('+c+')') : r;
-        });
-        document.getElementById('si-rooms').textContent = _parts.join(', ');
-      } else {
-        document.getElementById('si-rooms').textContent = '—';
-      }
+      document.getElementById('si-rooms').textContent = formatBatchRoomsForDisplay(_bRec);
       document.getElementById('si-hydration-date').textContent = _bRec.hydrationDate || '—';
       document.getElementById('si-veg-start').textContent = _bRec.vegStart || '—';
       document.getElementById('si-flower-start').textContent = _bRec.flowerStart || '—';
@@ -3495,18 +3535,11 @@ function summaryBatchChanged(){
     input.value = (_dist[r] != null && _dist[r] !== 0) ? _dist[r] : (_dist[r] === 0 ? '0' : '');
   });
   document.getElementById('si-phase').textContent = getDisplayPhase(b);
-  // Rooms display: show only ACTIVE rooms (plant count > 0). Veg drops out once all plants
-  // have been allocated to Flower rooms.
-  const _activeRooms = getActiveRooms(b.batchId);
-  if(_activeRooms.length){
-    const _parts = _activeRooms.map(r=>{
-      const c = (r === 'Veg') ? calcRoomPlantCount(b.batchId, 'Veg') : _dist[r];
-      return c != null ? (r + ' (' + c + ')') : r;
-    });
-    document.getElementById('si-rooms').textContent = _parts.join(', ');
-  } else {
-    document.getElementById('si-rooms').textContent = '—';
-  }
+  // Rooms display: show every flower room the batch ever touched (incl. harvested rooms with
+  // count = 0) plus Veg if it still has unallocated plants. Harvested-room visibility makes the
+  // multi-day harvest state obvious — e.g. "Flower 1 (0), Flower 2 (30)" means Flower 1 has been
+  // harvested while Flower 2 is still flowering.
+  document.getElementById('si-rooms').textContent = formatBatchRoomsForDisplay(b);
   summaryUpdatePhaseOptions(b.plantPhase||'', _curQty);
   document.getElementById('summary-status').value = b.status||'Open';
   applyPhaseRoomLock();
@@ -4311,17 +4344,7 @@ async function summaryAddTransaction(){
     summaryUpdatePhaseOptions(_b.plantPhase||'', _newQty);
     document.querySelectorAll('.summary-room-cb').forEach(cb=>{ cb.checked = (_b.rooms||[]).includes(cb.value); });
     document.getElementById('si-phase').textContent = getDisplayPhase(_b);
-    const _txActiveRooms = getActiveRooms(batchId);
-    const _txDist = _b.roomDistribution || {};
-    if(_txActiveRooms.length){
-      const _txParts = _txActiveRooms.map(r=>{
-        const c = (r === 'Veg') ? calcRoomPlantCount(batchId, 'Veg') : _txDist[r];
-        return c != null ? (r + ' (' + c + ')') : r;
-      });
-      document.getElementById('si-rooms').textContent = _txParts.join(', ');
-    } else {
-      document.getElementById('si-rooms').textContent = '—';
-    }
+    document.getElementById('si-rooms').textContent = formatBatchRoomsForDisplay(_b);
     document.getElementById('si-clone-date').textContent = _b.cloneDate || '—';
     document.getElementById('si-hydration-date').textContent = _b.hydrationDate || '—';
     document.getElementById('si-veg-start').textContent = _b.vegStart || '—';
