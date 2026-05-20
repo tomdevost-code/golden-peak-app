@@ -1036,7 +1036,57 @@ let ecRecs=[],roRecs=[],wasteRecs=[],batchRecs=[],batchTxRecs=[],harvestRecs=[],
 
 function lsGet(k){try{return JSON.parse(localStorage.getItem(k)||'null');}catch(e){return null;}}
 function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
-function loadAll(){ecRecs=lsGet('gp-ec')||[];roRecs=lsGet('gp-ro')||[];wasteRecs=lsGet('gp-waste')||[];batchRecs=lsGet('gp-batch')||[];batchTxRecs=lsGet('gp-batchtx')||[];harvestRecs=lsGet('gp-harvest')||[];postDryRecs=lsGet('gp-postdry')||[];wasteRecs.forEach(r=>{if(r.type==='Vegetative waste')r.type='Vegetative Waste';});lsSet('gp-waste',wasteRecs);const s=lsGet('gp-cfg');if(s){cfg=s;applySettings();}}
+function loadAll(){ecRecs=lsGet('gp-ec')||[];roRecs=lsGet('gp-ro')||[];wasteRecs=lsGet('gp-waste')||[];batchRecs=lsGet('gp-batch')||[];batchTxRecs=lsGet('gp-batchtx')||[];harvestRecs=lsGet('gp-harvest')||[];postDryRecs=lsGet('gp-postdry')||[];wasteRecs.forEach(r=>{if(r.type==='Vegetative waste')r.type='Vegetative Waste';});lsSet('gp-waste',wasteRecs);const s=lsGet('gp-cfg');if(s){cfg=s;applySettings();}backfillHarvestedTxs();}
+
+function backfillHarvestedTxs(){
+  // One-time data fix: prior to the per-room Harvested tx code, a Complete Harvest only created
+  // a single consolidated tx when the FINAL room was done. Batches that finished a room under
+  // the old code (e.g. QQ-001's Flower 1) have harvestedPlants/harvestedWeights data on the
+  // batch record but no corresponding Harvested tx in batchTxRecs. This walks the data and
+  // creates the missing per-room txs idempotently — never duplicates if a matching tx exists.
+  let added = 0;
+  batchRecs.forEach(b => {
+    if(b.type) return;
+    if(!b.harvestedPlants && !b.harvestedWeights) return;
+    const rooms = new Set([
+      ...(b.harvestedPlants ? Object.keys(b.harvestedPlants) : []),
+      ...(b.harvestedWeights ? Object.keys(b.harvestedWeights) : [])
+    ]);
+    rooms.forEach(room => {
+      const plants = parseInt(b.harvestedPlants && b.harvestedPlants[room]) || 0;
+      const weight = parseFloat(b.harvestedWeights && b.harvestedWeights[room]) || 0;
+      if(plants <= 0 && weight <= 0) return;
+      // Skip if there's already a Harvested tx whose notes mention this room
+      const exists = batchTxRecs.some(t =>
+        t.batchId === b.batchId &&
+        t.txType === 'Harvested' &&
+        typeof t.notes === 'string' &&
+        t.notes.indexOf(room) !== -1
+      );
+      if(exists) return;
+      // Reconstruct the tx. Use batchRec.harvestDate as the date; if that's missing fall back to today.
+      const date = b.harvestDate || localDate();
+      const tx = {
+        id: Date.now() + Math.floor(Math.random()*10000),
+        batchId: b.batchId,
+        date: date,
+        txType: 'Harvested',
+        qty: plants,
+        weight: Math.round(weight*1000)/1000,
+        notes: 'Harvested from '+room+' (backfilled)',
+        currentQtyBefore: 0,
+        plantPhase: b.plantPhase || '',
+        synced: false
+      };
+      batchTxRecs.unshift(tx);
+      added++;
+    });
+  });
+  if(added > 0){
+    lsSet('gp-batchtx', batchTxRecs);
+    console.log('[backfill] Added '+added+' historical Harvested tx(es) from per-room harvest data.');
+  }
+}
 function atReady(){return cfg.token&&cfg.base&&cfg.ecTbl&&cfg.roTbl;}
 async function atPost(tbl,fields){const body={fields,typecast:true};console.log('Airtable POST →',tbl,body);const r=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+tbl,{method:'POST',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok){let detail='';try{const j=await r.json();detail=j.error&&(j.error.message||j.error.type)||JSON.stringify(j);}catch(_){}console.error('Airtable POST failed',r.status,detail,'body=',body);throw new Error(r.status+(detail?': '+detail:''));}return r.json();}
 async function atUpsert(tbl,fields,mergeOn){const body={performUpsert:{fieldsToMergeOn:mergeOn},records:[{fields}],typecast:true};console.log('Airtable UPSERT →',tbl,body);const r=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+tbl,{method:'PATCH',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok){let detail='';try{const j=await r.json();detail=j.error&&(j.error.message||j.error.type)||JSON.stringify(j);}catch(_){}console.error('Airtable UPSERT failed',r.status,detail,'body=',body);throw new Error(r.status+(detail?': '+detail:''));}return r.json();}
