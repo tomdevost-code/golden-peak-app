@@ -4120,15 +4120,9 @@ function summaryUpdateTxTypeOptions(batchId){
 }
 
 function summaryCalcQty(batchId){
-  const txs = batchTxRecs.filter(t=>t.batchId===batchId);
-  let qty = 0;
-  txs.forEach(t=>{
-    if(t.txType==='Sold') return; // Sold tracks weight, not plant count
-    const q = parseInt(t.qty)||0;
-    if(t.txType==='Produced/Received') qty += q;
-    else qty -= q;
-  });
-  if(qty < 0) qty = 0;
+  // Delegate to the canonical helper — which handles multi-day harvest by subtracting per-room
+  // harvestedPlants counts when no consolidated Harvested tx exists yet.
+  const qty = calcBatchQty(batchId);
   document.getElementById('si-currentqty').textContent = qty;
   return qty;
 }
