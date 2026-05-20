@@ -1466,6 +1466,7 @@ async function harvestComplete(){
   }
   lsSet('gp-batch', batchRecs);
   // Detect "final room" — every flower room is either completed or has 0 plants currently.
+  // Used for toast messaging only; the per-room Harvested tx is created either way.
   const allFlowerRooms = (batchRec.rooms || []).filter(r => r !== 'Veg');
   const remainingRooms = allFlowerRooms.filter(r => {
     if(batchRec.completedHarvests.includes(r)) return false;
@@ -1473,38 +1474,28 @@ async function harvestComplete(){
     return p > 0;
   });
   const isFinalRoom = remainingRooms.length === 0;
-  // If this is the final room, create ONE consolidated Harvested transaction for the whole batch.
-  // Plant count = sum of original plants across all harvested rooms.
-  // Weight       = sum of all per-room harvest weights (from harvestedWeights).
-  let tx = null;
-  if(isFinalRoom){
-    // Guard: don't create a duplicate Harvested tx if one already exists for this batch
-    const alreadyHasHarvested = batchTxRecs.some(t => t.batchId === batch && t.txType === 'Harvested');
-    if(!alreadyHasHarvested){
-      const totalPlants = Object.values(batchRec.harvestedPlants).reduce((s,p)=> s + (parseInt(p)||0), 0);
-      const totalWeight = Math.round(Object.values(batchRec.harvestedWeights).reduce((s,w)=> s + (parseFloat(w)||0), 0) * 1000) / 1000;
-      tx = {
-        id: Date.now(),
-        batchId: batch,
-        date: localDate(),
-        txType: 'Harvested',
-        qty: totalPlants,
-        weight: totalWeight,
-        notes: 'Auto-completed from Harvest Log ('+allFlowerRooms.join(', ')+')',
-        currentQtyBefore: calcBatchQty(batch),
-        plantPhase: batchRec.plantPhase || '',
-        synced: false
-      };
-      batchTxRecs.unshift(tx);
-      lsSet('gp-batchtx', batchTxRecs);
-    }
-  }
+  // Create a per-room Harvested transaction now (one per Complete Harvest event) so the running
+  // balance decreases and the wet weight per room is visible in the Summary transaction history.
+  const tx = {
+    id: Date.now(),
+    batchId: batch,
+    date: localDate(),
+    txType: 'Harvested',
+    qty: plantsInRoom,
+    weight: totalNet,
+    notes: 'Harvested from '+room+' ('+bins.length+' bin'+(bins.length===1?'':'s')+')',
+    currentQtyBefore: calcBatchQty(batch),
+    plantPhase: batchRec.plantPhase || '',
+    synced: false
+  };
+  batchTxRecs.unshift(tx);
+  lsSet('gp-batchtx', batchTxRecs);
   updatePendingBadge();
   if(isFinalRoom){
     const totalAll = Math.round(Object.values(batchRec.harvestedWeights).reduce((s,w)=>s+(parseFloat(w)||0),0)*1000)/1000;
-    toast('Final room harvested! Total wet weight: '+totalAll.toFixed(3)+' kg. Harvested tx added on Summary.',5000);
+    toast('Final room harvested! Batch total: '+totalAll.toFixed(3)+' kg.',5000);
   } else {
-    toast('Harvest complete: '+totalNet.toFixed(3)+' kg from '+room+'.');
+    toast('Harvest complete: '+plantsInRoom+' plants / '+totalNet.toFixed(3)+' kg from '+room+'.',4500);
   }
   // Refresh UI
   harvestRenderBins();
