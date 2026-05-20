@@ -211,13 +211,12 @@ tr:last-child td { border-bottom: none; }
           </div>
           <div class="day-badge" id="ec-badge"><span style="font-size:12px;color:var(--text3);">Select a batch to see day count</span></div>
           <div id="ec-batch-rooms-info" style="display:none;font-size:11px;color:var(--text2);font-family:var(--mono);background:var(--bg2);border-radius:var(--radius-sm);padding:6px 10px;margin-top:6px;"></div>
-          <!-- Recent EC entries (inline in Batch info card, collapsible) -->
+          <!-- Watering History (always visible, inline in Batch Summary card) -->
           <div id="ec-recent-section" style="display:none;margin-top:8px;border-top:1px dashed var(--border);padding-top:8px;">
-            <button type="button" id="ec-recent-toggle" onclick="ecRecentToggle()" style="width:100%;display:flex;align-items:center;justify-content:space-between;background:transparent;border:none;padding:0;cursor:pointer;font-family:var(--mono);font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;outline:none;">
-              <span>Waterings History <span id="ec-recent-count" style="color:var(--green);font-weight:600;"></span></span>
-              <span id="ec-recent-caret" style="font-size:10px;">▼</span>
-            </button>
-            <div id="ec-recent-list" style="font-size:13px;color:var(--text3);text-align:center;padding:0;display:none;margin-top:6px;"></div>
+            <div style="font-family:var(--mono);font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">
+              Waterings History <span id="ec-recent-count" style="color:var(--green);font-weight:600;"></span>
+            </div>
+            <div id="ec-recent-list" style="font-size:13px;color:var(--text3);text-align:center;padding:0;"></div>
           </div>
         </div>
       </div>
@@ -349,6 +348,14 @@ tr:last-child td { border-bottom: none; }
       </div>
       <button class="btn-primary" id="ro-btn" onclick="roSave()">Save Runoff Entry</button>
       <button class="btn-secondary" style="width:100%;margin-top:8px;" onclick="roClearConfirm()">Clear Form</button>
+
+      <!-- Runoff summary — aggregate stats for the currently selected batch -->
+      <div class="section" id="ro-summary-section" style="display:none;margin-top:16px;">
+        <div class="section-label">Runoff Summary</div>
+        <div class="card" id="ro-summary-card">
+          <div style="font-size:13px;color:var(--text3);text-align:center;">Select a batch to see runoff stats.</div>
+        </div>
+      </div>
     </div>
 
     <!-- REPORT -->
@@ -427,6 +434,7 @@ tr:last-child td { border-bottom: none; }
       <div class="section">
         <div class="section-label">Waste Details</div>
         <div class="card">
+          <!-- Row 1: Waste Type + Sub-Category (sub-type appears after Type is selected) -->
           <div class="g2" style="margin-bottom:10px;">
             <div class="field"><label>Waste Type</label>
               <select id="waste-type" disabled style="background:var(--bg2);color:var(--text3);cursor:not-allowed;" onchange="wastePlantsToggle()">
@@ -435,18 +443,19 @@ tr:last-child td { border-bottom: none; }
                 <option>Dry Waste</option>
               </select>
             </div>
-            <div class="field"><label>Weight (kg)</label>
-              <input type="number" id="waste-weight" step="0.001" placeholder="0.000" disabled style="background:var(--bg2);color:var(--text3);cursor:not-allowed;" />
-            </div>
-          </div>
-          <div class="g2">
-            <div class="field"><label>Plants Destroyed</label>
-              <input type="number" id="waste-plants" step="1" min="0" placeholder="0" disabled style="background:var(--bg2);color:var(--text3);cursor:not-allowed;" />
-            </div>
             <div class="field" id="waste-subtype-wrap" style="display:none;"><label>Sub-Category</label>
               <select id="waste-subtype" disabled onchange="wastePlantsToggle()" style="background:var(--bg2);color:var(--text3);cursor:not-allowed;">
                 <option value="">select sub-category</option>
               </select>
+            </div>
+          </div>
+          <!-- Row 2: Weight + Plants Destroyed -->
+          <div class="g2">
+            <div class="field"><label>Weight (kg)</label>
+              <input type="number" id="waste-weight" step="0.001" placeholder="0.000" disabled style="background:var(--bg2);color:var(--text3);cursor:not-allowed;" />
+            </div>
+            <div class="field"><label>Plants Destroyed</label>
+              <input type="number" id="waste-plants" step="1" min="0" placeholder="0" disabled style="background:var(--bg2);color:var(--text3);cursor:not-allowed;" />
             </div>
           </div>
         </div>
@@ -629,10 +638,10 @@ tr:last-child td { border-bottom: none; }
         </div>
       </div>
 
-      <!-- Batch info (read only) -->
+      <!-- Batch Summary (read-only display of batch state) -->
       <div id="summary-info-card" style="display:none;">
         <div class="card" style="margin-bottom:12px;">
-          <div class="section-label">Batch Info</div>
+          <div class="section-label">Batch Summary</div>
           <div class="g2" style="margin-bottom:8px;">
             <div class="field"><label>Batch ID</label><div id="si-batchid" style="font-family:var(--mono);font-weight:700;color:var(--green);font-size:16px;padding:6px 0;"></div></div>
             <div class="field"><label>Cultivar</label><div id="si-cultivar" style="font-size:14px;padding:6px 0;color:var(--text2);"></div></div>
@@ -994,7 +1003,7 @@ tr:last-child td { border-bottom: none; }
     </button>
     <button class="bnav-btn active" id="bn-summary" onclick="switchPage('summary',this)">
       <svg viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9h6m-6 4h6m-6-8h.01"/></svg>
-      Summary
+      Batch Mgmt
     </button>
     <button class="bnav-btn" id="bn-ec" onclick="switchPage('ec',this)">
       <svg viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
@@ -2120,6 +2129,67 @@ function roBatchSelect(){
   else { hideClosedWarning('ro'); }
   // Refresh the runoff history for the new batch (room may already be picked)
   roRenderHistory(val, document.getElementById('ro-room').value);
+  roRenderSummary(val);
+}
+function roRenderSummary(batch){
+  // Aggregate stats card at the bottom of the Runoff page for the selected batch.
+  // Shows: total entries, overall avg EC, overall avg pH, alert count (variance > 1.0), per-room avg EC.
+  const sec = document.getElementById('ro-summary-section');
+  const card = document.getElementById('ro-summary-card');
+  if(!sec || !card) return;
+  if(!batch){
+    sec.style.display = 'none';
+    return;
+  }
+  sec.style.display = '';
+  const recs = roRecs.filter(r => r.batch && r.batch.trim().toLowerCase() === batch.trim().toLowerCase());
+  if(!recs.length){
+    card.innerHTML = '<div style="text-align:center;color:var(--text3);padding:10px;font-size:13px;">No runoff entries for '+batch+'.</div>';
+    return;
+  }
+  const avg = arr => arr.length ? arr.reduce((s,v)=>s+v,0)/arr.length : null;
+  const ecVals = recs.map(r => parseFloat(r.avgEC)).filter(v => !isNaN(v) && v > 0);
+  const phVals = recs.map(r => parseFloat(r.avgPH)).filter(v => !isNaN(v) && v > 0);
+  const alerts = recs.filter(r => r.variance != null && parseFloat(r.variance) > 1.0).length;
+  // Per-room averages
+  const byRoom = {};
+  recs.forEach(r => {
+    const rm = r.room || '—';
+    if(!byRoom[rm]) byRoom[rm] = {ecs:[], phs:[], count:0};
+    byRoom[rm].count++;
+    const ec = parseFloat(r.avgEC); if(!isNaN(ec) && ec>0) byRoom[rm].ecs.push(ec);
+    const ph = parseFloat(r.avgPH); if(!isNaN(ph) && ph>0) byRoom[rm].phs.push(ph);
+  });
+  const ecOverall = avg(ecVals);
+  const phOverall = avg(phVals);
+  let html = '<div class="g2" style="margin-bottom:8px;">'+
+    '<div class="stat-card" style="text-align:center;background:var(--bg2);border-radius:var(--radius-sm);padding:8px;"><div style="font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;">Entries</div><div style="font-size:22px;font-weight:700;font-family:var(--mono);color:var(--text);">'+recs.length+'</div></div>'+
+    '<div class="stat-card" style="text-align:center;background:'+(alerts>0?'var(--red-pale)':'var(--bg2)')+';border-radius:var(--radius-sm);padding:8px;"><div style="font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;">Alerts (variance &gt;1.0)</div><div style="font-size:22px;font-weight:700;font-family:var(--mono);color:'+(alerts>0?'var(--red)':'var(--text)')+';">'+alerts+'</div></div>'+
+  '</div>';
+  html += '<div class="g2" style="margin-bottom:8px;">'+
+    '<div class="stat-card" style="text-align:center;background:var(--green-pale);border-radius:var(--radius-sm);padding:8px;"><div style="font-size:10px;color:var(--green);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;">Overall Avg EC</div><div style="font-size:22px;font-weight:700;font-family:var(--mono);color:var(--green);">'+(ecOverall!=null?ecOverall.toFixed(2):'—')+'</div></div>'+
+    '<div class="stat-card" style="text-align:center;background:var(--green-pale);border-radius:var(--radius-sm);padding:8px;"><div style="font-size:10px;color:var(--green);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;">Overall Avg pH</div><div style="font-size:22px;font-weight:700;font-family:var(--mono);color:var(--green);">'+(phOverall!=null?phOverall.toFixed(2):'—')+'</div></div>'+
+  '</div>';
+  // Per-room breakdown
+  const rooms = Object.keys(byRoom).sort();
+  if(rooms.length){
+    html += '<div style="margin-top:10px;padding-top:8px;border-top:1px dashed var(--border);">'+
+      '<div style="font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">By Room</div>'+
+      '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;">'+
+        '<thead><tr style="background:#f5f5f5;"><th style="padding:6px 8px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Room</th><th style="padding:6px 8px;text-align:center;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Entries</th><th style="padding:6px 8px;text-align:center;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Avg EC</th><th style="padding:6px 8px;text-align:center;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Avg pH</th></tr></thead><tbody>';
+    rooms.forEach(rm => {
+      const ec = avg(byRoom[rm].ecs);
+      const ph = avg(byRoom[rm].phs);
+      html += '<tr style="border-top:1px solid var(--border);">'+
+        '<td style="padding:6px 8px;">'+rm+'</td>'+
+        '<td style="padding:6px 8px;text-align:center;font-family:var(--mono);">'+byRoom[rm].count+'</td>'+
+        '<td style="padding:6px 8px;text-align:center;font-family:var(--mono);">'+(ec!=null?ec.toFixed(2):'—')+'</td>'+
+        '<td style="padding:6px 8px;text-align:center;font-family:var(--mono);">'+(ph!=null?ph.toFixed(2):'—')+'</td>'+
+      '</tr>';
+    });
+    html += '</tbody></table></div></div>';
+  }
+  card.innerHTML = html;
 }
 function roRoomChanged(){
   // ro-room dropdown change handler: keeps the room colour strip in sync AND refreshes the history.
@@ -2883,7 +2953,7 @@ async function roSave(){
   }else{toast('Entry saved locally');}
   roClear();updatePendingBadge();
 }
-function roClear(){for(let i=1;i<=8;i++){document.getElementById('ro-ec-'+i).value='';document.getElementById('ro-ph-'+i).value='';}['ro-notes'].forEach(id=>document.getElementById(id).value='');['ro-avg-ec','ro-avg-ph','ro-variance'].forEach(id=>document.getElementById(id).textContent='-');document.getElementById('ro-count').textContent='0/8';document.getElementById('ro-warn').style.display='none';document.getElementById('ro-ok').style.display='none';document.getElementById('ro-batch-select').value='';document.getElementById('ro-batch').value='';document.getElementById('ro-veg').value='';document.getElementById('ro-flower').value='';document.getElementById('ro-harvest').value='';document.getElementById('ro-badge').innerHTML='<span style="font-size:12px;color:var(--text3);">Select a batch to calculate stage</span>';clearBatchRoomLock('ro');hideClosedWarning('ro');roRenderHistory('','');}
+function roClear(){for(let i=1;i<=8;i++){document.getElementById('ro-ec-'+i).value='';document.getElementById('ro-ph-'+i).value='';}['ro-notes'].forEach(id=>document.getElementById(id).value='');['ro-avg-ec','ro-avg-ph','ro-variance'].forEach(id=>document.getElementById(id).textContent='-');document.getElementById('ro-count').textContent='0/8';document.getElementById('ro-warn').style.display='none';document.getElementById('ro-ok').style.display='none';document.getElementById('ro-batch-select').value='';document.getElementById('ro-batch').value='';document.getElementById('ro-veg').value='';document.getElementById('ro-flower').value='';document.getElementById('ro-harvest').value='';document.getElementById('ro-badge').innerHTML='<span style="font-size:12px;color:var(--text3);">Select a batch to calculate stage</span>';clearBatchRoomLock('ro');hideClosedWarning('ro');roRenderHistory('','');roRenderSummary('');}
 
 // Pending badge
 function updatePendingBadge(){
@@ -3138,13 +3208,16 @@ function wasteSeqUnlock(){
   } else {
     batchRooms = [...new Set(ecRecs.filter(r=>r.batch&&r.batch.trim().toLowerCase()===batch.trim().toLowerCase()&&r.room).map(r=>r.room))];
   }
-  // For pre-harvest batches (Vegetative Waste only): only show rooms that currently have plants.
-  // For post-harvest batches (Dry Waste only): show all of the batch's rooms regardless of count.
-  const _isPreHarvestForRooms = !batchRec || !['Drying','Packaged'].includes(batchRec.plantPhase);
-  if(_isPreHarvestForRooms){
+  // Phase-driven room list:
+  //   Pre-harvest (Clones/Veg/Flower) → rooms with plants > 0 (+ Veg if it has unallocated plants)
+  //   Drying                         → batch's flower rooms (Dry Waste recorded from the room)
+  //   Packaged                       → only 'Trim Room' (the dedicated post-packaging trim space)
+  const _phase = batchRec ? batchRec.plantPhase : '';
+  if(_phase === 'Packaged'){
+    batchRooms = ['Trim Room'];
+  } else if(_phase !== 'Drying'){
+    // Pre-harvest filtering — include only rooms with plants, plus Veg if it has the remainder
     batchRooms = batchRooms.filter(r=>calcRoomPlantCount(batch, r) > 0);
-    // Veg holds unallocated plants as the implicit remainder. Include Veg whenever it has
-    // plants even if it was removed from batchRec.rooms (e.g. on phase advance to Flower).
     if(calcRoomPlantCount(batch, 'Veg') > 0 && !batchRooms.includes('Veg')){
       batchRooms.push('Veg');
     }
@@ -3281,6 +3354,11 @@ async function wasteSave(){
   // Guard: pre-harvest batches can only record Vegetative Waste (no dry product yet)
   if(!_wsPostHarvest && type!=='Vegetative Waste'){
     toast('Pre-harvest batches can only record Vegetative Waste — Dry Waste applies after harvest.',5000);
+    return;
+  }
+  // Guard: Dry Waste can only be recorded from 'Trim Room' (the dedicated post-packaging space)
+  if(type === 'Dry Waste' && room !== 'Trim Room'){
+    toast('Dry Waste can only be recorded from the Trim Room.',5000);
     return;
   }
   // Guard: destroying plants via Vegetative Waste cannot exceed the count IN THAT SPECIFIC ROOM.
@@ -3443,8 +3521,12 @@ function renderWaste(){
   });
   const tbl=document.getElementById('waste-table');
   if(!data.length){tbl.innerHTML='<div style="text-align:center;color:var(--text3);padding:20px;font-size:13px;">No waste records found.</div>';return;}
-  tbl.innerHTML='<div style="overflow-x:auto;background:#fff;border-radius:var(--radius-sm);border:1px solid var(--border);"><table style="width:100%;border-collapse:collapse;font-size:12px;background:#fff;"><thead><tr style="background:#f5f5f5;"><th style="padding:8px 6px;text-align:left;font-family:var(--mono);font-weight:600;font-size:11px;color:#333;">Date</th><th style="padding:8px 6px;text-align:left;color:#333;">Grower</th><th style="padding:8px 6px;text-align:left;color:#333;">Batch</th><th style="padding:8px 6px;text-align:left;color:#333;">Room</th><th style="padding:8px 6px;text-align:left;color:#333;">Type</th><th style="padding:8px 6px;text-align:right;color:#333;">Weight</th><th style="padding:8px 6px;text-align:right;color:#333;">Plants</th></tr></thead><tbody>'+
-    data.map(r=>'<tr style="background:#fff;border-bottom:1px solid #e0e0e0;"><td style="padding:7px 6px;font-family:var(--mono);font-size:11px;">'+r.date+'</td><td style="padding:7px 6px;">'+r.grower+'</td><td style="padding:7px 6px;font-family:var(--mono);">'+r.batch+'</td><td style="padding:7px 6px;">'+roomDot(r.room)+'</td><td style="padding:7px 6px;"><span style="font-size:11px;background:'+(r.type==='Vegetative Waste'?'var(--green-pale)':'var(--amber-pale)')+';color:'+(r.type==='Vegetative Waste'?'var(--green)':'var(--amber)')+';border-radius:20px;padding:2px 8px;">'+r.type+'</span></td><td style="padding:7px 6px;text-align:right;font-family:var(--mono);">'+r.weight.toFixed(3)+' kg</td><td style="padding:7px 6px;text-align:right;font-family:var(--mono);">'+(r.plants||0)+'</td></tr>').join('')+
+  // Totals for the current filter result
+  const filterWeight = data.reduce((s,r)=>s+(parseFloat(r.weight)||0),0);
+  const filterPlants = data.reduce((s,r)=>s+(parseInt(r.plants)||0),0);
+  const totalsHtml = '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--green-pale);border-bottom:1px solid var(--green-light);font-family:var(--mono);font-size:12px;color:var(--green);"><span style="text-transform:uppercase;letter-spacing:0.05em;font-size:10px;font-weight:600;">Filter Totals (' + data.length + ' record' + (data.length===1?'':'s') + ')</span><span><strong style="font-size:14px;">' + filterWeight.toFixed(3) + ' kg</strong> &nbsp;·&nbsp; <strong style="font-size:14px;">' + filterPlants + ' plants</strong></span></div>';
+  tbl.innerHTML='<div style="overflow-x:auto;background:#fff;border-radius:var(--radius-sm);border:1px solid var(--border);">'+totalsHtml+'<table style="width:100%;border-collapse:collapse;font-size:12px;background:#fff;"><thead><tr style="background:#f5f5f5;"><th style="padding:8px 6px;text-align:left;font-family:var(--mono);font-weight:600;font-size:11px;color:#333;">Date</th><th style="padding:8px 6px;text-align:left;color:#333;">Grower</th><th style="padding:8px 6px;text-align:left;color:#333;">Batch</th><th style="padding:8px 6px;text-align:left;color:#333;">Room</th><th style="padding:8px 6px;text-align:left;color:#333;">Type</th><th style="padding:8px 6px;text-align:left;color:#333;">Sub-Category</th><th style="padding:8px 6px;text-align:right;color:#333;">Weight</th><th style="padding:8px 6px;text-align:right;color:#333;">Plants</th></tr></thead><tbody>'+
+    data.map(r=>'<tr style="background:#fff;border-bottom:1px solid #e0e0e0;"><td style="padding:7px 6px;font-family:var(--mono);font-size:11px;">'+r.date+'</td><td style="padding:7px 6px;">'+r.grower+'</td><td style="padding:7px 6px;font-family:var(--mono);">'+r.batch+'</td><td style="padding:7px 6px;">'+roomDot(r.room)+'</td><td style="padding:7px 6px;"><span style="font-size:11px;background:'+(r.type==='Vegetative Waste'?'var(--green-pale)':'var(--amber-pale)')+';color:'+(r.type==='Vegetative Waste'?'var(--green)':'var(--amber)')+';border-radius:20px;padding:2px 8px;">'+r.type+'</span></td><td style="padding:7px 6px;font-size:11px;color:var(--text2);">'+(r.subtype||'—')+'</td><td style="padding:7px 6px;text-align:right;font-family:var(--mono);">'+r.weight.toFixed(3)+' kg</td><td style="padding:7px 6px;text-align:right;font-family:var(--mono);">'+(r.plants||0)+'</td></tr>').join('')+
     '</tbody></table></div>';
 }
 // ── END WASTE LOG ─────────────────────────────────────────────────────────────
