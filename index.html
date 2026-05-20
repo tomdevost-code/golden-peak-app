@@ -687,7 +687,7 @@ tr:last-child td { border-bottom: none; }
             </div>
             <div class="g2">
               <div class="field"><label>Veg Waste Weight</label><div id="si-vegwaste-weight" style="font-size:13px;font-family:var(--mono);padding:4px 0;color:var(--text2);">—</div></div>
-              <div></div>
+              <div class="field"><label>Dry Waste Weight</label><div id="si-drywaste-weight" style="font-size:13px;font-family:var(--mono);padding:4px 0;color:var(--text2);">—</div></div>
             </div>
           </div>
         </div>
@@ -1209,7 +1209,7 @@ function summaryRefreshBatchTotals(batchId){
   //   • Veg waste weight      = sum of weight on 'Vegetative Waste' records for this batch
   const setText = (id, val) => { const el=document.getElementById(id); if(el) el.textContent = val; };
   if(!batchId){
-    ['si-harvest-weight','si-postdry-weight','si-sold-weight','si-destroyed-count','si-vegwaste-weight']
+    ['si-harvest-weight','si-postdry-weight','si-sold-weight','si-destroyed-count','si-vegwaste-weight','si-drywaste-weight']
       .forEach(id => setText(id, '—'));
     return;
   }
@@ -1226,6 +1226,9 @@ function summaryRefreshBatchTotals(batchId){
   const vegWasteSum = wasteRecs
     .filter(r => r.batch === batchId && r.type === 'Vegetative Waste')
     .reduce((s,r) => s + (parseFloat(r.weight)||0), 0);
+  const dryWasteSum = wasteRecs
+    .filter(r => r.batch === batchId && r.type === 'Dry Waste')
+    .reduce((s,r) => s + (parseFloat(r.weight)||0), 0);
   const postDry = (b && b.postDryingWeight) ? parseFloat(b.postDryingWeight) : 0;
   const fmtKg = v => (v > 0 ? v.toFixed(3) + ' kg' : '—');
   const fmtCount = v => (v > 0 ? String(v) + ' plants' : '—');
@@ -1234,6 +1237,7 @@ function summaryRefreshBatchTotals(batchId){
   setText('si-sold-weight', fmtKg(soldSum));
   setText('si-destroyed-count', fmtCount(destroyedSum));
   setText('si-vegwaste-weight', fmtKg(vegWasteSum));
+  setText('si-drywaste-weight', fmtKg(dryWasteSum));
 }
 function getPerRoomHarvestDates(batchId){
   // Returns { room: 'YYYY-MM-DD' } for each completed harvest room. Derives the date from the
