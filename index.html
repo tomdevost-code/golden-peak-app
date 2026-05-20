@@ -4522,6 +4522,18 @@ async function summaryAddTransaction(){
   const tx = { id: Date.now(), batchId, date, txType, qty, weight, notes, currentQtyBefore, plantPhase: _txPhase, synced: false };
   batchTxRecs.unshift(tx);
   lsSet('gp-batchtx', batchTxRecs);
+  // Stamp Sold Date on the batch record when the first Sold tx lands. Independent of the
+  // Status=Closed flow that previously set soldDate — selling and closing aren't the same event.
+  let _soldDateStamped = false;
+  if(txType === 'Sold'){
+    const _sdIdx = batchRecs.findIndex(r => r.batchId === batchId && !r.type);
+    if(_sdIdx >= 0 && !batchRecs[_sdIdx].soldDate){
+      batchRecs[_sdIdx].soldDate = date;
+      batchRecs[_sdIdx].synced = false;
+      lsSet('gp-batch', batchRecs);
+      _soldDateStamped = true;
+    }
+  }
   // Auto-transition: a Harvested transaction moves the batch's plant phase to 'Drying'
   // and clears its rooms — but ONLY if the batch hasn't already entered the post-harvest lifecycle.
   // In Drying/Packaged/Sold, additional Harvested transactions don't pull the phase backward.
@@ -4581,6 +4593,8 @@ async function summaryAddTransaction(){
     document.getElementById('si-veg-start').textContent = _b.vegStart || '—';
     document.getElementById('si-flower-start').textContent = _b.flowerStart || '—';
     document.getElementById('si-harvest-date').textContent = formatHarvestDatesForDisplay(_b.batchId);
+    document.getElementById('si-sold-date').textContent = _b.soldDate || '—';
+    document.getElementById('si-packaged-date').textContent = _b.packagedDate || '—';
     // Refresh Current Day — a new Produced/Received tx may have just set cloneDate (Clones-Internal silent
     // capture or Clones-External user-entered), and a Harvested tx may have set harvestDate.
     summaryRefreshCurrentDay(batchId);
@@ -4602,7 +4616,7 @@ async function summaryAddTransaction(){
   // If the Harvested tx auto-advanced the phase to Drying (or zero-qty re-locked to Clones),
   // or the Clone Date was just captured on a Clones-External Produced/Received tx,
   // push the batch update to Airtable so the change is reflected immediately.
-  if((_phaseAutoChanged || _cloneDateCaptured) && cfg.batchTbl && cfg.token && cfg.base){
+  if((_phaseAutoChanged || _cloneDateCaptured || _soldDateStamped) && cfg.batchTbl && cfg.token && cfg.base){
     try{
       const _bi = batchRecs.findIndex(r=>r.batchId===batchId && !r.type);
       if(_bi >= 0){
