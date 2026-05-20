@@ -444,7 +444,7 @@ tr:last-child td { border-bottom: none; }
               <input type="number" id="waste-plants" step="1" min="0" placeholder="0" disabled style="background:var(--bg2);color:var(--text3);cursor:not-allowed;" />
             </div>
             <div class="field" id="waste-subtype-wrap" style="display:none;"><label>Sub-Category</label>
-              <select id="waste-subtype" disabled style="background:var(--bg2);color:var(--text3);cursor:not-allowed;">
+              <select id="waste-subtype" disabled onchange="wastePlantsToggle()" style="background:var(--bg2);color:var(--text3);cursor:not-allowed;">
                 <option value="">select sub-category</option>
               </select>
             </div>
@@ -3109,17 +3109,26 @@ function wasteBatchSelect(){
 const VEG_WASTE_SUBTYPES_CLONES = ['Dead Plant','Not Rooted','Extra Plants'];
 const VEG_WASTE_SUBTYPES_VEGFLOWER = ['Dead Plant','Extra Plants','Toping','De-Leaf','Pruning','Pre-Harvest De-Leaf','Harvest'];
 
+// Sub-categories that actually destroy whole plants (vs. leaf trim/pruning that only adds weight).
+const VEG_WASTE_DESTROYING_SUBTYPES = ['Dead Plant','Extra Plants'];
+
 function wastePlantsToggle(){
+  // Refresh the sub-category dropdown first (it may auto-pick a single available option),
+  // then evaluate whether Plants Destroyed should be active based on the resulting subtype.
+  wasteRefreshSubtype();
   const type=document.getElementById('waste-type').value;
   const plantsEl=document.getElementById('waste-plants');
-  const isVeg=type==='Vegetative Waste';
-  plantsEl.disabled=!isVeg;
-  plantsEl.style.background=isVeg?'':'var(--bg2)';
-  plantsEl.style.color=isVeg?'':'var(--text3)';
-  plantsEl.style.cursor=isVeg?'':'not-allowed';
-  if(!isVeg)plantsEl.value='';
-  // Sub-category dropdown — only for Vegetative Waste, populated from the batch's plant phase.
-  wasteRefreshSubtype();
+  const subtype = document.getElementById('waste-subtype')?.value || '';
+  const isVeg = type==='Vegetative Waste';
+  // Plants Destroyed is only active when the sub-category counts whole plants — Dead Plant or
+  // Extra Plants. Toping / De-Leaf / Pruning / Pre-Harvest De-Leaf / Harvest / Not Rooted are
+  // leaf-weight-only events and shouldn't allow a plant count.
+  const allowPlants = isVeg && VEG_WASTE_DESTROYING_SUBTYPES.includes(subtype);
+  plantsEl.disabled = !allowPlants;
+  plantsEl.style.background = allowPlants ? '' : 'var(--bg2)';
+  plantsEl.style.color = allowPlants ? '' : 'var(--text3)';
+  plantsEl.style.cursor = allowPlants ? '' : 'not-allowed';
+  if(!allowPlants) plantsEl.value = '';
 }
 
 function wasteRefreshSubtype(){
