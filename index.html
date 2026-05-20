@@ -1391,7 +1391,8 @@ function harvestPopulateBatches(){
   harvestSetupChanged();
 }
 function harvestSetupChanged(){
-  // Update the Room dropdown to only the Flower rooms the selected batch is currently in
+  // Update the Room dropdown to only the Flower rooms the selected batch is currently in AND
+  // hasn't already been harvested. (completedHarvests + zero plant count both mean "done".)
   const batchId = document.getElementById('harvest-batch-select').value;
   const roomEl = document.getElementById('harvest-room');
   const prevRoom = roomEl.value;
@@ -1401,9 +1402,15 @@ function harvestSetupChanged(){
     return;
   }
   const b = batchRecs.find(r=>r.batchId===batchId && !r.type);
-  const rooms = (b && Array.isArray(b.rooms)) ? b.rooms.filter(r=>r!=='Veg') : [];
+  const declared = (b && Array.isArray(b.rooms)) ? b.rooms.filter(r=>r!=='Veg') : [];
+  const completed = (b && Array.isArray(b.completedHarvests)) ? b.completedHarvests : [];
+  // A room is eligible to harvest only if it's NOT in completedHarvests AND still has plants.
+  const rooms = declared.filter(r => {
+    if(completed.includes(r)) return false;
+    return calcRoomPlantCount(batchId, r) > 0;
+  });
   if(rooms.length === 0){
-    roomEl.innerHTML = '<option value="">batch has no Flower rooms</option>';
+    roomEl.innerHTML = '<option value="">batch has no unharvested rooms</option>';
   } else {
     roomEl.innerHTML = '<option value="">-- select room --</option>' + rooms.map(r=>'<option'+(r===prevRoom?' selected':'')+'>'+r+'</option>').join('');
     autoSelectIfSingle('harvest-room');
