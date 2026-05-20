@@ -2481,10 +2481,9 @@ function ecSeqUnlock(){
     applyCascadeLocks();
     return;
   }
-  // Grower selected → unlock room (unless it's locked to Veg for a new batch)
-  const roomEl=document.getElementById('ec-room');
-  const isNewBatchLocked=roomEl.closest('.field').querySelector('.room-lock-hint');
-  if(!isNewBatchLocked) seqEnable('ec-room');
+  // Grower selected → unlock the Room dropdown. (The `.room-lock-hint` element under the room
+  // field is purely an informational label populated by ecBatchLookup — it's not a lock signal.)
+  seqEnable('ec-room');
   // Room selected → unlock rest of form
   const roomEl2=document.getElementById('ec-room');
   const effectiveRoom=room||(roomEl2.disabled&&roomEl2.options[roomEl2.selectedIndex]?roomEl2.options[roomEl2.selectedIndex].value:'');
@@ -3718,9 +3717,13 @@ function renderBatchLog(){
   populateBatchFilterDropdown();
   const list = document.getElementById('batch-active-list');
   if(!list) return;
-  // Only show active batches (no closedDate)
-  const active = batchRecs.filter(b => !b.type && !b.closedDate)
-    .sort((a,b) => (a.batchId||'').localeCompare(b.batchId||''));
+  // Only show OPEN batches — explicitly Status=Open (or unset, treated as Open) AND no closedDate.
+  const active = batchRecs.filter(b => {
+    if(b.type) return false;
+    if(b.closedDate) return false;
+    if(b.status && b.status !== 'Open') return false;
+    return true;
+  }).sort((a,b) => (a.batchId||'').localeCompare(b.batchId||''));
   if(!active.length){
     list.innerHTML='<div style="text-align:center;color:var(--text3);padding:30px 16px;font-size:13px;">No active batches. Create one above.</div>';
     return;
