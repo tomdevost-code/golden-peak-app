@@ -2029,11 +2029,14 @@ function ecRemoveEvent(slot){
 function getAllBatches(){const all=[...ecRecs,...roRecs];const seen={};batchRecs.forEach(r=>{if(r.batchId&&!seen[r.batchId]){seen[r.batchId]={vegStart:'',flowerStart:'',harvestDate:''};} });all.forEach(r=>{if(r.batch&&!seen[r.batch]){seen[r.batch]={vegStart:r.vegStart||'',flowerStart:r.flowerStart||'',harvestDate:r.harvestDate||''};}});return seen;}
 function getECBatches(){const seen={};ecRecs.forEach(r=>{if(r.batch&&!seen[r.batch]){seen[r.batch]={vegStart:r.vegStart||'',flowerStart:r.flowerStart||'',harvestDate:r.harvestDate||''};}});return seen;}
 function getFormBatchList(){
-  // Single source of truth for form dropdowns: batches created via the Batches form.
-  // Each entry now carries the plantPhase so individual dropdowns can filter further.
+  // Single source of truth for form dropdowns: batches created via the Batches form. We only
+  // surface batches that have at least one Produced/Received transaction — a freshly created
+  // batch with no plants assigned shouldn't appear in any operational dropdown.
   const list=[];
   batchRecs.forEach(b=>{
     if(b.type||!b.batchId) return; // skip legacy movement entries
+    const hasPlants = batchTxRecs.some(t => t.batchId === b.batchId && t.txType === 'Produced/Received');
+    if(!hasPlants) return;
     let closed=!!b.closedDate;
     if(!closed){closed=[...ecRecs,...roRecs].some(r=>r.batch===b.batchId&&r.harvestDate);}
     list.push({batchId:b.batchId,closed,plantPhase:b.plantPhase||''});
