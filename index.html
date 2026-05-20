@@ -1056,17 +1056,11 @@ function calcRoomPlantCount(batchId, room){
   // Returns the plants currently in the specified room.
   // - Flower rooms: direct lookup from batchRec.roomDistribution
   // - Veg: implicit remainder (batch total - sum of flower room distributions, floor 0)
+  // Uses calcBatchQty as the canonical total — that helper already handles multi-day harvest
+  // (subtracts mid-harvest per-room counts that haven't been folded into a Harvested tx yet).
   const b = batchRecs.find(r=>r.batchId===batchId && !r.type);
   if(!b) return 0;
-  const totalQty = (function(){
-    let q=0;
-    batchTxRecs.filter(t=>t.batchId===batchId).forEach(t=>{
-      if(t.txType==='Sold') return;
-      const v = parseInt(t.qty)||0;
-      if(t.txType==='Produced/Received') q+=v; else q-=v;
-    });
-    return Math.max(0,q);
-  })();
+  const totalQty = calcBatchQty(batchId);
   if(room === 'Veg'){
     const dist = b.roomDistribution || {};
     const flowerSum = Object.keys(dist).reduce((s,k)=>s + (parseInt(dist[k])||0), 0);
@@ -1077,12 +1071,25 @@ function calcRoomPlantCount(batchId, room){
 function calcBatchQty(batchId){
   // Pure helper: returns the running plant-count balance for a batch (floor 0). No DOM side effects.
   // Sold transactions track weight, not plant count, so they don't affect this running balance.
+  // Multi-day harvest correction: per-room Complete Harvest events don't create individual
+  // batchTx rows — the consolidated Harvested tx only fires once the final room is done. While
+  // mid-harvest, the per-room harvest counts live in batchRec.harvestedPlants; we subtract them
+  // here so plants that are physically in drying don't still show as "unallocated" in Veg.
   let qty=0;
   batchTxRecs.filter(t=>t.batchId===batchId).forEach(t=>{
     if(t.txType==='Sold') return; // weight tracked separately
     const q=parseInt(t.qty)||0;
     if(t.txType==='Produced/Received') qty+=q; else qty-=q;
   });
+  const b = batchRecs.find(r=>r.batchId===batchId && !r.type);
+  if(b && b.harvestedPlants){
+    // If a consolidated Harvested tx already exists, it already subtracted the total — don't double-count.
+    const hasConsolidatedHarvest = batchTxRecs.some(t => t.batchId === batchId && t.txType === 'Harvested');
+    if(!hasConsolidatedHarvest){
+      const harvested = Object.values(b.harvestedPlants).reduce((s,v) => s + (parseInt(v)||0), 0);
+      qty -= harvested;
+    }
+  }
   return Math.max(0,qty);
 }
 async function recordPhaseChangeTx(batchId, fromPhase, toPhase, weight){
