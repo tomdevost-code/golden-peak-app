@@ -1226,6 +1226,35 @@ function summaryRefreshBatchTotals(batchId){
   setText('si-destroyed-count', fmtCount(destroyedSum));
   setText('si-vegwaste-weight', fmtKg(vegWasteSum));
 }
+function getPerRoomHarvestDates(batchId){
+  // Returns { room: 'YYYY-MM-DD' } for each completed harvest room. Derives the date from the
+  // matching Harvested tx (notes contain the room name); falls back to batchRec.harvestDate
+  // for rooms missing a tx.
+  const map = {};
+  const b = batchRecs.find(r => r.batchId === batchId && !r.type);
+  if(!b) return map;
+  const completed = Array.isArray(b.completedHarvests) ? b.completedHarvests : [];
+  const txs = batchTxRecs.filter(t => t.batchId === batchId && t.txType === 'Harvested');
+  completed.forEach(room => {
+    const tx = txs.find(t => typeof t.notes === 'string' && t.notes.indexOf(room) !== -1);
+    if(tx && tx.date) map[room] = tx.date;
+    else if(b.harvestDate) map[room] = b.harvestDate;
+  });
+  return map;
+}
+
+function formatHarvestDatesForDisplay(batchId){
+  // If the batch was harvested across multiple days, list each room's date. Otherwise show a
+  // single date (or '—' if none).
+  const b = batchRecs.find(r => r.batchId === batchId && !r.type);
+  if(!b) return '—';
+  const map = getPerRoomHarvestDates(batchId);
+  const rooms = Object.keys(map).sort();
+  if(rooms.length === 0) return b.harvestDate || '—';
+  if(rooms.length === 1) return map[rooms[0]] + ' (' + rooms[0] + ')';
+  return rooms.map(r => map[r] + ' (' + r + ')').join(', ');
+}
+
 function formatBatchRoomsForDisplay(batchRec){
   // Returns a comma-separated string of all the batch's flower rooms with their current plant
   // counts, including rooms that have been harvested (count = 0). Veg is appended only when it
@@ -3316,7 +3345,7 @@ async function wasteSave(){
       document.getElementById('si-hydration-date').textContent = _bRec.hydrationDate || '—';
       document.getElementById('si-veg-start').textContent = _bRec.vegStart || '—';
       document.getElementById('si-flower-start').textContent = _bRec.flowerStart || '—';
-      document.getElementById('si-harvest-date').textContent = _bRec.harvestDate || '—';
+      document.getElementById('si-harvest-date').textContent = formatHarvestDatesForDisplay(_bRec.batchId);
     }
     applyPhaseRoomLock();
     summaryUpdateVegLock();
@@ -3680,7 +3709,7 @@ function summaryBatchChanged(){
   document.getElementById('si-hydration-date').textContent = b.hydrationDate || '—';
   document.getElementById('si-veg-start').textContent = b.vegStart || '—';
   document.getElementById('si-flower-start').textContent = b.flowerStart || '—';
-  document.getElementById('si-harvest-date').textContent = b.harvestDate || '—';
+  document.getElementById('si-harvest-date').textContent = formatHarvestDatesForDisplay(b.batchId);
   document.getElementById('si-packaged-date').textContent = b.packagedDate || '—';
   document.getElementById('si-sold-date').textContent = b.soldDate || '—';
   const _siDeliv = document.getElementById('si-delivered-date');
@@ -3753,13 +3782,45 @@ function summaryRefreshCurrentDay(batchId){
     const fd = daysBetween(b.flowerStart, _today);
     _dayEl.textContent = fd>0 ? ('F'+fd) : '—';
     _dayLbl.textContent = 'flower day';
-  } else if(b.plantPhase === 'Drying' && b.harvestDate){
-    const dd = daysBetween(b.harvestDate, _today);
-    _dayEl.textContent = dd>0 ? ('D'+dd) : '—';
-    _dayLbl.textContent = 'drying day';
+  } else if(b.plantPhase === 'Drying'){
+    // Drying: show D{n} - {Room} for each completed harvest (multi-day harvest → multiple lines).
+    const dates = getPerRoomHarvestDates(b.batchId);
+    const rooms = Object.keys(dates).sort();
+    if(rooms.length === 0){
+      // Fall back to single batch harvestDate if no per-room data was captured
+      if(b.harvestDate){
+        const dd = daysBetween(b.harvestDate, _today);
+        _dayEl.style.fontSize = '32px';
+        _dayEl.textContent = dd>0 ? ('D'+dd) : '—';
+        _dayLbl.textContent = 'drying day';
+      } else {
+        _dayEl.style.fontSize = '32px';
+        _dayEl.textContent = '—';
+        _dayLbl.textContent = 'drying day';
+      }
+    } else if(rooms.length === 1){
+      const dd = daysBetween(dates[rooms[0]], _today);
+      _dayEl.style.fontSize = '32px';
+      _dayEl.textContent = dd>0 ? ('D'+dd) : '—';
+      _dayLbl.textContent = 'drying day — ' + rooms[0];
+    } else {
+      // Multi-day harvest: list each room's drying day on its own line, smaller font.
+      const parts = rooms.map(r => {
+        const dd = daysBetween(dates[r], _today);
+        return (dd>0 ? 'D'+dd : 'D—') + ' &mdash; ' + r;
+      });
+      _dayEl.style.fontSize = '14px';
+      _dayEl.innerHTML = parts.join('<br>');
+      _dayLbl.textContent = 'drying days';
+    }
   } else {
+    _dayEl.style.fontSize = '32px';
     _dayEl.textContent = '—';
     _dayLbl.textContent = b.plantPhase ? b.plantPhase.toLowerCase() : '—';
+  }
+  // For single-value phases, ensure font size is reset to the default 32px
+  if(['Clones','Veg','Flower'].includes(b.plantPhase)){
+    _dayEl.style.fontSize = '32px';
   }
 }
 function summaryStatusChanged(){
@@ -4512,7 +4573,7 @@ async function summaryAddTransaction(){
     document.getElementById('si-hydration-date').textContent = _b.hydrationDate || '—';
     document.getElementById('si-veg-start').textContent = _b.vegStart || '—';
     document.getElementById('si-flower-start').textContent = _b.flowerStart || '—';
-    document.getElementById('si-harvest-date').textContent = _b.harvestDate || '—';
+    document.getElementById('si-harvest-date').textContent = formatHarvestDatesForDisplay(_b.batchId);
     // Refresh Current Day — a new Produced/Received tx may have just set cloneDate (Clones-Internal silent
     // capture or Clones-External user-entered), and a Harvested tx may have set harvestDate.
     summaryRefreshCurrentDay(batchId);
