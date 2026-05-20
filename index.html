@@ -443,6 +443,11 @@ tr:last-child td { border-bottom: none; }
             <div class="field"><label>Plants Destroyed</label>
               <input type="number" id="waste-plants" step="1" min="0" placeholder="0" disabled style="background:var(--bg2);color:var(--text3);cursor:not-allowed;" />
             </div>
+            <div class="field" id="waste-subtype-wrap" style="display:none;"><label>Sub-Category</label>
+              <select id="waste-subtype" disabled style="background:var(--bg2);color:var(--text3);cursor:not-allowed;">
+                <option value="">select sub-category</option>
+              </select>
+            </div>
           </div>
         </div>
       </div>
@@ -2936,7 +2941,7 @@ async function syncPending(){
   lsSet('gp-ro',roRecs);
   for(const rec of pendingWaste){
     try{
-      const f={'Date':rec.date,'Grower':rec.grower||undefined,'Batch ID':rec.batch?[rec.batch]:undefined,'Room':rec.room||undefined,'Waste Type':rec.type||rec.wtype||undefined,'Weight (kg)':rec.weight||undefined,'Plants Destroyed':rec.plants||undefined,'Notes':rec.notes||undefined};
+      const f={'Date':rec.date,'Grower':rec.grower||undefined,'Batch ID':rec.batch?[rec.batch]:undefined,'Room':rec.room||undefined,'Waste Type':rec.type||rec.wtype||undefined,'Sub-Category':rec.subtype||undefined,'Weight (kg)':rec.weight||undefined,'Plants Destroyed':rec.plants||undefined,'Notes':rec.notes||undefined};
       Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
       const wRes=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+cfg.wasteTbl,{method:'POST',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify({fields:f,typecast:true})});
       if(!wRes.ok){const err=await wRes.json();throw new Error('Waste '+wRes.status+': '+(err.error&&err.error.message||JSON.stringify(err)));}
@@ -3084,6 +3089,8 @@ function wasteSeqUnlock(){
   // If the Room or Waste Type dropdown has only one valid option, auto-pick it.
   autoSelectIfSingle('waste-room');
   autoSelectIfSingle('waste-type');
+  // Refresh sub-category dropdown based on current batch's plant phase + selected waste type
+  wasteRefreshSubtype();
 }
 
 function wasteBatchSelect(){
@@ -3098,6 +3105,10 @@ function wasteBatchSelect(){
   wasteSeqUnlock();
 }
 
+// Vegetative Waste sub-category options by plant phase
+const VEG_WASTE_SUBTYPES_CLONES = ['Dead Plant','Not Rooted','Extra Plants'];
+const VEG_WASTE_SUBTYPES_VEGFLOWER = ['Dead Plant','Extra Plants','Toping','De-Leaf','Pruning','Pre-Harvest De-Leaf','Harvest'];
+
 function wastePlantsToggle(){
   const type=document.getElementById('waste-type').value;
   const plantsEl=document.getElementById('waste-plants');
@@ -3107,6 +3118,40 @@ function wastePlantsToggle(){
   plantsEl.style.color=isVeg?'':'var(--text3)';
   plantsEl.style.cursor=isVeg?'':'not-allowed';
   if(!isVeg)plantsEl.value='';
+  // Sub-category dropdown — only for Vegetative Waste, populated from the batch's plant phase.
+  wasteRefreshSubtype();
+}
+
+function wasteRefreshSubtype(){
+  const wrap = document.getElementById('waste-subtype-wrap');
+  const sel = document.getElementById('waste-subtype');
+  if(!wrap || !sel) return;
+  const type = document.getElementById('waste-type').value;
+  const batch = document.getElementById('waste-batch-select').value;
+  const batchRec = batch ? batchRecs.find(r=>r.batchId===batch && !r.type) : null;
+  const phase = batchRec ? (batchRec.plantPhase||'') : '';
+  if(type !== 'Vegetative Waste'){
+    wrap.style.display = 'none';
+    sel.value = '';
+    return;
+  }
+  // Pick options by current plant phase
+  let opts = [];
+  if(phase === 'Clones')                 opts = VEG_WASTE_SUBTYPES_CLONES;
+  else if(['Veg','Flower'].includes(phase)) opts = VEG_WASTE_SUBTYPES_VEGFLOWER;
+  else opts = []; // unsupported phase (Drying/Packaged/Delivered shouldn't allow Veg Waste anyway)
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">select sub-category</option>' +
+    opts.map(o => '<option'+(o===prev?' selected':'')+'>'+o+'</option>').join('');
+  wrap.style.display = opts.length ? '' : 'none';
+  sel.disabled = !opts.length;
+  sel.style.background = opts.length ? '' : 'var(--bg2)';
+  sel.style.color = opts.length ? '' : 'var(--text3)';
+  sel.style.cursor = opts.length ? '' : 'not-allowed';
+  // Auto-pick if only one option
+  if(opts.length === 1 && !sel.value){
+    sel.value = opts[0];
+  }
 }
 async function wasteSave(){
   const grower=document.getElementById('waste-grower').value;
@@ -3152,7 +3197,18 @@ async function wasteSave(){
       return;
     }
   }
-  const rec={id:Date.now(),date,grower,batch,room,type,weight,plants,notes,synced:false};
+  // Sub-category (Vegetative Waste only) — required when the dropdown has options for the
+  // current plant phase.
+  const subtype = document.getElementById('waste-subtype')?.value || '';
+  if(type === 'Vegetative Waste'){
+    const _wrap = document.getElementById('waste-subtype-wrap');
+    const _selVisible = _wrap && _wrap.style.display !== 'none';
+    if(_selVisible && !subtype){
+      toast('Please select a sub-category for the Vegetative Waste record.',4500);
+      return;
+    }
+  }
+  const rec={id:Date.now(),date,grower,batch,room,type,subtype:subtype||'',weight,plants,notes,synced:false};
   wasteRecs.unshift(rec);lsSet('gp-waste',wasteRecs);
   // Auto-create a "Destroyed" Batch Transaction when plants are destroyed via Vegetative Waste
   let destroyedTx=null;
@@ -3211,7 +3267,7 @@ async function wasteSave(){
   if(cfg.token&&cfg.base&&cfg.wasteTbl){
     setSyncPill('ing','Syncing...');document.getElementById('waste-btn').disabled=true;
     try{
-      const f={'Date':rec.date,'Grower':rec.grower,'Batch ID':rec.batch?[rec.batch]:undefined,'Room':rec.room,'Waste Type':rec.type,'Weight (kg)':rec.weight,'Plants Destroyed':rec.plants||undefined,'Notes':rec.notes||undefined};
+      const f={'Date':rec.date,'Grower':rec.grower,'Batch ID':rec.batch?[rec.batch]:undefined,'Room':rec.room,'Waste Type':rec.type,'Sub-Category':rec.subtype||undefined,'Weight (kg)':rec.weight,'Plants Destroyed':rec.plants||undefined,'Notes':rec.notes||undefined};
       Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
       await atPost(cfg.wasteTbl,f);rec.synced=true;lsSet('gp-waste',wasteRecs);setSyncPill('ok','Synced');toast('Saved and synced to Airtable');
     }catch(e){setSyncPill('err','Sync failed: Waste '+e.message);toast('Saved locally - sync failed.',3500);}
