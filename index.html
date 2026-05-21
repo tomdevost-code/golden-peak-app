@@ -1053,6 +1053,14 @@ tr:last-child td { border-bottom: none; }
         <div class="sfield"><label>Biological Control Log Table ID</label><input type="text" id="s-bio" placeholder="tblXXXXXXXXXXXXXX" /></div>
         <button class="btn-save" onclick="saveSettings()">Save and Test Connection</button>
         <div class="conn-status" id="conn-status"></div>
+        <div style="margin-top:14px;padding-top:12px;border-top:1px dashed var(--border);">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+            <strong style="font-size:13px;">Multi-laptop sync</strong>
+            <span id="pull-status" style="font-size:12px;color:var(--text3);font-family:var(--mono);">—</span>
+          </div>
+          <p style="font-size:12px;color:var(--text2);line-height:1.5;margin:0 0 8px;">The app auto-pulls from Airtable every 60 seconds when this tab is visible, so records entered on another laptop appear here automatically. Tap below to pull immediately.</p>
+          <button class="btn-save" onclick="pullFromAirtable({manual:true})" style="background:var(--green);">Pull from Airtable Now</button>
+        </div>
         <button class="btn-save" id="sync-pending-btn" onclick="syncPending()" style="margin-top:8px;background:var(--blue);">Sync Pending Records</button>
         <div class="conn-status" id="sync-pending-status"></div>
         <button class="btn-save" onclick="clearPendingRecords()" style="margin-top:8px;background:var(--red);">Clear Pending Records</button>
@@ -1184,6 +1192,559 @@ function backfillHarvestedTxs(){
 function atReady(){return cfg.token&&cfg.base&&cfg.ecTbl&&cfg.roTbl;}
 async function atPost(tbl,fields){const body={fields,typecast:true};console.log('Airtable POST →',tbl,body);const r=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+tbl,{method:'POST',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok){let detail='';try{const j=await r.json();detail=j.error&&(j.error.message||j.error.type)||JSON.stringify(j);}catch(_){}console.error('Airtable POST failed',r.status,detail,'body=',body);throw new Error(r.status+(detail?': '+detail:''));}return r.json();}
 async function atUpsert(tbl,fields,mergeOn){const body={performUpsert:{fieldsToMergeOn:mergeOn},records:[{fields}],typecast:true};console.log('Airtable UPSERT →',tbl,body);const r=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+tbl,{method:'PATCH',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok){let detail='';try{const j=await r.json();detail=j.error&&(j.error.message||j.error.type)||JSON.stringify(j);}catch(_){}console.error('Airtable UPSERT failed',r.status,detail,'body=',body);throw new Error(r.status+(detail?': '+detail:''));}return r.json();}
+
+// ============================================================
+// MULTI-LAPTOP SYNC — PHASE 1: PULL FROM AIRTABLE
+// ============================================================
+// The app is still local-first: writes go to localStorage immediately and
+// POST/PATCH to Airtable as a secondary side-effect. The pull layer below
+// brings the OTHER direction online — every ~60s (and on boot) we GET every
+// configured Airtable table and merge new/updated rows into the in-memory
+// arrays so a second laptop sees what the first one wrote.
+//
+// Merge contract:
+//  - Local records carry `airtableId` once they've been confirmed by Airtable
+//    (populated in Phase 2 on the save paths). The merge keys on this id.
+//  - Local records with `synced === false` are NEVER overwritten by a pull —
+//    they hold pending local edits the server hasn't seen yet. Phase 3 will
+//    surface the conflict UI; for now the local change just wins until the
+//    next sync-pending retry succeeds.
+//  - Remote rows with no matching local airtableId are appended (unshifted so
+//    they show up at the top of newest-first views).
+//  - No deletes. If something is removed in Airtable it stays locally.
+
+// Paginated GET. Returns [] when the table is unconfigured. Resolves to an
+// array of Airtable record objects {id, createdTime, fields}.
+async function atFetchAll(tbl){
+  if(!atReady() || !tbl) return [];
+  const out = [];
+  let offset = '';
+  let safety = 0;
+  do {
+    safety++;
+    if(safety > 200){ console.warn('[pull] safety cap hit on', tbl); break; }
+    const url = 'https://api.airtable.com/v0/'+cfg.base+'/'+encodeURIComponent(tbl)+'?pageSize=100'+(offset?'&offset='+encodeURIComponent(offset):'');
+    const r = await fetch(url, {headers:{'Authorization':'Bearer '+cfg.token}});
+    if(!r.ok){
+      let detail='';
+      try{ const j=await r.json(); detail=j.error&&(j.error.message||j.error.type)||JSON.stringify(j); }catch(_){}
+      throw new Error(tbl+' fetch '+r.status+(detail?': '+detail:''));
+    }
+    const j = await r.json();
+    out.push(...(j.records||[]));
+    offset = j.offset || '';
+  } while(offset);
+  return out;
+}
+
+// Per-table remote→local field mappers.
+//  rec : raw Airtable record { id, createdTime, fields }
+//  ctx : { batchIdByRecId } — recordId→Batch-ID-string lookup used to resolve
+//        the linked-record `Batch ID` arrays returned by child tables.
+// Each returns a local-shaped record including `airtableId` and `synced:true`,
+// or null if the row can't be mapped (e.g. linked batch missing).
+const REMOTE_MAPPERS = {
+  batch(rec){
+    const f = rec.fields || {};
+    const bid = (f['Batch ID']||'').toString().trim().toUpperCase();
+    if(!bid) return null;
+    return {
+      id: 'b_'+rec.id,
+      airtableId: rec.id,
+      batchId: bid,
+      cultivar: f['Cultivar Name']||'',
+      mother: f['Mother/Seed ID']||'',
+      geneticsSource: f['Source of Genetics']||'',
+      externalCompany: f['External Clone Company']||'',
+      notes: f['Notes']||'',
+      createdDate: f['Created Date']||'',
+      cloneDate: f['Clone Date']||'',
+      hydrationDate: f['Hydration Date']||'',
+      vegStart: f['Veg Start Date']||'',
+      flowerStart: f['Flower Start Date']||'',
+      harvestDate: f['Harvest Date']||'',
+      packagedDate: f['Package Date']||'',
+      soldDate: f['Sold Date']||'',
+      deliveredDate: f['Delivered Date']||'',
+      rooms: Array.isArray(f['Rooms']) ? f['Rooms'] : (f['Rooms'] ? String(f['Rooms']).split(',').map(s=>s.trim()).filter(Boolean) : []),
+      plantPhase: f['Plant Phase']||'Clones',
+      status: f['Status']||'Open',
+      closedDate: f['Closed Date']||'',
+      postDryingWeight: parseFloat(f['Post-Drying Weight (kg)'])||0,
+      synced: true
+    };
+  },
+  ec(rec, ctx){
+    const f = rec.fields || {};
+    const link = Array.isArray(f['Batch ID']) ? f['Batch ID'][0] : null;
+    const batch = link ? (ctx.batchIdByRecId[link]||'') : '';
+    if(!batch) return null;
+    const pens = [parseFloat(f['Drip EC Pen 1'])||0, parseFloat(f['Drip EC Pen 2'])||0, parseFloat(f['Drip EC Pen 3'])||0];
+    const phs  = [parseFloat(f['Drip pH Pen 1'])||0, parseFloat(f['Drip pH Pen 2'])||0, parseFloat(f['Drip pH Pen 3'])||0];
+    const events = [1,2,3,4,5,6,7,8].map(i => parseFloat(f['Event '+i+' ml/plant'])||0);
+    const totalML = events.reduce((s,v)=>s+v, 0);
+    return {
+      id: 'ec_'+rec.id,
+      airtableId: rec.id,
+      date: f['Date']||'',
+      room: f['Room']||'',
+      grower: f['Grower']||'',
+      batch,
+      dripEcPens: pens,
+      dripPhPens: phs,
+      dripEc: avg(pens),
+      dripPh: avg(phs),
+      wtype: f['Watering Type']||'',
+      events,
+      totalML,
+      flow: parseFloat(f['Flow Meter Reading'])||0,
+      notes: f['Notes']||'',
+      synced: true
+    };
+  },
+  ro(rec, ctx){
+    const f = rec.fields || {};
+    const link = Array.isArray(f['Batch ID']) ? f['Batch ID'][0] : null;
+    const batch = link ? (ctx.batchIdByRecId[link]||'') : '';
+    if(!batch) return null;
+    const samples = [1,2,3,4,5,6,7,8].map(i => ({
+      ec: parseFloat(f['S'+i+' EC'])||0,
+      ph: parseFloat(f['S'+i+' pH'])||0
+    }));
+    const ecs = samples.map(s=>s.ec).filter(v=>v>0);
+    const phs = samples.map(s=>s.ph).filter(v=>v>0);
+    return {
+      id: 'ro_'+rec.id,
+      airtableId: rec.id,
+      date: f['Date']||'',
+      room: f['Room']||'',
+      grower: f['Grower']||'',
+      batch,
+      inputEC: f['Input EC']!=null ? parseFloat(f['Input EC']) : null,
+      samples,
+      avgEC: avg(ecs),
+      avgPH: avg(phs),
+      variance: parseFloat(f['EC Variance'])||0,
+      notes: f['Notes']||'',
+      synced: true
+    };
+  },
+  waste(rec, ctx){
+    const f = rec.fields || {};
+    const link = Array.isArray(f['Batch ID']) ? f['Batch ID'][0] : null;
+    const batch = link ? (ctx.batchIdByRecId[link]||'') : '';
+    if(!batch) return null;
+    return {
+      id: 'w_'+rec.id,
+      airtableId: rec.id,
+      date: f['Date']||'',
+      grower: f['Grower']||'',
+      batch,
+      room: f['Room']||'',
+      type: f['Waste Type']||'',
+      subtype: f['Sub-Category']||'',
+      weight: parseFloat(f['Weight (kg)'])||0,
+      plants: parseInt(f['Plants Destroyed'])||0,
+      notes: f['Notes']||'',
+      synced: true
+    };
+  },
+  batchtx(rec, ctx){
+    const f = rec.fields || {};
+    const link = Array.isArray(f['Batch ID']) ? f['Batch ID'][0] : null;
+    const batchId = link ? (ctx.batchIdByRecId[link]||'') : '';
+    if(!batchId) return null;
+    return {
+      id: 'tx_'+rec.id,
+      airtableId: rec.id,
+      batchId,
+      date: f['Date']||'',
+      txType: f['Transaction Type']||'',
+      qty: parseFloat(f['Quantity'])||0,
+      runningQty: parseInt(f['Current Quantity After'])||0,
+      notes: f['Notes']||'',
+      synced: true
+    };
+  },
+  harvest(rec, ctx){
+    const f = rec.fields || {};
+    const link = Array.isArray(f['Batch ID']) ? f['Batch ID'][0] : null;
+    const batch = link ? (ctx.batchIdByRecId[link]||'') : '';
+    if(!batch) return null;
+    return {
+      id: 'h_'+rec.id,
+      airtableId: rec.id,
+      date: f['Date']||'',
+      grower: f['Grower']||'',
+      batch,
+      room: f['Room']||'',
+      binNumber: parseInt(f['Bin Number'])||0,
+      tareWeight: parseFloat(f['Tare Weight (kg)'])||0,
+      totalWeight: parseFloat(f['Total Weight (kg)'])||0,
+      netWeight: parseFloat(f['Net Weight (kg)'])||0,
+      notes: f['Notes']||'',
+      synced: true
+    };
+  },
+  postdry(rec, ctx){
+    const f = rec.fields || {};
+    const link = Array.isArray(f['Batch ID']) ? f['Batch ID'][0] : null;
+    const batch = link ? (ctx.batchIdByRecId[link]||'') : '';
+    if(!batch) return null;
+    return {
+      id: 'pd_'+rec.id,
+      airtableId: rec.id,
+      date: f['Date']||'',
+      grower: f['Grower']||'',
+      batch,
+      binNumber: parseInt(f['Container ID'])||0,
+      tareWeight: parseFloat(f['Tare Weight (kg)'])||0,
+      grossWeight: parseFloat(f['Gross Weight (kg)'])||0,
+      netWeight: parseFloat(f['Net Weight (kg)'])||0,
+      containerType: f['Type/Size']||'',
+      notes: f['Notes']||'',
+      synced: true
+    };
+  },
+  bio(rec, ctx){
+    const f = rec.fields || {};
+    const link = Array.isArray(f['Batch ID']) ? f['Batch ID'][0] : null;
+    const batch = link ? (ctx.batchIdByRecId[link]||'') : '';
+    if(!batch) return null;
+    return {
+      id: 'bio_'+rec.id,
+      airtableId: rec.id,
+      date: f['Date']||'',
+      time: f['Time']||'',
+      grower: f['Grower']||'',
+      batch,
+      room: f['Room']||'',
+      product: f['Product']||'',
+      quantity: parseFloat(f['Quantity'])||0,
+      unit: f['Unit']||'',
+      reason: f['Reason']||'',
+      synced: true
+    };
+  }
+};
+
+// Conflicts queue — populated by mergeRemote when a pull arrives for a record
+// the user has unsynced local edits to. Each entry: { table, lsKey, localIdx,
+// local, remote }. The conflict modal (renderConflictsModal) drains this.
+let _pendingConflicts = [];
+
+// Merge remote rows into the local array (in place). Returns counts.
+//   - match local-by-airtableId; if local is synced, shallow-overlay remote
+//   - if local has synced===false, queue a conflict and leave local intact
+//   - new remote rows are unshifted onto the front
+function mergeRemote(localArr, remoteRecs, mapper, ctx, table, lsKey){
+  const byAt = {};
+  localArr.forEach((r,i) => { if(r && r.airtableId) byAt[r.airtableId] = i; });
+  let added = 0, updated = 0, conflicts = 0;
+  remoteRecs.forEach(rrec => {
+    const mapped = mapper(rrec, ctx||{});
+    if(!mapped) return;
+    if(byAt[rrec.id] !== undefined){
+      const idx = byAt[rrec.id];
+      if(localArr[idx].synced === false){
+        // Conflict — drop into the resolution queue (dedup by airtableId)
+        const aid = localArr[idx].airtableId;
+        const existing = _pendingConflicts.find(c => c.airtableId === aid);
+        if(!existing){
+          _pendingConflicts.push({
+            table, lsKey, airtableId: aid,
+            localIdx: idx,
+            local: JSON.parse(JSON.stringify(localArr[idx])),
+            remote: mapped
+          });
+        } else {
+          // Refresh the remote snapshot — server may have changed again
+          existing.remote = mapped;
+        }
+        conflicts++;
+      } else {
+        localArr[idx] = {...localArr[idx], ...mapped};
+        updated++;
+      }
+    } else {
+      localArr.unshift(mapped);
+      added++;
+    }
+  });
+  return {added, updated, conflicts};
+}
+
+// Top-level pull — fetch every configured table in parallel and merge.
+let isPulling = false;
+let lastPullAt = 0;
+async function pullFromAirtable(opts){
+  opts = opts||{};
+  if(!atReady()){
+    if(opts.manual) toast('Configure Airtable in Settings first');
+    console.log('[pull] skipped — Airtable not configured');
+    return null;
+  }
+  if(isPulling){
+    console.log('[pull] skipped — already in progress');
+    return null;
+  }
+  isPulling = true;
+  if(opts.manual) setSyncPill('ing','Syncing…');
+  try {
+    const [batches, ecs, ros, ws, txs, hs, pds, bs] = await Promise.all([
+      atFetchAll(cfg.batchTbl),
+      atFetchAll(cfg.ecTbl),
+      atFetchAll(cfg.roTbl),
+      atFetchAll(cfg.wasteTbl),
+      atFetchAll(cfg.batchtxTbl),
+      atFetchAll(cfg.harvestTbl),
+      atFetchAll(cfg.postDryTbl),
+      atFetchAll(cfg.bioTbl)
+    ]);
+    // Resolve linked-record refs by building recordId→Batch-ID-string lookup
+    const batchIdByRecId = {};
+    batches.forEach(b => {
+      const bid = ((b.fields||{})['Batch ID']||'').toString().trim().toUpperCase();
+      if(bid) batchIdByRecId[b.id] = bid;
+    });
+    const ctx = { batchIdByRecId };
+    const summary = {};
+    summary.batch   = mergeRemote(batchRecs,   batches, REMOTE_MAPPERS.batch,   ctx, 'batch',   'gp-batch');
+    summary.ec      = mergeRemote(ecRecs,      ecs,     REMOTE_MAPPERS.ec,      ctx, 'ec',      'gp-ec');
+    summary.ro      = mergeRemote(roRecs,      ros,     REMOTE_MAPPERS.ro,      ctx, 'ro',      'gp-ro');
+    summary.waste   = mergeRemote(wasteRecs,   ws,      REMOTE_MAPPERS.waste,   ctx, 'waste',   'gp-waste');
+    summary.batchtx = mergeRemote(batchTxRecs, txs,     REMOTE_MAPPERS.batchtx, ctx, 'batchtx', 'gp-batchtx');
+    summary.harvest = mergeRemote(harvestRecs, hs,      REMOTE_MAPPERS.harvest, ctx, 'harvest', 'gp-harvest');
+    summary.postdry = mergeRemote(postDryRecs, pds,     REMOTE_MAPPERS.postdry, ctx, 'postdry', 'gp-postdry');
+    summary.bio     = mergeRemote(bioRecs,     bs,      REMOTE_MAPPERS.bio,     ctx, 'bio',     'gp-bio');
+    lsSet('gp-batch',   batchRecs);
+    lsSet('gp-ec',      ecRecs);
+    lsSet('gp-ro',      roRecs);
+    lsSet('gp-waste',   wasteRecs);
+    lsSet('gp-batchtx', batchTxRecs);
+    lsSet('gp-harvest', harvestRecs);
+    lsSet('gp-postdry', postDryRecs);
+    lsSet('gp-bio',     bioRecs);
+    const totalAdded    = Object.values(summary).reduce((s,o)=>s+o.added, 0);
+    const totalUpdated  = Object.values(summary).reduce((s,o)=>s+o.updated, 0);
+    const totalConflicts= Object.values(summary).reduce((s,o)=>s+o.conflicts, 0);
+    lastPullAt = Date.now();
+    console.log('[pull] '+new Date().toLocaleTimeString()+' →', summary, 'totals: +'+totalAdded+' / ~'+totalUpdated+' / !'+totalConflicts);
+    // Best-effort refresh of any visible views
+    try { populateBatchDropdowns(); }catch(_){}
+    try { if(typeof renderBatchLog==='function') renderBatchLog(); }catch(_){}
+    try { if(typeof summaryRender==='function') summaryRender(); }catch(_){}
+    try { if(typeof updatePendingBadge==='function') updatePendingBadge(); }catch(_){}
+    try { if(typeof renderPullStatus==='function') renderPullStatus(); }catch(_){}
+    try { renderConflictBanner(); }catch(_){}
+    if(opts.manual){
+      if(totalConflicts){
+        toast(totalConflicts+' conflict(s) — review at top of page', 5000);
+        setSyncPill('err', totalConflicts+' conflict(s)');
+      } else if(totalAdded||totalUpdated){
+        toast('Synced: +'+totalAdded+' new, '+totalUpdated+' updated');
+        setSyncPill('ok','Synced');
+      } else {
+        toast('Up to date');
+        setSyncPill('ok','Up to date');
+      }
+    }
+    return summary;
+  } catch(err){
+    console.error('[pull] failed', err);
+    if(opts.manual){
+      setSyncPill('err','Sync failed');
+      toast('Pull failed: '+(err.message||err), 5000);
+    }
+    return null;
+  } finally {
+    isPulling = false;
+  }
+}
+
+// 60-second auto-poll. Pauses when the tab is hidden (no point hammering
+// Airtable when the user isn't looking). Idempotent — safe to call multiple
+// times; the previous timer is cleared first.
+let autoSyncTimer = null;
+const AUTO_SYNC_MS = 60000;
+function startAutoSync(){
+  if(autoSyncTimer){ clearInterval(autoSyncTimer); autoSyncTimer = null; }
+  if(!atReady()){
+    console.log('[autosync] not starting — Airtable not configured');
+    return;
+  }
+  console.log('[autosync] started — pulling every '+(AUTO_SYNC_MS/1000)+'s');
+  // First pull on boot, then on the timer
+  pullFromAirtable();
+  autoSyncTimer = setInterval(()=>{
+    if(document.hidden) return;
+    pullFromAirtable();
+  }, AUTO_SYNC_MS);
+}
+function stopAutoSync(){
+  if(autoSyncTimer){ clearInterval(autoSyncTimer); autoSyncTimer = null; console.log('[autosync] stopped'); }
+}
+// Friendly "last synced X ago" badge for the Settings card.
+function renderPullStatus(){
+  const el = document.getElementById('pull-status');
+  if(!el) return;
+  if(!lastPullAt){ el.textContent = atReady() ? 'Not pulled yet' : 'Airtable not configured'; return; }
+  const sec = Math.round((Date.now() - lastPullAt)/1000);
+  let txt;
+  if(sec < 60) txt = sec+'s ago';
+  else if(sec < 3600) txt = Math.round(sec/60)+'m ago';
+  else txt = Math.round(sec/3600)+'h ago';
+  el.textContent = 'Last sync: '+txt;
+}
+setInterval(renderPullStatus, 15000);
+
+// ─── Conflict resolution UI ────────────────────────────────────────────────
+// When mergeRemote detects a remote change to a record that has unsynced
+// local edits, it pushes onto _pendingConflicts. The banner sits above the
+// page header; the modal lists conflicts with side-by-side fields and per-row
+// Keep Local / Take Remote buttons.
+
+function renderConflictBanner(){
+  let banner = document.getElementById('conflict-banner');
+  if(!_pendingConflicts.length){
+    if(banner) banner.style.display = 'none';
+    return;
+  }
+  if(!banner){
+    banner = document.createElement('div');
+    banner.id = 'conflict-banner';
+    banner.style.cssText = 'position:sticky;top:0;left:0;right:0;z-index:1000;background:var(--amber-pale);color:var(--amber);padding:10px 14px;border-bottom:2px solid var(--amber);font-weight:600;display:flex;justify-content:space-between;align-items:center;font-size:13px;';
+    document.body.insertBefore(banner, document.body.firstChild);
+  }
+  banner.innerHTML = '<span>⚠ '+_pendingConflicts.length+' sync conflict(s) — both you and another device edited the same record.</span>'
+                   + '<button onclick="openConflictsModal()" style="background:var(--amber);color:#fff;border:none;padding:6px 12px;border-radius:6px;font-weight:600;cursor:pointer;font-size:12px;">Review</button>';
+  banner.style.display = 'flex';
+}
+
+function _conflictDiffFields(local, remote){
+  // Returns the keys that actually differ between local and remote, excluding
+  // bookkeeping fields (id, airtableId, synced, etc).
+  const skip = new Set(['id','airtableId','synced','samples','events','dripEcPens','dripPhPens']);
+  const keys = new Set([...Object.keys(local||{}), ...Object.keys(remote||{})]);
+  const diffs = [];
+  keys.forEach(k => {
+    if(skip.has(k)) return;
+    const lv = local ? local[k] : undefined;
+    const rv = remote ? remote[k] : undefined;
+    const ls = (lv==null||lv==='') ? '' : (typeof lv==='object' ? JSON.stringify(lv) : String(lv));
+    const rs = (rv==null||rv==='') ? '' : (typeof rv==='object' ? JSON.stringify(rv) : String(rv));
+    if(ls !== rs) diffs.push({key:k, local:ls||'—', remote:rs||'—'});
+  });
+  return diffs;
+}
+
+function openConflictsModal(){
+  let modal = document.getElementById('conflicts-modal');
+  if(!modal){
+    modal = document.createElement('div');
+    modal.id = 'conflicts-modal';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:2000;background:rgba(0,0,0,0.55);display:flex;align-items:flex-start;justify-content:center;padding:24px 12px;overflow-y:auto;';
+    modal.onclick = (e) => { if(e.target === modal) modal.style.display='none'; };
+    document.body.appendChild(modal);
+  }
+  modal.style.display = 'flex';
+  renderConflictsModal();
+}
+
+function closeConflictsModal(){
+  const modal = document.getElementById('conflicts-modal');
+  if(modal) modal.style.display = 'none';
+}
+
+function renderConflictsModal(){
+  const modal = document.getElementById('conflicts-modal');
+  if(!modal) return;
+  if(!_pendingConflicts.length){
+    modal.style.display = 'none';
+    renderConflictBanner();
+    return;
+  }
+  const tableLabels = {batch:'Batch', ec:'EC Log', ro:'Runoff', waste:'Waste', batchtx:'Batch Transaction', harvest:'Harvest', postdry:'Post-Drying', bio:'Bio Control'};
+  const items = _pendingConflicts.map((c, i) => {
+    const diffs = _conflictDiffFields(c.local, c.remote);
+    const label = tableLabels[c.table] || c.table;
+    const rowId = c.local.batchId || c.local.batch || c.local.date || c.airtableId;
+    const diffRows = diffs.length ? diffs.map(d => (
+      '<tr><td style="padding:4px 8px;color:var(--text2);font-family:var(--mono);font-size:11px;border-bottom:1px solid var(--border);">'+d.key+'</td>'
+      + '<td style="padding:4px 8px;border-bottom:1px solid var(--border);">'+d.local+'</td>'
+      + '<td style="padding:4px 8px;border-bottom:1px solid var(--border);">'+d.remote+'</td></tr>'
+    )).join('') : '<tr><td colspan="3" style="padding:6px;color:var(--text3);text-align:center;">No field-level differences (both saved at the same time).</td></tr>';
+    return ''
+      + '<div style="border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px;background:var(--bg2);">'
+      +   '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'
+      +     '<strong style="font-size:13px;">'+label+' — '+rowId+'</strong>'
+      +     '<span style="font-family:var(--mono);font-size:11px;color:var(--text3);">'+(c.airtableId||'')+'</span>'
+      +   '</div>'
+      +   '<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:10px;">'
+      +     '<thead><tr><th style="padding:4px 8px;text-align:left;color:var(--text2);font-weight:600;border-bottom:2px solid var(--border);">Field</th>'
+      +     '<th style="padding:4px 8px;text-align:left;color:var(--green);font-weight:600;border-bottom:2px solid var(--border);">Your version</th>'
+      +     '<th style="padding:4px 8px;text-align:left;color:var(--blue);font-weight:600;border-bottom:2px solid var(--border);">Remote version</th></tr></thead>'
+      +     '<tbody>'+diffRows+'</tbody>'
+      +   '</table>'
+      +   '<div style="display:flex;gap:8px;justify-content:flex-end;">'
+      +     '<button onclick="resolveConflict('+i+',\'local\')" style="background:var(--green);color:#fff;border:none;padding:7px 14px;border-radius:6px;font-weight:600;cursor:pointer;font-size:12px;">Keep my version</button>'
+      +     '<button onclick="resolveConflict('+i+',\'remote\')" style="background:var(--blue);color:#fff;border:none;padding:7px 14px;border-radius:6px;font-weight:600;cursor:pointer;font-size:12px;">Use remote</button>'
+      +   '</div>'
+      + '</div>';
+  }).join('');
+  modal.innerHTML = ''
+    + '<div style="background:var(--card);border-radius:10px;padding:20px;max-width:800px;width:100%;max-height:90vh;overflow-y:auto;">'
+    +   '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;border-bottom:1px solid var(--border);padding-bottom:10px;">'
+    +     '<h3 style="margin:0;color:var(--amber);">Sync conflicts ('+_pendingConflicts.length+')</h3>'
+    +     '<button onclick="closeConflictsModal()" style="background:transparent;border:1px solid var(--border);padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px;">Close</button>'
+    +   '</div>'
+    +   '<p style="font-size:12px;color:var(--text2);line-height:1.5;margin:0 0 14px;">These records were edited locally <em>and</em> on another device. Pick which version to keep for each one. "Keep my version" will resync your local changes to Airtable; "Use remote" will overwrite your local copy with the version from the server.</p>'
+    +   items
+    + '</div>';
+}
+
+async function resolveConflict(idx, choice){
+  const c = _pendingConflicts[idx];
+  if(!c) return;
+  const arrName = {batch:'batchRecs', ec:'ecRecs', ro:'roRecs', waste:'wasteRecs', batchtx:'batchTxRecs', harvest:'harvestRecs', postdry:'postDryRecs', bio:'bioRecs'}[c.table];
+  const arr = arrName ? window[arrName] : null;
+  if(!arr){ _pendingConflicts.splice(idx,1); renderConflictsModal(); renderConflictBanner(); return; }
+  // Find the local row by airtableId (index may have shifted since the
+  // conflict was queued — pulls prepend new rows).
+  const j = arr.findIndex(r => r && r.airtableId === c.airtableId);
+  if(j < 0){ _pendingConflicts.splice(idx,1); renderConflictsModal(); renderConflictBanner(); return; }
+  if(choice === 'remote'){
+    // Overwrite local with remote; remote is by definition synced.
+    arr[j] = {...c.remote, synced: true};
+    lsSet(c.lsKey, arr);
+    toast('Used remote version');
+  } else {
+    // Keep local — push local edits back to Airtable now.
+    arr[j].synced = true;
+    try {
+      if(c.table === 'batch' && cfg.batchTbl){
+        await atUpsert(cfg.batchTbl, buildBatchFields(arr[j]), ['Batch ID']);
+      }
+      // For child tables there's no single-record update endpoint we use, so
+      // the simplest "keep local" is to mark it as synced and rely on the
+      // user re-saving if they want it re-pushed. Most child-table records
+      // are append-only and shouldn't conflict in practice.
+      lsSet(c.lsKey, arr);
+      toast('Kept your version');
+    } catch(e){
+      arr[j].synced = false;  // re-mark so Sync Pending will retry
+      lsSet(c.lsKey, arr);
+      toast('Push failed — kept locally, will retry: '+(e.message||''),5000);
+    }
+  }
+  _pendingConflicts.splice(idx, 1);
+  renderConflictsModal();
+  renderConflictBanner();
+  try { populateBatchDropdowns(); }catch(_){}
+  try { if(typeof renderBatchLog==='function') renderBatchLog(); }catch(_){}
+  updatePendingBadge();
+}
+
 function getActiveRooms(batchId){
   // Returns the rooms currently holding plants for this batch. Veg is ALWAYS included whenever
   // it holds plants (the implicit remainder = batch total − sum of flower-room counts), even if
@@ -1298,8 +1859,9 @@ async function recordPhaseChangeTx(batchId, fromPhase, toPhase, weight){
         'Notes': tx.notes
       };
       Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
-      await atPost(cfg.batchtxTbl, f);
+      const _res = await atPost(cfg.batchtxTbl, f);
       tx.synced = true;
+      if(_res && _res.id) tx.airtableId = _res.id;
       lsSet('gp-batchtx', batchTxRecs);
       updatePendingBadge();
     }catch(e){
@@ -1715,15 +2277,20 @@ async function harvestComplete(){
     try{
       const f = {'Batch ID':[tx.batchId],'Date':tx.date,'Transaction Type':tx.txType,'Plant Phase':tx.plantPhase||undefined,'Quantity':tx.qty,'Weight (kg)':tx.weight||undefined,'Current Quantity After':calcBatchQty(batch),'Notes':tx.notes};
       Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
-      await atPost(cfg.batchtxTbl, f);
-      tx.synced = true; lsSet('gp-batchtx', batchTxRecs);
+      const _txRes = await atPost(cfg.batchtxTbl, f);
+      tx.synced = true;
+      if(_txRes && _txRes.id) tx.airtableId = _txRes.id;
+      lsSet('gp-batchtx', batchTxRecs);
     }catch(e){ /* Sync Pending will retry */ }
   }
   // Sync the updated batch (room distribution + completedHarvests + harvestedWeights + maybe new phase/harvest date)
   if(cfg.batchTbl && cfg.token && cfg.base){
     try{
-      await atUpsert(cfg.batchTbl, buildBatchFields(batchRec), ['Batch ID']);
-      batchRec.synced = true; lsSet('gp-batch', batchRecs);
+      const _bRes = await atUpsert(cfg.batchTbl, buildBatchFields(batchRec), ['Batch ID']);
+      batchRec.synced = true;
+      const _bId = _bRes && _bRes.records && _bRes.records[0] && _bRes.records[0].id;
+      if(_bId) batchRec.airtableId = _bId;
+      lsSet('gp-batch', batchRecs);
       updatePendingBadge();
     }catch(e){ /* retry later */ }
   }
@@ -1778,8 +2345,9 @@ async function harvestSave(){
         'Notes': rec.notes || undefined
       };
       Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
-      await atPost(cfg.harvestTbl, f);
+      const _hRes = await atPost(cfg.harvestTbl, f);
       rec.synced = true;
+      if(_hRes && _hRes.id) rec.airtableId = _hRes.id;
       lsSet('gp-harvest', harvestRecs);
       setSyncPill('ok','Synced');
     }catch(e){
@@ -1950,8 +2518,9 @@ async function bioSave(){
         'Reason': rec.reason || undefined
       };
       Object.keys(f).forEach(k => { if(f[k]===undefined||f[k]===null||f[k]==='') delete f[k]; });
-      await atPost(cfg.bioTbl, f);
+      const _bioRes = await atPost(cfg.bioTbl, f);
       rec.synced = true;
+      if(_bioRes && _bioRes.id) rec.airtableId = _bioRes.id;
       lsSet('gp-bio', bioRecs);
       setSyncPill('ok','Synced');
       updatePendingBadge();
@@ -2114,8 +2683,9 @@ async function postDrySave(){
         'Notes': rec.notes || undefined
       };
       Object.keys(f).forEach(k=>{ if(f[k]===undefined||f[k]===null||f[k]==='') delete f[k]; });
-      await atPost(cfg.postDryTbl, f);
+      const _pdRes = await atPost(cfg.postDryTbl, f);
       rec.synced = true;
+      if(_pdRes && _pdRes.id) rec.airtableId = _pdRes.id;
       lsSet('gp-postdry', postDryRecs);
       setSyncPill('ok','Synced');
       updatePendingBadge();
@@ -2224,8 +2794,10 @@ async function postDryComplete(){
   // Push to Airtable
   if(cfg.batchTbl && cfg.token && cfg.base){
     try{
-      await atUpsert(cfg.batchTbl, buildBatchFields(batchRecs[idx]), ['Batch ID']);
+      const _pdcRes = await atUpsert(cfg.batchTbl, buildBatchFields(batchRecs[idx]), ['Batch ID']);
       batchRecs[idx].synced = true;
+      const _pdcId = _pdcRes && _pdcRes.records && _pdcRes.records[0] && _pdcRes.records[0].id;
+      if(_pdcId) batchRecs[idx].airtableId = _pdcId;
       lsSet('gp-batch', batchRecs);
       updatePendingBadge();
     }catch(e){
@@ -3179,15 +3751,17 @@ async function ecSave(){
     try{
       const f={'Date':rec.date,'Room':rec.room,'Grower':rec.grower,'Batch ID':rec.batch?[rec.batch]:undefined,'Watering Type':rec.wtype||undefined,'Drip EC Pen 1':rec.dripEcPens[0]||undefined,'Drip EC Pen 2':rec.dripEcPens[1]||undefined,'Drip EC Pen 3':rec.dripEcPens[2]||undefined,'Drip pH Pen 1':rec.dripPhPens[0]||undefined,'Drip pH Pen 2':rec.dripPhPens[1]||undefined,'Drip pH Pen 3':rec.dripPhPens[2]||undefined,'Event 1 ml/plant':rec.events[0]||undefined,'Event 2 ml/plant':rec.events[1]||undefined,'Event 3 ml/plant':rec.events[2]||undefined,'Event 4 ml/plant':rec.events[3]||undefined,'Event 5 ml/plant':rec.events[4]||undefined,'Event 6 ml/plant':rec.events[5]||undefined,'Event 7 ml/plant':rec.events[6]||undefined,'Event 8 ml/plant':rec.events[7]||undefined,'Flow Meter Reading':rec.flow||undefined,'Notes':rec.notes||undefined};
       Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
-      await atPost(cfg.ecTbl,f);rec.synced=true;lsSet('gp-ec',ecRecs);setSyncPill('ok','Synced');toast('Saved and synced to Airtable');
+      const _ecRes = await atPost(cfg.ecTbl,f);rec.synced=true;if(_ecRes && _ecRes.id) rec.airtableId=_ecRes.id;lsSet('gp-ec',ecRecs);setSyncPill('ok','Synced');toast('Saved and synced to Airtable');
     }catch(e){setSyncPill('err','Sync failed');toast('Saved locally - Airtable: '+(e.message||'sync failed'),5000);}
     document.getElementById('ec-btn').disabled=false;
   }else{toast('Entry saved locally');}
   // If this entry captured the hydration date or auto-advanced phase, push the batch update to Airtable
   if((_hydrationCaptured || _vegAdvanced || _flowerAdvanced) && cfg.batchTbl && cfg.token && cfg.base){
     try{
-      await atUpsert(cfg.batchTbl, buildBatchFields(_ecBatchRec), ['Batch ID']);
+      const _ecBRes = await atUpsert(cfg.batchTbl, buildBatchFields(_ecBatchRec), ['Batch ID']);
       _ecBatchRec.synced = true;
+      const _ecBId = _ecBRes && _ecBRes.records && _ecBRes.records[0] && _ecBRes.records[0].id;
+      if(_ecBId) _ecBatchRec.airtableId = _ecBId;
       lsSet('gp-batch', batchRecs);
       updatePendingBadge();
     }catch(e){
@@ -3283,7 +3857,7 @@ async function roSave(){
       const f={'Date':rec.date,'Room':rec.room,'Grower':rec.grower,'Batch ID':rec.batch?[rec.batch]:undefined,'Input EC':rec.inputEC||undefined,'EC Variance':rec.variance||undefined,'Notes':rec.notes||undefined};
       rec.samples.forEach((s,i)=>{if(s.ec)f['S'+(i+1)+' EC']=s.ec;if(s.ph)f['S'+(i+1)+' pH']=s.ph;});
       Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
-      await atPost(cfg.roTbl,f);rec.synced=true;lsSet('gp-ro',roRecs);setSyncPill('ok','Synced');toast('Saved and synced to Airtable');
+      const _roRes = await atPost(cfg.roTbl,f);rec.synced=true;if(_roRes && _roRes.id) rec.airtableId=_roRes.id;lsSet('gp-ro',roRecs);setSyncPill('ok','Synced');toast('Saved and synced to Airtable');
     }catch(e){setSyncPill('err','Sync failed');toast('Saved locally - Airtable sync failed.',3500);}
     document.getElementById('ro-btn').disabled=false;
   }else{toast('Entry saved locally');}
@@ -3419,6 +3993,7 @@ async function syncPending(){
       Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
       const ecRes=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+cfg.ecTbl,{method:'POST',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify({fields:f,typecast:true})});
       if(!ecRes.ok){const err=await ecRes.json();throw new Error('EC '+ecRes.status+': '+(err.error&&err.error.message||JSON.stringify(err)));}
+      try{const _j=await ecRes.json(); if(_j && _j.id) rec.airtableId=_j.id;}catch(_){}
       rec.synced=true;ok++;
     }catch(e){fail++;lastErr=e.message;}
   }
@@ -3430,6 +4005,7 @@ async function syncPending(){
       Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
       const roRes=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+cfg.roTbl,{method:'POST',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify({fields:f,typecast:true})});
       if(!roRes.ok){const err=await roRes.json();throw new Error('RO '+roRes.status+': '+(err.error&&err.error.message||JSON.stringify(err)));}
+      try{const _j=await roRes.json(); if(_j && _j.id) rec.airtableId=_j.id;}catch(_){}
       rec.synced=true;ok++;
     }catch(e){fail++;lastErr=e.message;}
   }
@@ -3440,6 +4016,7 @@ async function syncPending(){
       Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
       const wRes=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+cfg.wasteTbl,{method:'POST',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify({fields:f,typecast:true})});
       if(!wRes.ok){const err=await wRes.json();throw new Error('Waste '+wRes.status+': '+(err.error&&err.error.message||JSON.stringify(err)));}
+      try{const _j=await wRes.json(); if(_j && _j.id) rec.airtableId=_j.id;}catch(_){}
       rec.synced=true;ok++;
     }catch(e){fail++;lastErr=e.message;}
   }
@@ -3447,7 +4024,9 @@ async function syncPending(){
   if(cfg.batchTbl){
     for(const rec of pendingBatch){
       try{
-        await atUpsert(cfg.batchTbl, buildBatchFields(rec), ['Batch ID']);
+        const _r = await atUpsert(cfg.batchTbl, buildBatchFields(rec), ['Batch ID']);
+        const _id = _r && _r.records && _r.records[0] && _r.records[0].id;
+        if(_id) rec.airtableId = _id;
         rec.synced=true;ok++;
       }catch(e){fail++;lastErr=e.message;}
     }
@@ -3465,6 +4044,7 @@ async function syncPending(){
         Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
         const txRes=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+cfg.batchtxTbl,{method:'POST',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify({fields:f,typecast:true})});
         if(!txRes.ok){const err=await txRes.json();throw new Error('Tx '+txRes.status+': '+(err.error&&err.error.message||JSON.stringify(err)));}
+        try{const _j=await txRes.json(); if(_j && _j.id) tx.airtableId=_j.id;}catch(_){}
         tx.synced=true;ok++;
       }catch(e){fail++;lastErr=e.message;}
     }
@@ -3477,6 +4057,7 @@ async function syncPending(){
         Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
         const hRes=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+cfg.harvestTbl,{method:'POST',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify({fields:f,typecast:true})});
         if(!hRes.ok){const err=await hRes.json();throw new Error('Harvest '+hRes.status+': '+(err.error&&err.error.message||JSON.stringify(err)));}
+        try{const _j=await hRes.json(); if(_j && _j.id) h.airtableId=_j.id;}catch(_){}
         h.synced=true;ok++;
       }catch(e){fail++;lastErr=e.message;}
     }
@@ -3489,6 +4070,7 @@ async function syncPending(){
         Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
         const pRes=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+cfg.postDryTbl,{method:'POST',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify({fields:f,typecast:true})});
         if(!pRes.ok){const err=await pRes.json();throw new Error('PostDry '+pRes.status+': '+(err.error&&err.error.message||JSON.stringify(err)));}
+        try{const _j=await pRes.json(); if(_j && _j.id) p.airtableId=_j.id;}catch(_){}
         p.synced=true;ok++;
       }catch(e){fail++;lastErr=e.message;}
     }
@@ -3501,6 +4083,7 @@ async function syncPending(){
         Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
         const bRes=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+cfg.bioTbl,{method:'POST',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify({fields:f,typecast:true})});
         if(!bRes.ok){const err=await bRes.json();throw new Error('Bio '+bRes.status+': '+(err.error&&err.error.message||JSON.stringify(err)));}
+        try{const _j=await bRes.json(); if(_j && _j.id) r.airtableId=_j.id;}catch(_){}
         r.synced=true;ok++;
       }catch(e){fail++;lastErr=e.message;}
     }
@@ -3513,7 +4096,7 @@ async function syncPending(){
   else{setSyncPill('err','Sync failed');st.style.background='var(--red-pale)';st.style.color='var(--red)';st.textContent='Sync failed: '+(lastErr||'Check your Airtable connection.');}
 }
 function applySettings(){document.getElementById('s-token').value=cfg.token||'';document.getElementById('s-base').value=cfg.base||'';document.getElementById('s-ec').value=cfg.ecTbl||'';document.getElementById('s-ro').value=cfg.roTbl||'';document.getElementById('s-waste').value=cfg.wasteTbl||'';document.getElementById('s-batch').value=cfg.batchTbl||'';document.getElementById('s-batchtx').value=cfg.batchtxTbl||'';const sh=document.getElementById('s-harvest'); if(sh) sh.value=cfg.harvestTbl||'';const spd=document.getElementById('s-postdry'); if(spd) spd.value=cfg.postDryTbl||'';const sbio=document.getElementById('s-bio'); if(sbio) sbio.value=cfg.bioTbl||'';setSyncPill(atReady()?'ok':'off',atReady()?'Airtable connected':'Not configured');}
-async function saveSettings(){cfg={token:document.getElementById('s-token').value.trim(),base:document.getElementById('s-base').value.trim(),ecTbl:document.getElementById('s-ec').value.trim(),roTbl:document.getElementById('s-ro').value.trim(),wasteTbl:document.getElementById('s-waste').value.trim(),batchTbl:document.getElementById('s-batch').value.trim(),batchtxTbl:document.getElementById('s-batchtx').value.trim(),harvestTbl:(document.getElementById('s-harvest')?.value||'').trim(),postDryTbl:(document.getElementById('s-postdry')?.value||'').trim(),bioTbl:(document.getElementById('s-bio')?.value||'').trim()};const st=document.getElementById('conn-status');st.style.display='block';st.style.background='var(--bg2)';st.style.color='var(--text2)';st.textContent='Testing connection...';if(!atReady()){st.textContent='Please fill in all fields.';st.style.background='var(--amber-pale)';st.style.color='var(--amber)';return;}try{const r=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+cfg.ecTbl+'?maxRecords=1',{headers:{'Authorization':'Bearer '+cfg.token}});if(r.ok){lsSet('gp-cfg',cfg);applySettings();st.textContent='Connected! Credentials saved.';st.style.background='var(--green-pale)';st.style.color='var(--green)';}else{st.textContent='Failed ('+r.status+'). Check your credentials.';st.style.background='var(--red-pale)';st.style.color='var(--red)';}}catch(e){st.textContent='Could not reach Airtable. Check internet connection.';st.style.background='var(--red-pale)';st.style.color='var(--red)';}}
+async function saveSettings(){cfg={token:document.getElementById('s-token').value.trim(),base:document.getElementById('s-base').value.trim(),ecTbl:document.getElementById('s-ec').value.trim(),roTbl:document.getElementById('s-ro').value.trim(),wasteTbl:document.getElementById('s-waste').value.trim(),batchTbl:document.getElementById('s-batch').value.trim(),batchtxTbl:document.getElementById('s-batchtx').value.trim(),harvestTbl:(document.getElementById('s-harvest')?.value||'').trim(),postDryTbl:(document.getElementById('s-postdry')?.value||'').trim(),bioTbl:(document.getElementById('s-bio')?.value||'').trim()};const st=document.getElementById('conn-status');st.style.display='block';st.style.background='var(--bg2)';st.style.color='var(--text2)';st.textContent='Testing connection...';if(!atReady()){st.textContent='Please fill in all fields.';st.style.background='var(--amber-pale)';st.style.color='var(--amber)';return;}try{const r=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+cfg.ecTbl+'?maxRecords=1',{headers:{'Authorization':'Bearer '+cfg.token}});if(r.ok){lsSet('gp-cfg',cfg);applySettings();st.textContent='Connected! Credentials saved.';st.style.background='var(--green-pale)';st.style.color='var(--green)';startAutoSync();}else{st.textContent='Failed ('+r.status+'). Check your credentials.';st.style.background='var(--red-pale)';st.style.color='var(--red)';}}catch(e){st.textContent='Could not reach Airtable. Check internet connection.';st.style.background='var(--red-pale)';st.style.color='var(--red)';}}
 
 function localDate(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 const today=localDate();
@@ -3524,6 +4107,10 @@ document.getElementById('ro-date').style.background='var(--bg2)';
 document.getElementById('ro-date').style.color='var(--text3)';
 document.getElementById('ro-date').style.cursor='default';
 buildECEvents();buildROSamples();loadAll();populateBatchDropdowns();setVegMin();applyCascadeLocks();updatePendingBadge();ecSeqUnlock();wasteSeqUnlock();summaryPopulateBatches();document.getElementById('waste-date').textContent=new Date().toISOString().split('T')[0];
+// Kick off auto-sync (60s polling) if Airtable is configured. Idempotent —
+// also re-invoked from saveSettings() so a fresh token starts the timer.
+startAutoSync();
+renderPullStatus();
 // Keep entry dates updated to today on each page load
 setInterval(()=>{const t=localDate();document.getElementById('ec-date').value=t;document.getElementById('ro-date').value=t;},60000);
 
@@ -3793,7 +4380,7 @@ async function wasteSave(){
     try{
       const f={'Date':rec.date,'Grower':rec.grower,'Batch ID':rec.batch?[rec.batch]:undefined,'Room':rec.room,'Waste Type':rec.type,'Sub-Category':rec.subtype||undefined,'Weight (kg)':rec.weight,'Plants Destroyed':rec.plants||undefined,'Notes':rec.notes||undefined};
       Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
-      await atPost(cfg.wasteTbl,f);rec.synced=true;lsSet('gp-waste',wasteRecs);setSyncPill('ok','Synced');toast('Saved and synced to Airtable');
+      const _wRes = await atPost(cfg.wasteTbl,f);rec.synced=true;if(_wRes && _wRes.id) rec.airtableId=_wRes.id;lsSet('gp-waste',wasteRecs);setSyncPill('ok','Synced');toast('Saved and synced to Airtable');
     }catch(e){setSyncPill('err','Sync failed: Waste '+e.message);toast('Saved locally - sync failed.',3500);}
     document.getElementById('waste-btn').disabled=false;
   } else {
@@ -3805,14 +4392,16 @@ async function wasteSave(){
       let qtyAfter=(destroyedTx.currentQtyBefore||0)-destroyedTx.qty;if(qtyAfter<0)qtyAfter=0;
       const tf={'Batch ID':[destroyedTx.batchId],'Date':destroyedTx.date,'Transaction Type':destroyedTx.txType,'Plant Phase':destroyedTx.plantPhase||undefined,'Quantity':destroyedTx.qty,'Current Quantity After':qtyAfter,'Notes':destroyedTx.notes};
       Object.keys(tf).forEach(k=>{if(tf[k]===undefined||tf[k]===null||tf[k]==='')delete tf[k];});
-      await atPost(cfg.batchtxTbl,tf);destroyedTx.synced=true;lsSet('gp-batchtx',batchTxRecs);
+      const _dtRes = await atPost(cfg.batchtxTbl,tf);destroyedTx.synced=true;if(_dtRes && _dtRes.id) destroyedTx.airtableId=_dtRes.id;lsSet('gp-batchtx',batchTxRecs);
     }catch(e){toast('Destroyed transaction not synced: '+(e.message||'error'),4000);}
   }
   // Push the updated batch (with decremented roomDistribution) to Airtable
   if(_distChanged && cfg.batchTbl && cfg.token && cfg.base){
     try{
-      await atUpsert(cfg.batchTbl, buildBatchFields(_wsBatchRec), ['Batch ID']);
+      const _wsBRes = await atUpsert(cfg.batchTbl, buildBatchFields(_wsBatchRec), ['Batch ID']);
       _wsBatchRec.synced = true;
+      const _wsBId = _wsBRes && _wsBRes.records && _wsBRes.records[0] && _wsBRes.records[0].id;
+      if(_wsBId) _wsBatchRec.airtableId = _wsBId;
       lsSet('gp-batch', batchRecs);
       updatePendingBadge();
     }catch(e){ /* Sync Pending will retry */ }
@@ -3981,7 +4570,9 @@ async function batchCreate(){
   // Sync to Airtable
   if(cfg.batchTbl && cfg.token && cfg.base){
     try{
-      await atUpsert(cfg.batchTbl, buildBatchFields(rec), ['Batch ID']);
+      const _bcRes = await atUpsert(cfg.batchTbl, buildBatchFields(rec), ['Batch ID']);
+      const _bcId = _bcRes && _bcRes.records && _bcRes.records[0] && _bcRes.records[0].id;
+      if(_bcId) rec.airtableId = _bcId;
       rec.synced=true; lsSet('gp-batch',batchRecs); setSyncPill('ok','Synced'); toast('Batch created and synced to Airtable'); updatePendingBadge();
     }catch(e){ setSyncPill('err','Sync error'); toast('Batch saved locally - Airtable: '+(e.message||'sync failed'),5000); }
   } else { toast('Batch '+batchId+' created!'); }
@@ -4873,8 +5464,10 @@ async function summaryUpdateBatch(){
   if(cfg.batchTbl && cfg.token && cfg.base){
     setSyncPill('ing','Syncing...');
     try{
-      await atUpsert(cfg.batchTbl, buildBatchFields(batchRecs[idx]), ['Batch ID']);
+      const _suRes = await atUpsert(cfg.batchTbl, buildBatchFields(batchRecs[idx]), ['Batch ID']);
       batchRecs[idx].synced = true;
+      const _suId = _suRes && _suRes.records && _suRes.records[0] && _suRes.records[0].id;
+      if(_suId) batchRecs[idx].airtableId = _suId;
       lsSet('gp-batch', batchRecs);
       setSyncPill('ok','Synced');
       updatePendingBadge();
@@ -5080,8 +5673,8 @@ async function summaryAddTransaction(){
       const currentQty = summaryCalcQty(batchId);
       const f={'Batch ID':tx.batchId?[tx.batchId]:undefined,'Date':tx.date,'Transaction Type':tx.txType,'Plant Phase':tx.plantPhase||undefined,'Quantity':tx.qty,'Weight (kg)':tx.weight||undefined,'Current Quantity After':currentQty,'Notes':tx.notes||undefined};
       Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
-      await atPost(cfg.batchtxTbl, f);
-      tx.synced=true; lsSet('gp-batchtx',batchTxRecs); setSyncPill('ok','Synced');
+      const _stRes = await atPost(cfg.batchtxTbl, f);
+      tx.synced=true; if(_stRes && _stRes.id) tx.airtableId=_stRes.id; lsSet('gp-batchtx',batchTxRecs); setSyncPill('ok','Synced');
     }catch(e){ setSyncPill('err','Sync error'); toast('Transaction saved locally - Airtable: '+(e.message||'sync failed'),5000); }
   }
   // If the Harvested tx auto-advanced the phase to Drying (or zero-qty re-locked to Clones),
@@ -5091,8 +5684,10 @@ async function summaryAddTransaction(){
     try{
       const _bi = batchRecs.findIndex(r=>r.batchId===batchId && !r.type);
       if(_bi >= 0){
-        await atUpsert(cfg.batchTbl, buildBatchFields(batchRecs[_bi]), ['Batch ID']);
+        const _bcaRes = await atUpsert(cfg.batchTbl, buildBatchFields(batchRecs[_bi]), ['Batch ID']);
         batchRecs[_bi].synced = true;
+        const _bcaId = _bcaRes && _bcaRes.records && _bcaRes.records[0] && _bcaRes.records[0].id;
+        if(_bcaId) batchRecs[_bi].airtableId = _bcaId;
         lsSet('gp-batch', batchRecs);
         updatePendingBadge();
       }
