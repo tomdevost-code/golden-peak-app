@@ -1057,11 +1057,8 @@ tr:last-child td { border-bottom: none; }
           </div>
           <div class="g2" style="margin-bottom:0;">
             <div class="field"><label>Room</label>
-              <select id="pest-room" onchange="pestRoomChanged()">
+              <select id="pest-room" onchange="pestRoomChanged()" disabled style="background:var(--bg2);color:var(--text3);cursor:not-allowed;">
                 <option value="">select room</option>
-                <option>Flower 1</option><option>Flower 2</option>
-                <option>Flower 3</option><option>Flower 4</option>
-                <option>Flower 5</option><option>Veg</option>
               </select>
             </div>
             <div class="field"><label>Date</label>
@@ -1107,14 +1104,26 @@ tr:last-child td { border-bottom: none; }
             <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer;padding:6px 8px;border-radius:var(--radius-sm);background:var(--bg2);">
               <input type="checkbox" class="pest-known" value="Fungus Gnats" onchange="pestSeqUnlock()" /> Fungus Gnats
             </label>
+            <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer;padding:6px 8px;border-radius:var(--radius-sm);background:var(--bg2);">
+              <input type="checkbox" class="pest-known" value="Spider Mites" onchange="pestSeqUnlock()" /> Spider Mites
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer;padding:6px 8px;border-radius:var(--radius-sm);background:var(--bg2);">
+              <input type="checkbox" class="pest-known" value="PM" onchange="pestSeqUnlock()" /> PM (Powdery Mildew)
+            </label>
           </div>
-          <div style="border-top:1px dashed var(--border);padding-top:10px;">
+          <div style="border-top:1px dashed var(--border);padding-top:10px;margin-bottom:12px;">
             <label style="display:block;font-size:11px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">Other pest / pathogen not in list</label>
             <div style="display:flex;gap:6px;">
-              <input type="text" id="pest-other-input" placeholder="e.g. Spider Mites, Powdery Mildew" style="flex:1;font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;" />
+              <input type="text" id="pest-other-input" placeholder="e.g. Aphids, Whiteflies, Botrytis" style="flex:1;font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;" />
               <button type="button" onclick="pestAddOther()" style="background:var(--green);color:#fff;border:none;border-radius:var(--radius-sm);padding:8px 14px;font-weight:600;cursor:pointer;font-size:13px;">Add</button>
             </div>
             <div id="pest-other-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;"></div>
+          </div>
+          <div style="border-top:1px dashed var(--border);padding-top:10px;">
+            <div class="field"><label>Quantity Observed</label>
+              <input type="number" id="pest-quantity" min="0" step="1" placeholder="e.g. 5" onwheel="this.blur()" onkeydown="if(event.key==='ArrowUp'||event.key==='ArrowDown')event.preventDefault();" onchange="pestSeqUnlock()" oninput="pestSeqUnlock()" />
+              <div style="font-size:11px;color:var(--text3);margin-top:4px;">Total count across all pests in this observation (insects on the card / plant / room).</div>
+            </div>
           </div>
         </div>
       </div>
@@ -1548,6 +1557,7 @@ const REMOTE_MAPPERS = {
       location: f['Location']||'',
       cardNumber: f['Card Number'] != null ? parseInt(f['Card Number']) : null,
       pests,
+      quantity: f['Quantity'] != null ? parseInt(f['Quantity']) : 0,
       notes: f['Notes']||'',
       synced: true
     };
@@ -2819,10 +2829,41 @@ function pestBatchSelect(){
   const hidden = document.getElementById('pest-batch');
   if(hidden) hidden.value = val;
   pestRefreshDate();
+  // Re-populate the room dropdown to only show rooms with live plants for this batch
+  pestPopulateRooms(val);
   // Refresh history when batch changes
   const room = document.getElementById('pest-room').value;
   pestRenderHistory(val, room);
   pestSeqUnlock();
+}
+
+function pestPopulateRooms(batchId){
+  // Show only rooms that currently hold plants for the selected batch.
+  // Uses getActiveRooms() — the same helper that drives EC's room dropdown —
+  // which returns batchRec.rooms filtered by calcRoomPlantCount > 0 (Veg drops
+  // off once all plants are allocated to flower rooms).
+  const sel = document.getElementById('pest-room');
+  if(!sel) return;
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">select room</option>';
+  if(!batchId){
+    sel.disabled = true; sel.style.background='var(--bg2)'; sel.style.color='var(--text3)'; sel.style.cursor='not-allowed';
+    return;
+  }
+  const rooms = (typeof getActiveRooms === 'function') ? getActiveRooms(batchId) : [];
+  rooms.forEach(r => {
+    const opt = document.createElement('option');
+    opt.value = r; opt.textContent = r;
+    sel.appendChild(opt);
+  });
+  // Restore previous selection if it's still valid
+  if(prev && rooms.includes(prev)) sel.value = prev; else sel.value = '';
+  sel.disabled = !rooms.length;
+  sel.style.background = rooms.length ? '' : 'var(--bg2)';
+  sel.style.color = rooms.length ? '' : 'var(--text3)';
+  sel.style.cursor = rooms.length ? '' : 'not-allowed';
+  // Auto-pick if only one room
+  if(rooms.length === 1) sel.value = rooms[0];
 }
 
 function pestRoomChanged(){
@@ -2890,31 +2931,33 @@ function pestGetSelectedPests(){
 }
 
 function pestSeqUnlock(){
-  // Sequential unlock: Batch → Grower → Room → Location (+ Card if Sticky Card) → Pests → Save
+  // Sequential unlock: Batch → Grower → Room → Location (+ Card if Sticky Card) → Pests + Quantity → Save
   const batch = document.getElementById('pest-batch-select').value;
   const grower = document.getElementById('pest-grower').value;
   const room = document.getElementById('pest-room').value;
   const loc = document.getElementById('pest-location').value;
   const card = document.getElementById('pest-card-num').value;
   const pests = pestGetSelectedPests();
+  const qty = parseInt(document.getElementById('pest-quantity')?.value)||0;
   const lock = (id) => { const el=document.getElementById(id); if(!el) return; el.disabled=true; el.style.background='var(--bg2)'; el.style.color='var(--text3)'; el.style.cursor='not-allowed'; };
   const unlock = (id) => { const el=document.getElementById(id); if(!el) return; el.disabled=false; el.style.background=''; el.style.color=''; el.style.cursor=''; };
   // Gate the Save button so a partial entry can't be saved
   const btn = document.getElementById('pest-btn');
-  const ready = !!(batch && grower && room && loc && (loc !== 'Sticky Card' || card) && pests.length);
+  const ready = !!(batch && grower && room && loc && (loc !== 'Sticky Card' || card) && pests.length && qty > 0);
   if(btn){
     btn.disabled = !ready;
     btn.style.opacity = ready ? '1' : '0.5';
     btn.style.cursor = ready ? 'pointer' : 'not-allowed';
   }
   // Progressive lock/unlock of downstream fields
-  if(!batch){ lock('pest-grower'); lock('pest-room'); lock('pest-location'); lock('pest-card-num'); return; }
+  if(!batch){ lock('pest-grower'); lock('pest-room'); lock('pest-location'); lock('pest-card-num'); lock('pest-quantity'); return; }
   unlock('pest-grower');
-  if(!grower){ lock('pest-room'); lock('pest-location'); lock('pest-card-num'); return; }
+  if(!grower){ lock('pest-room'); lock('pest-location'); lock('pest-card-num'); lock('pest-quantity'); return; }
   unlock('pest-room');
-  if(!room){ lock('pest-location'); lock('pest-card-num'); return; }
+  if(!room){ lock('pest-location'); lock('pest-card-num'); lock('pest-quantity'); return; }
   unlock('pest-location');
   if(loc === 'Sticky Card') unlock('pest-card-num'); else lock('pest-card-num');
+  unlock('pest-quantity');
 }
 
 async function pestSave(){
@@ -2926,6 +2969,7 @@ async function pestSave(){
   const cardRaw = document.getElementById('pest-card-num').value;
   const cardNumber = cardRaw ? parseInt(cardRaw) : null;
   const pests = pestGetSelectedPests();
+  const quantity = parseInt(document.getElementById('pest-quantity').value) || 0;
   const notes = document.getElementById('pest-notes').value.trim();
   if(!batch){ toast('Please select a batch.'); return; }
   if(!grower){ toast('Please select a grower.'); return; }
@@ -2933,6 +2977,7 @@ async function pestSave(){
   if(!loc){ toast('Please select where the identification was made.'); return; }
   if(loc === 'Sticky Card' && !cardNumber){ toast('Please pick which card (1–8).'); return; }
   if(!pests.length){ toast('Select or add at least one pest.'); return; }
+  if(quantity <= 0){ toast('Enter the quantity observed (> 0).'); return; }
   // Block writes when batch is closed
   const _bRec = batchRecs.find(r=>r.batchId===batch && !r.type);
   if(_bRec && _bRec.status === 'Closed'){
@@ -2945,18 +2990,20 @@ async function pestSave(){
     location: loc,
     cardNumber,
     pests,
+    quantity,
     notes,
     synced: false
   };
   pestRecs.unshift(rec);
   lsSet('gp-pest', pestRecs);
-  toast('Saved: '+pests.join(', '));
+  toast('Saved: '+quantity+' × '+pests.join(', '));
   updatePendingBadge();
-  // Soft-refresh: clear pests + card + notes; keep batch/grower/room/location ready
+  // Soft-refresh: clear pests + card + qty + notes; keep batch/grower/room/location ready
   document.querySelectorAll('.pest-known').forEach(cb => cb.checked = false);
   _pestOtherList = [];
   pestRenderOtherChips();
   document.getElementById('pest-other-input').value = '';
+  document.getElementById('pest-quantity').value = '';
   document.getElementById('pest-notes').value = '';
   document.getElementById('pest-card-num').value = '';
   pestRenderHistory(batch, room);
@@ -2973,6 +3020,7 @@ async function pestSave(){
         'Location': rec.location,
         'Card Number': rec.cardNumber || undefined,
         'Pests Identified': rec.pests,         // multi-select; typecast:true auto-creates new options
+        'Quantity': rec.quantity,
         'Notes': rec.notes || undefined
       };
       Object.keys(f).forEach(k => { if(f[k]===undefined||f[k]===null||f[k]==='') delete f[k]; });
@@ -2994,15 +3042,15 @@ function pestClearConfirm(){
   document.querySelectorAll('.pest-known').forEach(cb => cb.checked = false);
   _pestOtherList = [];
   pestRenderOtherChips();
-  ['pest-other-input','pest-notes','pest-card-num'].forEach(id => {
+  ['pest-other-input','pest-notes','pest-card-num','pest-quantity'].forEach(id => {
     const el=document.getElementById(id); if(el) el.value='';
   });
   document.getElementById('pest-batch-select').value = '';
   document.getElementById('pest-batch').value = '';
   document.getElementById('pest-grower').value = '';
-  document.getElementById('pest-room').value = '';
   document.getElementById('pest-location').value = '';
   document.getElementById('pest-card-wrap').style.display = 'none';
+  pestPopulateRooms('');  // resets room dropdown to disabled/empty
   pestRefreshDate();
   pestSeqUnlock();
   pestRenderHistory('', '');
@@ -3025,17 +3073,20 @@ function pestRenderHistory(batch, room){
     '<th style="padding:6px 8px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Location</th>'+
     '<th style="padding:6px 8px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Card</th>'+
     '<th style="padding:6px 8px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Pests</th>'+
+    '<th style="padding:6px 8px;text-align:right;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Qty</th>'+
     '<th style="padding:6px 8px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Grower</th>'+
     '<th style="padding:6px 8px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Notes</th>'+
   '</tr></thead><tbody>';
   recs.forEach(r => {
     const pestList = Array.isArray(r.pests) ? r.pests.join(', ') : (r.pests||'—');
     const cardStr = r.cardNumber ? ('#'+r.cardNumber) : '—';
+    const qtyStr = r.quantity ? String(r.quantity) : '—';
     html += '<tr>'+
       '<td style="padding:5px 8px;font-family:var(--mono);border-top:1px solid var(--border);white-space:nowrap;">'+r.date+'</td>'+
       '<td style="padding:5px 8px;border-top:1px solid var(--border);border-left:1px solid var(--border);">'+(r.location||'—')+'</td>'+
       '<td style="padding:5px 8px;font-family:var(--mono);border-top:1px solid var(--border);border-left:1px solid var(--border);">'+cardStr+'</td>'+
       '<td style="padding:5px 8px;border-top:1px solid var(--border);border-left:1px solid var(--border);font-weight:600;color:var(--amber);">'+pestList+'</td>'+
+      '<td style="padding:5px 8px;font-family:var(--mono);text-align:right;border-top:1px solid var(--border);border-left:1px solid var(--border);font-weight:600;">'+qtyStr+'</td>'+
       '<td style="padding:5px 8px;font-size:11px;color:var(--text2);border-top:1px solid var(--border);border-left:1px solid var(--border);">'+(r.grower||'—')+'</td>'+
       '<td style="padding:5px 8px;font-size:11px;color:var(--text3);border-top:1px solid var(--border);border-left:1px solid var(--border);max-width:200px;">'+(r.notes||'—')+'</td>'+
     '</tr>';
@@ -4562,7 +4613,7 @@ async function syncPending(){
   if(cfg.pestTbl){
     for(const r of pendingPest){
       try{
-        const f = {'Date':r.date,'Grower':r.grower,'Batch ID':r.batch?[r.batch]:undefined,'Room':r.room,'Location':r.location||undefined,'Card Number':r.cardNumber||undefined,'Pests Identified':(r.pests&&r.pests.length)?r.pests:undefined,'Notes':r.notes||undefined};
+        const f = {'Date':r.date,'Grower':r.grower,'Batch ID':r.batch?[r.batch]:undefined,'Room':r.room,'Location':r.location||undefined,'Card Number':r.cardNumber||undefined,'Pests Identified':(r.pests&&r.pests.length)?r.pests:undefined,'Quantity':r.quantity||undefined,'Notes':r.notes||undefined};
         Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
         const pRes=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+cfg.pestTbl,{method:'POST',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify({fields:f,typecast:true})});
         if(!pRes.ok){const err=await pRes.json();throw new Error('Pest '+pRes.status+': '+(err.error&&err.error.message||JSON.stringify(err)));}
