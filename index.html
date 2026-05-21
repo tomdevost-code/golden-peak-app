@@ -994,12 +994,6 @@ tr:last-child td { border-bottom: none; }
               <input type="date" id="bio-date" readonly style="background:var(--bg2);color:var(--text3);cursor:default;" />
             </div>
           </div>
-          <div class="g2" style="margin-bottom:0;">
-            <div class="field"><label>Time (24hr)</label>
-              <input type="time" id="bio-time" />
-            </div>
-            <div></div>
-          </div>
         </div>
       </div>
 
@@ -1419,7 +1413,6 @@ const REMOTE_MAPPERS = {
       id: 'bio_'+rec.id,
       airtableId: rec.id,
       date: f['Date']||'',
-      time: f['Time']||'',
       grower: f['Grower']||'',
       batch,
       room: f['Room']||'',
@@ -2526,7 +2519,7 @@ function bioSeqUnlock(){
   const grower = document.getElementById('bio-grower').value;
   const batch = document.getElementById('bio-batch-select').value;
   const room = document.getElementById('bio-room').value;
-  const fields = ['bio-time','bio-product','bio-quantity','bio-reason'];
+  const fields = ['bio-product','bio-quantity','bio-reason'];
   const lock = (id) => { const el=document.getElementById(id); if(!el) return; el.disabled=true; el.style.background='var(--bg2)'; el.style.color='var(--text3)'; el.style.cursor='not-allowed'; };
   const unlock = id => { const el=document.getElementById(id); if(!el) return; el.disabled=false; el.style.background=''; el.style.color=''; el.style.cursor=''; };
   if(!batch){
@@ -2544,14 +2537,12 @@ async function bioSave(){
   const batch = document.getElementById('bio-batch').value;
   const room = document.getElementById('bio-room').value;
   const date = document.getElementById('bio-date').value || localDate();
-  const time = document.getElementById('bio-time').value;
   const product = document.getElementById('bio-product').value;
   const quantity = parseFloat(document.getElementById('bio-quantity').value) || 0;
   const reason = document.getElementById('bio-reason').value.trim();
   if(!batch){ toast('Please select a batch.'); return; }
   if(!grower){ toast('Please select a grower (initials).'); return; }
   if(!room){ toast('Please select a room.'); return; }
-  if(!time){ toast('Please set a time.'); return; }
   if(!product){ toast('Please select a product.'); return; }
   if(quantity <= 0){
     const unit = (BIO_PRODUCTS[product] && BIO_PRODUCTS[product].unit) || 'units';
@@ -2570,7 +2561,7 @@ async function bioSave(){
   }
   const unit = (BIO_PRODUCTS[product] && BIO_PRODUCTS[product].unit) || '';
   const rec = {
-    id: Date.now(), date, time, grower, batch, room,
+    id: Date.now(), date, grower, batch, room,
     product, quantity, unit, reason, synced: false
   };
   bioRecs.unshift(rec);
@@ -2588,7 +2579,6 @@ async function bioSave(){
     try{
       const f = {
         'Date': rec.date,
-        'Time': rec.time,
         'Grower': rec.grower,
         'Batch ID': rec.batch ? [rec.batch] : undefined,
         'Room': rec.room,
@@ -2612,7 +2602,7 @@ async function bioSave(){
 }
 function bioClearConfirm(){
   if(!confirm('Clear the current form? Unsaved data will be lost.')) return;
-  ['bio-product','bio-quantity','bio-reason','bio-time']
+  ['bio-product','bio-quantity','bio-reason']
     .forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
   document.getElementById('bio-batch-select').value = '';
   document.getElementById('bio-batch').value = '';
@@ -2639,7 +2629,6 @@ function bioRenderHistory(batch, room){
   let html = '<div style="overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius-sm);background:#fff;"><table style="width:100%;border-collapse:collapse;font-size:12px;">';
   html += '<thead><tr style="background:#f5f5f5;">'+
     '<th style="padding:6px 8px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);">Date</th>'+
-    '<th style="padding:6px 8px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Time</th>'+
     '<th style="padding:6px 8px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Product</th>'+
     '<th style="padding:6px 8px;text-align:right;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Quantity</th>'+
     '<th style="padding:6px 8px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Grower</th>'+
@@ -2650,7 +2639,6 @@ function bioRenderHistory(batch, room){
     const qtyStr = (r.quantity != null) ? (r.quantity + (unit ? ' ' + unit : '')) : '—';
     html += '<tr>'+
       '<td style="padding:5px 8px;font-family:var(--mono);border-top:1px solid var(--border);white-space:nowrap;">'+r.date+'</td>'+
-      '<td style="padding:5px 8px;font-family:var(--mono);border-top:1px solid var(--border);border-left:1px solid var(--border);">'+(r.time||'—')+'</td>'+
       '<td style="padding:5px 8px;border-top:1px solid var(--border);border-left:1px solid var(--border);">'+(r.product||'—')+'</td>'+
       '<td style="padding:5px 8px;font-family:var(--mono);text-align:right;border-top:1px solid var(--border);border-left:1px solid var(--border);">'+qtyStr+'</td>'+
       '<td style="padding:5px 8px;font-size:11px;color:var(--text2);border-top:1px solid var(--border);border-left:1px solid var(--border);">'+(r.grower||'—')+'</td>'+
@@ -4162,7 +4150,7 @@ async function syncPending(){
   if(cfg.bioTbl){
     for(const r of pendingBio){
       try{
-        const f = {'Date':r.date,'Time':r.time||undefined,'Grower':r.grower,'Batch ID':r.batch?[r.batch]:undefined,'Room':r.room,'Product':r.product||undefined,'Quantity':r.quantity||undefined,'Unit':r.unit||undefined,'Reason':r.reason||undefined};
+        const f = {'Date':r.date,'Grower':r.grower,'Batch ID':r.batch?[r.batch]:undefined,'Room':r.room,'Product':r.product||undefined,'Quantity':r.quantity||undefined,'Unit':r.unit||undefined,'Reason':r.reason||undefined};
         Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
         const bRes=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+cfg.bioTbl,{method:'POST',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify({fields:f,typecast:true})});
         if(!bRes.ok){const err=await bRes.json();throw new Error('Bio '+bRes.status+': '+(err.error&&err.error.message||JSON.stringify(err)));}
