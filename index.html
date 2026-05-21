@@ -1000,37 +1000,24 @@ tr:last-child td { border-bottom: none; }
       </div>
 
       <div class="section">
-        <div class="section-label">Biological Controls Applied</div>
+        <div class="section-label">Biological Control Applied</div>
         <div class="card">
-          <div class="g2" style="margin-bottom:8px;">
-            <div class="field"><label>Orius</label>
-              <input type="number" id="bio-orius" step="1" min="0" placeholder="0" onwheel="this.blur()" onkeydown="if(event.key==='ArrowUp'||event.key==='ArrowDown')event.preventDefault();" />
+          <div class="g2" style="margin-bottom:10px;">
+            <div class="field"><label>Product</label>
+              <select id="bio-product" onchange="bioProductChanged()">
+                <option value="">-- select product --</option>
+                <option>Orius</option>
+                <option>Swirskii (Loose)</option>
+                <option>Swirskii (Sachet)</option>
+                <option>Nematodes</option>
+                <option>Blue Traps</option>
+                <option>Yellow Traps</option>
+                <option>Pure Spray FX</option>
+              </select>
             </div>
-            <div class="field"><label>Nematodes</label>
-              <input type="number" id="bio-nematodes" step="1" min="0" placeholder="0" onwheel="this.blur()" onkeydown="if(event.key==='ArrowUp'||event.key==='ArrowDown')event.preventDefault();" />
+            <div class="field"><label id="bio-quantity-label">Quantity</label>
+              <input type="number" id="bio-quantity" step="1" min="0" placeholder="0" onwheel="this.blur()" onkeydown="if(event.key==='ArrowUp'||event.key==='ArrowDown')event.preventDefault();" />
             </div>
-          </div>
-          <div class="g2" style="margin-bottom:8px;">
-            <div class="field"><label>Swirskii (Loose)</label>
-              <input type="number" id="bio-swirskii-loose" step="1" min="0" placeholder="0" onwheel="this.blur()" onkeydown="if(event.key==='ArrowUp'||event.key==='ArrowDown')event.preventDefault();" />
-            </div>
-            <div class="field"><label>Swirskii (Sachet)</label>
-              <input type="number" id="bio-swirskii-sachet" step="1" min="0" placeholder="0" onwheel="this.blur()" onkeydown="if(event.key==='ArrowUp'||event.key==='ArrowDown')event.preventDefault();" />
-            </div>
-          </div>
-          <div class="g2" style="margin-bottom:8px;">
-            <div class="field"><label>Blue Traps</label>
-              <input type="number" id="bio-blue-traps" step="1" min="0" placeholder="0" onwheel="this.blur()" onkeydown="if(event.key==='ArrowUp'||event.key==='ArrowDown')event.preventDefault();" />
-            </div>
-            <div class="field"><label>Yellow Traps</label>
-              <input type="number" id="bio-yellow-traps" step="1" min="0" placeholder="0" onwheel="this.blur()" onkeydown="if(event.key==='ArrowUp'||event.key==='ArrowDown')event.preventDefault();" />
-            </div>
-          </div>
-          <div class="g2">
-            <div class="field"><label>Pure Spray FX</label>
-              <input type="number" id="bio-pure-spray" step="0.01" min="0" placeholder="0.00" onwheel="this.blur()" onkeydown="if(event.key==='ArrowUp'||event.key==='ArrowDown')event.preventDefault();" />
-            </div>
-            <div></div>
           </div>
         </div>
       </div>
@@ -1803,6 +1790,34 @@ async function harvestSave(){
 }
 // ───────────────────── Post-Drying Inventory Weight Log ─────────────────────
 // ── BIOLOGICAL CONTROL LOG ────────────────────────────────────────────────────
+// Each product carries its own unit + numeric step. The form's Quantity field adapts to whichever
+// product is currently selected (label, step, placeholder).
+const BIO_PRODUCTS = {
+  'Orius':             { unit: 'units',   step: '1',    placeholder: '0' },
+  'Swirskii (Loose)':  { unit: 'units',   step: '1',    placeholder: '0' },
+  'Swirskii (Sachet)': { unit: 'sachets', step: '1',    placeholder: '0' },
+  'Nematodes':         { unit: 'units',   step: '1',    placeholder: '0' },
+  'Blue Traps':        { unit: 'traps',   step: '1',    placeholder: '0' },
+  'Yellow Traps':      { unit: 'traps',   step: '1',    placeholder: '0' },
+  'Pure Spray FX':     { unit: 'mL',      step: '0.01', placeholder: '0.00' }
+};
+function bioProductChanged(){
+  // Update the Quantity field's label, step, and placeholder to match the selected product.
+  const product = document.getElementById('bio-product').value;
+  const lbl = document.getElementById('bio-quantity-label');
+  const inp = document.getElementById('bio-quantity');
+  if(!lbl || !inp) return;
+  const meta = BIO_PRODUCTS[product];
+  if(meta){
+    lbl.innerHTML = 'Quantity <span style="color:var(--text3);font-weight:400;font-size:11px;">('+meta.unit+')</span>';
+    inp.step = meta.step;
+    inp.placeholder = meta.placeholder;
+  } else {
+    lbl.textContent = 'Quantity';
+    inp.step = '1';
+    inp.placeholder = '0';
+  }
+}
 function bioRefreshDate(){ const el=document.getElementById('bio-date'); if(el) el.value = localDate(); }
 function bioPopulateBatches(){
   // Bio Control applies to growing plants — same scope as EC/Runoff (Clones/Veg/Flower only).
@@ -1863,8 +1878,8 @@ function bioSeqUnlock(){
   const grower = document.getElementById('bio-grower').value;
   const batch = document.getElementById('bio-batch-select').value;
   const room = document.getElementById('bio-room').value;
-  const fields = ['bio-time','bio-orius','bio-swirskii-loose','bio-swirskii-sachet','bio-nematodes','bio-blue-traps','bio-yellow-traps','bio-pure-spray','bio-reason'];
-  const lock = (id,hint) => { const el=document.getElementById(id); if(!el) return; el.disabled=true; el.style.background='var(--bg2)'; el.style.color='var(--text3)'; el.style.cursor='not-allowed'; };
+  const fields = ['bio-time','bio-product','bio-quantity','bio-reason'];
+  const lock = (id) => { const el=document.getElementById(id); if(!el) return; el.disabled=true; el.style.background='var(--bg2)'; el.style.color='var(--text3)'; el.style.cursor='not-allowed'; };
   const unlock = id => { const el=document.getElementById(id); if(!el) return; el.disabled=false; el.style.background=''; el.style.color=''; el.style.cursor=''; };
   if(!batch){
     lock('bio-grower'); lock('bio-room'); fields.forEach(id => lock(id));
@@ -1882,10 +1897,19 @@ async function bioSave(){
   const room = document.getElementById('bio-room').value;
   const date = document.getElementById('bio-date').value || localDate();
   const time = document.getElementById('bio-time').value;
+  const product = document.getElementById('bio-product').value;
+  const quantity = parseFloat(document.getElementById('bio-quantity').value) || 0;
+  const reason = document.getElementById('bio-reason').value.trim();
   if(!batch){ toast('Please select a batch.'); return; }
   if(!grower){ toast('Please select a grower (initials).'); return; }
   if(!room){ toast('Please select a room.'); return; }
   if(!time){ toast('Please set a time.'); return; }
+  if(!product){ toast('Please select a product.'); return; }
+  if(quantity <= 0){
+    const unit = (BIO_PRODUCTS[product] && BIO_PRODUCTS[product].unit) || 'units';
+    toast('Enter a quantity greater than 0 ('+unit+').',4000);
+    return;
+  }
   // Block writes when batch is closed
   const _bRec = batchRecs.find(r=>r.batchId===batch && !r.type);
   if(_bRec && _bRec.status === 'Closed'){
@@ -1896,34 +1920,21 @@ async function bioSave(){
     toast('Bio Control entries are not allowed after the batch is harvested.',4500);
     return;
   }
-  const orius = parseInt(document.getElementById('bio-orius').value)||0;
-  const swirskiiLoose = parseInt(document.getElementById('bio-swirskii-loose').value)||0;
-  const swirskiiSachet = parseInt(document.getElementById('bio-swirskii-sachet').value)||0;
-  const nematodes = parseInt(document.getElementById('bio-nematodes').value)||0;
-  const blueTraps = parseInt(document.getElementById('bio-blue-traps').value)||0;
-  const yellowTraps = parseInt(document.getElementById('bio-yellow-traps').value)||0;
-  const pureSprayFx = parseFloat(document.getElementById('bio-pure-spray').value)||0;
-  const reason = document.getElementById('bio-reason').value.trim();
-  // Require at least one input (any count) OR a reason
-  const anyCount = orius+swirskiiLoose+swirskiiSachet+nematodes+blueTraps+yellowTraps+pureSprayFx;
-  if(anyCount === 0 && !reason){
-    toast('Enter at least one count, or write a reason.',4500);
-    return;
-  }
+  const unit = (BIO_PRODUCTS[product] && BIO_PRODUCTS[product].unit) || '';
   const rec = {
     id: Date.now(), date, time, grower, batch, room,
-    orius, swirskiiLoose, swirskiiSachet, nematodes, blueTraps, yellowTraps, pureSprayFx,
-    reason, synced: false
+    product, quantity, unit, reason, synced: false
   };
   bioRecs.unshift(rec);
   lsSet('gp-bio', bioRecs);
-  toast('Bio Control entry saved.');
+  toast('Saved: '+product+' '+quantity+' '+unit);
   updatePendingBadge();
-  // Soft-refresh: keep batch/grower/room, clear per-entry inputs, refresh history
-  ['bio-orius','bio-swirskii-loose','bio-swirskii-sachet','bio-nematodes','bio-blue-traps','bio-yellow-traps','bio-pure-spray','bio-reason']
-    .forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
+  // Soft-refresh: keep batch/grower/room/time, clear product/quantity/reason, refresh history
+  ['bio-product','bio-quantity','bio-reason'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
+  bioProductChanged(); // reset the unit label/step
   bioRenderHistory(batch, room);
-  // Sync to Airtable
+  // Sync to Airtable. The new single-select 'Product' field carries the product name; 'Quantity'
+  // holds the numeric amount; 'Unit' is the unit string (also configurable as a single-select).
   if(cfg.bioTbl && cfg.token && cfg.base){
     setSyncPill('ing','Syncing...');
     try{
@@ -1933,13 +1944,9 @@ async function bioSave(){
         'Grower': rec.grower,
         'Batch ID': rec.batch ? [rec.batch] : undefined,
         'Room': rec.room,
-        'Orius': rec.orius || undefined,
-        'Swirskii (Loose)': rec.swirskiiLoose || undefined,
-        'Swirskii (Sachet)': rec.swirskiiSachet || undefined,
-        'Nematodes': rec.nematodes || undefined,
-        'Blue Traps': rec.blueTraps || undefined,
-        'Yellow Traps': rec.yellowTraps || undefined,
-        'Pure Spray FX': rec.pureSprayFx || undefined,
+        'Product': rec.product,
+        'Quantity': rec.quantity,
+        'Unit': rec.unit || undefined,
         'Reason': rec.reason || undefined
       };
       Object.keys(f).forEach(k => { if(f[k]===undefined||f[k]===null||f[k]==='') delete f[k]; });
@@ -1956,13 +1963,14 @@ async function bioSave(){
 }
 function bioClearConfirm(){
   if(!confirm('Clear the current form? Unsaved data will be lost.')) return;
-  ['bio-orius','bio-swirskii-loose','bio-swirskii-sachet','bio-nematodes','bio-blue-traps','bio-yellow-traps','bio-pure-spray','bio-reason','bio-time']
+  ['bio-product','bio-quantity','bio-reason','bio-time']
     .forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
   document.getElementById('bio-batch-select').value = '';
   document.getElementById('bio-batch').value = '';
   document.getElementById('bio-grower').value = '';
   document.getElementById('bio-room').value = '';
   bioRefreshDate();
+  bioProductChanged();
   bioSeqUnlock();
   bioRenderHistory('', '');
 }
@@ -1983,28 +1991,21 @@ function bioRenderHistory(batch, room){
   html += '<thead><tr style="background:#f5f5f5;">'+
     '<th style="padding:6px 8px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);">Date</th>'+
     '<th style="padding:6px 8px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Time</th>'+
-    '<th style="padding:6px 8px;text-align:right;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Orius</th>'+
-    '<th style="padding:6px 8px;text-align:right;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Swir (L)</th>'+
-    '<th style="padding:6px 8px;text-align:right;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Swir (S)</th>'+
-    '<th style="padding:6px 8px;text-align:right;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Nem</th>'+
-    '<th style="padding:6px 8px;text-align:right;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Blue</th>'+
-    '<th style="padding:6px 8px;text-align:right;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Yellow</th>'+
-    '<th style="padding:6px 8px;text-align:right;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Spray</th>'+
+    '<th style="padding:6px 8px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Product</th>'+
+    '<th style="padding:6px 8px;text-align:right;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Quantity</th>'+
+    '<th style="padding:6px 8px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Grower</th>'+
     '<th style="padding:6px 8px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Reason</th>'+
   '</tr></thead><tbody>';
   recs.forEach(r => {
-    const fmt = v => (v > 0 ? String(v) : '—');
+    const unit = r.unit || (BIO_PRODUCTS[r.product] && BIO_PRODUCTS[r.product].unit) || '';
+    const qtyStr = (r.quantity != null) ? (r.quantity + (unit ? ' ' + unit : '')) : '—';
     html += '<tr>'+
       '<td style="padding:5px 8px;font-family:var(--mono);border-top:1px solid var(--border);white-space:nowrap;">'+r.date+'</td>'+
       '<td style="padding:5px 8px;font-family:var(--mono);border-top:1px solid var(--border);border-left:1px solid var(--border);">'+(r.time||'—')+'</td>'+
-      '<td style="padding:5px 8px;font-family:var(--mono);text-align:right;border-top:1px solid var(--border);border-left:1px solid var(--border);">'+fmt(r.orius)+'</td>'+
-      '<td style="padding:5px 8px;font-family:var(--mono);text-align:right;border-top:1px solid var(--border);border-left:1px solid var(--border);">'+fmt(r.swirskiiLoose)+'</td>'+
-      '<td style="padding:5px 8px;font-family:var(--mono);text-align:right;border-top:1px solid var(--border);border-left:1px solid var(--border);">'+fmt(r.swirskiiSachet)+'</td>'+
-      '<td style="padding:5px 8px;font-family:var(--mono);text-align:right;border-top:1px solid var(--border);border-left:1px solid var(--border);">'+fmt(r.nematodes)+'</td>'+
-      '<td style="padding:5px 8px;font-family:var(--mono);text-align:right;border-top:1px solid var(--border);border-left:1px solid var(--border);">'+fmt(r.blueTraps)+'</td>'+
-      '<td style="padding:5px 8px;font-family:var(--mono);text-align:right;border-top:1px solid var(--border);border-left:1px solid var(--border);">'+fmt(r.yellowTraps)+'</td>'+
-      '<td style="padding:5px 8px;font-family:var(--mono);text-align:right;border-top:1px solid var(--border);border-left:1px solid var(--border);">'+(r.pureSprayFx>0?r.pureSprayFx:'—')+'</td>'+
-      '<td style="padding:5px 8px;font-size:11px;color:var(--text3);border-top:1px solid var(--border);border-left:1px solid var(--border);max-width:160px;">'+(r.reason||'—')+'</td>'+
+      '<td style="padding:5px 8px;border-top:1px solid var(--border);border-left:1px solid var(--border);">'+(r.product||'—')+'</td>'+
+      '<td style="padding:5px 8px;font-family:var(--mono);text-align:right;border-top:1px solid var(--border);border-left:1px solid var(--border);">'+qtyStr+'</td>'+
+      '<td style="padding:5px 8px;font-size:11px;color:var(--text2);border-top:1px solid var(--border);border-left:1px solid var(--border);">'+(r.grower||'—')+'</td>'+
+      '<td style="padding:5px 8px;font-size:11px;color:var(--text3);border-top:1px solid var(--border);border-left:1px solid var(--border);max-width:200px;">'+(r.reason||'—')+'</td>'+
     '</tr>';
   });
   html += '</tbody></table></div>';
@@ -3496,7 +3497,7 @@ async function syncPending(){
   if(cfg.bioTbl){
     for(const r of pendingBio){
       try{
-        const f = {'Date':r.date,'Time':r.time||undefined,'Grower':r.grower,'Batch ID':r.batch?[r.batch]:undefined,'Room':r.room,'Orius':r.orius||undefined,'Swirskii (Loose)':r.swirskiiLoose||undefined,'Swirskii (Sachet)':r.swirskiiSachet||undefined,'Nematodes':r.nematodes||undefined,'Blue Traps':r.blueTraps||undefined,'Yellow Traps':r.yellowTraps||undefined,'Pure Spray FX':r.pureSprayFx||undefined,'Reason':r.reason||undefined};
+        const f = {'Date':r.date,'Time':r.time||undefined,'Grower':r.grower,'Batch ID':r.batch?[r.batch]:undefined,'Room':r.room,'Product':r.product||undefined,'Quantity':r.quantity||undefined,'Unit':r.unit||undefined,'Reason':r.reason||undefined};
         Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
         const bRes=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+cfg.bioTbl,{method:'POST',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify({fields:f,typecast:true})});
         if(!bRes.ok){const err=await bRes.json();throw new Error('Bio '+bRes.status+': '+(err.error&&err.error.message||JSON.stringify(err)));}
