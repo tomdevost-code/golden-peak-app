@@ -957,6 +957,99 @@ tr:last-child td { border-bottom: none; }
       </div>
     </div>
 
+    <!-- BIOLOGICAL CONTROL LOG -->
+    <div class="page" id="page-bio">
+      <div id="bio-room-strip" style="display:none;align-items:center;padding:8px 12px;border-radius:var(--radius-sm);border:1px solid;margin-bottom:12px;"></div>
+      <div class="section">
+        <div class="section-label">Bio Control Setup</div>
+        <div class="card">
+          <div class="g2" style="margin-bottom:10px;">
+            <div class="field"><label>Batch ID</label>
+              <select id="bio-batch-select" onchange="bioBatchSelect()" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;">
+                <option value="">-- select batch --</option>
+              </select>
+              <input type="hidden" id="bio-batch" />
+            </div>
+            <div class="field"><label>Grower (Initials)</label>
+              <select id="bio-grower" onchange="bioSeqUnlock()">
+                <option value="">select grower</option>
+                <option>Jordan Elliott</option><option>Brandon Cail</option><option>Tom Devost</option>
+              </select>
+            </div>
+          </div>
+          <div class="g2" style="margin-bottom:10px;">
+            <div class="field"><label>Room</label>
+              <select id="bio-room" onchange="bioRoomChanged()">
+                <option value="">select room</option>
+                <option>Flower 1</option><option>Flower 2</option>
+                <option>Flower 3</option><option>Flower 4</option>
+                <option>Flower 5</option><option>Veg</option>
+              </select>
+            </div>
+            <div class="field"><label>Date</label>
+              <input type="date" id="bio-date" readonly style="background:var(--bg2);color:var(--text3);cursor:default;" />
+            </div>
+          </div>
+          <div class="g2" style="margin-bottom:0;">
+            <div class="field"><label>Time (24hr)</label>
+              <input type="time" id="bio-time" />
+            </div>
+            <div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-label">Biological Controls Applied</div>
+        <div class="card">
+          <div class="g2" style="margin-bottom:8px;">
+            <div class="field"><label>Orius</label>
+              <input type="number" id="bio-orius" step="1" min="0" placeholder="0" onwheel="this.blur()" onkeydown="if(event.key==='ArrowUp'||event.key==='ArrowDown')event.preventDefault();" />
+            </div>
+            <div class="field"><label>Nematodes</label>
+              <input type="number" id="bio-nematodes" step="1" min="0" placeholder="0" onwheel="this.blur()" onkeydown="if(event.key==='ArrowUp'||event.key==='ArrowDown')event.preventDefault();" />
+            </div>
+          </div>
+          <div class="g2" style="margin-bottom:8px;">
+            <div class="field"><label>Swirskii (Loose)</label>
+              <input type="number" id="bio-swirskii-loose" step="1" min="0" placeholder="0" onwheel="this.blur()" onkeydown="if(event.key==='ArrowUp'||event.key==='ArrowDown')event.preventDefault();" />
+            </div>
+            <div class="field"><label>Swirskii (Sachet)</label>
+              <input type="number" id="bio-swirskii-sachet" step="1" min="0" placeholder="0" onwheel="this.blur()" onkeydown="if(event.key==='ArrowUp'||event.key==='ArrowDown')event.preventDefault();" />
+            </div>
+          </div>
+          <div class="g2" style="margin-bottom:8px;">
+            <div class="field"><label>Blue Traps</label>
+              <input type="number" id="bio-blue-traps" step="1" min="0" placeholder="0" onwheel="this.blur()" onkeydown="if(event.key==='ArrowUp'||event.key==='ArrowDown')event.preventDefault();" />
+            </div>
+            <div class="field"><label>Yellow Traps</label>
+              <input type="number" id="bio-yellow-traps" step="1" min="0" placeholder="0" onwheel="this.blur()" onkeydown="if(event.key==='ArrowUp'||event.key==='ArrowDown')event.preventDefault();" />
+            </div>
+          </div>
+          <div class="g2">
+            <div class="field"><label>Pure Spray FX</label>
+              <input type="number" id="bio-pure-spray" step="0.01" min="0" placeholder="0.00" onwheel="this.blur()" onkeydown="if(event.key==='ArrowUp'||event.key==='ArrowDown')event.preventDefault();" />
+            </div>
+            <div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-label">Reason / Notes</div>
+        <textarea id="bio-reason" rows="2" style="width:100%;font-size:14px;font-family:var(--sans);border-radius:var(--radius-sm);border:1px solid var(--border);padding:10px;background:var(--card);color:var(--text);outline:none;" placeholder="Pest pressure observed, preventive release, etc."></textarea>
+      </div>
+
+      <button class="btn-primary" id="bio-btn" onclick="bioSave()">Save Bio Control Entry</button>
+      <button class="btn-secondary" style="width:100%;margin-top:8px;" onclick="bioClearConfirm()">Clear Form</button>
+
+      <!-- Bio Control History for selected batch + room -->
+      <div class="section" id="bio-history-section" style="display:none;margin-top:16px;">
+        <div class="section-label">Bio Control History</div>
+        <div id="bio-history-list" style="font-size:13px;color:var(--text3);text-align:center;padding:10px;"></div>
+      </div>
+    </div>
+
     <!-- SETTINGS -->
     <div class="page" id="page-settings">
       <div class="settings-card">
@@ -970,6 +1063,7 @@ tr:last-child td { border-bottom: none; }
         <div class="sfield"><label>Batch Transactions Table ID</label><input type="text" id="s-batchtx" placeholder="tblXXXXXXXXXXXXXX" /></div>
         <div class="sfield"><label>Harvest Log Table ID</label><input type="text" id="s-harvest" placeholder="tblXXXXXXXXXXXXXX" /></div>
         <div class="sfield"><label>Post-Drying Log Table ID</label><input type="text" id="s-postdry" placeholder="tblXXXXXXXXXXXXXX" /></div>
+        <div class="sfield"><label>Biological Control Log Table ID</label><input type="text" id="s-bio" placeholder="tblXXXXXXXXXXXXXX" /></div>
         <button class="btn-save" onclick="saveSettings()">Save and Test Connection</button>
         <div class="conn-status" id="conn-status"></div>
         <button class="btn-save" id="sync-pending-btn" onclick="syncPending()" style="margin-top:8px;background:var(--blue);">Sync Pending Records</button>
@@ -1025,6 +1119,10 @@ tr:last-child td { border-bottom: none; }
       <svg viewBox="0 0 24 24"><path d="M3 8l9-5 9 5v8l-9 5-9-5V8z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg>
       Post-Dry
     </button>
+    <button class="bnav-btn" id="bn-bio" onclick="switchPage('bio',this)">
+      <svg viewBox="0 0 24 24"><path d="M12 2C8 5 6 8 6 12a6 6 0 0012 0c0-4-2-7-6-10z"/><path d="M12 14v6"/></svg>
+      Bio
+    </button>
     <button class="bnav-btn" id="bn-report" onclick="switchPage('report',this)">
       <svg viewBox="0 0 24 24"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
       Report
@@ -1041,11 +1139,11 @@ tr:last-child td { border-bottom: none; }
 <script>
 const EC_LO=2.2,EC_HI=2.3,PH_EC_LO=6.2,PH_EC_HI=6.3;
 const RO_PH_LO=6.0,RO_PH_HI=6.5,RO_VAR_LO=0.3,RO_VAR_HI=0.5,RO_VAR_ALERT=1.0;
-let ecRecs=[],roRecs=[],wasteRecs=[],batchRecs=[],batchTxRecs=[],harvestRecs=[],postDryRecs=[],cfg={token:'',base:'',ecTbl:'',roTbl:'',wasteTbl:'',batchTbl:'',batchtxTbl:'',harvestTbl:'',postDryTbl:''};
+let ecRecs=[],roRecs=[],wasteRecs=[],batchRecs=[],batchTxRecs=[],harvestRecs=[],postDryRecs=[],bioRecs=[],cfg={token:'',base:'',ecTbl:'',roTbl:'',wasteTbl:'',batchTbl:'',batchtxTbl:'',harvestTbl:'',postDryTbl:'',bioTbl:''};
 
 function lsGet(k){try{return JSON.parse(localStorage.getItem(k)||'null');}catch(e){return null;}}
 function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
-function loadAll(){ecRecs=lsGet('gp-ec')||[];roRecs=lsGet('gp-ro')||[];wasteRecs=lsGet('gp-waste')||[];batchRecs=lsGet('gp-batch')||[];batchTxRecs=lsGet('gp-batchtx')||[];harvestRecs=lsGet('gp-harvest')||[];postDryRecs=lsGet('gp-postdry')||[];wasteRecs.forEach(r=>{if(r.type==='Vegetative waste')r.type='Vegetative Waste';});lsSet('gp-waste',wasteRecs);const s=lsGet('gp-cfg');if(s){cfg=s;applySettings();}backfillHarvestedTxs();}
+function loadAll(){ecRecs=lsGet('gp-ec')||[];roRecs=lsGet('gp-ro')||[];wasteRecs=lsGet('gp-waste')||[];batchRecs=lsGet('gp-batch')||[];batchTxRecs=lsGet('gp-batchtx')||[];harvestRecs=lsGet('gp-harvest')||[];postDryRecs=lsGet('gp-postdry')||[];bioRecs=lsGet('gp-bio')||[];wasteRecs.forEach(r=>{if(r.type==='Vegetative waste')r.type='Vegetative Waste';});lsSet('gp-waste',wasteRecs);const s=lsGet('gp-cfg');if(s){cfg=s;applySettings();}backfillHarvestedTxs();}
 
 function backfillHarvestedTxs(){
   // One-time data fix: prior to the per-room Harvested tx code, a Complete Harvest only created
@@ -1411,7 +1509,7 @@ function setAvg(id,val,lo,hi){const el=document.getElementById(id);if(val===null
 function stageLabel(r){if(!r.stage||!r.day)return'<span style="color:var(--text3)">-</span>';return r.stage==='flower'?'<span class="flower-txt">F'+r.day+'</span>':'<span class="veg-txt">V'+r.day+'</span>';}
 function toast(msg,dur){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),dur||2500);}
 
-function switchPage(page,btn){document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.bnav-btn').forEach(b=>b.classList.remove('active'));document.getElementById('page-'+page).classList.add('active');btn.classList.add('active');if(page==='report'){renderEC();renderRO();}if(page==='waste'){renderWaste();}if(page==='batch'){renderBatchLog();}if(page==='summary'){summaryPopulateBatches();}if(page==='harvest'){harvestPopulateBatches();harvestRefreshDate();harvestPopulateBinNumbers();}if(page==='postdry'){postDryPopulateBatches();postDrySetupChanged();}}
+function switchPage(page,btn){document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.bnav-btn').forEach(b=>b.classList.remove('active'));document.getElementById('page-'+page).classList.add('active');btn.classList.add('active');if(page==='report'){renderEC();renderRO();}if(page==='waste'){renderWaste();}if(page==='batch'){renderBatchLog();}if(page==='summary'){summaryPopulateBatches();}if(page==='harvest'){harvestPopulateBatches();harvestRefreshDate();harvestPopulateBinNumbers();}if(page==='postdry'){postDryPopulateBatches();postDrySetupChanged();}if(page==='bio'){bioRefreshDate();bioSeqUnlock();}}
 // ── HARVEST LOG ──────────────────────────────────────────────────────────────
 function harvestRefreshDate(){const t=localDate();const el=document.getElementById('harvest-date'); if(el) el.value=t;}
 function harvestPopulateBinNumbers(){
@@ -1704,6 +1802,215 @@ async function harvestSave(){
   }
 }
 // ───────────────────── Post-Drying Inventory Weight Log ─────────────────────
+// ── BIOLOGICAL CONTROL LOG ────────────────────────────────────────────────────
+function bioRefreshDate(){ const el=document.getElementById('bio-date'); if(el) el.value = localDate(); }
+function bioPopulateBatches(){
+  // Bio Control applies to growing plants — same scope as EC/Runoff (Clones/Veg/Flower only).
+  const sel = document.getElementById('bio-batch-select');
+  if(!sel) return;
+  const cur = sel.value;
+  const eligible = batchRecs
+    .filter(b => {
+      if(b.type || !b.batchId) return false;
+      if(['Drying','Packaged','Delivered'].includes(b.plantPhase)) return false;
+      // Must have plants (at least one Produced/Received tx)
+      return batchTxRecs.some(t => t.batchId === b.batchId && t.txType === 'Produced/Received');
+    })
+    .map(b => b.batchId)
+    .sort();
+  sel.innerHTML = '<option value="">-- select batch --</option>' +
+    eligible.map(id => '<option'+(id===cur?' selected':'')+'>'+id+'</option>').join('');
+  if(typeof autoSelectIfSingle === 'function') autoSelectIfSingle('bio-batch-select');
+}
+function bioBatchSelect(){
+  const val = document.getElementById('bio-batch-select').value;
+  document.getElementById('bio-batch').value = val;
+  // Populate room dropdown from batchRec.rooms (filtered by active plant count)
+  const roomEl = document.getElementById('bio-room');
+  if(!val){
+    roomEl.innerHTML = '<option value="">select room</option><option>Flower 1</option><option>Flower 2</option><option>Flower 3</option><option>Flower 4</option><option>Flower 5</option><option>Veg</option>';
+    bioRenderHistory('', '');
+    bioSeqUnlock();
+    return;
+  }
+  const batchRec = batchRecs.find(r=>r.batchId===val && !r.type);
+  const declaredRooms = (batchRec && Array.isArray(batchRec.rooms)) ? batchRec.rooms : [];
+  let availableRooms = declaredRooms.length ? [...declaredRooms]
+    : ['Flower 1','Flower 2','Flower 3','Flower 4','Flower 5','Veg'];
+  // Add Veg if it has unallocated plants
+  if(batchRec && batchRec.roomDistribution && Object.keys(batchRec.roomDistribution).length){
+    if(calcRoomPlantCount(val, 'Veg') === 0){
+      availableRooms = availableRooms.filter(r => r !== 'Veg');
+    } else if(!availableRooms.includes('Veg')){
+      availableRooms.push('Veg');
+    }
+  }
+  const prevRoom = roomEl.value;
+  roomEl.innerHTML = '<option value="">select room</option>' +
+    availableRooms.map(r => '<option'+(r===prevRoom?' selected':'')+'>'+r+'</option>').join('');
+  if(typeof autoSelectIfSingle === 'function') autoSelectIfSingle('bio-room');
+  bioSeqUnlock();
+  bioRenderHistory(val, document.getElementById('bio-room').value);
+}
+function bioRoomChanged(){
+  const room = document.getElementById('bio-room').value;
+  if(typeof applyRoomColor === 'function') applyRoomColor('bio', room);
+  bioRenderHistory(document.getElementById('bio-batch-select').value, room);
+  bioSeqUnlock();
+}
+function bioSeqUnlock(){
+  // Sequential unlock: Batch → Grower → Room → rest of form.
+  const grower = document.getElementById('bio-grower').value;
+  const batch = document.getElementById('bio-batch-select').value;
+  const room = document.getElementById('bio-room').value;
+  const fields = ['bio-time','bio-orius','bio-swirskii-loose','bio-swirskii-sachet','bio-nematodes','bio-blue-traps','bio-yellow-traps','bio-pure-spray','bio-reason'];
+  const lock = (id,hint) => { const el=document.getElementById(id); if(!el) return; el.disabled=true; el.style.background='var(--bg2)'; el.style.color='var(--text3)'; el.style.cursor='not-allowed'; };
+  const unlock = id => { const el=document.getElementById(id); if(!el) return; el.disabled=false; el.style.background=''; el.style.color=''; el.style.cursor=''; };
+  if(!batch){
+    lock('bio-grower'); lock('bio-room'); fields.forEach(id => lock(id));
+    return;
+  }
+  unlock('bio-grower');
+  if(!grower){ lock('bio-room'); fields.forEach(id => lock(id)); return; }
+  unlock('bio-room');
+  if(!room){ fields.forEach(id => lock(id)); return; }
+  fields.forEach(id => unlock(id));
+}
+async function bioSave(){
+  const grower = document.getElementById('bio-grower').value;
+  const batch = document.getElementById('bio-batch').value;
+  const room = document.getElementById('bio-room').value;
+  const date = document.getElementById('bio-date').value || localDate();
+  const time = document.getElementById('bio-time').value;
+  if(!batch){ toast('Please select a batch.'); return; }
+  if(!grower){ toast('Please select a grower (initials).'); return; }
+  if(!room){ toast('Please select a room.'); return; }
+  if(!time){ toast('Please set a time.'); return; }
+  // Block writes when batch is closed
+  const _bRec = batchRecs.find(r=>r.batchId===batch && !r.type);
+  if(_bRec && _bRec.status === 'Closed'){
+    toast('This batch is closed (Status=Closed). No new entries.',3500);
+    return;
+  }
+  if(_bRec && ['Drying','Packaged','Delivered'].includes(_bRec.plantPhase)){
+    toast('Bio Control entries are not allowed after the batch is harvested.',4500);
+    return;
+  }
+  const orius = parseInt(document.getElementById('bio-orius').value)||0;
+  const swirskiiLoose = parseInt(document.getElementById('bio-swirskii-loose').value)||0;
+  const swirskiiSachet = parseInt(document.getElementById('bio-swirskii-sachet').value)||0;
+  const nematodes = parseInt(document.getElementById('bio-nematodes').value)||0;
+  const blueTraps = parseInt(document.getElementById('bio-blue-traps').value)||0;
+  const yellowTraps = parseInt(document.getElementById('bio-yellow-traps').value)||0;
+  const pureSprayFx = parseFloat(document.getElementById('bio-pure-spray').value)||0;
+  const reason = document.getElementById('bio-reason').value.trim();
+  // Require at least one input (any count) OR a reason
+  const anyCount = orius+swirskiiLoose+swirskiiSachet+nematodes+blueTraps+yellowTraps+pureSprayFx;
+  if(anyCount === 0 && !reason){
+    toast('Enter at least one count, or write a reason.',4500);
+    return;
+  }
+  const rec = {
+    id: Date.now(), date, time, grower, batch, room,
+    orius, swirskiiLoose, swirskiiSachet, nematodes, blueTraps, yellowTraps, pureSprayFx,
+    reason, synced: false
+  };
+  bioRecs.unshift(rec);
+  lsSet('gp-bio', bioRecs);
+  toast('Bio Control entry saved.');
+  updatePendingBadge();
+  // Soft-refresh: keep batch/grower/room, clear per-entry inputs, refresh history
+  ['bio-orius','bio-swirskii-loose','bio-swirskii-sachet','bio-nematodes','bio-blue-traps','bio-yellow-traps','bio-pure-spray','bio-reason']
+    .forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
+  bioRenderHistory(batch, room);
+  // Sync to Airtable
+  if(cfg.bioTbl && cfg.token && cfg.base){
+    setSyncPill('ing','Syncing...');
+    try{
+      const f = {
+        'Date': rec.date,
+        'Time': rec.time,
+        'Grower': rec.grower,
+        'Batch ID': rec.batch ? [rec.batch] : undefined,
+        'Room': rec.room,
+        'Orius': rec.orius || undefined,
+        'Swirskii (Loose)': rec.swirskiiLoose || undefined,
+        'Swirskii (Sachet)': rec.swirskiiSachet || undefined,
+        'Nematodes': rec.nematodes || undefined,
+        'Blue Traps': rec.blueTraps || undefined,
+        'Yellow Traps': rec.yellowTraps || undefined,
+        'Pure Spray FX': rec.pureSprayFx || undefined,
+        'Reason': rec.reason || undefined
+      };
+      Object.keys(f).forEach(k => { if(f[k]===undefined||f[k]===null||f[k]==='') delete f[k]; });
+      await atPost(cfg.bioTbl, f);
+      rec.synced = true;
+      lsSet('gp-bio', bioRecs);
+      setSyncPill('ok','Synced');
+      updatePendingBadge();
+    }catch(e){
+      setSyncPill('err','Sync failed');
+      toast('Saved locally - Airtable: '+(e.message||'sync failed'),5000);
+    }
+  }
+}
+function bioClearConfirm(){
+  if(!confirm('Clear the current form? Unsaved data will be lost.')) return;
+  ['bio-orius','bio-swirskii-loose','bio-swirskii-sachet','bio-nematodes','bio-blue-traps','bio-yellow-traps','bio-pure-spray','bio-reason','bio-time']
+    .forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
+  document.getElementById('bio-batch-select').value = '';
+  document.getElementById('bio-batch').value = '';
+  document.getElementById('bio-grower').value = '';
+  document.getElementById('bio-room').value = '';
+  bioRefreshDate();
+  bioSeqUnlock();
+  bioRenderHistory('', '');
+}
+function bioRenderHistory(batch, room){
+  // Per-(batch, room) history table — newest first.
+  const sec = document.getElementById('bio-history-section');
+  const list = document.getElementById('bio-history-list');
+  if(!sec || !list) return;
+  if(!batch || !room){ sec.style.display = 'none'; return; }
+  sec.style.display = '';
+  const recs = bioRecs.filter(r => r.batch === batch && r.room === room)
+                      .sort((a,b) => (b.id||0) - (a.id||0));
+  if(!recs.length){
+    list.innerHTML = '<span style="color:var(--text3);">No Bio Control entries yet for '+batch+' / '+room+'.</span>';
+    return;
+  }
+  let html = '<div style="overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius-sm);background:#fff;"><table style="width:100%;border-collapse:collapse;font-size:12px;">';
+  html += '<thead><tr style="background:#f5f5f5;">'+
+    '<th style="padding:6px 8px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);">Date</th>'+
+    '<th style="padding:6px 8px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Time</th>'+
+    '<th style="padding:6px 8px;text-align:right;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Orius</th>'+
+    '<th style="padding:6px 8px;text-align:right;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Swir (L)</th>'+
+    '<th style="padding:6px 8px;text-align:right;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Swir (S)</th>'+
+    '<th style="padding:6px 8px;text-align:right;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Nem</th>'+
+    '<th style="padding:6px 8px;text-align:right;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Blue</th>'+
+    '<th style="padding:6px 8px;text-align:right;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Yellow</th>'+
+    '<th style="padding:6px 8px;text-align:right;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Spray</th>'+
+    '<th style="padding:6px 8px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Reason</th>'+
+  '</tr></thead><tbody>';
+  recs.forEach(r => {
+    const fmt = v => (v > 0 ? String(v) : '—');
+    html += '<tr>'+
+      '<td style="padding:5px 8px;font-family:var(--mono);border-top:1px solid var(--border);white-space:nowrap;">'+r.date+'</td>'+
+      '<td style="padding:5px 8px;font-family:var(--mono);border-top:1px solid var(--border);border-left:1px solid var(--border);">'+(r.time||'—')+'</td>'+
+      '<td style="padding:5px 8px;font-family:var(--mono);text-align:right;border-top:1px solid var(--border);border-left:1px solid var(--border);">'+fmt(r.orius)+'</td>'+
+      '<td style="padding:5px 8px;font-family:var(--mono);text-align:right;border-top:1px solid var(--border);border-left:1px solid var(--border);">'+fmt(r.swirskiiLoose)+'</td>'+
+      '<td style="padding:5px 8px;font-family:var(--mono);text-align:right;border-top:1px solid var(--border);border-left:1px solid var(--border);">'+fmt(r.swirskiiSachet)+'</td>'+
+      '<td style="padding:5px 8px;font-family:var(--mono);text-align:right;border-top:1px solid var(--border);border-left:1px solid var(--border);">'+fmt(r.nematodes)+'</td>'+
+      '<td style="padding:5px 8px;font-family:var(--mono);text-align:right;border-top:1px solid var(--border);border-left:1px solid var(--border);">'+fmt(r.blueTraps)+'</td>'+
+      '<td style="padding:5px 8px;font-family:var(--mono);text-align:right;border-top:1px solid var(--border);border-left:1px solid var(--border);">'+fmt(r.yellowTraps)+'</td>'+
+      '<td style="padding:5px 8px;font-family:var(--mono);text-align:right;border-top:1px solid var(--border);border-left:1px solid var(--border);">'+(r.pureSprayFx>0?r.pureSprayFx:'—')+'</td>'+
+      '<td style="padding:5px 8px;font-size:11px;color:var(--text3);border-top:1px solid var(--border);border-left:1px solid var(--border);max-width:160px;">'+(r.reason||'—')+'</td>'+
+    '</tr>';
+  });
+  html += '</tbody></table></div>';
+  list.innerHTML = html;
+}
+
 function postDryPopulateBatches(){
   // Populate the post-drying batch dropdown with batches currently in Drying phase.
   // (After Complete Post-Drying, the batch moves to Packaged and disappears from this list.)
@@ -2100,6 +2407,8 @@ function populateBatchDropdowns(){
   fillFormSelect('waste-batch-select','-- select batch --',wasteList);
   // Post-Drying batch dropdown filters by Drying phase — handled separately
   if(typeof postDryPopulateBatches === 'function') postDryPopulateBatches();
+  // Bio Control batch dropdown filters by growing phase — handled separately
+  if(typeof bioPopulateBatches === 'function') bioPopulateBatches();
   // Auto-pick if only one batch exists
   autoSelectIfSingle('ec-batch-select');
   autoSelectIfSingle('ro-batch-select');
@@ -2983,7 +3292,7 @@ function roClear(){for(let i=1;i<=8;i++){document.getElementById('ro-ec-'+i).val
 
 // Pending badge
 function updatePendingBadge(){
-  const n=(ecRecs.filter(r=>!r.synced).length)+(roRecs.filter(r=>!r.synced).length)+(wasteRecs.filter(r=>!r.synced).length)+(batchRecs.filter(r=>!r.synced).length)+(batchTxRecs.filter(r=>!r.synced).length)+(harvestRecs.filter(r=>!r.synced).length)+(postDryRecs.filter(r=>!r.synced).length);
+  const n=(ecRecs.filter(r=>!r.synced).length)+(roRecs.filter(r=>!r.synced).length)+(wasteRecs.filter(r=>!r.synced).length)+(batchRecs.filter(r=>!r.synced).length)+(batchTxRecs.filter(r=>!r.synced).length)+(harvestRecs.filter(r=>!r.synced).length)+(postDryRecs.filter(r=>!r.synced).length)+(bioRecs.filter(r=>!r.synced).length);
   const b=document.getElementById('pending-badge');
   if(n>0){b.textContent=n;b.style.display='block';}else{b.style.display='none';}
 }
@@ -3060,8 +3369,8 @@ function migrateRoomNames(){
 }
 function clearAllLocalData(){
   if(!confirm('This will permanently delete ALL local records including synced data, batch IDs, transactions, and dropdowns. This cannot be undone. Continue?'))return;
-  ecRecs=[];roRecs=[];wasteRecs=[];batchRecs=[];batchTxRecs=[];harvestRecs=[];postDryRecs=[];
-  lsSet('gp-ec',[]);lsSet('gp-ro',[]);lsSet('gp-waste',[]);lsSet('gp-batch',[]);lsSet('gp-batchtx',[]);lsSet('gp-harvest',[]);lsSet('gp-postdry',[]);
+  ecRecs=[];roRecs=[];wasteRecs=[];batchRecs=[];batchTxRecs=[];harvestRecs=[];postDryRecs=[];bioRecs=[];
+  lsSet('gp-ec',[]);lsSet('gp-ro',[]);lsSet('gp-waste',[]);lsSet('gp-batch',[]);lsSet('gp-batchtx',[]);lsSet('gp-harvest',[]);lsSet('gp-postdry',[]);lsSet('gp-bio',[]);
   populateBatchDropdowns();renderEC();renderRO();
   ecClear();roClear();
   summaryPopulateBatches();
@@ -3077,7 +3386,8 @@ function clearPendingRecords(){
   batchTxRecs=batchTxRecs.filter(r=>r.synced);
   harvestRecs=harvestRecs.filter(r=>r.synced);
   postDryRecs=postDryRecs.filter(r=>r.synced);
-  lsSet('gp-ec',ecRecs);lsSet('gp-ro',roRecs);lsSet('gp-waste',wasteRecs);lsSet('gp-batch',batchRecs);lsSet('gp-batchtx',batchTxRecs);lsSet('gp-harvest',harvestRecs);lsSet('gp-postdry',postDryRecs);
+  bioRecs=bioRecs.filter(r=>r.synced);
+  lsSet('gp-ec',ecRecs);lsSet('gp-ro',roRecs);lsSet('gp-waste',wasteRecs);lsSet('gp-batch',batchRecs);lsSet('gp-batchtx',batchTxRecs);lsSet('gp-harvest',harvestRecs);lsSet('gp-postdry',postDryRecs);lsSet('gp-bio',bioRecs);
   populateBatchDropdowns();renderEC();renderRO();
   summaryPopulateBatches();
   updatePendingBadge();
@@ -3096,7 +3406,8 @@ async function syncPending(){
   const pendingBatchTx=batchTxRecs.filter(r=>!r.synced);
   const pendingHarvest=harvestRecs.filter(r=>!r.synced);
   const pendingPostDry=postDryRecs.filter(r=>!r.synced);
-  const total=pendingEC.length+pendingRO.length+pendingWaste.length+pendingBatch.length+pendingBatchTx.length+pendingHarvest.length+pendingPostDry.length;
+  const pendingBio=bioRecs.filter(r=>!r.synced);
+  const total=pendingEC.length+pendingRO.length+pendingWaste.length+pendingBatch.length+pendingBatchTx.length+pendingHarvest.length+pendingPostDry.length+pendingBio.length;
   if(!total){st.style.display='block';st.style.background='var(--green-pale)';st.style.color='var(--green)';st.textContent='No pending records - everything is synced.';updatePendingBadge();return;}
   st.style.display='block';st.style.background='var(--bg2)';st.style.color='var(--text2)';st.textContent='Syncing '+total+' record(s)...';
   btn.disabled=true;setSyncPill('ing','Syncing...');
@@ -3182,14 +3493,26 @@ async function syncPending(){
     }
     lsSet('gp-postdry',postDryRecs);
   }
+  if(cfg.bioTbl){
+    for(const r of pendingBio){
+      try{
+        const f = {'Date':r.date,'Time':r.time||undefined,'Grower':r.grower,'Batch ID':r.batch?[r.batch]:undefined,'Room':r.room,'Orius':r.orius||undefined,'Swirskii (Loose)':r.swirskiiLoose||undefined,'Swirskii (Sachet)':r.swirskiiSachet||undefined,'Nematodes':r.nematodes||undefined,'Blue Traps':r.blueTraps||undefined,'Yellow Traps':r.yellowTraps||undefined,'Pure Spray FX':r.pureSprayFx||undefined,'Reason':r.reason||undefined};
+        Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
+        const bRes=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+cfg.bioTbl,{method:'POST',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify({fields:f,typecast:true})});
+        if(!bRes.ok){const err=await bRes.json();throw new Error('Bio '+bRes.status+': '+(err.error&&err.error.message||JSON.stringify(err)));}
+        r.synced=true;ok++;
+      }catch(e){fail++;lastErr=e.message;}
+    }
+    lsSet('gp-bio',bioRecs);
+  }
   updatePendingBadge();
   btn.disabled=false;
   if(fail===0){setSyncPill('ok','Synced');st.style.background='var(--green-pale)';st.style.color='var(--green)';st.textContent='Done! '+ok+' record(s) synced to Airtable.';}
   else if(ok>0){setSyncPill('err','Partial sync');st.style.background='var(--amber-pale)';st.style.color='var(--amber)';st.textContent=ok+' synced, '+fail+' failed. Check connection and retry.';}
   else{setSyncPill('err','Sync failed');st.style.background='var(--red-pale)';st.style.color='var(--red)';st.textContent='Sync failed: '+(lastErr||'Check your Airtable connection.');}
 }
-function applySettings(){document.getElementById('s-token').value=cfg.token||'';document.getElementById('s-base').value=cfg.base||'';document.getElementById('s-ec').value=cfg.ecTbl||'';document.getElementById('s-ro').value=cfg.roTbl||'';document.getElementById('s-waste').value=cfg.wasteTbl||'';document.getElementById('s-batch').value=cfg.batchTbl||'';document.getElementById('s-batchtx').value=cfg.batchtxTbl||'';const sh=document.getElementById('s-harvest'); if(sh) sh.value=cfg.harvestTbl||'';const spd=document.getElementById('s-postdry'); if(spd) spd.value=cfg.postDryTbl||'';setSyncPill(atReady()?'ok':'off',atReady()?'Airtable connected':'Not configured');}
-async function saveSettings(){cfg={token:document.getElementById('s-token').value.trim(),base:document.getElementById('s-base').value.trim(),ecTbl:document.getElementById('s-ec').value.trim(),roTbl:document.getElementById('s-ro').value.trim(),wasteTbl:document.getElementById('s-waste').value.trim(),batchTbl:document.getElementById('s-batch').value.trim(),batchtxTbl:document.getElementById('s-batchtx').value.trim(),harvestTbl:(document.getElementById('s-harvest')?.value||'').trim(),postDryTbl:(document.getElementById('s-postdry')?.value||'').trim()};const st=document.getElementById('conn-status');st.style.display='block';st.style.background='var(--bg2)';st.style.color='var(--text2)';st.textContent='Testing connection...';if(!atReady()){st.textContent='Please fill in all fields.';st.style.background='var(--amber-pale)';st.style.color='var(--amber)';return;}try{const r=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+cfg.ecTbl+'?maxRecords=1',{headers:{'Authorization':'Bearer '+cfg.token}});if(r.ok){lsSet('gp-cfg',cfg);applySettings();st.textContent='Connected! Credentials saved.';st.style.background='var(--green-pale)';st.style.color='var(--green)';}else{st.textContent='Failed ('+r.status+'). Check your credentials.';st.style.background='var(--red-pale)';st.style.color='var(--red)';}}catch(e){st.textContent='Could not reach Airtable. Check internet connection.';st.style.background='var(--red-pale)';st.style.color='var(--red)';}}
+function applySettings(){document.getElementById('s-token').value=cfg.token||'';document.getElementById('s-base').value=cfg.base||'';document.getElementById('s-ec').value=cfg.ecTbl||'';document.getElementById('s-ro').value=cfg.roTbl||'';document.getElementById('s-waste').value=cfg.wasteTbl||'';document.getElementById('s-batch').value=cfg.batchTbl||'';document.getElementById('s-batchtx').value=cfg.batchtxTbl||'';const sh=document.getElementById('s-harvest'); if(sh) sh.value=cfg.harvestTbl||'';const spd=document.getElementById('s-postdry'); if(spd) spd.value=cfg.postDryTbl||'';const sbio=document.getElementById('s-bio'); if(sbio) sbio.value=cfg.bioTbl||'';setSyncPill(atReady()?'ok':'off',atReady()?'Airtable connected':'Not configured');}
+async function saveSettings(){cfg={token:document.getElementById('s-token').value.trim(),base:document.getElementById('s-base').value.trim(),ecTbl:document.getElementById('s-ec').value.trim(),roTbl:document.getElementById('s-ro').value.trim(),wasteTbl:document.getElementById('s-waste').value.trim(),batchTbl:document.getElementById('s-batch').value.trim(),batchtxTbl:document.getElementById('s-batchtx').value.trim(),harvestTbl:(document.getElementById('s-harvest')?.value||'').trim(),postDryTbl:(document.getElementById('s-postdry')?.value||'').trim(),bioTbl:(document.getElementById('s-bio')?.value||'').trim()};const st=document.getElementById('conn-status');st.style.display='block';st.style.background='var(--bg2)';st.style.color='var(--text2)';st.textContent='Testing connection...';if(!atReady()){st.textContent='Please fill in all fields.';st.style.background='var(--amber-pale)';st.style.color='var(--amber)';return;}try{const r=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+cfg.ecTbl+'?maxRecords=1',{headers:{'Authorization':'Bearer '+cfg.token}});if(r.ok){lsSet('gp-cfg',cfg);applySettings();st.textContent='Connected! Credentials saved.';st.style.background='var(--green-pale)';st.style.color='var(--green)';}else{st.textContent='Failed ('+r.status+'). Check your credentials.';st.style.background='var(--red-pale)';st.style.color='var(--red)';}}catch(e){st.textContent='Could not reach Airtable. Check internet connection.';st.style.background='var(--red-pale)';st.style.color='var(--red)';}}
 
 function localDate(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 const today=localDate();
