@@ -1142,7 +1142,7 @@ let ecRecs=[],roRecs=[],wasteRecs=[],batchRecs=[],batchTxRecs=[],harvestRecs=[],
 
 function lsGet(k){try{return JSON.parse(localStorage.getItem(k)||'null');}catch(e){return null;}}
 function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
-function loadAll(){ecRecs=lsGet('gp-ec')||[];roRecs=lsGet('gp-ro')||[];wasteRecs=lsGet('gp-waste')||[];batchRecs=lsGet('gp-batch')||[];batchTxRecs=lsGet('gp-batchtx')||[];harvestRecs=lsGet('gp-harvest')||[];postDryRecs=lsGet('gp-postdry')||[];bioRecs=lsGet('gp-bio')||[];wasteRecs.forEach(r=>{if(r.type==='Vegetative waste')r.type='Vegetative Waste';});lsSet('gp-waste',wasteRecs);const s=lsGet('gp-cfg');if(s){cfg=s;applySettings();}backfillHarvestedTxs();}
+function loadAll(){ecRecs=lsGet('gp-ec')||[];roRecs=lsGet('gp-ro')||[];wasteRecs=lsGet('gp-waste')||[];batchRecs=lsGet('gp-batch')||[];batchTxRecs=lsGet('gp-batchtx')||[];harvestRecs=lsGet('gp-harvest')||[];postDryRecs=lsGet('gp-postdry')||[];bioRecs=lsGet('gp-bio')||[];wasteRecs.forEach(r=>{if(r.type==='Vegetative waste')r.type='Vegetative Waste';});lsSet('gp-waste',wasteRecs);const s=lsGet('gp-cfg');if(s){cfg=s;applySettings();}backfillHarvestedTxs();reconcileAllPackagedBatches();}
 
 function backfillHarvestedTxs(){
   // One-time data fix: prior to the per-room Harvested tx code, a Complete Harvest only created
@@ -2000,6 +2000,79 @@ function enforceZeroQtyState(batchId){
   }
   return changed;
 }
+
+async function reconcilePackagedBatchBalance(batchId, opts){
+  // When a batch reaches Packaged, every plant should be accounted for — either harvested
+  // (consumed by per-room Harvested txs) or destroyed (Vegetative Waste). Any remaining
+  // running balance is plant material lost during cultivation/harvest that never got logged.
+  // We zero it out with an auto-Destroyed tx so the Summary stops showing a phantom balance,
+  // and clear roomDistribution so no room shows lingering plants.
+  opts = opts || {};
+  const b = batchRecs.find(r=>r.batchId===batchId && !r.type);
+  if(!b) return false;
+  if(!['Packaged','Delivered'].includes(b.plantPhase)) return false;
+  const remaining = calcBatchQty(batchId);
+  let changed = false;
+  let tx = null;
+  if(remaining > 0){
+    tx = {
+      id: Date.now() + Math.floor(Math.random()*1000),
+      batchId,
+      date: localDate(),
+      txType: 'Destroyed',
+      qty: remaining,
+      notes: 'Auto-reconciled at packaging — unaccounted plants from cultivation/harvest',
+      plantPhase: b.plantPhase,
+      synced: false
+    };
+    batchTxRecs.unshift(tx);
+    lsSet('gp-batchtx', batchTxRecs);
+    changed = true;
+  }
+  // Always clear room distribution for packaged batches — the plants aren't in rooms anymore.
+  if(b.roomDistribution && Object.keys(b.roomDistribution).length){
+    b.roomDistribution = {};
+    b.synced = false;
+    lsSet('gp-batch', batchRecs);
+    changed = true;
+  }
+  // Sync the Destroyed tx to Airtable if connected
+  if(tx && opts.syncTx !== false && cfg.batchtxTbl && cfg.token && cfg.base){
+    try {
+      const f = {
+        'Batch ID': [tx.batchId],
+        'Date': tx.date,
+        'Transaction Type': tx.txType,
+        'Plant Phase': tx.plantPhase || undefined,
+        'Quantity': tx.qty,
+        'Current Quantity After': 0,
+        'Notes': tx.notes
+      };
+      Object.keys(f).forEach(k=>{ if(f[k]===undefined||f[k]===null||f[k]==='') delete f[k]; });
+      const _r = await atPost(cfg.batchtxTbl, f);
+      tx.synced = true;
+      if(_r && _r.id) tx.airtableId = _r.id;
+      lsSet('gp-batchtx', batchTxRecs);
+    } catch(e){ /* retry via Sync Pending */ }
+  }
+  return changed;
+}
+
+function reconcileAllPackagedBatches(){
+  // Boot-time cleanup: scan every Packaged/Delivered batch and zero out any
+  // phantom balance + lingering roomDistribution. Idempotent — only writes a
+  // tx when there's a non-zero balance to reconcile.
+  let fixed = 0;
+  batchRecs.forEach(b => {
+    if(!b || b.type) return;
+    if(!['Packaged','Delivered'].includes(b.plantPhase)) return;
+    if(calcBatchQty(b.batchId) > 0 || (b.roomDistribution && Object.keys(b.roomDistribution).length)){
+      reconcilePackagedBatchBalance(b.batchId, {syncTx: true});
+      fixed++;
+    }
+  });
+  if(fixed) console.log('[reconcile] fixed '+fixed+' packaged batch balance(s)');
+}
 function buildBatchFields(rec){
   const f={
     'Batch ID':rec.batchId,
@@ -2785,6 +2858,9 @@ async function postDryComplete(){
   // Stamp the total post-drying weight on the Drying → Packaged phase-change tx so it's visible
   // in the Summary transaction history's Qty column (same treatment as Harvested wet weight).
   recordPhaseChangeTx(batch, _prevPhase, 'Packaged', batchRecs[idx].postDryingWeight);
+  // Auto-reconcile any remaining plant balance — at Packaged every plant must be
+  // accounted for; phantom counts get a Destroyed tx and roomDistribution is cleared.
+  await reconcilePackagedBatchBalance(batch, {syncTx: true});
   const msg = document.getElementById('postdry-complete-msg');
   if(msg){
     msg.style.display = 'block';
@@ -4171,31 +4247,14 @@ function wasteSeqUnlock(){
   roomEl.disabled=false;roomEl.style.background='';roomEl.style.color='';roomEl.style.cursor='';
   const room=roomEl.value||prevRoom;
   if(!room){disableFields();return;}
-  // Room-aware waste-type filter — needed for multi-day harvests where some rooms
-  // have been harvested (now drying) and others still hold flowering plants.
+  // Phase-driven waste-type filter:
   //   • Packaged batches  → 'Trim Room' only, Dry Waste only
-  //   • Drying batches    → per-room:
-  //       - room is in completedHarvests (or no live plants) → Dry Waste
-  //       - room still holds living plants                    → Vegetative Waste
-  //   • Pre-Drying        → Vegetative Waste (room must hold plants)
+  //   • Everything else (Clones / Veg / Flower / Drying) → Vegetative Waste
+  //     (Drying still allows Veg Waste for trim & de-leaf work done as the
+  //      plants dry, all the way up until packaging.)
   const _phaseNow = batchRec ? batchRec.plantPhase : '';
-  const _completed = (batchRec && Array.isArray(batchRec.completedHarvests)) ? batchRec.completedHarvests : [];
-  const _roomLivePlants = calcRoomPlantCount(batch, room);
-  const _roomHarvested = _completed.includes(room) || (_phaseNow==='Drying' && _roomLivePlants === 0);
-  let _wasteTypeForRoom;
-  if(_phaseNow === 'Packaged'){
-    _wasteTypeForRoom = 'Dry Waste';
-  } else if(_phaseNow === 'Drying'){
-    _wasteTypeForRoom = _roomHarvested ? 'Dry Waste' : 'Vegetative Waste';
-  } else {
-    _wasteTypeForRoom = 'Vegetative Waste';
-  }
-  // Quantity gate — Vegetative Waste needs live plants in the selected room.
-  // Dry Waste can be recorded whether or not plants are still live.
-  if(_wasteTypeForRoom === 'Vegetative Waste' && _roomLivePlants <= 0){
-    disableFields(); return;
-  }
-  // Filter waste-type dropdown — single option determined per room above.
+  const _wasteTypeForRoom = (_phaseNow === 'Packaged') ? 'Dry Waste' : 'Vegetative Waste';
+  // Filter waste-type dropdown — single option determined by phase.
   const _wtEl = document.getElementById('waste-type');
   const _wtPrev = _wtEl.value;
   _wtEl.innerHTML = '<option value="">select type</option><option>'+_wasteTypeForRoom+'</option>';
@@ -4262,14 +4321,12 @@ function wasteRefreshSubtype(){
     sel.value = '';
     return;
   }
-  // Pick options by plant phase. Special case: a batch in Drying phase can still
-  // have rooms holding live (flowering) plants when the harvest spans multiple
-  // days — those rooms get the Veg/Flower sub-category list.
+  // Pick options by plant phase. Veg Waste is permitted through Drying (harvest
+  // trim and de-leaf work on drying plants), so Drying-phase records get the
+  // same Veg/Flower sub-category list as live Flower rooms.
   let opts = [];
-  const _roomLive = (batch && room) ? calcRoomPlantCount(batch, room) : 0;
-  if(phase === 'Clones')                            opts = VEG_WASTE_SUBTYPES_CLONES;
-  else if(['Veg','Flower'].includes(phase))         opts = VEG_WASTE_SUBTYPES_VEGFLOWER;
-  else if(phase === 'Drying' && _roomLive > 0)      opts = VEG_WASTE_SUBTYPES_VEGFLOWER;
+  if(phase === 'Clones')                                opts = VEG_WASTE_SUBTYPES_CLONES;
+  else if(['Veg','Flower','Drying'].includes(phase))    opts = VEG_WASTE_SUBTYPES_VEGFLOWER;
   else opts = [];
   const prev = sel.value;
   sel.innerHTML = '<option value="">select sub-category</option>' +
@@ -4299,29 +4356,19 @@ async function wasteSave(){
   if(!room){toast('Please select a room.');return;}
   if(!type){toast('Please select a waste type.');return;}
   if(!weight||isNaN(weight)||weight<=0){toast('Please enter a weight greater than 0 kg.');return;}
-  // Room-aware waste-type validation. During multi-day harvest (Drying phase),
-  // some rooms may still hold living plants — those rooms still accept
-  // Vegetative Waste even though the batch as a whole is in Drying.
+  // Phase-driven waste-type validation. Vegetative Waste is allowed all the way
+  // through Drying (for harvest-trim / de-leaf work as plants dry); only after
+  // packaging do we switch to Dry Waste from the Trim Room.
   const _wsBatchRec = batchRecs.find(r=>r.batchId===batch && !r.type);
   const _wsPhase = _wsBatchRec ? _wsBatchRec.plantPhase : '';
-  const _wsCompleted = (_wsBatchRec && Array.isArray(_wsBatchRec.completedHarvests)) ? _wsBatchRec.completedHarvests : [];
   const _wsRoomLive = calcRoomPlantCount(batch, room);
-  const _wsRoomHarvested = _wsCompleted.includes(room) || (_wsPhase==='Drying' && _wsRoomLive === 0);
-  let _wsExpectedType;
-  if(_wsPhase === 'Packaged') _wsExpectedType = 'Dry Waste';
-  else if(_wsPhase === 'Drying') _wsExpectedType = _wsRoomHarvested ? 'Dry Waste' : 'Vegetative Waste';
-  else _wsExpectedType = 'Vegetative Waste';
-  // Guard: Vegetative Waste requires live plants in the selected room
-  if(type === 'Vegetative Waste' && _wsRoomLive <= 0){
-    toast('Cannot save Vegetative Waste — '+room+' has 0 plants.',4500);
-    return;
-  }
-  // Guard: waste type must match what this (batch, room, phase) allows
+  const _wsExpectedType = (_wsPhase === 'Packaged') ? 'Dry Waste' : 'Vegetative Waste';
+  // Guard: waste type must match what this phase allows
   if(type !== _wsExpectedType){
     if(_wsExpectedType === 'Vegetative Waste'){
-      toast(room+' still has flowering plants — record Vegetative Waste here, not Dry Waste.',5500);
+      toast('This batch is still pre-packaging — record Vegetative Waste, not Dry Waste.',5500);
     } else {
-      toast(room+' has been harvested — record Dry Waste, not Vegetative Waste.',5500);
+      toast('This batch has been packaged — record Dry Waste from the Trim Room.',5500);
     }
     return;
   }
