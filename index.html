@@ -1116,21 +1116,44 @@ function getActiveRooms(batchId){
   if(calcRoomPlantCount(batchId, 'Veg') > 0 && !result.includes('Veg')) result.push('Veg');
   return result;
 }
+function getNormalizedRoomDist(batchId){
+  // Returns a normalized copy of batchRec.roomDistribution where the flower-room sum can never
+  // exceed calcBatchQty. Excess is trimmed from the largest room first. Read-only — does NOT
+  // mutate the underlying record. Use whenever you need to display per-room plant counts so the
+  // sum stays consistent with Current Quantity even if a tx (Moved to Moms, manual edit, etc.)
+  // reduced the total without updating roomDistribution.
+  const b = batchRecs.find(r=>r.batchId===batchId && !r.type);
+  if(!b || !b.roomDistribution) return {};
+  const totalQty = calcBatchQty(batchId);
+  const dist = {...b.roomDistribution};
+  const flowerKeys = Object.keys(dist).filter(k => k !== 'Veg');
+  const flowerSum = flowerKeys.reduce((s,k) => s + (parseInt(dist[k])||0), 0);
+  if(flowerSum <= totalQty) return dist;
+  // Trim excess from the largest room down until sum <= totalQty
+  let excess = flowerSum - totalQty;
+  const sorted = [...flowerKeys].sort((a,b) => (parseInt(dist[b])||0) - (parseInt(dist[a])||0));
+  for(const k of sorted){
+    if(excess <= 0) break;
+    const cur = parseInt(dist[k])||0;
+    const reduce = Math.min(cur, excess);
+    dist[k] = cur - reduce;
+    excess -= reduce;
+  }
+  return dist;
+}
 function calcRoomPlantCount(batchId, room){
   // Returns the plants currently in the specified room.
-  // - Flower rooms: direct lookup from batchRec.roomDistribution
-  // - Veg: implicit remainder (batch total - sum of flower room distributions, floor 0)
-  // Uses calcBatchQty as the canonical total — that helper already handles multi-day harvest
-  // (subtracts mid-harvest per-room counts that haven't been folded into a Harvested tx yet).
+  // - Flower rooms: looked up from the NORMALIZED distribution (capped so flower sum ≤ totalQty)
+  // - Veg: implicit remainder (totalQty - normalized flower sum, floor 0)
   const b = batchRecs.find(r=>r.batchId===batchId && !r.type);
   if(!b) return 0;
   const totalQty = calcBatchQty(batchId);
+  const dist = getNormalizedRoomDist(batchId);
   if(room === 'Veg'){
-    const dist = b.roomDistribution || {};
-    const flowerSum = Object.keys(dist).reduce((s,k)=>s + (parseInt(dist[k])||0), 0);
+    const flowerSum = Object.keys(dist).filter(k => k !== 'Veg').reduce((s,k)=>s + (parseInt(dist[k])||0), 0);
     return Math.max(0, totalQty - flowerSum);
   }
-  return Math.max(0, Math.min(totalQty, (b.roomDistribution && parseInt(b.roomDistribution[room]))||0));
+  return Math.max(0, Math.min(totalQty, parseInt(dist[room])||0));
 }
 function calcBatchQty(batchId){
   // Pure helper: returns the running plant-count balance for a batch (floor 0). No DOM side effects.
