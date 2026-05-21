@@ -678,16 +678,20 @@ tr:last-child td { border-bottom: none; }
           <div style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--border);">
             <div style="font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">Batch Totals</div>
             <div class="g2" style="margin-bottom:6px;">
+              <div class="field"><label>Plants Harvested</label><div id="si-harvested-count" style="font-size:13px;font-family:var(--mono);padding:4px 0;color:var(--text2);">—</div></div>
               <div class="field"><label>Harvest Weight</label><div id="si-harvest-weight" style="font-size:13px;font-family:var(--mono);padding:4px 0;color:var(--text2);">—</div></div>
-              <div class="field"><label>Post-Dry Weight</label><div id="si-postdry-weight" style="font-size:13px;font-family:var(--mono);padding:4px 0;color:var(--text2);">—</div></div>
             </div>
             <div class="g2" style="margin-bottom:6px;">
+              <div class="field"><label>Post-Dry Weight</label><div id="si-postdry-weight" style="font-size:13px;font-family:var(--mono);padding:4px 0;color:var(--text2);">—</div></div>
               <div class="field"><label>Sold Weight</label><div id="si-sold-weight" style="font-size:13px;font-family:var(--mono);padding:4px 0;color:var(--text2);">—</div></div>
+            </div>
+            <div class="g2" style="margin-bottom:6px;">
               <div class="field"><label>Plants Destroyed</label><div id="si-destroyed-count" style="font-size:13px;font-family:var(--mono);padding:4px 0;color:var(--text2);">—</div></div>
+              <div class="field"><label>Veg Waste Weight</label><div id="si-vegwaste-weight" style="font-size:13px;font-family:var(--mono);padding:4px 0;color:var(--text2);">—</div></div>
             </div>
             <div class="g2">
-              <div class="field"><label>Veg Waste Weight</label><div id="si-vegwaste-weight" style="font-size:13px;font-family:var(--mono);padding:4px 0;color:var(--text2);">—</div></div>
               <div class="field"><label>Dry Waste Weight</label><div id="si-drywaste-weight" style="font-size:13px;font-family:var(--mono);padding:4px 0;color:var(--text2);">—</div></div>
+              <div class="field"></div>
             </div>
           </div>
         </div>
@@ -1872,21 +1876,23 @@ async function recordPhaseChangeTx(batchId, fromPhase, toPhase, weight){
 }
 function summaryRefreshBatchTotals(batchId){
   // Populates the Batch Totals block in the Batch Info card with:
-  //   • Harvest weight       = sum of weight on Harvested transactions for this batch
+  //   • Plants harvested      = sum of qty on Harvested transactions for this batch
+  //   • Harvest weight        = sum of weight on Harvested transactions for this batch
   //   • Post-Dry weight       = batchRec.postDryingWeight (set on Complete Post-Drying)
   //   • Sold weight           = sum of weight on Sold transactions for this batch
   //   • Plants destroyed      = sum of qty on Destroyed transactions for this batch
   //   • Veg waste weight      = sum of weight on 'Vegetative Waste' records for this batch
+  //   • Dry waste weight      = sum of weight on 'Dry Waste' records for this batch
   const setText = (id, val) => { const el=document.getElementById(id); if(el) el.textContent = val; };
   if(!batchId){
-    ['si-harvest-weight','si-postdry-weight','si-sold-weight','si-destroyed-count','si-vegwaste-weight','si-drywaste-weight']
+    ['si-harvested-count','si-harvest-weight','si-postdry-weight','si-sold-weight','si-destroyed-count','si-vegwaste-weight','si-drywaste-weight']
       .forEach(id => setText(id, '—'));
     return;
   }
   const b = batchRecs.find(r => r.batchId === batchId && !r.type);
-  const harvestSum = batchTxRecs
-    .filter(t => t.batchId === batchId && t.txType === 'Harvested')
-    .reduce((s,t) => s + (parseFloat(t.weight)||0), 0);
+  const harvestTxs = batchTxRecs.filter(t => t.batchId === batchId && t.txType === 'Harvested');
+  const harvestedPlantsSum = harvestTxs.reduce((s,t) => s + (parseInt(t.qty)||0), 0);
+  const harvestSum = harvestTxs.reduce((s,t) => s + (parseFloat(t.weight)||0), 0);
   const soldSum = batchTxRecs
     .filter(t => t.batchId === batchId && t.txType === 'Sold')
     .reduce((s,t) => s + (parseFloat(t.weight)||0), 0);
@@ -1902,6 +1908,7 @@ function summaryRefreshBatchTotals(batchId){
   const postDry = (b && b.postDryingWeight) ? parseFloat(b.postDryingWeight) : 0;
   const fmtKg = v => (v > 0 ? v.toFixed(3) + ' kg' : '—');
   const fmtCount = v => (v > 0 ? String(v) + ' plants' : '—');
+  setText('si-harvested-count', fmtCount(harvestedPlantsSum));
   setText('si-harvest-weight', fmtKg(harvestSum));
   setText('si-postdry-weight', fmtKg(postDry));
   setText('si-sold-weight', fmtKg(soldSum));
