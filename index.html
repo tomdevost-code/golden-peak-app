@@ -280,15 +280,15 @@ tr:last-child td { border-bottom: none; }
         <div class="section-label">Batch info</div>
         <div class="card">
           <div class="g2" style="margin-bottom:10px;">
+            <div class="field"><label>Batch ID</label>
+              <select id="ro-batch-select" onchange="roBatchSelect()" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;">
+                <option value="">-- select batch --</option>
+              </select>
+            </div>
             <div class="field"><label>Grower</label>
               <select id="ro-grower">
                 <option value="">select grower</option>
                 <option>Jordan Elliott</option><option>Brandon Cail</option><option>Tom Devost</option>
-              </select>
-            </div>
-            <div class="field"><label>Batch ID</label>
-              <select id="ro-batch-select" onchange="roBatchSelect()" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;">
-                <option value="">-- select batch --</option>
               </select>
             </div>
             <div class="field"><label>Room</label>
@@ -407,15 +407,15 @@ tr:last-child td { border-bottom: none; }
         <div class="section-label">Batch Info</div>
         <div class="card">
           <div class="g2" style="margin-bottom:10px;">
-            <div class="field"><label>Grower</label>
-              <select id="waste-grower" onchange="wasteSeqUnlock()">
-                <option value="">select grower</option>
-                <option>Jordan Elliott</option><option>Brandon Cail</option><option>Tom Devost</option>
+            <div class="field"><label>Batch ID</label>
+              <select id="waste-batch-select" onchange="wasteBatchSelect()" style="margin-bottom:6px;">
+                <option value="">-- select batch --</option>
               </select>
             </div>
-            <div class="field"><label>Batch ID</label>
-              <select id="waste-batch-select" onchange="wasteBatchSelect()" disabled style="background:var(--bg2);color:var(--text3);cursor:not-allowed;margin-bottom:6px;">
-                <option value="">-- select batch --</option>
+            <div class="field"><label>Grower</label>
+              <select id="waste-grower" onchange="wasteSeqUnlock()" disabled style="background:var(--bg2);color:var(--text3);cursor:not-allowed;">
+                <option value="">select grower</option>
+                <option>Jordan Elliott</option><option>Brandon Cail</option><option>Tom Devost</option>
               </select>
             </div>
           </div>
@@ -835,6 +835,11 @@ tr:last-child td { border-bottom: none; }
       <div class="section">
         <div class="section-label">Harvest Setup</div>
         <div class="card">
+          <div class="field" style="margin-bottom:10px;"><label>Batch ID</label>
+            <select id="harvest-batch-select" onchange="harvestSetupChanged()">
+              <option value="">-- select batch --</option>
+            </select>
+          </div>
           <div class="g2" style="margin-bottom:10px;">
             <div class="field"><label>Grower</label>
               <select id="harvest-grower" onchange="harvestSetupChanged()">
@@ -843,11 +848,6 @@ tr:last-child td { border-bottom: none; }
               </select>
             </div>
             <div class="field"><label>Date</label><input type="date" id="harvest-date" readonly style="background:var(--bg2);color:var(--text3);cursor:default;" /></div>
-          </div>
-          <div class="field" style="margin-bottom:10px;"><label>Batch ID</label>
-            <select id="harvest-batch-select" onchange="harvestSetupChanged()">
-              <option value="">-- select batch --</option>
-            </select>
           </div>
           <div class="field" style="margin-bottom:0;"><label>Room</label>
             <select id="harvest-room" onchange="harvestSetupChanged()">
@@ -901,7 +901,12 @@ tr:last-child td { border-bottom: none; }
       <div class="section">
         <div class="section-label">Post-Drying Setup</div>
         <div class="card">
-          <div class="g2" style="margin-bottom:10px;">
+          <div class="field" style="margin-bottom:10px;"><label>Batch ID</label>
+            <select id="postdry-batch-select" onchange="postDrySetupChanged()">
+              <option value="">-- select batch --</option>
+            </select>
+          </div>
+          <div class="g2" style="margin-bottom:0;">
             <div class="field"><label>Grower</label>
               <select id="postdry-grower" onchange="postDrySetupChanged()">
                 <option value="">select grower</option>
@@ -909,11 +914,6 @@ tr:last-child td { border-bottom: none; }
               </select>
             </div>
             <div class="field"><label>Date</label><input type="date" id="postdry-date" readonly style="background:var(--bg2);color:var(--text3);cursor:default;" /></div>
-          </div>
-          <div class="field" style="margin-bottom:0;"><label>Batch ID</label>
-            <select id="postdry-batch-select" onchange="postDrySetupChanged()">
-              <option value="">-- select batch --</option>
-            </select>
           </div>
           <div id="postdry-setup-hint" style="font-size:11px;color:var(--text3);margin-top:6px;font-family:var(--mono);">Only batches in Drying phase appear here. Bin numbers start at 1 per batch.</div>
         </div>
@@ -4657,20 +4657,22 @@ setInterval(()=>{const t=localDate();document.getElementById('ec-date').value=t;
 // ── WASTE LOG ─────────────────────────────────────────────────────────────────
 
 function wasteSeqUnlock(){
-  const grower=document.getElementById('waste-grower').value;
+  // Sequential unlock: Batch → Grower → Room → rest of form.
   const batchSel=document.getElementById('waste-batch-select');
+  const growerEl=document.getElementById('waste-grower');
   const roomEl=document.getElementById('waste-room');
   const fields=['waste-type','waste-weight','waste-notes'];
   function disableFields(){fields.forEach(id=>{const el=document.getElementById(id);el.disabled=true;el.style.background='var(--bg2)';el.style.color='var(--text3)';el.style.cursor='not-allowed';});}
   function enableFields(){fields.forEach(id=>{const el=document.getElementById(id);el.disabled=false;el.style.background='';el.style.color='';el.style.cursor='';});document.getElementById('waste-notes').style.background='';document.getElementById('waste-notes').style.color='';}
-  if(!grower){
-    batchSel.disabled=true;batchSel.style.background='var(--bg2)';batchSel.style.color='var(--text3)';batchSel.style.cursor='not-allowed';
+  const batch=batchSel.value;
+  if(!batch){
+    growerEl.disabled=true;growerEl.style.background='var(--bg2)';growerEl.style.color='var(--text3)';growerEl.style.cursor='not-allowed';
     roomEl.disabled=true;roomEl.style.background='var(--bg2)';roomEl.style.color='var(--text3)';roomEl.style.cursor='not-allowed';
     disableFields();return;
   }
-  batchSel.disabled=false;batchSel.style.background='';batchSel.style.color='';batchSel.style.cursor='';
-  const batch=batchSel.value;
-  if(!batch){
+  growerEl.disabled=false;growerEl.style.background='';growerEl.style.color='';growerEl.style.cursor='';
+  const grower=growerEl.value;
+  if(!grower){
     roomEl.disabled=true;roomEl.style.background='var(--bg2)';roomEl.style.color='var(--text3)';roomEl.style.cursor='not-allowed';
     disableFields();return;
   }
