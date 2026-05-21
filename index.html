@@ -1035,6 +1035,105 @@ tr:last-child td { border-bottom: none; }
       </div>
     </div>
 
+    <!-- PEST IDENTIFICATION LOG -->
+    <div class="page" id="page-pest">
+      <div id="pest-room-strip" style="display:none;align-items:center;padding:8px 12px;border-radius:var(--radius-sm);border:1px solid;margin-bottom:12px;"></div>
+      <div class="section">
+        <div class="section-label">Pest ID Setup</div>
+        <div class="card">
+          <div class="g2" style="margin-bottom:10px;">
+            <div class="field"><label>Batch ID</label>
+              <select id="pest-batch-select" onchange="pestBatchSelect()" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;">
+                <option value="">-- select batch --</option>
+              </select>
+              <input type="hidden" id="pest-batch" />
+            </div>
+            <div class="field"><label>Grower (Initials)</label>
+              <select id="pest-grower" onchange="pestSeqUnlock()">
+                <option value="">select grower</option>
+                <option>Jordan Elliott</option><option>Brandon Cail</option><option>Tom Devost</option>
+              </select>
+            </div>
+          </div>
+          <div class="g2" style="margin-bottom:0;">
+            <div class="field"><label>Room</label>
+              <select id="pest-room" onchange="pestRoomChanged()">
+                <option value="">select room</option>
+                <option>Flower 1</option><option>Flower 2</option>
+                <option>Flower 3</option><option>Flower 4</option>
+                <option>Flower 5</option><option>Veg</option>
+              </select>
+            </div>
+            <div class="field"><label>Date</label>
+              <input type="date" id="pest-date" readonly style="background:var(--bg2);color:var(--text3);cursor:default;" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-label">Identification Location</div>
+        <div class="card">
+          <div class="g2" style="margin-bottom:10px;">
+            <div class="field"><label>Where Identified</label>
+              <select id="pest-location" onchange="pestLocationChanged()">
+                <option value="">-- select location --</option>
+                <option>Sticky Card</option>
+                <option>Plants</option>
+                <option>Room</option>
+              </select>
+            </div>
+            <div class="field" id="pest-card-wrap" style="display:none;"><label>Card Number (1–8)</label>
+              <select id="pest-card-num" onchange="pestSeqUnlock()">
+                <option value="">-- select card --</option>
+                <option value="1">Card 1</option><option value="2">Card 2</option>
+                <option value="3">Card 3</option><option value="4">Card 4</option>
+                <option value="5">Card 5</option><option value="6">Card 6</option>
+                <option value="7">Card 7</option><option value="8">Card 8</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-label">Pests Identified</div>
+        <div class="card">
+          <div style="font-size:12px;color:var(--text2);margin-bottom:8px;">Select all that apply:</div>
+          <div id="pest-checkboxes" style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px;">
+            <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer;padding:6px 8px;border-radius:var(--radius-sm);background:var(--bg2);">
+              <input type="checkbox" class="pest-known" value="Thrip" onchange="pestSeqUnlock()" /> Thrip
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer;padding:6px 8px;border-radius:var(--radius-sm);background:var(--bg2);">
+              <input type="checkbox" class="pest-known" value="Fungus Gnats" onchange="pestSeqUnlock()" /> Fungus Gnats
+            </label>
+          </div>
+          <div style="border-top:1px dashed var(--border);padding-top:10px;">
+            <label style="display:block;font-size:11px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">Other pest / pathogen not in list</label>
+            <div style="display:flex;gap:6px;">
+              <input type="text" id="pest-other-input" placeholder="e.g. Spider Mites, Powdery Mildew" style="flex:1;font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;" />
+              <button type="button" onclick="pestAddOther()" style="background:var(--green);color:#fff;border:none;border-radius:var(--radius-sm);padding:8px 14px;font-weight:600;cursor:pointer;font-size:13px;">Add</button>
+            </div>
+            <div id="pest-other-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-label">Notes</div>
+        <textarea id="pest-notes" rows="2" style="width:100%;font-size:14px;font-family:var(--sans);border-radius:var(--radius-sm);border:1px solid var(--border);padding:10px;background:var(--card);color:var(--text);outline:none;" placeholder="Severity, location on plant, action taken, etc."></textarea>
+      </div>
+
+      <button class="btn-primary" id="pest-btn" onclick="pestSave()">Save Pest ID Entry</button>
+      <button class="btn-secondary" style="width:100%;margin-top:8px;" onclick="pestClearConfirm()">Clear Form</button>
+
+      <!-- Pest ID History for selected batch + room -->
+      <div class="section" id="pest-history-section" style="display:none;margin-top:16px;">
+        <div class="section-label">Pest ID History</div>
+        <div id="pest-history-list" style="font-size:13px;color:var(--text3);text-align:center;padding:10px;"></div>
+      </div>
+    </div>
+
     <!-- SETTINGS -->
     <div class="page" id="page-settings">
       <div class="settings-card">
@@ -1049,6 +1148,7 @@ tr:last-child td { border-bottom: none; }
         <div class="sfield"><label>Harvest Log Table ID</label><input type="text" id="s-harvest" placeholder="tblXXXXXXXXXXXXXX" /></div>
         <div class="sfield"><label>Post-Drying Log Table ID</label><input type="text" id="s-postdry" placeholder="tblXXXXXXXXXXXXXX" /></div>
         <div class="sfield"><label>Biological Control Log Table ID</label><input type="text" id="s-bio" placeholder="tblXXXXXXXXXXXXXX" /></div>
+        <div class="sfield"><label>Pest Identification Log Table ID</label><input type="text" id="s-pest" placeholder="tblXXXXXXXXXXXXXX" /></div>
         <button class="btn-save" onclick="saveSettings()">Save and Test Connection</button>
         <div class="conn-status" id="conn-status"></div>
         <div style="margin-top:14px;padding-top:12px;border-top:1px dashed var(--border);">
@@ -1116,6 +1216,10 @@ tr:last-child td { border-bottom: none; }
       <svg viewBox="0 0 24 24"><path d="M12 2C8 5 6 8 6 12a6 6 0 0012 0c0-4-2-7-6-10z"/><path d="M12 14v6"/></svg>
       Bio
     </button>
+    <button class="bnav-btn" id="bn-pest" onclick="switchPage('pest',this)">
+      <svg viewBox="0 0 24 24"><path d="M12 4v16M6 8l6-4 6 4M4 14h16M7 19l5-3 5 3"/></svg>
+      Pest ID
+    </button>
     <button class="bnav-btn" id="bn-report" onclick="switchPage('report',this)">
       <svg viewBox="0 0 24 24"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
       Report
@@ -1132,11 +1236,11 @@ tr:last-child td { border-bottom: none; }
 <script>
 const EC_LO=2.2,EC_HI=2.3,PH_EC_LO=6.2,PH_EC_HI=6.3;
 const RO_PH_LO=6.0,RO_PH_HI=6.5,RO_VAR_LO=0.3,RO_VAR_HI=0.5,RO_VAR_ALERT=1.0;
-let ecRecs=[],roRecs=[],wasteRecs=[],batchRecs=[],batchTxRecs=[],harvestRecs=[],postDryRecs=[],bioRecs=[],cfg={token:'',base:'',ecTbl:'',roTbl:'',wasteTbl:'',batchTbl:'',batchtxTbl:'',harvestTbl:'',postDryTbl:'',bioTbl:''};
+let ecRecs=[],roRecs=[],wasteRecs=[],batchRecs=[],batchTxRecs=[],harvestRecs=[],postDryRecs=[],bioRecs=[],pestRecs=[],cfg={token:'',base:'',ecTbl:'',roTbl:'',wasteTbl:'',batchTbl:'',batchtxTbl:'',harvestTbl:'',postDryTbl:'',bioTbl:'',pestTbl:''};
 
 function lsGet(k){try{return JSON.parse(localStorage.getItem(k)||'null');}catch(e){return null;}}
 function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
-function loadAll(){ecRecs=lsGet('gp-ec')||[];roRecs=lsGet('gp-ro')||[];wasteRecs=lsGet('gp-waste')||[];batchRecs=lsGet('gp-batch')||[];batchTxRecs=lsGet('gp-batchtx')||[];harvestRecs=lsGet('gp-harvest')||[];postDryRecs=lsGet('gp-postdry')||[];bioRecs=lsGet('gp-bio')||[];wasteRecs.forEach(r=>{if(r.type==='Vegetative waste')r.type='Vegetative Waste';});lsSet('gp-waste',wasteRecs);const s=lsGet('gp-cfg');if(s){cfg=s;applySettings();}backfillHarvestedTxs();reconcileAllPackagedBatches();}
+function loadAll(){ecRecs=lsGet('gp-ec')||[];roRecs=lsGet('gp-ro')||[];wasteRecs=lsGet('gp-waste')||[];batchRecs=lsGet('gp-batch')||[];batchTxRecs=lsGet('gp-batchtx')||[];harvestRecs=lsGet('gp-harvest')||[];postDryRecs=lsGet('gp-postdry')||[];bioRecs=lsGet('gp-bio')||[];pestRecs=lsGet('gp-pest')||[];wasteRecs.forEach(r=>{if(r.type==='Vegetative waste')r.type='Vegetative Waste';});lsSet('gp-waste',wasteRecs);const s=lsGet('gp-cfg');if(s){cfg=s;applySettings();}backfillHarvestedTxs();reconcileAllPackagedBatches();}
 
 function backfillHarvestedTxs(){
   // One-time data fix: prior to the per-room Harvested tx code, a Complete Harvest only created
@@ -1422,6 +1526,31 @@ const REMOTE_MAPPERS = {
       reason: f['Reason']||'',
       synced: true
     };
+  },
+  pest(rec, ctx){
+    const f = rec.fields || {};
+    const link = Array.isArray(f['Batch ID']) ? f['Batch ID'][0] : null;
+    const batch = link ? (ctx.batchIdByRecId[link]||'') : '';
+    if(!batch) return null;
+    // 'Pests Identified' is a multi-select in Airtable — comes back as an array.
+    // Fall back to splitting a comma-separated string if someone configured it as text.
+    let pests = f['Pests Identified'];
+    if(Array.isArray(pests)) {/* already good */}
+    else if(typeof pests === 'string' && pests.trim()) pests = pests.split(',').map(s=>s.trim()).filter(Boolean);
+    else pests = [];
+    return {
+      id: 'pest_'+rec.id,
+      airtableId: rec.id,
+      date: f['Date']||'',
+      grower: f['Grower']||'',
+      batch,
+      room: f['Room']||'',
+      location: f['Location']||'',
+      cardNumber: f['Card Number'] != null ? parseInt(f['Card Number']) : null,
+      pests,
+      notes: f['Notes']||'',
+      synced: true
+    };
   }
 };
 
@@ -1488,7 +1617,7 @@ async function pullFromAirtable(opts){
   isPulling = true;
   if(opts.manual) setSyncPill('ing','Syncing…');
   try {
-    const [batches, ecs, ros, ws, txs, hs, pds, bs] = await Promise.all([
+    const [batches, ecs, ros, ws, txs, hs, pds, bs, ps] = await Promise.all([
       atFetchAll(cfg.batchTbl),
       atFetchAll(cfg.ecTbl),
       atFetchAll(cfg.roTbl),
@@ -1496,7 +1625,8 @@ async function pullFromAirtable(opts){
       atFetchAll(cfg.batchtxTbl),
       atFetchAll(cfg.harvestTbl),
       atFetchAll(cfg.postDryTbl),
-      atFetchAll(cfg.bioTbl)
+      atFetchAll(cfg.bioTbl),
+      atFetchAll(cfg.pestTbl)
     ]);
     // Resolve linked-record refs by building recordId→Batch-ID-string lookup
     const batchIdByRecId = {};
@@ -1514,6 +1644,7 @@ async function pullFromAirtable(opts){
     summary.harvest = mergeRemote(harvestRecs, hs,      REMOTE_MAPPERS.harvest, ctx, 'harvest', 'gp-harvest');
     summary.postdry = mergeRemote(postDryRecs, pds,     REMOTE_MAPPERS.postdry, ctx, 'postdry', 'gp-postdry');
     summary.bio     = mergeRemote(bioRecs,     bs,      REMOTE_MAPPERS.bio,     ctx, 'bio',     'gp-bio');
+    summary.pest    = mergeRemote(pestRecs,    ps,      REMOTE_MAPPERS.pest,    ctx, 'pest',    'gp-pest');
     lsSet('gp-batch',   batchRecs);
     lsSet('gp-ec',      ecRecs);
     lsSet('gp-ro',      roRecs);
@@ -1522,6 +1653,7 @@ async function pullFromAirtable(opts){
     lsSet('gp-harvest', harvestRecs);
     lsSet('gp-postdry', postDryRecs);
     lsSet('gp-bio',     bioRecs);
+    lsSet('gp-pest',    pestRecs);
     const totalAdded    = Object.values(summary).reduce((s,o)=>s+o.added, 0);
     const totalUpdated  = Object.values(summary).reduce((s,o)=>s+o.updated, 0);
     const totalConflicts= Object.values(summary).reduce((s,o)=>s+o.conflicts, 0);
@@ -1661,7 +1793,7 @@ function renderConflictsModal(){
     renderConflictBanner();
     return;
   }
-  const tableLabels = {batch:'Batch', ec:'EC Log', ro:'Runoff', waste:'Waste', batchtx:'Batch Transaction', harvest:'Harvest', postdry:'Post-Drying', bio:'Bio Control'};
+  const tableLabels = {batch:'Batch', ec:'EC Log', ro:'Runoff', waste:'Waste', batchtx:'Batch Transaction', harvest:'Harvest', postdry:'Post-Drying', bio:'Bio Control', pest:'Pest ID'};
   const items = _pendingConflicts.map((c, i) => {
     const diffs = _conflictDiffFields(c.local, c.remote);
     const label = tableLabels[c.table] || c.table;
@@ -1703,7 +1835,7 @@ function renderConflictsModal(){
 async function resolveConflict(idx, choice){
   const c = _pendingConflicts[idx];
   if(!c) return;
-  const arrName = {batch:'batchRecs', ec:'ecRecs', ro:'roRecs', waste:'wasteRecs', batchtx:'batchTxRecs', harvest:'harvestRecs', postdry:'postDryRecs', bio:'bioRecs'}[c.table];
+  const arrName = {batch:'batchRecs', ec:'ecRecs', ro:'roRecs', waste:'wasteRecs', batchtx:'batchTxRecs', harvest:'harvestRecs', postdry:'postDryRecs', bio:'bioRecs', pest:'pestRecs'}[c.table];
   const arr = arrName ? window[arrName] : null;
   if(!arr){ _pendingConflicts.splice(idx,1); renderConflictsModal(); renderConflictBanner(); return; }
   // Find the local row by airtableId (index may have shifted since the
@@ -2131,7 +2263,7 @@ function setAvg(id,val,lo,hi){const el=document.getElementById(id);if(val===null
 function stageLabel(r){if(!r.stage||!r.day)return'<span style="color:var(--text3)">-</span>';return r.stage==='flower'?'<span class="flower-txt">F'+r.day+'</span>':'<span class="veg-txt">V'+r.day+'</span>';}
 function toast(msg,dur){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),dur||2500);}
 
-function switchPage(page,btn){document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.bnav-btn').forEach(b=>b.classList.remove('active'));document.getElementById('page-'+page).classList.add('active');btn.classList.add('active');if(page==='report'){renderEC();renderRO();}if(page==='waste'){renderWaste();}if(page==='batch'){renderBatchLog();}if(page==='summary'){summaryPopulateBatches();}if(page==='harvest'){harvestPopulateBatches();harvestRefreshDate();harvestPopulateBinNumbers();}if(page==='postdry'){postDryPopulateBatches();postDrySetupChanged();}if(page==='bio'){bioRefreshDate();bioSeqUnlock();}}
+function switchPage(page,btn){document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.bnav-btn').forEach(b=>b.classList.remove('active'));document.getElementById('page-'+page).classList.add('active');btn.classList.add('active');if(page==='report'){renderEC();renderRO();}if(page==='waste'){renderWaste();}if(page==='batch'){renderBatchLog();}if(page==='summary'){summaryPopulateBatches();}if(page==='harvest'){harvestPopulateBatches();harvestRefreshDate();harvestPopulateBinNumbers();}if(page==='postdry'){postDryPopulateBatches();postDrySetupChanged();}if(page==='bio'){bioRefreshDate();bioSeqUnlock();}if(page==='pest'){pestRefreshDate();pestPopulateBatches();pestSeqUnlock();}}
 // ── HARVEST LOG ──────────────────────────────────────────────────────────────
 function harvestRefreshDate(){const t=localDate();const el=document.getElementById('harvest-date'); if(el) el.value=t;}
 function harvestPopulateBinNumbers(){
@@ -2649,6 +2781,269 @@ function bioRenderHistory(batch, room){
   list.innerHTML = html;
 }
 
+// ─── PEST IDENTIFICATION LOG ─────────────────────────────────────────────────
+// Sticky-card pest monitoring: 8 cards per (batch, room), monitored weekly.
+// Pests can also be observed directly on plants or in the room. Each record
+// captures one identification event with one or more pests selected.
+
+// "Other" pests added via the +Add input — held in this transient array until
+// the form is cleared/saved.
+let _pestOtherList = [];
+
+function pestRefreshDate(){
+  const el = document.getElementById('pest-date');
+  if(el) el.value = localDate();
+}
+
+function pestPopulateBatches(){
+  // Same source as the other batch dropdowns: from batchRecs, plus phase gating
+  // similar to Bio Control. Pest monitoring stops once the batch is in
+  // Drying/Packaged/Delivered (no living plants to monitor).
+  const sel = document.getElementById('pest-batch-select');
+  if(!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">-- select batch --</option>';
+  const list = (typeof getFormBatchList === 'function') ? getFormBatchList() : [];
+  list.forEach(b => {
+    if(['Drying','Packaged','Delivered'].includes(b.plantPhase)) return;
+    const opt = document.createElement('option');
+    opt.value = b.batchId;
+    opt.textContent = b.batchId + (b.cultivar ? ' — '+b.cultivar : '');
+    sel.appendChild(opt);
+  });
+  if(cur) sel.value = cur;
+}
+
+function pestBatchSelect(){
+  const val = document.getElementById('pest-batch-select').value;
+  const hidden = document.getElementById('pest-batch');
+  if(hidden) hidden.value = val;
+  pestRefreshDate();
+  // Refresh history when batch changes
+  const room = document.getElementById('pest-room').value;
+  pestRenderHistory(val, room);
+  pestSeqUnlock();
+}
+
+function pestRoomChanged(){
+  const room = document.getElementById('pest-room').value;
+  if(typeof applyRoomColor === 'function') applyRoomColor('pest', room);
+  pestRenderHistory(document.getElementById('pest-batch-select').value, room);
+  pestSeqUnlock();
+}
+
+function pestLocationChanged(){
+  // Show Card Number only when location is Sticky Card
+  const loc = document.getElementById('pest-location').value;
+  const wrap = document.getElementById('pest-card-wrap');
+  if(wrap) wrap.style.display = (loc === 'Sticky Card') ? '' : 'none';
+  if(loc !== 'Sticky Card'){
+    const cardSel = document.getElementById('pest-card-num');
+    if(cardSel) cardSel.value = '';
+  }
+  pestSeqUnlock();
+}
+
+function pestAddOther(){
+  const input = document.getElementById('pest-other-input');
+  if(!input) return;
+  const val = input.value.trim();
+  if(!val){ toast('Type a pest name first.'); return; }
+  // De-dupe (case-insensitive)
+  const exists = _pestOtherList.some(p => p.toLowerCase() === val.toLowerCase());
+  // Also ignore if it duplicates a predefined option
+  const predefined = ['thrip','fungus gnats'];
+  if(predefined.includes(val.toLowerCase())){
+    toast('"'+val+'" is already in the list — tick the checkbox above.',4000);
+    input.value = '';
+    return;
+  }
+  if(exists){ toast('"'+val+'" already added.'); input.value=''; return; }
+  _pestOtherList.push(val);
+  input.value = '';
+  pestRenderOtherChips();
+  pestSeqUnlock();
+}
+
+function pestRemoveOther(idx){
+  _pestOtherList.splice(idx, 1);
+  pestRenderOtherChips();
+  pestSeqUnlock();
+}
+
+function pestRenderOtherChips(){
+  const wrap = document.getElementById('pest-other-chips');
+  if(!wrap) return;
+  if(!_pestOtherList.length){ wrap.innerHTML = ''; return; }
+  wrap.innerHTML = _pestOtherList.map((p, i) =>
+    '<span style="display:inline-flex;align-items:center;gap:6px;background:var(--green-pale);color:var(--green);padding:4px 10px;border-radius:12px;font-size:12px;font-weight:600;">'
+    + p
+    + '<button type="button" onclick="pestRemoveOther('+i+')" style="background:transparent;border:none;color:var(--green);cursor:pointer;font-size:14px;line-height:1;padding:0;font-weight:700;">×</button>'
+    + '</span>'
+  ).join('');
+}
+
+function pestGetSelectedPests(){
+  // Combines ticked known pests + the transient _pestOtherList into one array.
+  const known = Array.from(document.querySelectorAll('.pest-known:checked')).map(cb => cb.value);
+  return [...known, ..._pestOtherList];
+}
+
+function pestSeqUnlock(){
+  // Sequential unlock: Batch → Grower → Room → Location (+ Card if Sticky Card) → Pests → Save
+  const batch = document.getElementById('pest-batch-select').value;
+  const grower = document.getElementById('pest-grower').value;
+  const room = document.getElementById('pest-room').value;
+  const loc = document.getElementById('pest-location').value;
+  const card = document.getElementById('pest-card-num').value;
+  const pests = pestGetSelectedPests();
+  const lock = (id) => { const el=document.getElementById(id); if(!el) return; el.disabled=true; el.style.background='var(--bg2)'; el.style.color='var(--text3)'; el.style.cursor='not-allowed'; };
+  const unlock = (id) => { const el=document.getElementById(id); if(!el) return; el.disabled=false; el.style.background=''; el.style.color=''; el.style.cursor=''; };
+  // Gate the Save button so a partial entry can't be saved
+  const btn = document.getElementById('pest-btn');
+  const ready = !!(batch && grower && room && loc && (loc !== 'Sticky Card' || card) && pests.length);
+  if(btn){
+    btn.disabled = !ready;
+    btn.style.opacity = ready ? '1' : '0.5';
+    btn.style.cursor = ready ? 'pointer' : 'not-allowed';
+  }
+  // Progressive lock/unlock of downstream fields
+  if(!batch){ lock('pest-grower'); lock('pest-room'); lock('pest-location'); lock('pest-card-num'); return; }
+  unlock('pest-grower');
+  if(!grower){ lock('pest-room'); lock('pest-location'); lock('pest-card-num'); return; }
+  unlock('pest-room');
+  if(!room){ lock('pest-location'); lock('pest-card-num'); return; }
+  unlock('pest-location');
+  if(loc === 'Sticky Card') unlock('pest-card-num'); else lock('pest-card-num');
+}
+
+async function pestSave(){
+  const grower = document.getElementById('pest-grower').value;
+  const batch = document.getElementById('pest-batch-select').value;
+  const room = document.getElementById('pest-room').value;
+  const date = document.getElementById('pest-date').value || localDate();
+  const loc = document.getElementById('pest-location').value;
+  const cardRaw = document.getElementById('pest-card-num').value;
+  const cardNumber = cardRaw ? parseInt(cardRaw) : null;
+  const pests = pestGetSelectedPests();
+  const notes = document.getElementById('pest-notes').value.trim();
+  if(!batch){ toast('Please select a batch.'); return; }
+  if(!grower){ toast('Please select a grower.'); return; }
+  if(!room){ toast('Please select a room.'); return; }
+  if(!loc){ toast('Please select where the identification was made.'); return; }
+  if(loc === 'Sticky Card' && !cardNumber){ toast('Please pick which card (1–8).'); return; }
+  if(!pests.length){ toast('Select or add at least one pest.'); return; }
+  // Block writes when batch is closed
+  const _bRec = batchRecs.find(r=>r.batchId===batch && !r.type);
+  if(_bRec && _bRec.status === 'Closed'){
+    toast('This batch is closed (Status=Closed). No new entries.',3500);
+    return;
+  }
+  const rec = {
+    id: Date.now(),
+    date, grower, batch, room,
+    location: loc,
+    cardNumber,
+    pests,
+    notes,
+    synced: false
+  };
+  pestRecs.unshift(rec);
+  lsSet('gp-pest', pestRecs);
+  toast('Saved: '+pests.join(', '));
+  updatePendingBadge();
+  // Soft-refresh: clear pests + card + notes; keep batch/grower/room/location ready
+  document.querySelectorAll('.pest-known').forEach(cb => cb.checked = false);
+  _pestOtherList = [];
+  pestRenderOtherChips();
+  document.getElementById('pest-other-input').value = '';
+  document.getElementById('pest-notes').value = '';
+  document.getElementById('pest-card-num').value = '';
+  pestRenderHistory(batch, room);
+  pestSeqUnlock();
+  // Sync to Airtable
+  if(cfg.pestTbl && cfg.token && cfg.base){
+    setSyncPill('ing','Syncing...');
+    try {
+      const f = {
+        'Date': rec.date,
+        'Grower': rec.grower,
+        'Batch ID': rec.batch ? [rec.batch] : undefined,
+        'Room': rec.room,
+        'Location': rec.location,
+        'Card Number': rec.cardNumber || undefined,
+        'Pests Identified': rec.pests,         // multi-select; typecast:true auto-creates new options
+        'Notes': rec.notes || undefined
+      };
+      Object.keys(f).forEach(k => { if(f[k]===undefined||f[k]===null||f[k]==='') delete f[k]; });
+      const _pRes = await atPost(cfg.pestTbl, f);
+      rec.synced = true;
+      if(_pRes && _pRes.id) rec.airtableId = _pRes.id;
+      lsSet('gp-pest', pestRecs);
+      setSyncPill('ok','Synced');
+      updatePendingBadge();
+    } catch(e){
+      setSyncPill('err','Sync failed');
+      toast('Saved locally - Airtable: '+(e.message||'sync failed'),5000);
+    }
+  }
+}
+
+function pestClearConfirm(){
+  if(!confirm('Clear the current form? Unsaved data will be lost.')) return;
+  document.querySelectorAll('.pest-known').forEach(cb => cb.checked = false);
+  _pestOtherList = [];
+  pestRenderOtherChips();
+  ['pest-other-input','pest-notes','pest-card-num'].forEach(id => {
+    const el=document.getElementById(id); if(el) el.value='';
+  });
+  document.getElementById('pest-batch-select').value = '';
+  document.getElementById('pest-batch').value = '';
+  document.getElementById('pest-grower').value = '';
+  document.getElementById('pest-room').value = '';
+  document.getElementById('pest-location').value = '';
+  document.getElementById('pest-card-wrap').style.display = 'none';
+  pestRefreshDate();
+  pestSeqUnlock();
+  pestRenderHistory('', '');
+}
+
+function pestRenderHistory(batch, room){
+  const sec = document.getElementById('pest-history-section');
+  const list = document.getElementById('pest-history-list');
+  if(!sec || !list) return;
+  if(!batch || !room){ sec.style.display = 'none'; return; }
+  sec.style.display = '';
+  const recs = pestRecs.filter(r => r.batch === batch && r.room === room);
+  if(!recs.length){
+    list.innerHTML = '<span style="color:var(--text3);">No Pest ID entries yet for '+batch+' / '+room+'.</span>';
+    return;
+  }
+  let html = '<div style="overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius-sm);background:#fff;"><table style="width:100%;border-collapse:collapse;font-size:12px;">';
+  html += '<thead><tr style="background:#f5f5f5;">'+
+    '<th style="padding:6px 8px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);">Date</th>'+
+    '<th style="padding:6px 8px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Location</th>'+
+    '<th style="padding:6px 8px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Card</th>'+
+    '<th style="padding:6px 8px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Pests</th>'+
+    '<th style="padding:6px 8px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Grower</th>'+
+    '<th style="padding:6px 8px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Notes</th>'+
+  '</tr></thead><tbody>';
+  recs.forEach(r => {
+    const pestList = Array.isArray(r.pests) ? r.pests.join(', ') : (r.pests||'—');
+    const cardStr = r.cardNumber ? ('#'+r.cardNumber) : '—';
+    html += '<tr>'+
+      '<td style="padding:5px 8px;font-family:var(--mono);border-top:1px solid var(--border);white-space:nowrap;">'+r.date+'</td>'+
+      '<td style="padding:5px 8px;border-top:1px solid var(--border);border-left:1px solid var(--border);">'+(r.location||'—')+'</td>'+
+      '<td style="padding:5px 8px;font-family:var(--mono);border-top:1px solid var(--border);border-left:1px solid var(--border);">'+cardStr+'</td>'+
+      '<td style="padding:5px 8px;border-top:1px solid var(--border);border-left:1px solid var(--border);font-weight:600;color:var(--amber);">'+pestList+'</td>'+
+      '<td style="padding:5px 8px;font-size:11px;color:var(--text2);border-top:1px solid var(--border);border-left:1px solid var(--border);">'+(r.grower||'—')+'</td>'+
+      '<td style="padding:5px 8px;font-size:11px;color:var(--text3);border-top:1px solid var(--border);border-left:1px solid var(--border);max-width:200px;">'+(r.notes||'—')+'</td>'+
+    '</tr>';
+  });
+  html += '</tbody></table></div>';
+  list.innerHTML = html;
+}
+
 function postDryPopulateBatches(){
   // Populate the post-drying batch dropdown with batches currently in Drying phase.
   // (After Complete Post-Drying, the batch moves to Packaged and disappears from this list.)
@@ -3053,6 +3448,8 @@ function populateBatchDropdowns(){
   if(typeof postDryPopulateBatches === 'function') postDryPopulateBatches();
   // Bio Control batch dropdown filters by growing phase — handled separately
   if(typeof bioPopulateBatches === 'function') bioPopulateBatches();
+  // Pest ID batch dropdown filters by growing phase too
+  if(typeof pestPopulateBatches === 'function') pestPopulateBatches();
   // Auto-pick if only one batch exists
   autoSelectIfSingle('ec-batch-select');
   autoSelectIfSingle('ro-batch-select');
@@ -3938,7 +4335,7 @@ function roClear(){for(let i=1;i<=8;i++){document.getElementById('ro-ec-'+i).val
 
 // Pending badge
 function updatePendingBadge(){
-  const n=(ecRecs.filter(r=>!r.synced).length)+(roRecs.filter(r=>!r.synced).length)+(wasteRecs.filter(r=>!r.synced).length)+(batchRecs.filter(r=>!r.synced).length)+(batchTxRecs.filter(r=>!r.synced).length)+(harvestRecs.filter(r=>!r.synced).length)+(postDryRecs.filter(r=>!r.synced).length)+(bioRecs.filter(r=>!r.synced).length);
+  const n=(ecRecs.filter(r=>!r.synced).length)+(roRecs.filter(r=>!r.synced).length)+(wasteRecs.filter(r=>!r.synced).length)+(batchRecs.filter(r=>!r.synced).length)+(batchTxRecs.filter(r=>!r.synced).length)+(harvestRecs.filter(r=>!r.synced).length)+(postDryRecs.filter(r=>!r.synced).length)+(bioRecs.filter(r=>!r.synced).length)+(pestRecs.filter(r=>!r.synced).length);
   const b=document.getElementById('pending-badge');
   if(n>0){b.textContent=n;b.style.display='block';}else{b.style.display='none';}
 }
@@ -4015,8 +4412,8 @@ function migrateRoomNames(){
 }
 function clearAllLocalData(){
   if(!confirm('This will permanently delete ALL local records including synced data, batch IDs, transactions, and dropdowns. This cannot be undone. Continue?'))return;
-  ecRecs=[];roRecs=[];wasteRecs=[];batchRecs=[];batchTxRecs=[];harvestRecs=[];postDryRecs=[];bioRecs=[];
-  lsSet('gp-ec',[]);lsSet('gp-ro',[]);lsSet('gp-waste',[]);lsSet('gp-batch',[]);lsSet('gp-batchtx',[]);lsSet('gp-harvest',[]);lsSet('gp-postdry',[]);lsSet('gp-bio',[]);
+  ecRecs=[];roRecs=[];wasteRecs=[];batchRecs=[];batchTxRecs=[];harvestRecs=[];postDryRecs=[];bioRecs=[];pestRecs=[];
+  lsSet('gp-ec',[]);lsSet('gp-ro',[]);lsSet('gp-waste',[]);lsSet('gp-batch',[]);lsSet('gp-batchtx',[]);lsSet('gp-harvest',[]);lsSet('gp-postdry',[]);lsSet('gp-bio',[]);lsSet('gp-pest',[]);
   populateBatchDropdowns();renderEC();renderRO();
   ecClear();roClear();
   summaryPopulateBatches();
@@ -4033,7 +4430,8 @@ function clearPendingRecords(){
   harvestRecs=harvestRecs.filter(r=>r.synced);
   postDryRecs=postDryRecs.filter(r=>r.synced);
   bioRecs=bioRecs.filter(r=>r.synced);
-  lsSet('gp-ec',ecRecs);lsSet('gp-ro',roRecs);lsSet('gp-waste',wasteRecs);lsSet('gp-batch',batchRecs);lsSet('gp-batchtx',batchTxRecs);lsSet('gp-harvest',harvestRecs);lsSet('gp-postdry',postDryRecs);lsSet('gp-bio',bioRecs);
+  pestRecs=pestRecs.filter(r=>r.synced);
+  lsSet('gp-ec',ecRecs);lsSet('gp-ro',roRecs);lsSet('gp-waste',wasteRecs);lsSet('gp-batch',batchRecs);lsSet('gp-batchtx',batchTxRecs);lsSet('gp-harvest',harvestRecs);lsSet('gp-postdry',postDryRecs);lsSet('gp-bio',bioRecs);lsSet('gp-pest',pestRecs);
   populateBatchDropdowns();renderEC();renderRO();
   summaryPopulateBatches();
   updatePendingBadge();
@@ -4053,7 +4451,8 @@ async function syncPending(){
   const pendingHarvest=harvestRecs.filter(r=>!r.synced);
   const pendingPostDry=postDryRecs.filter(r=>!r.synced);
   const pendingBio=bioRecs.filter(r=>!r.synced);
-  const total=pendingEC.length+pendingRO.length+pendingWaste.length+pendingBatch.length+pendingBatchTx.length+pendingHarvest.length+pendingPostDry.length+pendingBio.length;
+  const pendingPest=pestRecs.filter(r=>!r.synced);
+  const total=pendingEC.length+pendingRO.length+pendingWaste.length+pendingBatch.length+pendingBatchTx.length+pendingHarvest.length+pendingPostDry.length+pendingBio.length+pendingPest.length;
   if(!total){st.style.display='block';st.style.background='var(--green-pale)';st.style.color='var(--green)';st.textContent='No pending records - everything is synced.';updatePendingBadge();return;}
   st.style.display='block';st.style.background='var(--bg2)';st.style.color='var(--text2)';st.textContent='Syncing '+total+' record(s)...';
   btn.disabled=true;setSyncPill('ing','Syncing...');
@@ -4160,14 +4559,27 @@ async function syncPending(){
     }
     lsSet('gp-bio',bioRecs);
   }
+  if(cfg.pestTbl){
+    for(const r of pendingPest){
+      try{
+        const f = {'Date':r.date,'Grower':r.grower,'Batch ID':r.batch?[r.batch]:undefined,'Room':r.room,'Location':r.location||undefined,'Card Number':r.cardNumber||undefined,'Pests Identified':(r.pests&&r.pests.length)?r.pests:undefined,'Notes':r.notes||undefined};
+        Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
+        const pRes=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+cfg.pestTbl,{method:'POST',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify({fields:f,typecast:true})});
+        if(!pRes.ok){const err=await pRes.json();throw new Error('Pest '+pRes.status+': '+(err.error&&err.error.message||JSON.stringify(err)));}
+        try{const _j=await pRes.json(); if(_j && _j.id) r.airtableId=_j.id;}catch(_){}
+        r.synced=true;ok++;
+      }catch(e){fail++;lastErr=e.message;}
+    }
+    lsSet('gp-pest',pestRecs);
+  }
   updatePendingBadge();
   btn.disabled=false;
   if(fail===0){setSyncPill('ok','Synced');st.style.background='var(--green-pale)';st.style.color='var(--green)';st.textContent='Done! '+ok+' record(s) synced to Airtable.';}
   else if(ok>0){setSyncPill('err','Partial sync');st.style.background='var(--amber-pale)';st.style.color='var(--amber)';st.textContent=ok+' synced, '+fail+' failed. Check connection and retry.';}
   else{setSyncPill('err','Sync failed');st.style.background='var(--red-pale)';st.style.color='var(--red)';st.textContent='Sync failed: '+(lastErr||'Check your Airtable connection.');}
 }
-function applySettings(){document.getElementById('s-token').value=cfg.token||'';document.getElementById('s-base').value=cfg.base||'';document.getElementById('s-ec').value=cfg.ecTbl||'';document.getElementById('s-ro').value=cfg.roTbl||'';document.getElementById('s-waste').value=cfg.wasteTbl||'';document.getElementById('s-batch').value=cfg.batchTbl||'';document.getElementById('s-batchtx').value=cfg.batchtxTbl||'';const sh=document.getElementById('s-harvest'); if(sh) sh.value=cfg.harvestTbl||'';const spd=document.getElementById('s-postdry'); if(spd) spd.value=cfg.postDryTbl||'';const sbio=document.getElementById('s-bio'); if(sbio) sbio.value=cfg.bioTbl||'';setSyncPill(atReady()?'ok':'off',atReady()?'Airtable connected':'Not configured');}
-async function saveSettings(){cfg={token:document.getElementById('s-token').value.trim(),base:document.getElementById('s-base').value.trim(),ecTbl:document.getElementById('s-ec').value.trim(),roTbl:document.getElementById('s-ro').value.trim(),wasteTbl:document.getElementById('s-waste').value.trim(),batchTbl:document.getElementById('s-batch').value.trim(),batchtxTbl:document.getElementById('s-batchtx').value.trim(),harvestTbl:(document.getElementById('s-harvest')?.value||'').trim(),postDryTbl:(document.getElementById('s-postdry')?.value||'').trim(),bioTbl:(document.getElementById('s-bio')?.value||'').trim()};const st=document.getElementById('conn-status');st.style.display='block';st.style.background='var(--bg2)';st.style.color='var(--text2)';st.textContent='Testing connection...';if(!atReady()){st.textContent='Please fill in all fields.';st.style.background='var(--amber-pale)';st.style.color='var(--amber)';return;}try{const r=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+cfg.ecTbl+'?maxRecords=1',{headers:{'Authorization':'Bearer '+cfg.token}});if(r.ok){lsSet('gp-cfg',cfg);applySettings();st.textContent='Connected! Credentials saved.';st.style.background='var(--green-pale)';st.style.color='var(--green)';startAutoSync();}else{st.textContent='Failed ('+r.status+'). Check your credentials.';st.style.background='var(--red-pale)';st.style.color='var(--red)';}}catch(e){st.textContent='Could not reach Airtable. Check internet connection.';st.style.background='var(--red-pale)';st.style.color='var(--red)';}}
+function applySettings(){document.getElementById('s-token').value=cfg.token||'';document.getElementById('s-base').value=cfg.base||'';document.getElementById('s-ec').value=cfg.ecTbl||'';document.getElementById('s-ro').value=cfg.roTbl||'';document.getElementById('s-waste').value=cfg.wasteTbl||'';document.getElementById('s-batch').value=cfg.batchTbl||'';document.getElementById('s-batchtx').value=cfg.batchtxTbl||'';const sh=document.getElementById('s-harvest'); if(sh) sh.value=cfg.harvestTbl||'';const spd=document.getElementById('s-postdry'); if(spd) spd.value=cfg.postDryTbl||'';const sbio=document.getElementById('s-bio'); if(sbio) sbio.value=cfg.bioTbl||'';const spest=document.getElementById('s-pest'); if(spest) spest.value=cfg.pestTbl||'';setSyncPill(atReady()?'ok':'off',atReady()?'Airtable connected':'Not configured');}
+async function saveSettings(){cfg={token:document.getElementById('s-token').value.trim(),base:document.getElementById('s-base').value.trim(),ecTbl:document.getElementById('s-ec').value.trim(),roTbl:document.getElementById('s-ro').value.trim(),wasteTbl:document.getElementById('s-waste').value.trim(),batchTbl:document.getElementById('s-batch').value.trim(),batchtxTbl:document.getElementById('s-batchtx').value.trim(),harvestTbl:(document.getElementById('s-harvest')?.value||'').trim(),postDryTbl:(document.getElementById('s-postdry')?.value||'').trim(),bioTbl:(document.getElementById('s-bio')?.value||'').trim(),pestTbl:(document.getElementById('s-pest')?.value||'').trim()};const st=document.getElementById('conn-status');st.style.display='block';st.style.background='var(--bg2)';st.style.color='var(--text2)';st.textContent='Testing connection...';if(!atReady()){st.textContent='Please fill in all fields.';st.style.background='var(--amber-pale)';st.style.color='var(--amber)';return;}try{const r=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+cfg.ecTbl+'?maxRecords=1',{headers:{'Authorization':'Bearer '+cfg.token}});if(r.ok){lsSet('gp-cfg',cfg);applySettings();st.textContent='Connected! Credentials saved.';st.style.background='var(--green-pale)';st.style.color='var(--green)';startAutoSync();}else{st.textContent='Failed ('+r.status+'). Check your credentials.';st.style.background='var(--red-pale)';st.style.color='var(--red)';}}catch(e){st.textContent='Could not reach Airtable. Check internet connection.';st.style.background='var(--red-pale)';st.style.color='var(--red)';}}
 
 function localDate(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 const today=localDate();
