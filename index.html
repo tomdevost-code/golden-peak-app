@@ -513,12 +513,14 @@ tr:last-child td { border-bottom: none; }
       <!-- Active Batches List (top) -->
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
         <div class="section-label" id="batch-list-label" style="margin:0;">Active Batches</div>
-        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text3);white-space:nowrap;">
-          <input type="checkbox" id="batch-list-closed-only" onchange="renderBatchLog()"> Closed only
-        </label>
       </div>
-      <!-- Per-column filter bar — applied on top of the open/closed toggle. -->
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:8px;font-size:12px;">
+      <!-- Filter bar — Status defaults to Open. All four filters combine (AND logic). -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:6px;margin-bottom:8px;font-size:12px;">
+        <select id="batch-filter-status" onchange="renderBatchLog()" style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;background:var(--bg);color:var(--text);">
+          <option value="open" selected>Open only</option>
+          <option value="closed">Closed only</option>
+          <option value="all">All (open + closed)</option>
+        </select>
         <input type="text" id="batch-filter-id" placeholder="Filter Batch ID…" oninput="renderBatchLog()" style="font-family:var(--mono);text-transform:uppercase;border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;background:var(--bg);color:var(--text);" />
         <input type="text" id="batch-filter-cultivar" placeholder="Filter Cultivar…" oninput="renderBatchLog()" style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;background:var(--bg);color:var(--text);" />
         <select id="batch-filter-phase" onchange="renderBatchLog()" style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;background:var(--bg);color:var(--text);">
@@ -2516,9 +2518,11 @@ function harvestPopulateBatches(){
   const sel = document.getElementById('harvest-batch-select');
   if(!sel) return;
   const cur = sel.value;
+  const _harvestMomsOnly = momsOnlyFilter('harvest-batch-select');
   const list = batchRecs.filter(b=>{
     if(b.type) return false;
     if(isBatchClosedRec(b)) return false; // closed batches never show in operational dropdowns
+    if(_harvestMomsOnly && !isMotherBatch(b.batchId)) return false;
     if(!['Flower','Drying'].includes(b.plantPhase)) return false;
     // Must have at least one flower room that's still unharvested
     const rooms = Array.isArray(b.rooms) ? b.rooms.filter(r=>r!=='Veg') : [];
@@ -2820,11 +2824,13 @@ function bioPopulateBatches(){
   const sel = document.getElementById('bio-batch-select');
   if(!sel) return;
   const cur = sel.value;
+  const _bioMomsOnly = momsOnlyFilter('bio-batch-select');
   const eligible = batchRecs
     .filter(b => {
       if(b.type || !b.batchId) return false;
       if(isBatchClosedRec(b)) return false;
       if(['Drying','Packaged','Delivered'].includes(b.plantPhase)) return false;
+      if(_bioMomsOnly && !isMotherBatch(b.batchId)) return false;
       // Must have plants (at least one Produced/Received tx)
       return batchTxRecs.some(t => t.batchId === b.batchId && t.txType === 'Produced/Received');
     })
@@ -3028,8 +3034,10 @@ function pestPopulateBatches(){
   const cur = sel.value;
   sel.innerHTML = '<option value="">-- select batch --</option>';
   const list = (typeof getFormBatchList === 'function') ? getFormBatchList() : [];
+  const _pestMomsOnly = (typeof momsOnlyFilter === 'function') && momsOnlyFilter('pest-batch-select');
   list.forEach(b => {
     if(['Drying','Packaged','Delivered'].includes(b.plantPhase)) return;
+    if(_pestMomsOnly && !isMotherBatch(b.batchId)) return;
     const opt = document.createElement('option');
     opt.value = b.batchId;
     opt.textContent = b.batchId + (b.cultivar ? ' — '+b.cultivar : '');
@@ -3322,8 +3330,10 @@ function postDryPopulateBatches(){
   const sel = document.getElementById('postdry-batch-select');
   if(!sel) return;
   const cur = sel.value;
+  const _pdMomsOnly = momsOnlyFilter('postdry-batch-select');
   const eligible = batchRecs
     .filter(b => !b.type && b.plantPhase === 'Drying' && !isBatchClosedRec(b))
+    .filter(b => !_pdMomsOnly || isMotherBatch(b.batchId))
     .map(b => b.batchId)
     .sort();
   sel.innerHTML = '<option value="">-- select batch --</option>' +
@@ -3774,9 +3784,13 @@ function populateBatchDropdowns(){
     items.forEach(b=>{const opt=document.createElement('option');opt.value=b.batchId;opt.textContent=b.batchId+(b.closed?' (harvested)':'');if(b.closed)opt.style.color='var(--text3)';sel.appendChild(opt);});
     sel.value=cur;
   }
-  fillFormSelect('ec-batch-select','-- select batch --',ecList);
-  fillFormSelect('ro-batch-select','-- select batch --',roList);
-  fillFormSelect('waste-batch-select','-- select batch --',wasteList);
+  // Apply the per-select "Moms only" toggle on top of the phase-based lists.
+  const _ecFinal    = momsOnlyFilter('ec-batch-select')    ? ecList.filter(b => isMotherBatch(b.batchId))    : ecList;
+  const _roFinal    = momsOnlyFilter('ro-batch-select')    ? roList.filter(b => isMotherBatch(b.batchId))    : roList;
+  const _wasteFinal = momsOnlyFilter('waste-batch-select') ? wasteList.filter(b => isMotherBatch(b.batchId)) : wasteList;
+  fillFormSelect('ec-batch-select','-- select batch --',_ecFinal);
+  fillFormSelect('ro-batch-select','-- select batch --',_roFinal);
+  fillFormSelect('waste-batch-select','-- select batch --',_wasteFinal);
   // Post-Drying batch dropdown filters by Drying phase — handled separately
   if(typeof postDryPopulateBatches === 'function') postDryPopulateBatches();
   // Bio Control batch dropdown filters by growing phase — handled separately
@@ -3792,6 +3806,85 @@ function populateBatchDropdowns(){
   const _wfb=document.getElementById('f-waste-batch');
   if(_wfb){const _c=_wfb.value;const _a=Object.keys(getAllBatches()).sort();_wfb.innerHTML='<option value="">All batches</option>'+_a.map(b=>'<option'+(b===_c?' selected':'')+'>'+b+'</option>').join('');_wfb.value=_c;}
 }
+
+// ── Moms-only filter toggle ──────────────────────────────────────────────────
+// Each operational batch dropdown gets a small "Moms" button alongside it.
+// When toggled on, the dropdown filters to mother batches only — without
+// disrupting any of the other per-page rules (phase, closed, etc.).
+const MOMS_FILTER_SELECTS = [
+  'ec-batch-select','ro-batch-select','waste-batch-select',
+  'harvest-batch-select','postdry-batch-select','bio-batch-select',
+  'pest-batch-select','summary-batch-select'
+];
+const MOMS_FILTER_REPOP = {
+  'ec-batch-select':      ()=>populateBatchDropdowns(),
+  'ro-batch-select':      ()=>populateBatchDropdowns(),
+  'waste-batch-select':   ()=>populateBatchDropdowns(),
+  'harvest-batch-select': ()=>{ if(typeof harvestPopulateBatches==='function')  harvestPopulateBatches(); },
+  'postdry-batch-select': ()=>{ if(typeof postDryPopulateBatches==='function')  postDryPopulateBatches(); },
+  'bio-batch-select':     ()=>{ if(typeof bioPopulateBatches==='function')      bioPopulateBatches(); },
+  'pest-batch-select':    ()=>{ if(typeof pestPopulateBatches==='function')     pestPopulateBatches(); },
+  'summary-batch-select': ()=>{ if(typeof summaryPopulateBatches==='function')  summaryPopulateBatches(); }
+};
+
+function momsOnlyFilter(selectId){
+  const btn = document.querySelector('button.moms-filter-btn[data-target="'+selectId+'"]');
+  return !!(btn && btn.dataset.active === 'true');
+}
+
+function toggleMomsFilter(selectId){
+  const btn = document.querySelector('button.moms-filter-btn[data-target="'+selectId+'"]');
+  if(!btn) return;
+  const next = btn.dataset.active === 'true' ? 'false' : 'true';
+  btn.dataset.active = next;
+  if(next === 'true'){
+    btn.style.background = 'var(--green)';
+    btn.style.color = '#fff';
+    btn.style.borderColor = 'var(--green)';
+    btn.title = 'Showing mother batches only — click to show all';
+  } else {
+    btn.style.background = 'var(--bg2)';
+    btn.style.color = 'var(--text2)';
+    btn.style.borderColor = 'var(--border)';
+    btn.title = 'Click to filter to mother batches only';
+  }
+  // Clear the current selection if it no longer matches the new filter so the
+  // user doesn't end up with a stale value displayed.
+  const sel = document.getElementById(selectId);
+  if(sel && sel.value){
+    const cur = sel.value;
+    if(next === 'true' && !isMotherBatch(cur)) sel.value = '';
+    // (Toggling off keeps the current value — moms are still valid in the broader set.)
+  }
+  const repop = MOMS_FILTER_REPOP[selectId];
+  if(repop) repop();
+}
+
+function installMomsFilterButtons(){
+  MOMS_FILTER_SELECTS.forEach(id => {
+    const sel = document.getElementById(id);
+    if(!sel) return;
+    if(sel.dataset.momsFilterInstalled) return;
+    sel.dataset.momsFilterInstalled = '1';
+    // Wrap the select in a flex row that hosts the toggle button next to it.
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'display:flex;gap:6px;align-items:stretch;width:100%;';
+    sel.parentNode.insertBefore(wrap, sel);
+    wrap.appendChild(sel);
+    sel.style.flex = '1';
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'moms-filter-btn';
+    btn.dataset.target = id;
+    btn.dataset.active = 'false';
+    btn.textContent = 'Moms';
+    btn.title = 'Click to filter to mother batches only';
+    btn.style.cssText = 'font-family:var(--mono);font-size:12px;font-weight:700;padding:0 10px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg2);color:var(--text2);cursor:pointer;white-space:nowrap;';
+    btn.onclick = () => toggleMomsFilter(id);
+    wrap.appendChild(btn);
+  });
+}
+
 function ecBatchSelect(){const val=document.getElementById('ec-batch-select').value;document.getElementById('ec-batch').value=val;ecBatchLookup();ecSeqUnlock();ecRoomChanged();ecRenderRecent(val,document.getElementById('ec-room').value);}
 
 // Batch-room locking helpers
@@ -4922,7 +5015,7 @@ document.getElementById('ro-date').readOnly=true;
 document.getElementById('ro-date').style.background='var(--bg2)';
 document.getElementById('ro-date').style.color='var(--text3)';
 document.getElementById('ro-date').style.cursor='default';
-buildECEvents();buildROSamples();loadAll();populateBatchDropdowns();setVegMin();applyCascadeLocks();updatePendingBadge();ecSeqUnlock();wasteSeqUnlock();summaryPopulateBatches();document.getElementById('waste-date').textContent=new Date().toISOString().split('T')[0];
+buildECEvents();buildROSamples();loadAll();installMomsFilterButtons();populateBatchDropdowns();setVegMin();applyCascadeLocks();updatePendingBadge();ecSeqUnlock();wasteSeqUnlock();summaryPopulateBatches();document.getElementById('waste-date').textContent=new Date().toISOString().split('T')[0];
 // Kick off auto-sync (60s polling) if Airtable is configured. Idempotent —
 // also re-invoked from saveSettings() so a fresh token starts the timer.
 startAutoSync();
@@ -5602,23 +5695,23 @@ function renderBatchLog(){
   const list = document.getElementById('batch-active-list');
   if(!list) return;
   // Read the filter bar.
-  const closedOnly = !!document.getElementById('batch-list-closed-only')?.checked;
+  const fStatus   = (document.getElementById('batch-filter-status')?.value || 'open').trim();
   const fId       = (document.getElementById('batch-filter-id')?.value || '').trim().toUpperCase();
   const fCultivar = (document.getElementById('batch-filter-cultivar')?.value || '').trim().toLowerCase();
   const fPhase    = (document.getElementById('batch-filter-phase')?.value || '').trim();
   const fType     = (document.getElementById('batch-filter-type')?.value || '').trim();
-  // Section label reflects the closed/open toggle.
+  // Section label reflects the status filter.
   const lbl = document.getElementById('batch-list-label');
-  if(lbl) lbl.textContent = closedOnly ? 'Closed Batches' : 'Active Batches';
-  // Open/closed toggle is exclusive: closed-only when checked, open-only when not.
+  if(lbl) lbl.textContent = (fStatus === 'closed') ? 'Closed Batches'
+                          : (fStatus === 'all')    ? 'All Batches'
+                          :                           'Active Batches';
+  // Status filter: open / closed / all.
   const active = batchRecs.filter(b => {
     if(b.type) return false;
     const isClosed = !!b.closedDate || (b.status && b.status !== 'Open');
-    if(closedOnly){
-      if(!isClosed) return false;
-    } else {
-      if(isClosed) return false;
-    }
+    if(fStatus === 'closed' && !isClosed) return false;
+    if(fStatus === 'open'   &&  isClosed) return false;
+    // 'all' → no status filter
     // Apply per-column filters
     if(fId && !(b.batchId||'').toUpperCase().includes(fId)) return false;
     if(fCultivar && !(b.cultivar||'').toLowerCase().includes(fCultivar)) return false;
@@ -5631,7 +5724,9 @@ function renderBatchLog(){
     const filtered = (fId || fCultivar || fPhase || fType);
     const emptyMsg = filtered
       ? 'No batches match the current filters.'
-      : (closedOnly ? 'No closed batches yet.' : 'No active batches. Create one above.');
+      : (fStatus === 'closed' ? 'No closed batches yet.'
+         : fStatus === 'all'  ? 'No batches yet. Create one above.'
+         :                      'No active batches. Create one above.');
     list.innerHTML='<div style="text-align:center;color:var(--text3);padding:30px 16px;font-size:13px;">'+emptyMsg+'</div>';
     return;
   }
@@ -5673,8 +5768,12 @@ function renderBatchLog(){
         if(dd > 0) dayLabel = 'D' + dd;
       }
     }
-    html += '<tr style="border-top:1px solid var(--border);">'+
-      '<td style="padding:8px 10px;font-family:var(--mono);font-weight:700;color:var(--green);">'+b.batchId+'</td>'+
+    // When the All filter is on, visually mark closed rows so they don't blend in.
+    const rowIsClosed = !!b.closedDate || (b.status && b.status !== 'Open');
+    const rowStyle = rowIsClosed ? ' style="border-top:1px solid var(--border);background:#fafafa;color:var(--text3);"' : ' style="border-top:1px solid var(--border);"';
+    const closedTag = rowIsClosed ? ' <span style="display:inline-block;background:var(--text3);color:#fff;font-size:9px;font-family:var(--mono);font-weight:700;padding:1px 6px;border-radius:8px;letter-spacing:0.05em;margin-left:6px;vertical-align:middle;">CLOSED</span>' : '';
+    html += '<tr'+rowStyle+'>'+
+      '<td style="padding:8px 10px;font-family:var(--mono);font-weight:700;color:'+(rowIsClosed?'var(--text3)':'var(--green)')+';">'+b.batchId+closedTag+'</td>'+
       '<td style="padding:8px 10px;border-left:1px solid var(--border);">'+(b.cultivar || '—')+'</td>'+
       '<td style="padding:8px 10px;border-left:1px solid var(--border);color:var(--text2);">'+phase+'</td>'+
       '<td style="padding:8px 10px;border-left:1px solid var(--border);font-family:var(--mono);font-weight:600;">'+dayLabel+'</td>'+
@@ -5690,8 +5789,14 @@ function summaryPopulateBatches(){
   //   - checked   → CLOSED batches only (closedDate is set)
   const sel = document.getElementById('summary-batch-select');
   const closedOnly = document.getElementById('summary-show-closed').checked;
+  const _sumMomsOnly = (typeof momsOnlyFilter === 'function') && momsOnlyFilter('summary-batch-select');
   const cur = sel.value;
-  const batches = batchRecs.filter(b => !b.type && (closedOnly ? !!b.closedDate : !b.closedDate));
+  const batches = batchRecs.filter(b => {
+    if(b.type) return false;
+    if(closedOnly ? !b.closedDate : !!b.closedDate) return false;
+    if(_sumMomsOnly && !isMotherBatch(b.batchId)) return false;
+    return true;
+  });
   sel.innerHTML = '<option value="">-- select batch --</option>' +
     batches.map(b => '<option value="'+b.batchId+'"'+(b.batchId===cur?' selected':'')+'>'+b.batchId+(b.cultivar?' – '+b.cultivar:'')+(b.closedDate?' [Closed]':'')+'</option>').join('');
   if(cur && batches.some(b=>b.batchId===cur)) summaryBatchChanged();
