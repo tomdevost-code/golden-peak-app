@@ -2442,10 +2442,12 @@ function isMotherBatch(batchId){
   return MOTHER_BATCH_ID_RE.test((batchId||'').toString().trim());
 }
 function getMotherBatchIds(){
-  // List of all batch IDs that look like mother stock (M-XX-NNN). Used to
-  // populate the Mother ID dropdown on the Batch creation page.
+  // List of OPEN mother stock batches (M-XX-NNN). Used to populate the Mother ID
+  // dropdown on the Batch creation page and the destination dropdown on a
+  // Moved-to-Moms transaction. Closed mothers are excluded — they shouldn't be
+  // pickable as destinations for new clones.
   return batchRecs
-    .filter(r => r && !r.type && isMotherBatch(r.batchId))
+    .filter(r => r && !r.type && isMotherBatch(r.batchId) && !isBatchClosedRec(r))
     .map(r => r.batchId)
     .filter((v,i,a) => a.indexOf(v) === i)   // unique
     .sort();
@@ -2500,6 +2502,7 @@ function harvestPopulateBatches(){
   const cur = sel.value;
   const list = batchRecs.filter(b=>{
     if(b.type) return false;
+    if(isBatchClosedRec(b)) return false; // closed batches never show in operational dropdowns
     if(!['Flower','Drying'].includes(b.plantPhase)) return false;
     // Must have at least one flower room that's still unharvested
     const rooms = Array.isArray(b.rooms) ? b.rooms.filter(r=>r!=='Veg') : [];
@@ -2804,6 +2807,7 @@ function bioPopulateBatches(){
   const eligible = batchRecs
     .filter(b => {
       if(b.type || !b.batchId) return false;
+      if(isBatchClosedRec(b)) return false;
       if(['Drying','Packaged','Delivered'].includes(b.plantPhase)) return false;
       // Must have plants (at least one Produced/Received tx)
       return batchTxRecs.some(t => t.batchId === b.batchId && t.txType === 'Produced/Received');
@@ -3303,7 +3307,7 @@ function postDryPopulateBatches(){
   if(!sel) return;
   const cur = sel.value;
   const eligible = batchRecs
-    .filter(b => !b.type && b.plantPhase === 'Drying')
+    .filter(b => !b.type && b.plantPhase === 'Drying' && !isBatchClosedRec(b))
     .map(b => b.batchId)
     .sort();
   sel.innerHTML = '<option value="">-- select batch --</option>' +
@@ -3708,17 +3712,30 @@ function ecRemoveEvent(slot){
 }
 function getAllBatches(){const all=[...ecRecs,...roRecs];const seen={};batchRecs.forEach(r=>{if(r.batchId&&!seen[r.batchId]){seen[r.batchId]={vegStart:'',flowerStart:'',harvestDate:''};} });all.forEach(r=>{if(r.batch&&!seen[r.batch]){seen[r.batch]={vegStart:r.vegStart||'',flowerStart:r.flowerStart||'',harvestDate:r.harvestDate||''};}});return seen;}
 function getECBatches(){const seen={};ecRecs.forEach(r=>{if(r.batch&&!seen[r.batch]){seen[r.batch]={vegStart:r.vegStart||'',flowerStart:r.flowerStart||'',harvestDate:r.harvestDate||''};}});return seen;}
+// True when the batch is closed via either signal — Status=Closed or a stamped
+// closedDate. Used everywhere we want to suppress closed batches from operational
+// dropdowns; Batch Management has its own toggle for surfacing closed records.
+function isBatchClosedRec(b){
+  if(!b) return false;
+  if(b.closedDate) return true;
+  if(b.status === 'Closed') return true;
+  return false;
+}
+
 function getFormBatchList(){
-  // Single source of truth for form dropdowns: batches created via the Batches form. We only
-  // surface batches that have at least one Produced/Received transaction — a freshly created
-  // batch with no plants assigned shouldn't appear in any operational dropdown.
+  // Single source of truth for form dropdowns (EC, Runoff, Waste, etc): batches created via
+  // the Batches form, with at least one Produced/Received tx, and NOT closed. A freshly
+  // created batch with no plants assigned shouldn't appear in any operational dropdown, and
+  // closed batches stay out of every workflow — they remain visible only on Batch Management.
   const list=[];
   batchRecs.forEach(b=>{
     if(b.type||!b.batchId) return; // skip legacy movement entries
+    if(isBatchClosedRec(b)) return; // closed batches never show in operational dropdowns
     const hasPlants = batchTxRecs.some(t => t.batchId === b.batchId && t.txType === 'Produced/Received');
     if(!hasPlants) return;
-    let closed=!!b.closedDate;
-    if(!closed){closed=[...ecRecs,...roRecs].some(r=>r.batch===b.batchId&&r.harvestDate);}
+    // 'closed' here is the legacy "harvested" indicator (any EC/RO with harvestDate),
+    // used to mark drying batches as (harvested). Not the same as actual closed status.
+    let closed=[...ecRecs,...roRecs].some(r=>r.batch===b.batchId&&r.harvestDate);
     list.push({batchId:b.batchId,closed,plantPhase:b.plantPhase||''});
   });
   return list.sort((a,b)=>a.batchId.localeCompare(b.batchId));
