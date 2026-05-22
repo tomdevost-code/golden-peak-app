@@ -2234,12 +2234,20 @@ function formatBatchRoomsForDisplay(batchRec){
   if(vegCount > 0) parts.push('Veg (' + vegCount + ')');
   return parts.length ? parts.join(', ') : '—';
 }
+// Mother batches retain a cohort of new clones as "in Clones phase" for this many
+// days after the most recent Produced/Received tx. After this window the cohort
+// is assumed to have matured into the batch's primary phase.
+const MOM_CLONE_COHORT_DAYS = 21;
+
 function getDisplayPhase(batchRec){
-  // What to render in the Batch Info "Plant Phase" cell. Mostly mirrors batchRec.plantPhase, with
-  // two overrides:
+  // What to render in the Batch Info "Plant Phase" cell. Mirrors batchRec.plantPhase
+  // with a few overrides:
   //   • Once a Sold transaction is recorded → 'Sold' (final business state).
   //   • During multi-day harvest (batch in Drying but flower rooms still hold plants) →
-  //     'Drying/Flower' to reflect that some rooms are drying while others are still flowering.
+  //     'Drying/Flower' to reflect that some rooms are drying while others are flowering.
+  //   • For MOTHER batches in Veg/Flower phase with a recent Produced/Received tx,
+  //     prepend 'Clones/' — the new cuttings haven't matured yet, so the batch
+  //     genuinely has plants in two phases at once.
   if(!batchRec) return '—';
   const hasSold = batchTxRecs.some(t => t.batchId === batchRec.batchId && t.txType === 'Sold');
   if(hasSold) return 'Sold';
@@ -2247,6 +2255,24 @@ function getDisplayPhase(batchRec){
   if(phase === 'Drying' && Array.isArray(batchRec.rooms)){
     const stillFlowering = batchRec.rooms.some(r => r !== 'Veg' && calcRoomPlantCount(batchRec.batchId, r) > 0);
     if(stillFlowering) return 'Drying / Flower';
+  }
+  // Mother multi-cohort indicator
+  if(isMotherBatch(batchRec.batchId) && (phase === 'Veg' || phase === 'Flower')){
+    // Latest Produced/Received tx for this batch — if it lands inside the
+    // cohort window, there are still un-matured clones present.
+    let latestPR = null;
+    batchTxRecs.forEach(t => {
+      if(t.batchId === batchRec.batchId && t.txType === 'Produced/Received' && t.date){
+        if(!latestPR || t.date > latestPR) latestPR = t.date;
+      }
+    });
+    if(latestPR){
+      const _today = localDate();
+      const _age = daysBetween(latestPR, _today);
+      if(_age != null && _age >= 1 && _age <= MOM_CLONE_COHORT_DAYS){
+        return 'Clones / ' + phase;
+      }
+    }
   }
   return phase;
 }
@@ -6884,7 +6910,15 @@ async function summaryAddTransaction(){
     return;
   }
   const _txBatchRec = batchRecs.find(r=>r.batchId===batchId && !r.type);
-  const _txPhase = _txBatchRec ? (_txBatchRec.plantPhase||'') : '';
+  // For Produced/Received txs on a mother batch in Veg/Flower phase, tag the tx as
+  // 'Clones' — these are fresh cuttings, even though the batch's overall phase has
+  // already advanced past Clones for older cohorts. Lets the history table show
+  // each cohort in its own phase and feeds the "Clones/Veg" display indicator.
+  let _txPhase = _txBatchRec ? (_txBatchRec.plantPhase||'') : '';
+  if(txType === 'Produced/Received' && _txBatchRec && isMotherBatch(batchId)
+     && ['Veg','Flower'].includes(_txPhase)){
+    _txPhase = 'Clones';
+  }
   // Capture Clone Date on the first Produced/Received tx (when cloneDate isn't already set).
   //   - Clones-Internal: cloneDate = the transaction's date (today), set silently.
   //   - Clones-External: cloneDate = the value the user entered in the conditional Clone Date input.
