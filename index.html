@@ -669,6 +669,10 @@ tr:last-child td { border-bottom: none; }
 
       <!-- Batch Summary (read-only display of batch state) -->
       <div id="summary-info-card" style="display:none;">
+        <!-- Flower-day milestone alerts (rendered by summaryRenderFlowerAlerts) — sits above
+             the Batch Summary card so growers see today's required tasks first. Hidden when
+             the batch isn't in Flower phase or no milestones apply. -->
+        <div id="summary-flower-alerts" style="display:none;margin-bottom:12px;"></div>
         <div class="card" style="margin-bottom:12px;">
           <div class="section-label">Batch Summary</div>
           <div class="g2" style="margin-bottom:8px;">
@@ -5743,6 +5747,8 @@ function summaryBatchChanged(){
   summaryRefreshCurrentDay(b.batchId);
   // Batch Totals (harvest, post-dry, sold, destroyed plants, veg waste)
   summaryRefreshBatchTotals(b.batchId);
+  // Flower-day milestone alerts (today's required tasks + upcoming reminders)
+  summaryRenderFlowerAlerts(b.batchId);
   // Today's date for transactions
   document.getElementById('tx-date-display').textContent = localDate();
   // Restrict transaction types: only Produced/Received until at least one tx exists for this batch
@@ -5783,6 +5789,77 @@ function applyDeliveredLock(b){
     txTypeEl.style.color = lockTx ? 'var(--text3)' : '';
     txTypeEl.style.cursor = lockTx ? 'not-allowed' : '';
   }
+}
+
+// ── Flower-day milestone schedule ───────────────────────────────────────────
+// Tasks that growers need to perform on specific Flower days (F-day = days
+// since batchRec.flowerStart, inclusive of that first day). The Batch
+// Management page renders alerts based on the selected batch's current F-day.
+const FLOWER_DAY_TASKS = {
+  7:  ['First Prune'],
+  21: ['Deleaf', 'Install Trellis', 'Change spectrum to Summer'],
+  23: ['Lower RH to 63%'],
+  26: ['Second Prune'],
+  36: ['Change spectrum to Fall'],
+  52: ['Lower Day temps to 24°C and Lower day RH to 58%',
+       'Lower Night temps to 21°C and Lower night RH to 54%',
+       'Start Flush'],
+  53: ['Lower CO2 to 900ppm'],
+  57: ['Deleaf for harvest and remove sachets']
+};
+
+function summaryRenderFlowerAlerts(batchId){
+  // Renders today's required flower-day tasks (amber banner) and the next few
+  // upcoming tasks (subtle reminder list). Hidden unless the selected batch is
+  // currently in Flower phase AND has a flowerStart date stamped.
+  const wrap = document.getElementById('summary-flower-alerts');
+  if(!wrap) return;
+  wrap.style.display = 'none';
+  wrap.innerHTML = '';
+  if(!batchId) return;
+  const b = batchRecs.find(r => r.batchId === batchId && !r.type);
+  if(!b) return;
+  if(b.plantPhase !== 'Flower' || !b.flowerStart) return;
+  const today = localDate();
+  const fd = daysBetween(b.flowerStart, today);
+  if(!fd || fd <= 0) return;
+  const todaysTasks = FLOWER_DAY_TASKS[fd] || null;
+  // Upcoming: the next 3 milestones after today, within the next 21 days.
+  const upcoming = Object.keys(FLOWER_DAY_TASKS)
+    .map(d => parseInt(d, 10))
+    .filter(d => d > fd && d <= fd + 21)
+    .sort((a, b) => a - b)
+    .slice(0, 3)
+    .map(d => ({day: d, daysAway: d - fd, tasks: FLOWER_DAY_TASKS[d]}));
+  // Nothing to show → keep banner hidden.
+  if(!todaysTasks && !upcoming.length) return;
+  let html = '';
+  if(todaysTasks){
+    html += '<div style="background:var(--amber-pale);border:2px solid var(--amber);border-radius:var(--radius-sm);padding:12px 14px;">'
+         +    '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">'
+         +      '<span style="background:var(--amber);color:#fff;font-family:var(--mono);font-weight:700;font-size:13px;padding:3px 10px;border-radius:12px;">F'+fd+' — TODAY</span>'
+         +      '<span style="font-weight:600;color:var(--amber);font-size:14px;">Required tasks for today</span>'
+         +    '</div>'
+         +    '<ul style="margin:0;padding-left:20px;font-size:13px;color:var(--text);line-height:1.6;">'
+         +      todaysTasks.map(t => '<li>'+t+'</li>').join('')
+         +    '</ul>'
+         +  '</div>';
+  }
+  if(upcoming.length){
+    html += '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;'+(todaysTasks?'margin-top:8px;':'')+'">'
+         +    '<div style="font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">Upcoming flower-day milestones</div>';
+    upcoming.forEach(u => {
+      const inLabel = u.daysAway === 1 ? 'in 1 day' : ('in ' + u.daysAway + ' days');
+      html += '<div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:4px;">'
+           +    '<span style="font-family:var(--mono);font-weight:700;color:var(--green);min-width:36px;">F'+u.day+'</span>'
+           +    '<span style="color:var(--text3);font-size:11px;min-width:60px;">'+inLabel+'</span>'
+           +    '<span style="font-size:12px;color:var(--text2);">'+u.tasks.join(' · ')+'</span>'
+           +  '</div>';
+    });
+    html += '</div>';
+  }
+  wrap.innerHTML = html;
+  wrap.style.display = '';
 }
 
 function summaryRefreshCurrentDay(batchId){
