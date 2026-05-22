@@ -6418,6 +6418,11 @@ function summaryUpdateTxTypeOptions(batchId){
   if(hasHarvested) opts = opts.filter(o=>o!=='Harvested');
   sel.innerHTML = '<option value="">-- select type --</option>' + opts.map(o=>'<option'+(o===prev?' selected':'')+'>'+o+'</option>').join('');
   autoSelectIfSingle('tx-type');
+  // Refresh the conditional source/destination dropdowns against the (possibly new)
+  // batch context, even if the tx-type itself didn't change. Without this, changing
+  // batch from regular → mother while tx-type is already 'Produced/Received' would
+  // leave the Cutting Source dropdown hidden.
+  if(typeof txTypeChanged === 'function') txTypeChanged();
 }
 
 function summaryCalcQty(batchId){
