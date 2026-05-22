@@ -1249,7 +1249,7 @@ let ecRecs=[],roRecs=[],wasteRecs=[],batchRecs=[],batchTxRecs=[],harvestRecs=[],
 
 function lsGet(k){try{return JSON.parse(localStorage.getItem(k)||'null');}catch(e){return null;}}
 function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
-function loadAll(){ecRecs=lsGet('gp-ec')||[];roRecs=lsGet('gp-ro')||[];wasteRecs=lsGet('gp-waste')||[];batchRecs=lsGet('gp-batch')||[];batchTxRecs=lsGet('gp-batchtx')||[];harvestRecs=lsGet('gp-harvest')||[];postDryRecs=lsGet('gp-postdry')||[];bioRecs=lsGet('gp-bio')||[];pestRecs=lsGet('gp-pest')||[];wasteRecs.forEach(r=>{if(r.type==='Vegetative waste')r.type='Vegetative Waste';});lsSet('gp-waste',wasteRecs);const s=lsGet('gp-cfg');if(s){cfg=s;applySettings();}backfillHarvestedTxs();reconcileAllPackagedBatches();}
+function loadAll(){ecRecs=lsGet('gp-ec')||[];roRecs=lsGet('gp-ro')||[];wasteRecs=lsGet('gp-waste')||[];batchRecs=lsGet('gp-batch')||[];batchTxRecs=lsGet('gp-batchtx')||[];harvestRecs=lsGet('gp-harvest')||[];postDryRecs=lsGet('gp-postdry')||[];bioRecs=lsGet('gp-bio')||[];pestRecs=lsGet('gp-pest')||[];wasteRecs.forEach(r=>{if(r.type==='Vegetative waste')r.type='Vegetative Waste';});lsSet('gp-waste',wasteRecs);const s=lsGet('gp-cfg');if(s){cfg=s;applySettings();}dedupeBatchRecs();backfillHarvestedTxs();reconcileAllPackagedBatches();}
 
 function backfillHarvestedTxs(){
   // One-time data fix: prior to the per-room Harvested tx code, a Complete Harvest only created
@@ -1606,12 +1606,33 @@ function _recordsLookEquivalent(local, remote, table){
 function mergeRemote(localArr, remoteRecs, mapper, ctx, table, lsKey){
   const byAt = {};
   localArr.forEach((r,i) => { if(r && r.airtableId) byAt[r.airtableId] = i; });
-  let added = 0, updated = 0, conflicts = 0, repaired = 0;
+  // Fallback natural-key index for the batch table — local records created
+  // before sync was wired up have no airtableId, so they can't be matched
+  // by ID. The Batch ID is unique by app rule so it's a safe secondary key.
+  const byBatchId = {};
+  if(table === 'batch'){
+    localArr.forEach((r,i) => {
+      if(r && r.batchId && !r.type){
+        const k = String(r.batchId).toUpperCase();
+        if(byBatchId[k] === undefined) byBatchId[k] = i;
+      }
+    });
+  }
+  let added = 0, updated = 0, conflicts = 0, repaired = 0, linked = 0;
   remoteRecs.forEach(rrec => {
     const mapped = mapper(rrec, ctx||{});
     if(!mapped) return;
-    if(byAt[rrec.id] !== undefined){
-      const idx = byAt[rrec.id];
+    let idx = byAt[rrec.id];
+    // No airtableId match — for batches, try to find a pre-existing local row
+    // by Batch ID so we link to it instead of creating a duplicate.
+    if(idx === undefined && table === 'batch' && mapped.batchId){
+      const k = String(mapped.batchId).toUpperCase();
+      if(byBatchId[k] !== undefined){
+        idx = byBatchId[k];
+        linked++;
+      }
+    }
+    if(idx !== undefined){
       // Guard against ID corruption — if the matched local record clearly
       // isn't the same row as the remote, the link is stale. Clear the local
       // airtableId so the remote can be appended cleanly as a new record.
@@ -1651,6 +1672,7 @@ function mergeRemote(localArr, remoteRecs, mapper, ctx, table, lsKey){
     }
   });
   if(repaired) console.log('[mergeRemote] '+table+' — repaired '+repaired+' stale airtableId link(s)');
+  if(linked)   console.log('[mergeRemote] '+table+' — linked '+linked+' pre-existing local row(s) to remote by natural key');
   return {added, updated, conflicts};
 }
 
@@ -1691,6 +1713,10 @@ async function pullFromAirtable(opts){
     const ctx = { batchIdByRecId };
     const summary = {};
     summary.batch   = mergeRemote(batchRecs,   batches, REMOTE_MAPPERS.batch,   ctx, 'batch',   'gp-batch');
+    // After batch merge, run dedupe in case a remote arrived that links to a
+    // previously-unlinked local row (the natural-key fallback in mergeRemote
+    // handles the link; this pass cleans up any duplicates that slipped through).
+    dedupeBatchRecs();
     summary.ec      = mergeRemote(ecRecs,      ecs,     REMOTE_MAPPERS.ec,      ctx, 'ec',      'gp-ec');
     summary.ro      = mergeRemote(roRecs,      ros,     REMOTE_MAPPERS.ro,      ctx, 'ro',      'gp-ro');
     summary.waste   = mergeRemote(wasteRecs,   ws,      REMOTE_MAPPERS.waste,   ctx, 'waste',   'gp-waste');
@@ -2186,6 +2212,63 @@ function enforceZeroQtyState(batchId){
     updatePendingBadge();
   }
   return changed;
+}
+
+function dedupeBatchRecs(){
+  // Collapse duplicate batchRecs that share the same Batch ID. This happens
+  // when a local-only batch (no airtableId) and its remote twin (with
+  // airtableId) coexist in the array because the older mergeRemote couldn't
+  // link them. Keep the most-complete row: prefer one with airtableId, then
+  // one with synced:true, then the latest by createdDate, then the first one.
+  // Legacy movement entries (type:'movement') are NOT deduped — they live
+  // alongside real batch records under the same batchId.
+  const byId = {};
+  const order = []; // preserves first-seen index for stable iteration
+  batchRecs.forEach((r, i) => {
+    if(!r || r.type) return; // skip movement entries
+    const k = (r.batchId || '').toString().toUpperCase();
+    if(!k) return;
+    if(byId[k] === undefined){ byId[k] = [i]; order.push(k); }
+    else byId[k].push(i);
+  });
+  let removed = 0;
+  const dropIdx = new Set();
+  Object.keys(byId).forEach(k => {
+    const idxs = byId[k];
+    if(idxs.length <= 1) return;
+    // Pick the best survivor
+    let best = idxs[0];
+    idxs.forEach(i => {
+      const a = batchRecs[best], b = batchRecs[i];
+      const aHasId = !!a.airtableId, bHasId = !!b.airtableId;
+      if(bHasId && !aHasId){ best = i; return; }
+      if(aHasId && !bHasId) return;
+      if(a.synced && !b.synced) return;
+      if(!a.synced && b.synced){ best = i; return; }
+      // Tie-breaker: later createdDate wins
+      if((b.createdDate||'') > (a.createdDate||'')) best = i;
+    });
+    // Merge non-empty fields from the dupes into the survivor so we don't lose
+    // anything (e.g. a local row had rooms set, the remote-linked row didn't).
+    const surv = batchRecs[best];
+    idxs.forEach(i => {
+      if(i === best) return;
+      const d = batchRecs[i];
+      Object.keys(d).forEach(field => {
+        const sv = surv[field], dv = d[field];
+        const isEmpty = (sv == null || sv === '' || (Array.isArray(sv) && sv.length === 0));
+        if(isEmpty && dv != null && dv !== '') surv[field] = dv;
+      });
+      dropIdx.add(i);
+      removed++;
+    });
+  });
+  if(dropIdx.size){
+    batchRecs = batchRecs.filter((_, i) => !dropIdx.has(i));
+    lsSet('gp-batch', batchRecs);
+    console.log('[dedupeBatchRecs] removed '+removed+' duplicate batch row(s)');
+  }
+  return removed;
 }
 
 async function reconcilePackagedBatchBalance(batchId, opts){
