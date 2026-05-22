@@ -543,8 +543,8 @@ tr:last-child td { border-bottom: none; }
 
         <!-- Step 4: Mother ID — required (and pickable) only when Clones-Internal is the source -->
         <div class="field" id="batch-mother-wrap" style="display:none;margin-bottom:10px;">
-          <label>Mother ID <span style="font-size:10px;color:var(--text3);font-weight:400;">(M-XX-NNN — clone donor batch)</span></label>
-          <select id="batch-mother" disabled style="background:var(--bg2);color:var(--text3);cursor:not-allowed;">
+          <label>Mother ID <span style="color:var(--red);font-weight:700;">*</span> <span style="font-size:10px;color:var(--text3);font-weight:400;">(M-XX-NNN — clone donor batch)</span></label>
+          <select id="batch-mother" onchange="batchMotherChanged()" disabled style="background:var(--bg2);color:var(--text3);cursor:not-allowed;">
             <option value="">-- select mother batch --</option>
           </select>
           <div id="batch-mother-msg" style="font-size:11px;color:var(--text3);margin-top:4px;"></div>
@@ -5236,7 +5236,6 @@ let activeBatchId = '';
 function batchIdCheck(){
   const val = document.getElementById('batch-id-input').value.trim();
   const msg = document.getElementById('batch-id-msg');
-  const btn = document.getElementById('batch-create-btn');
   // Format accepts both regular (XX-NNN) and mother (M-XX-NNN) IDs.
   const formatOk = BATCH_ID_RE_ANY.test(val);
   const exists = batchRecs.some(r => r.batchId === val.toUpperCase());
@@ -5251,20 +5250,19 @@ function batchIdCheck(){
     } else {
       msg.style.display='none';
     }
-    btn.disabled = false; btn.style.opacity='1'; btn.style.cursor='pointer';
   } else {
     lock(fields);
     // Hide/lock the conditional Mother ID + External Company fields too
     lock(['batch-mother','batch-external-company']);
     document.getElementById('batch-mother-wrap').style.display='none';
     document.getElementById('batch-external-wrap').style.display='none';
-    btn.disabled = true; btn.style.opacity='0.4'; btn.style.cursor='not-allowed';
     if(val.length > 0 && !formatOk){
       msg.style.display='block'; msg.style.color='var(--amber)'; msg.textContent='Format must be XX-NNN (regular) or M-XX-NNN (mother batch).';
     } else if(exists){
       msg.style.display='block'; msg.style.color='var(--red)'; msg.textContent='Batch ID already exists.';
     } else { msg.style.display='none'; }
   }
+  batchUpdateCreateBtn();
 }
 
 function batchGeneticsChange(){
@@ -5289,19 +5287,66 @@ function batchGeneticsChange(){
     momSel.innerHTML = '<option value="">-- select mother batch --</option>'
       + moms.map(m => '<option value="'+m+'">'+m+'</option>').join('');
     momWrap.style.display='';
-    momSel.disabled = false; momSel.style.background=''; momSel.style.color=''; momSel.style.cursor='';
+    momSel.disabled = false; momSel.style.cursor='';
     if(!moms.length){
       momMsg.style.color = 'var(--amber)';
       momMsg.textContent = 'No mother batches exist yet. Create one with a M-XX-NNN ID first, then come back.';
     } else {
-      momMsg.style.color = 'var(--text3)';
-      momMsg.textContent = 'Required — pick which mother stock these clones came from.';
+      momMsg.style.color = 'var(--amber)';
+      momMsg.textContent = 'Required — which mother batch produced these clones?';
     }
   } else {
     momWrap.style.display='none';
     momSel.disabled = true; momSel.style.background='var(--bg2)'; momSel.style.color='var(--text3)'; momSel.style.cursor='not-allowed';
     momSel.value = '';
   }
+  batchMotherChanged();
+}
+
+function batchMotherChanged(){
+  // Visually highlight the dropdown when Clones-Internal is selected and Mother
+  // ID hasn't been picked yet — amber border draws the eye. Clears the highlight
+  // (and the "Required" message) once a value is chosen. Always refreshes the
+  // Create button's enabled state.
+  const sel = document.getElementById('batch-genetics-source').value;
+  const momSel = document.getElementById('batch-mother');
+  const momMsg = document.getElementById('batch-mother-msg');
+  if(sel === 'Clones-Internal'){
+    if(!momSel.value){
+      momSel.style.borderColor = 'var(--amber)';
+      momSel.style.background  = 'var(--amber-pale)';
+      momSel.style.color       = '';
+    } else {
+      momSel.style.borderColor = '';
+      momSel.style.background  = '';
+      momSel.style.color       = '';
+      if(momMsg){
+        momMsg.style.color = 'var(--green)';
+        momMsg.textContent = 'Linked to mother batch '+momSel.value+'.';
+      }
+    }
+  } else {
+    momSel.style.borderColor = '';
+  }
+  batchUpdateCreateBtn();
+}
+
+function batchUpdateCreateBtn(){
+  // Single source of truth for the Create Batch button's enabled state. Required:
+  //   - Valid + unique Batch ID
+  //   - If Genetics Source is Clones-Internal, a Mother ID must be picked
+  const btn = document.getElementById('batch-create-btn');
+  if(!btn) return;
+  const val = document.getElementById('batch-id-input').value.trim();
+  const formatOk = BATCH_ID_RE_ANY.test(val);
+  const exists = batchRecs.some(r => r.batchId === val.toUpperCase());
+  const genetics = document.getElementById('batch-genetics-source').value;
+  const mother = document.getElementById('batch-mother').value;
+  let ok = formatOk && !exists;
+  if(ok && genetics === 'Clones-Internal' && !mother) ok = false;
+  btn.disabled = !ok;
+  btn.style.opacity = ok ? '1' : '0.4';
+  btn.style.cursor  = ok ? 'pointer' : 'not-allowed';
 }
 
 async function batchCreate(){
