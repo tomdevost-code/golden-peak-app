@@ -6336,21 +6336,31 @@ function txTypeChanged(){
     const _curBatch = document.getElementById('summary-batch-select').value;
     if(t === 'Produced/Received' && isMotherBatch(_curBatch)){
       // Eligible source batches:
-      //   - any OTHER open mother batch (regardless of phase)
+      //   - the CURRENT mom batch itself (taking new cuttings off existing plants — most common case)
+      //   - any other open mother batch (regardless of phase)
       //   - any open non-mother batch with plantPhase === 'Veg'
+      // Source is NOT decremented — cuttings don't remove plants from the donor.
       const sources = batchRecs
-        .filter(b => b && !b.type && b.batchId && b.batchId !== _curBatch && !isBatchClosedRec(b))
+        .filter(b => b && !b.type && b.batchId && !isBatchClosedRec(b))
         .filter(b => isMotherBatch(b.batchId) || b.plantPhase === 'Veg')
         .map(b => b.batchId)
         .sort();
-      const cur = srcSel.value;
+      // Default: pre-select the current mom batch (self-source is the typical workflow).
+      const prev = srcSel.value;
+      const defaultPick = prev || (sources.includes(_curBatch) ? _curBatch : '');
       srcSel.innerHTML = '<option value="">-- select source batch --</option>'
-        + sources.map(b => '<option value="'+b+'"'+(b===cur?' selected':'')+'>'+b+(isMotherBatch(b)?' (mother)':' (Veg)')+'</option>').join('');
+        + sources.map(b => {
+            const label = b + (isMotherBatch(b) ? ' (mother)' : ' (Veg)') + (b === _curBatch ? ' — this batch' : '');
+            return '<option value="'+b+'"'+(b===defaultPick?' selected':'')+'>'+label+'</option>';
+          }).join('');
       srcWrap.style.display = '';
       if(srcMsg){
         if(!sources.length){
           srcMsg.style.color = 'var(--amber)';
-          srcMsg.textContent = 'No eligible source batches. Cuttings must come from another mother batch or a non-mother batch in Veg phase.';
+          srcMsg.textContent = 'No eligible source batches. Cuttings must come from a mother batch or a non-mother batch in Veg phase.';
+        } else if(defaultPick === _curBatch){
+          srcMsg.style.color = 'var(--text3)';
+          srcMsg.textContent = 'Defaulted to this batch (cuttings from its own plants). Change if the cuttings came from a different donor.';
         } else {
           srcMsg.style.color = 'var(--amber)';
           srcMsg.textContent = 'Required — which batch did the cuttings come from? Source is not decremented (cuttings, not transfers).';
@@ -6667,11 +6677,7 @@ async function summaryAddTransaction(){
   if(txType === 'Produced/Received' && isMotherBatch(batchId)){
     _srcCuttingBatchId = (document.getElementById('tx-src-batch')?.value || '').trim();
     if(!_srcCuttingBatchId){
-      toast('Pick which batch the cuttings came from (another mother, or a Veg-phase non-mom).', 5000);
-      return;
-    }
-    if(_srcCuttingBatchId === batchId){
-      toast('Source and destination must be different batches.', 4500);
+      toast('Pick which batch the cuttings came from (this batch, another mother, or a Veg-phase non-mom).', 5500);
       return;
     }
     const _src = batchRecs.find(r => r.batchId === _srcCuttingBatchId && !r.type);
@@ -6680,9 +6686,11 @@ async function summaryAddTransaction(){
       toast('Source batch '+_srcCuttingBatchId+' is closed — pick an open one.', 5000);
       return;
     }
-    // Source eligibility: must be a mother (any phase) OR a non-mom in Veg phase.
+    // Source eligibility: this batch itself, another mother (any phase), OR a non-mom in Veg phase.
+    // Self-source is the most common case — taking new cuttings from existing plants in the same mom batch.
     const _srcIsMom = isMotherBatch(_srcCuttingBatchId);
-    if(!_srcIsMom && _src.plantPhase !== 'Veg'){
+    const _srcIsSelf = (_srcCuttingBatchId === batchId);
+    if(!_srcIsMom && !_srcIsSelf && _src.plantPhase !== 'Veg'){
       toast('A non-mother source batch must be in Veg phase to provide cuttings.', 5500);
       return;
     }
@@ -6799,7 +6807,10 @@ async function summaryAddTransaction(){
   if(txType === 'Moved to Moms' && _destMomBatchId){
     _txNotes = (notes ? notes + ' — ' : '') + 'Moved to ' + _destMomBatchId;
   } else if(txType === 'Produced/Received' && _srcCuttingBatchId){
-    _txNotes = (notes ? notes + ' — ' : '') + 'Cuttings from ' + _srcCuttingBatchId;
+    const _srcLabel = (_srcCuttingBatchId === batchId)
+      ? 'Cuttings from this batch'
+      : ('Cuttings from ' + _srcCuttingBatchId);
+    _txNotes = (notes ? notes + ' — ' : '') + _srcLabel;
   }
   const tx = { id: Date.now(), batchId, date, txType, qty, weight, notes: _txNotes, currentQtyBefore, plantPhase: _txPhase, synced: false };
   if(txType === 'Moved to Moms' && _destMomBatchId) tx.destBatchId = _destMomBatchId;
