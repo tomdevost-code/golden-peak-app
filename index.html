@@ -519,8 +519,8 @@ tr:last-child td { border-bottom: none; }
 
         <!-- Step 1: Batch ID -->
         <div class="field" style="margin-bottom:10px;">
-          <label>Batch ID <span style="font-size:10px;color:var(--text3);font-weight:400;">(2 letters – dash – 3 digits, e.g. SP-001)</span></label>
-          <input type="text" id="batch-id-input" placeholder="e.g. SP-001" style="font-family:var(--mono);text-transform:uppercase;" oninput="this.value=this.value.toUpperCase();batchIdCheck()" />
+          <label>Batch ID <span style="font-size:10px;color:var(--text3);font-weight:400;">(XX-NNN, e.g. SP-001 — or M-XX-NNN for a mother batch, e.g. M-SP-001)</span></label>
+          <input type="text" id="batch-id-input" placeholder="e.g. SP-001 or M-SP-001" style="font-family:var(--mono);text-transform:uppercase;" oninput="this.value=this.value.toUpperCase();batchIdCheck()" />
           <div id="batch-id-msg" style="display:none;font-size:11px;margin-top:4px;"></div>
         </div>
 
@@ -530,13 +530,7 @@ tr:last-child td { border-bottom: none; }
           <input type="text" id="batch-cultivar" placeholder="e.g. Blue Dream" disabled style="background:var(--bg2);color:var(--text3);cursor:not-allowed;" />
         </div>
 
-        <!-- Step 3: Mother/Seed ID -->
-        <div class="field" style="margin-bottom:10px;">
-          <label>Mother / Seed ID</label>
-          <input type="text" id="batch-mother" placeholder="e.g. MOM-001 or SEED-042" disabled style="background:var(--bg2);color:var(--text3);cursor:not-allowed;" />
-        </div>
-
-        <!-- Step 4: Source of Genetics -->
+        <!-- Step 3: Source of Genetics (moved up — drives whether Mother ID is shown/required) -->
         <div class="field" style="margin-bottom:10px;">
           <label>Source of Genetics</label>
           <select id="batch-genetics-source" disabled onchange="batchGeneticsChange()" style="background:var(--bg2);color:var(--text3);cursor:not-allowed;">
@@ -545,6 +539,15 @@ tr:last-child td { border-bottom: none; }
             <option value="Clones-Internal">Clones-Internal</option>
             <option value="Clones-External">Clones-External</option>
           </select>
+        </div>
+
+        <!-- Step 4: Mother ID — required (and pickable) only when Clones-Internal is the source -->
+        <div class="field" id="batch-mother-wrap" style="display:none;margin-bottom:10px;">
+          <label>Mother ID <span style="font-size:10px;color:var(--text3);font-weight:400;">(M-XX-NNN — clone donor batch)</span></label>
+          <select id="batch-mother" disabled style="background:var(--bg2);color:var(--text3);cursor:not-allowed;">
+            <option value="">-- select mother batch --</option>
+          </select>
+          <div id="batch-mother-msg" style="font-size:11px;color:var(--text3);margin-top:4px;"></div>
         </div>
 
         <!-- External clone company (shows only when Clones-External selected) -->
@@ -647,7 +650,7 @@ tr:last-child td { border-bottom: none; }
             <div class="field"><label>Cultivar</label><div id="si-cultivar" style="font-size:14px;padding:6px 0;color:var(--text2);"></div></div>
           </div>
           <div class="g2" style="margin-bottom:8px;">
-            <div class="field"><label>Mother / Seed ID</label><div id="si-mother" style="font-size:13px;font-family:var(--mono);padding:6px 0;color:var(--text2);"></div></div>
+            <div class="field"><label>Mother ID</label><div id="si-mother" style="font-size:13px;font-family:var(--mono);padding:6px 0;color:var(--text2);"></div></div>
             <div class="field"><label>Source of Genetics</label><div id="si-genetics" style="font-size:13px;padding:6px 0;color:var(--text2);"></div></div>
           </div>
           <div class="field"><label>Created Date</label><div id="si-created" style="font-size:13px;font-family:var(--mono);padding:6px 0;color:var(--text3);"></div></div>
@@ -1364,7 +1367,7 @@ const REMOTE_MAPPERS = {
       airtableId: rec.id,
       batchId: bid,
       cultivar: f['Cultivar Name']||'',
-      mother: f['Mother/Seed ID']||'',
+      mother: f['Mother ID'] || f['Mother/Seed ID'] || '',  // fall back to legacy field name if Airtable rename hasn't happened yet
       geneticsSource: f['Source of Genetics']||'',
       externalCompany: f['External Clone Company']||'',
       notes: f['Notes']||'',
@@ -2347,7 +2350,7 @@ function buildBatchFields(rec){
   const f={
     'Batch ID':rec.batchId,
     'Cultivar Name':rec.cultivar||undefined,
-    'Mother/Seed ID':rec.mother||undefined,
+    'Mother ID':rec.mother||undefined,
     'Source of Genetics':rec.geneticsSource||undefined,
     'External Clone Company':rec.externalCompany||undefined,
     'Notes':rec.notes||undefined,
@@ -2391,6 +2394,26 @@ function avg(arr){const v=arr.filter(x=>x!==null&&!isNaN(x)&&x>0);return v.lengt
 function pens(sel){return Array.from(document.querySelectorAll(sel)).map(i=>parseFloat(i.value)||null);}
 function daysBetween(s,e){if(!s||!e)return null;const a=new Date(s),b=new Date(e);return isNaN(a)||isNaN(b)?null:Math.floor((b-a)/864e5)+1;}
 function calcStage(vs,fs,d){if(fs&&d>=fs){const fd=daysBetween(fs,d);return{stage:'flower',day:fd>0?fd:null};}if(vs){const vd=daysBetween(vs,d);return{stage:'veg',day:vd>0?vd:null};}return{stage:null,day:null};}
+// Mother batch detection — IDs prefixed with "M-" denote a mother stock batch.
+// Mother batches share the regular lifecycle (Clones → Veg → Flower → Drying)
+// for their use as clone donors and optional flower-out at end-of-life, but
+// they CANNOT advance to Packaged / Delivered and CANNOT have Sold txs.
+// Format: M-XX-NNN (e.g. M-SP-001). Regular batches stay as XX-NNN.
+const BATCH_ID_RE       = /^[A-Za-z]{2}-\d{3}$/;
+const MOTHER_BATCH_ID_RE = /^M-[A-Za-z]{2}-\d{3}$/i;
+const BATCH_ID_RE_ANY   = /^(M-)?[A-Za-z]{2}-\d{3}$/i;
+function isMotherBatch(batchId){
+  return MOTHER_BATCH_ID_RE.test((batchId||'').toString().trim());
+}
+function getMotherBatchIds(){
+  // List of all batch IDs that look like mother stock (M-XX-NNN). Used to
+  // populate the Mother ID dropdown on the Batch creation page.
+  return batchRecs
+    .filter(r => r && !r.type && isMotherBatch(r.batchId))
+    .map(r => r.batchId)
+    .filter((v,i,a) => a.indexOf(v) === i)   // unique
+    .sort();
+}
 function calcCloneDay(batchId, dateStr){
   // Clone day = days since batchRec.cloneDate (C1 on the day the clones arrived / were taken).
   //   - Clones-Internal: cloneDate is set at batch creation (= createdDate).
@@ -3418,29 +3441,75 @@ async function postDryComplete(){
     return;
   }
   const totalNet = recs.reduce((s,r)=> s + (parseFloat(r.netWeight)||0), 0);
-  if(!confirm('Complete Post-Drying for '+batch+'?\n\nTotal: '+totalNet.toFixed(3)+' kg across '+recs.length+' container(s).\n\nThis will advance the batch to Packaged.')){
-    return;
-  }
+  const _isMom = isMotherBatch(batch);
+  const _promptMsg = _isMom
+    ? ('Complete Post-Drying for mother batch '+batch+'?\n\nTotal: '+totalNet.toFixed(3)+' kg across '+recs.length+' container(s).\n\nThis records the post-drying weight. Mother batches stay in Drying — set Status=Closed when done.')
+    : ('Complete Post-Drying for '+batch+'?\n\nTotal: '+totalNet.toFixed(3)+' kg across '+recs.length+' container(s).\n\nThis will advance the batch to Packaged.');
+  if(!confirm(_promptMsg)){ return; }
   const idx = batchRecs.findIndex(r => r.batchId === batch && !r.type);
   if(idx < 0){ toast('Batch not found.'); return; }
   const _prevPhase = batchRecs[idx].plantPhase || '';
   const today = localDate();
   batchRecs[idx].postDryingWeight = Math.round(totalNet * 1000) / 1000;
-  batchRecs[idx].plantPhase = 'Packaged';
-  if(!batchRecs[idx].packagedDate) batchRecs[idx].packagedDate = today;
-  batchRecs[idx].synced = false;
-  lsSet('gp-batch', batchRecs);
-  // Stamp the total post-drying weight on the Drying → Packaged phase-change tx so it's visible
-  // in the Summary transaction history's Qty column (same treatment as Harvested wet weight).
-  recordPhaseChangeTx(batch, _prevPhase, 'Packaged', batchRecs[idx].postDryingWeight);
-  // Auto-reconcile any remaining plant balance — at Packaged every plant must be
-  // accounted for; phantom counts get a Destroyed tx and roomDistribution is cleared.
-  await reconcilePackagedBatchBalance(batch, {syncTx: true});
+  if(_isMom){
+    // Mother batch: keep phase at Drying. Just record the weight on a stand-alone
+    // 'Post-Dry Weight' tx (no phase change, qty=0). No packagedDate stamping.
+    batchRecs[idx].synced = false;
+    lsSet('gp-batch', batchRecs);
+    const _mw = batchRecs[idx].postDryingWeight;
+    const _mtx = {
+      id: Date.now() + Math.floor(Math.random()*1000),
+      batchId: batch,
+      date: today,
+      txType: 'Post-Dry Weight',
+      qty: 0,
+      weight: _mw,
+      currentQtyBefore: calcBatchQty(batch),
+      plantPhase: _prevPhase,
+      notes: 'Mother batch post-drying weight recorded: '+_mw.toFixed(3)+' kg',
+      synced: false
+    };
+    batchTxRecs.unshift(_mtx);
+    lsSet('gp-batchtx', batchTxRecs);
+    updatePendingBadge();
+    if(cfg.batchtxTbl && cfg.token && cfg.base){
+      try {
+        const f = {
+          'Batch ID': [_mtx.batchId],
+          'Date': _mtx.date,
+          'Transaction Type': _mtx.txType,
+          'Plant Phase': _mtx.plantPhase || undefined,
+          'Quantity': _mtx.qty,
+          'Weight (kg)': _mtx.weight,
+          'Current Quantity After': _mtx.currentQtyBefore,
+          'Notes': _mtx.notes
+        };
+        Object.keys(f).forEach(k=>{ if(f[k]===undefined||f[k]===null||f[k]==='') delete f[k]; });
+        const _r = await atPost(cfg.batchtxTbl, f);
+        _mtx.synced = true;
+        if(_r && _r.id) _mtx.airtableId = _r.id;
+        lsSet('gp-batchtx', batchTxRecs);
+      } catch(e){ /* Sync Pending will retry */ }
+    }
+  } else {
+    batchRecs[idx].plantPhase = 'Packaged';
+    if(!batchRecs[idx].packagedDate) batchRecs[idx].packagedDate = today;
+    batchRecs[idx].synced = false;
+    lsSet('gp-batch', batchRecs);
+    // Stamp the total post-drying weight on the Drying → Packaged phase-change tx so it's visible
+    // in the Summary transaction history's Qty column (same treatment as Harvested wet weight).
+    recordPhaseChangeTx(batch, _prevPhase, 'Packaged', batchRecs[idx].postDryingWeight);
+    // Auto-reconcile any remaining plant balance — at Packaged every plant must be
+    // accounted for; phantom counts get a Destroyed tx and roomDistribution is cleared.
+    await reconcilePackagedBatchBalance(batch, {syncTx: true});
+  }
   const msg = document.getElementById('postdry-complete-msg');
   if(msg){
     msg.style.display = 'block';
     msg.style.color = 'var(--green)';
-    msg.textContent = 'Post-Drying complete: '+totalNet.toFixed(3)+' kg recorded; batch advanced to Packaged.';
+    msg.textContent = _isMom
+      ? 'Post-Drying weight recorded: '+totalNet.toFixed(3)+' kg. Mother batch stays in Drying — close it manually via Status when ready.'
+      : 'Post-Drying complete: '+totalNet.toFixed(3)+' kg recorded; batch advanced to Packaged.';
     setTimeout(()=>{ msg.style.display = 'none'; }, 5000);
   }
   populateBatchDropdowns();
@@ -5168,24 +5237,30 @@ function batchIdCheck(){
   const val = document.getElementById('batch-id-input').value.trim();
   const msg = document.getElementById('batch-id-msg');
   const btn = document.getElementById('batch-create-btn');
-  // Format: exactly 2 letters, dash, exactly 3 digits
-  const formatOk = /^[A-Za-z]{2}-\d{3}$/.test(val);
+  // Format accepts both regular (XX-NNN) and mother (M-XX-NNN) IDs.
+  const formatOk = BATCH_ID_RE_ANY.test(val);
   const exists = batchRecs.some(r => r.batchId === val.toUpperCase());
   function unlock(ids){ ids.forEach(id=>{ const el=document.getElementById(id);if(el){el.disabled=false;el.style.background='';el.style.color='';el.style.cursor='';} }); }
   function lock(ids){ ids.forEach(id=>{ const el=document.getElementById(id);if(el){el.disabled=true;el.style.background='var(--bg2)';el.style.color='var(--text3)';el.style.cursor='not-allowed';} }); }
-  const fields = ['batch-cultivar','batch-mother','batch-genetics-source','batch-notes'];
+  const fields = ['batch-cultivar','batch-genetics-source','batch-notes'];
   if(formatOk && !exists){
     unlock(fields);
+    // Visual hint when it's a mother batch — gives the user confirmation the M- prefix was detected.
+    if(isMotherBatch(val)){
+      msg.style.display='block'; msg.style.color='var(--green)'; msg.textContent='Mother stock batch — Packaged / Delivered / Sold are disabled for this batch.';
+    } else {
+      msg.style.display='none';
+    }
     btn.disabled = false; btn.style.opacity='1'; btn.style.cursor='pointer';
-    msg.style.display='none';
   } else {
     lock(fields);
-    // also lock external company field
-    lock(['batch-external-company']);
+    // Hide/lock the conditional Mother ID + External Company fields too
+    lock(['batch-mother','batch-external-company']);
+    document.getElementById('batch-mother-wrap').style.display='none';
     document.getElementById('batch-external-wrap').style.display='none';
     btn.disabled = true; btn.style.opacity='0.4'; btn.style.cursor='not-allowed';
     if(val.length > 0 && !formatOk){
-      msg.style.display='block'; msg.style.color='var(--amber)'; msg.textContent='Format must be 2 letters – dash – 3 digits (e.g. SP-001).';
+      msg.style.display='block'; msg.style.color='var(--amber)'; msg.textContent='Format must be XX-NNN (regular) or M-XX-NNN (mother batch).';
     } else if(exists){
       msg.style.display='block'; msg.style.color='var(--red)'; msg.textContent='Batch ID already exists.';
     } else { msg.style.display='none'; }
@@ -5194,28 +5269,60 @@ function batchIdCheck(){
 
 function batchGeneticsChange(){
   const sel = document.getElementById('batch-genetics-source').value;
-  const wrap = document.getElementById('batch-external-wrap');
-  const comp = document.getElementById('batch-external-company');
+  const extWrap = document.getElementById('batch-external-wrap');
+  const extComp = document.getElementById('batch-external-company');
+  const momWrap = document.getElementById('batch-mother-wrap');
+  const momSel  = document.getElementById('batch-mother');
+  const momMsg  = document.getElementById('batch-mother-msg');
+  // External Clone Company — only visible for Clones-External
   if(sel === 'Clones-External'){
-    wrap.style.display='';
-    comp.disabled=false; comp.style.background=''; comp.style.color=''; comp.style.cursor='';
+    extWrap.style.display='';
+    extComp.disabled=false; extComp.style.background=''; extComp.style.color=''; extComp.style.cursor='';
   } else {
-    wrap.style.display='none';
-    comp.disabled=true; comp.style.background='var(--bg2)'; comp.style.color='var(--text3)'; comp.style.cursor='not-allowed';
-    comp.value='';
+    extWrap.style.display='none';
+    extComp.disabled=true; extComp.style.background='var(--bg2)'; extComp.style.color='var(--text3)'; extComp.style.cursor='not-allowed';
+    extComp.value='';
+  }
+  // Mother ID — only visible / required for Clones-Internal, sourced from M-* batches.
+  if(sel === 'Clones-Internal'){
+    const moms = getMotherBatchIds();
+    momSel.innerHTML = '<option value="">-- select mother batch --</option>'
+      + moms.map(m => '<option value="'+m+'">'+m+'</option>').join('');
+    momWrap.style.display='';
+    momSel.disabled = false; momSel.style.background=''; momSel.style.color=''; momSel.style.cursor='';
+    if(!moms.length){
+      momMsg.style.color = 'var(--amber)';
+      momMsg.textContent = 'No mother batches exist yet. Create one with a M-XX-NNN ID first, then come back.';
+    } else {
+      momMsg.style.color = 'var(--text3)';
+      momMsg.textContent = 'Required — pick which mother stock these clones came from.';
+    }
+  } else {
+    momWrap.style.display='none';
+    momSel.disabled = true; momSel.style.background='var(--bg2)'; momSel.style.color='var(--text3)'; momSel.style.cursor='not-allowed';
+    momSel.value = '';
   }
 }
 
 async function batchCreate(){
   const batchId = document.getElementById('batch-id-input').value.trim().toUpperCase();
   if(!batchId){ toast('Enter a Batch ID.'); return; }
-  if(!/^[A-Za-z]{2}-\d{3}$/.test(batchId)){ toast('Invalid Batch ID format.'); return; }
+  if(!BATCH_ID_RE_ANY.test(batchId)){ toast('Invalid Batch ID format. Use XX-NNN or M-XX-NNN.'); return; }
   if(batchRecs.some(r=>r.batchId===batchId)){ toast('Batch ID already exists.'); return; }
   const cultivar = document.getElementById('batch-cultivar').value.trim();
   const mother = document.getElementById('batch-mother').value.trim();
   const geneticsSource = document.getElementById('batch-genetics-source').value;
   const externalCompany = document.getElementById('batch-external-company').value.trim();
   const notes = document.getElementById('batch-notes').value.trim();
+  // Mother ID required for Clones-Internal; must reference an existing M-* batch.
+  if(geneticsSource === 'Clones-Internal'){
+    if(!mother){ toast('Mother ID is required for Clones-Internal batches.'); return; }
+    if(!isMotherBatch(mother)){ toast('Mother ID must be an M-XX-NNN batch.'); return; }
+    if(!batchRecs.some(r => r.batchId === mother && !r.type)){
+      toast('Mother batch '+mother+' not found. Create it first, then create this clone batch.', 5000);
+      return;
+    }
+  }
   // All new batches start with qty=0, so the zero-qty rule applies: phase='Clones', rooms=['Veg'].
   const _created = localDate();
   // cloneDate is left empty at batch creation for both Clones-Internal and Clones-External.
@@ -5231,6 +5338,7 @@ async function batchCreate(){
   document.getElementById('batch-id-input').value = '';
   document.getElementById('batch-cultivar').value = '';
   document.getElementById('batch-mother').value = '';
+  document.getElementById('batch-mother-wrap').style.display='none';
   document.getElementById('batch-genetics-source').value = '';
   document.getElementById('batch-external-company').value = '';
   document.getElementById('batch-external-wrap').style.display='none';
@@ -5413,7 +5521,9 @@ function summaryBatchChanged(){
     updatePendingBadge();
   }
   document.getElementById('summary-info-card').style.display='';
-  document.getElementById('si-batchid').textContent = b.batchId;
+  document.getElementById('si-batchid').innerHTML = b.batchId + (isMotherBatch(b.batchId)
+    ? ' <span style="display:inline-block;background:var(--green-pale);color:var(--green);font-size:10px;font-weight:700;font-family:var(--mono);padding:2px 6px;border-radius:8px;letter-spacing:0.05em;vertical-align:middle;margin-left:4px;">MOTHER</span>'
+    : '');
   document.getElementById('si-cultivar').textContent = b.cultivar||'—';
   document.getElementById('si-mother').textContent = b.mother||'—';
   document.getElementById('si-genetics').textContent = b.geneticsSource ? b.geneticsSource+(b.externalCompany?' ('+b.externalCompany+')':'') : '—';
@@ -5811,23 +5921,25 @@ function applyPhaseRoomLock(){
   // Re-render the chip view so disabled rooms lose their × button and locked rooms appear faded.
   summaryRenderRoomChips();
 }
-function getAllowedPhases(currentPhase){
+function getAllowedPhases(currentPhase, batchId){
   // Plant lifecycle — single linear path: Clones → Veg → Flower → Drying → Packaged → Delivered.
   // Every transition except Packaged → Delivered is event-driven, so the dropdown only offers a
   // forward option in the one place the user actually triggers a phase change manually.
   //   Clones → Veg          — auto on Water-In EC entry
   //   Veg    → Flower       — MANUAL (user advances when they flip lights to 12/12)
   //   Flower → Drying       — auto on first Complete Harvest
-  //   Drying → Packaged     — auto on Complete Post-Drying
-  //   Packaged → Delivered  — MANUAL (user advances when product is delivered)
+  //   Drying → Packaged     — auto on Complete Post-Drying  (NOT for mother batches)
+  //   Packaged → Delivered  — MANUAL  (NOT for mother batches)
   //   Delivered → (Closed)  — via Status, not a phase change
+  // Mother batches (M-XX-NNN) cap out at Drying — they're closed via Status manually.
   if(!currentPhase) return ['Clones'];
+  const isMother = batchId ? isMotherBatch(batchId) : false;
   switch(currentPhase){
     case 'Clones':   return ['Clones'];
     case 'Veg':      return ['Veg','Flower']; // manual transition
     case 'Flower':   return ['Flower'];
-    case 'Drying':   return ['Drying'];
-    case 'Packaged': return ['Packaged','Delivered']; // manual transition
+    case 'Drying':   return ['Drying']; // mothers terminate here too
+    case 'Packaged': return isMother ? ['Packaged'] : ['Packaged','Delivered']; // mothers shouldn't reach Packaged anyway
     case 'Delivered':return ['Delivered']; // terminal — only Close (via Status) remains
     case 'Seeds':    return ['Seeds','Clones']; // legacy migration path
     default:         return [currentPhase];
@@ -5860,7 +5972,7 @@ function summaryUpdatePhaseOptions(currentPhase, qty){
   // manually skipping to Veg/Flower/etc. without first watering them in).
   const waterInGate = (currentPhase === 'Clones') && batchId && !batchHasWaterInForAllRooms(batchId);
   const lockToClones = noPlants || waterInGate;
-  const allowed = lockToClones ? ['Clones'] : getAllowedPhases(currentPhase);
+  const allowed = lockToClones ? ['Clones'] : getAllowedPhases(currentPhase, batchId);
   const valueToSelect = lockToClones ? 'Clones' : currentPhase;
   sel.innerHTML = '<option value="">-- select phase --</option>' + allowed.map(p=>'<option'+(p===valueToSelect?' selected':'')+'>'+p+'</option>').join('');
 }
@@ -5962,6 +6074,8 @@ function summaryUpdateTxTypeOptions(batchId){
   else                        opts = ['Produced/Received','Moved to Moms','Harvested'];
   // Drop Sold from the list if this batch already has a Sold tx (only one allowed)
   if(hasSold) opts = opts.filter(o=>o!=='Sold');
+  // Mother batches (M-XX-NNN) can never be sold — they're clone donors, not product.
+  if(isMotherBatch(batchId)) opts = opts.filter(o=>o!=='Sold');
   // Drop Harvested from the list if this batch already has a Harvested tx — it's auto-created
   // by the Harvest Log when the final room is completed, so there's no need to add another.
   const hasHarvested = batchTxRecs.some(t=>t.batchId===batchId && t.txType==='Harvested');
@@ -6022,7 +6136,7 @@ async function summaryUpdateBatch(){
   const _exHarvest = batchRecs[idx].harvestDate || '';
   // Guard: enforce forward-only phase progression
   const existingPhase = batchRecs[idx].plantPhase || '';
-  if(plantPhase && !getAllowedPhases(existingPhase).includes(plantPhase)){
+  if(plantPhase && !getAllowedPhases(existingPhase, batchId).includes(plantPhase)){
     toast('Cannot move plant phase backward (from '+(existingPhase||'unset')+' to '+plantPhase+').',5000);
     return;
   }
@@ -6164,6 +6278,10 @@ async function summaryAddTransaction(){
   const isHarvested = (txType === 'Harvested');
   // Guard: only one Sold transaction per batch
   if(isSold){
+    if(isMotherBatch(batchId)){
+      toast('Mother batches cannot be sold.',4000);
+      return;
+    }
     const _hasSold = batchTxRecs.some(t=>t.batchId===batchId && t.txType==='Sold');
     if(_hasSold){
       toast('This batch already has a Sold transaction — only one is allowed per batch.',5000);
