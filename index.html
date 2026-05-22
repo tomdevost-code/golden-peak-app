@@ -6189,17 +6189,19 @@ function getAllowedPhases(currentPhase, batchId){
   // Plant lifecycle — single linear path: Clones → Veg → Flower → Drying → Packaged → Delivered.
   // Every transition except Packaged → Delivered is event-driven, so the dropdown only offers a
   // forward option in the one place the user actually triggers a phase change manually.
-  //   Clones → Veg          — auto on Water-In EC entry
+  //   Clones → Veg          — auto on Water-In EC entry (MANUAL for mother batches)
   //   Veg    → Flower       — MANUAL (user advances when they flip lights to 12/12)
   //   Flower → Drying       — auto on first Complete Harvest
   //   Drying → Packaged     — auto on Complete Post-Drying  (NOT for mother batches)
   //   Packaged → Delivered  — MANUAL  (NOT for mother batches)
   //   Delivered → (Closed)  — via Status, not a phase change
-  // Mother batches (M-XX-NNN) cap out at Drying — they're closed via Status manually.
+  // Mother batches (M-XXX-NNN) cap out at Drying and need MANUAL control over every phase
+  // transition because plants in a mom batch can sit at multiple phases at once — there's
+  // no automatic Clones→Veg signal that fits the multi-cohort model.
   if(!currentPhase) return ['Clones'];
   const isMother = batchId ? isMotherBatch(batchId) : false;
   switch(currentPhase){
-    case 'Clones':   return ['Clones'];
+    case 'Clones':   return isMother ? ['Clones','Veg','Flower'] : ['Clones']; // moms can jump straight to Flower if needed
     case 'Veg':      return ['Veg','Flower']; // manual transition
     case 'Flower':   return ['Flower'];
     case 'Drying':   return ['Drying']; // mothers terminate here too
@@ -6233,8 +6235,10 @@ function summaryUpdatePhaseOptions(currentPhase, qty){
   const postHarvest = ['Drying','Packaged','Delivered'].includes(currentPhase);
   const noPlants = (!qty || qty<=0) && !postHarvest;
   // Water-In gate: only relevant while the batch is still in Clones phase (the gate that prevents
-  // manually skipping to Veg/Flower/etc. without first watering them in).
-  const waterInGate = (currentPhase === 'Clones') && batchId && !batchHasWaterInForAllRooms(batchId);
+  // manually skipping to Veg/Flower/etc. without first watering them in). Mother batches bypass
+  // this gate — they need full manual control of phase transitions across their multi-cohort lifecycle.
+  const _gateIsMother = batchId ? isMotherBatch(batchId) : false;
+  const waterInGate = (currentPhase === 'Clones') && batchId && !_gateIsMother && !batchHasWaterInForAllRooms(batchId);
   const lockToClones = noPlants || waterInGate;
   const allowed = lockToClones ? ['Clones'] : getAllowedPhases(currentPhase, batchId);
   const valueToSelect = lockToClones ? 'Clones' : currentPhase;
@@ -6519,9 +6523,10 @@ async function summaryUpdateBatch(){
     _roomsForSave = (batchRecs[idx].rooms && batchRecs[idx].rooms.length) ? batchRecs[idx].rooms.slice() : rooms;
   }
   // Auto-set lifecycle dates on phase advance (if not already set):
-  //   Clones → Veg: vegStart = today
-  //   Veg    → Flower: flowerStart = today
-  //   Flower → Drying: harvestDate = today
+  //   Clones → Veg:     vegStart = today
+  //   Clones → Flower:  vegStart = today AND flowerStart = today (mom batches can skip Veg)
+  //   Veg    → Flower:  flowerStart = today
+  //   Flower → Drying:  harvestDate = today
   // (Hydration date is set separately by EC log Hydration entries — not here.)
   let _autoVeg = _exVeg, _autoFlower = _exFlower, _autoHarvest = _exHarvest;
   let _autoPackaged = batchRecs[idx].packagedDate || '';
@@ -6529,6 +6534,12 @@ async function summaryUpdateBatch(){
   const _t = localDate();
   if(plantPhase === 'Veg' && existingPhase === 'Clones' && !_autoVeg) _autoVeg = _t;
   if(plantPhase === 'Flower' && existingPhase === 'Veg' && !_autoFlower) _autoFlower = _t;
+  // Mom batches can jump Clones → Flower directly; stamp both vegStart and flowerStart so the
+  // day counters (V-day, F-day) and downstream rules still have valid anchor dates.
+  if(plantPhase === 'Flower' && existingPhase === 'Clones'){
+    if(!_autoVeg) _autoVeg = _t;
+    if(!_autoFlower) _autoFlower = _t;
+  }
   if(plantPhase === 'Drying' && existingPhase === 'Flower' && !_autoHarvest) _autoHarvest = _t;
   if(plantPhase === 'Packaged' && existingPhase === 'Drying' && !_autoPackaged) _autoPackaged = _t;
   // Delivered phase reachable from Veg (clone sales) or Packaged (flower sales). Stamp today
