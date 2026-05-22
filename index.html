@@ -1569,19 +1569,62 @@ const REMOTE_MAPPERS = {
 // local, remote }. The conflict modal (renderConflictsModal) drains this.
 let _pendingConflicts = [];
 
+// Sanity check: do these two records actually describe the same logical row?
+// Used to guard against airtableId corruption (where a local record has been
+// tagged with a remote record ID that actually belongs to a different row —
+// often the result of an earlier backfill / sync-pending bug). When this
+// returns false, mergeRemote treats the local airtableId as stale and rebuilds.
+function _recordsLookEquivalent(local, remote, table){
+  if(!local || !remote) return false;
+  switch(table){
+    case 'batch':
+      // Batch records are keyed on Batch ID — that's the identity.
+      return (local.batchId || '').toString().toUpperCase() === (remote.batchId || '').toString().toUpperCase();
+    case 'batchtx':
+      // Append-only tx — batchId must match. (txType/date can drift on edit but
+      // batchId is the parent link and shouldn't ever change.)
+      return (local.batchId || '').toString().toUpperCase() === (remote.batchId || '').toString().toUpperCase();
+    case 'ec':
+    case 'ro':
+    case 'waste':
+    case 'harvest':
+    case 'postdry':
+    case 'bio':
+    case 'pest':
+      return (local.batch || '').toString().toUpperCase() === (remote.batch || '').toString().toUpperCase();
+    default:
+      return true;
+  }
+}
+
 // Merge remote rows into the local array (in place). Returns counts.
 //   - match local-by-airtableId; if local is synced, shallow-overlay remote
 //   - if local has synced===false, queue a conflict and leave local intact
 //   - new remote rows are unshifted onto the front
+//   - airtableId mismatch (corrupted link to wrong remote): clear the stale
+//     local airtableId, add remote as a new row
 function mergeRemote(localArr, remoteRecs, mapper, ctx, table, lsKey){
   const byAt = {};
   localArr.forEach((r,i) => { if(r && r.airtableId) byAt[r.airtableId] = i; });
-  let added = 0, updated = 0, conflicts = 0;
+  let added = 0, updated = 0, conflicts = 0, repaired = 0;
   remoteRecs.forEach(rrec => {
     const mapped = mapper(rrec, ctx||{});
     if(!mapped) return;
     if(byAt[rrec.id] !== undefined){
       const idx = byAt[rrec.id];
+      // Guard against ID corruption — if the matched local record clearly
+      // isn't the same row as the remote, the link is stale. Clear the local
+      // airtableId so the remote can be appended cleanly as a new record.
+      if(!_recordsLookEquivalent(localArr[idx], mapped, table)){
+        console.warn('[mergeRemote] stale airtableId on local',
+          {table, airtableId: rrec.id,
+           local: {batchId: localArr[idx].batchId, batch: localArr[idx].batch, date: localArr[idx].date, txType: localArr[idx].txType},
+           remote: {batchId: mapped.batchId, batch: mapped.batch, date: mapped.date, txType: mapped.txType}});
+        delete localArr[idx].airtableId;
+        localArr.unshift(mapped);
+        added++; repaired++;
+        return;
+      }
       if(localArr[idx].synced === false){
         // Conflict — drop into the resolution queue (dedup by airtableId)
         const aid = localArr[idx].airtableId;
@@ -1607,6 +1650,7 @@ function mergeRemote(localArr, remoteRecs, mapper, ctx, table, lsKey){
       added++;
     }
   });
+  if(repaired) console.log('[mergeRemote] '+table+' — repaired '+repaired+' stale airtableId link(s)');
   return {added, updated, conflicts};
 }
 
@@ -1655,7 +1699,15 @@ async function pullFromAirtable(opts){
     summary.postdry = mergeRemote(postDryRecs, pds,     REMOTE_MAPPERS.postdry, ctx, 'postdry', 'gp-postdry');
     summary.bio     = mergeRemote(bioRecs,     bs,      REMOTE_MAPPERS.bio,     ctx, 'bio',     'gp-bio');
     summary.pest    = mergeRemote(pestRecs,    ps,      REMOTE_MAPPERS.pest,    ctx, 'pest',    'gp-pest');
-    lsSet('gp-batch',   batchRecs);
+    // Sweep the conflict queue — drop any entries whose local row no longer
+    // matches the remote (could happen if mergeRemote just repaired a stale
+    // airtableId link, or if the local was deleted out from under us).
+    _pendingConflicts = _pendingConflicts.filter(c => {
+      const arr = {batch:batchRecs, ec:ecRecs, ro:roRecs, waste:wasteRecs, batchtx:batchTxRecs, harvest:harvestRecs, postdry:postDryRecs, bio:bioRecs, pest:pestRecs}[c.table] || [];
+      const stillLocal = arr.find(r => r && r.airtableId === c.airtableId);
+      if(!stillLocal) return false;
+      return _recordsLookEquivalent(stillLocal, c.remote, c.table);
+    });
     lsSet('gp-ec',      ecRecs);
     lsSet('gp-ro',      roRecs);
     lsSet('gp-waste',   wasteRecs);
