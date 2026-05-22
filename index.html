@@ -847,6 +847,16 @@ tr:last-child td { border-bottom: none; }
             </select>
             <div id="tx-dest-mom-msg" style="font-size:11px;color:var(--text3);margin-top:4px;"></div>
           </div>
+          <!-- Source Batch (for mom Produced/Received): where the cuttings came from. Can be
+               another open M-* batch (any phase) OR an open non-mom batch in Veg phase.
+               Cuttings DON'T decrement the source — these are clones, not plant transfers. -->
+          <div class="field" style="margin-bottom:10px;display:none;" id="tx-src-batch-wrap">
+            <label>Cutting Source Batch <span style="color:var(--red);font-weight:700;">*</span></label>
+            <select id="tx-src-batch" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;">
+              <option value="">-- select source batch --</option>
+            </select>
+            <div id="tx-src-batch-msg" style="font-size:11px;color:var(--text3);margin-top:4px;"></div>
+          </div>
           <!-- Weight: shown for Sold (user enters sale weight) and for Harvested (auto-filled,
                read-only — comes from the Harvest Log total). Hidden for everything else. -->
           <div class="field" style="margin-bottom:10px;display:none;" id="tx-wet-weight-wrap">
@@ -6309,6 +6319,42 @@ function txTypeChanged(){
       destSel.value = '';
     }
   }
+  // Cutting Source Batch: only relevant for a Produced/Received tx ON a mother
+  // batch. Eligible sources: other open mom batches (any phase) + open non-mom
+  // batches currently in Veg phase. Source is NOT decremented — clones are
+  // cuttings, not transfers, so the source plants stay where they are.
+  const srcWrap = document.getElementById('tx-src-batch-wrap');
+  const srcSel  = document.getElementById('tx-src-batch');
+  const srcMsg  = document.getElementById('tx-src-batch-msg');
+  if(srcWrap && srcSel){
+    const _curBatch = document.getElementById('summary-batch-select').value;
+    if(t === 'Produced/Received' && isMotherBatch(_curBatch)){
+      // Eligible source batches:
+      //   - any OTHER open mother batch (regardless of phase)
+      //   - any open non-mother batch with plantPhase === 'Veg'
+      const sources = batchRecs
+        .filter(b => b && !b.type && b.batchId && b.batchId !== _curBatch && !isBatchClosedRec(b))
+        .filter(b => isMotherBatch(b.batchId) || b.plantPhase === 'Veg')
+        .map(b => b.batchId)
+        .sort();
+      const cur = srcSel.value;
+      srcSel.innerHTML = '<option value="">-- select source batch --</option>'
+        + sources.map(b => '<option value="'+b+'"'+(b===cur?' selected':'')+'>'+b+(isMotherBatch(b)?' (mother)':' (Veg)')+'</option>').join('');
+      srcWrap.style.display = '';
+      if(srcMsg){
+        if(!sources.length){
+          srcMsg.style.color = 'var(--amber)';
+          srcMsg.textContent = 'No eligible source batches. Cuttings must come from another mother batch or a non-mother batch in Veg phase.';
+        } else {
+          srcMsg.style.color = 'var(--amber)';
+          srcMsg.textContent = 'Required — which batch did the cuttings come from? Source is not decremented (cuttings, not transfers).';
+        }
+      }
+    } else {
+      srcWrap.style.display = 'none';
+      srcSel.value = '';
+    }
+  }
   // Clone Date input: shown only when:
   //   - txType is Produced/Received
   //   - the batch's geneticsSource is Clones-External
@@ -6596,6 +6642,33 @@ async function summaryAddTransaction(){
   } else {
     if(!qty || qty <= 0){ toast('Enter a valid plant count.'); return; }
   }
+  // Mother batches receiving Produced/Received clones need a Cutting Source Batch
+  // (another mother, or a non-mom batch in Veg). Source is NOT decremented — these
+  // are cuttings, the source plants stay put. Recorded into tx.notes for traceability.
+  let _srcCuttingBatchId = '';
+  if(txType === 'Produced/Received' && isMotherBatch(batchId)){
+    _srcCuttingBatchId = (document.getElementById('tx-src-batch')?.value || '').trim();
+    if(!_srcCuttingBatchId){
+      toast('Pick which batch the cuttings came from (another mother, or a Veg-phase non-mom).', 5000);
+      return;
+    }
+    if(_srcCuttingBatchId === batchId){
+      toast('Source and destination must be different batches.', 4500);
+      return;
+    }
+    const _src = batchRecs.find(r => r.batchId === _srcCuttingBatchId && !r.type);
+    if(!_src){ toast('Source batch '+_srcCuttingBatchId+' not found.', 4500); return; }
+    if(isBatchClosedRec(_src)){
+      toast('Source batch '+_srcCuttingBatchId+' is closed — pick an open one.', 5000);
+      return;
+    }
+    // Source eligibility: must be a mother (any phase) OR a non-mom in Veg phase.
+    const _srcIsMom = isMotherBatch(_srcCuttingBatchId);
+    if(!_srcIsMom && _src.plantPhase !== 'Veg'){
+      toast('A non-mother source batch must be in Veg phase to provide cuttings.', 5500);
+      return;
+    }
+  }
   // Moved to Moms requires a destination mother batch. Look it up and validate.
   let _destMomBatchId = '';
   if(txType === 'Moved to Moms'){
@@ -6700,13 +6773,19 @@ async function summaryAddTransaction(){
       }
     }
   }
-  // If this is a Moved-to-Moms transfer, tag the source tx with the destination
-  // in its notes so the link is human-readable in the history table.
-  const _txNotes = (txType === 'Moved to Moms' && _destMomBatchId)
-    ? ((notes ? notes + ' — ' : '') + 'Moved to ' + _destMomBatchId)
-    : notes;
+  // Tag the source tx with structured context in its notes so the link is
+  // human-readable in the history table:
+  //   - Moved to Moms        → "Moved to <destMom>"
+  //   - Produced/Received on a mother batch with cuttings → "Cuttings from <srcBatch>"
+  let _txNotes = notes;
+  if(txType === 'Moved to Moms' && _destMomBatchId){
+    _txNotes = (notes ? notes + ' — ' : '') + 'Moved to ' + _destMomBatchId;
+  } else if(txType === 'Produced/Received' && _srcCuttingBatchId){
+    _txNotes = (notes ? notes + ' — ' : '') + 'Cuttings from ' + _srcCuttingBatchId;
+  }
   const tx = { id: Date.now(), batchId, date, txType, qty, weight, notes: _txNotes, currentQtyBefore, plantPhase: _txPhase, synced: false };
   if(txType === 'Moved to Moms' && _destMomBatchId) tx.destBatchId = _destMomBatchId;
+  if(txType === 'Produced/Received' && _srcCuttingBatchId) tx.sourceBatchId = _srcCuttingBatchId;
   batchTxRecs.unshift(tx);
   lsSet('gp-batchtx', batchTxRecs);
   // For Moved to Moms: create the paired Produced/Received tx on the destination
@@ -6786,6 +6865,8 @@ async function summaryAddTransaction(){
   const _cdWrap = document.getElementById('tx-clone-date-wrap'); if(_cdWrap) _cdWrap.style.display = 'none';
   const _dmInp = document.getElementById('tx-dest-mom'); if(_dmInp) _dmInp.value = '';
   const _dmWrap = document.getElementById('tx-dest-mom-wrap'); if(_dmWrap) _dmWrap.style.display = 'none';
+  const _sbInp = document.getElementById('tx-src-batch'); if(_sbInp) _sbInp.value = '';
+  const _sbWrap = document.getElementById('tx-src-batch-wrap'); if(_sbWrap) _sbWrap.style.display = 'none';
   const msg = document.getElementById('tx-msg');
   msg.style.display='block'; msg.style.color='var(--green)'; msg.textContent='Transaction saved!';
   setTimeout(()=>{ msg.style.display='none'; }, 3000);
