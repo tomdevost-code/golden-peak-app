@@ -807,6 +807,16 @@ tr:last-child td { border-bottom: none; }
             <label>Plant Count</label>
             <input type="number" id="tx-plant-count" placeholder="0" min="0" step="1" onwheel="this.blur()" onkeydown="if(event.key==='ArrowUp'||event.key==='ArrowDown')event.preventDefault();" style="font-size:14px;font-family:var(--mono);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;" />
           </div>
+          <!-- Destination Mother Batch: shown only for Moved to Moms. Picks which M-* batch
+               the plants are being moved INTO. Saving creates a paired Produced/Received tx
+               on that destination batch so the running totals stay consistent. -->
+          <div class="field" style="margin-bottom:10px;display:none;" id="tx-dest-mom-wrap">
+            <label>Destination Mother Batch <span style="color:var(--red);font-weight:700;">*</span></label>
+            <select id="tx-dest-mom" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;">
+              <option value="">-- select mother batch --</option>
+            </select>
+            <div id="tx-dest-mom-msg" style="font-size:11px;color:var(--text3);margin-top:4px;"></div>
+          </div>
           <!-- Weight: shown for Sold (user enters sale weight) and for Harvested (auto-filled,
                read-only — comes from the Harvest Log total). Hidden for everything else. -->
           <div class="field" style="margin-bottom:10px;display:none;" id="tx-wet-weight-wrap">
@@ -6075,6 +6085,33 @@ function txTypeChanged(){
     pcInp.value = '';
     wetInp.value = '';
   }
+  // Destination Mother Batch: only relevant for 'Moved to Moms'. Populate with
+  // existing M-* batches (excluding the current source batch if it's itself a mother).
+  const destWrap = document.getElementById('tx-dest-mom-wrap');
+  const destSel  = document.getElementById('tx-dest-mom');
+  const destMsg  = document.getElementById('tx-dest-mom-msg');
+  if(destWrap && destSel){
+    if(t === 'Moved to Moms'){
+      const _srcBatch = document.getElementById('summary-batch-select').value;
+      const moms = getMotherBatchIds().filter(m => m !== _srcBatch);
+      const cur = destSel.value;
+      destSel.innerHTML = '<option value="">-- select mother batch --</option>'
+        + moms.map(m => '<option value="'+m+'"'+(m===cur?' selected':'')+'>'+m+'</option>').join('');
+      destWrap.style.display = '';
+      if(destMsg){
+        if(!moms.length){
+          destMsg.style.color = 'var(--amber)';
+          destMsg.textContent = 'No mother batches available. Create one with a M-XX-NNN ID first.';
+        } else {
+          destMsg.style.color = 'var(--amber)';
+          destMsg.textContent = 'Required — which mother batch are the plants moving INTO? A matching Produced/Received tx will be added there.';
+        }
+      }
+    } else {
+      destWrap.style.display = 'none';
+      destSel.value = '';
+    }
+  }
   // Clone Date input: shown only when:
   //   - txType is Produced/Received
   //   - the batch's geneticsSource is Clones-External
@@ -6356,6 +6393,33 @@ async function summaryAddTransaction(){
   } else {
     if(!qty || qty <= 0){ toast('Enter a valid plant count.'); return; }
   }
+  // Moved to Moms requires a destination mother batch. Look it up and validate.
+  let _destMomBatchId = '';
+  if(txType === 'Moved to Moms'){
+    _destMomBatchId = (document.getElementById('tx-dest-mom')?.value || '').trim();
+    if(!_destMomBatchId){
+      toast('Pick which mother batch the plants are being moved INTO.', 4500);
+      return;
+    }
+    if(!isMotherBatch(_destMomBatchId)){
+      toast('Destination must be a mother batch (M-XX-NNN).', 4500);
+      return;
+    }
+    if(!batchRecs.some(r => r.batchId === _destMomBatchId && !r.type)){
+      toast('Destination mother batch '+_destMomBatchId+' not found.', 4500);
+      return;
+    }
+    if(_destMomBatchId === batchId){
+      toast('Source and destination must be different batches.', 4500);
+      return;
+    }
+    // Block writes against a closed destination batch
+    const _destRec = batchRecs.find(r => r.batchId === _destMomBatchId && !r.type);
+    if(_destRec && _destRec.status === 'Closed'){
+      toast('Destination batch '+_destMomBatchId+' is closed — pick another mother.', 5000);
+      return;
+    }
+  }
   const notes = document.getElementById('tx-notes').value.trim();
   const date = localDate();
   const currentQtyBefore = summaryCalcQty(batchId);
@@ -6433,9 +6497,46 @@ async function summaryAddTransaction(){
       }
     }
   }
-  const tx = { id: Date.now(), batchId, date, txType, qty, weight, notes, currentQtyBefore, plantPhase: _txPhase, synced: false };
+  // If this is a Moved-to-Moms transfer, tag the source tx with the destination
+  // in its notes so the link is human-readable in the history table.
+  const _txNotes = (txType === 'Moved to Moms' && _destMomBatchId)
+    ? ((notes ? notes + ' — ' : '') + 'Moved to ' + _destMomBatchId)
+    : notes;
+  const tx = { id: Date.now(), batchId, date, txType, qty, weight, notes: _txNotes, currentQtyBefore, plantPhase: _txPhase, synced: false };
+  if(txType === 'Moved to Moms' && _destMomBatchId) tx.destBatchId = _destMomBatchId;
   batchTxRecs.unshift(tx);
   lsSet('gp-batchtx', batchTxRecs);
+  // For Moved to Moms: create the paired Produced/Received tx on the destination
+  // mother batch so its plant count increases by the same amount. Linked via notes.
+  let _destTx = null;
+  if(txType === 'Moved to Moms' && _destMomBatchId && qty > 0){
+    const _destRec = batchRecs.find(r => r.batchId === _destMomBatchId && !r.type);
+    const _destPhase = _destRec ? (_destRec.plantPhase || '') : '';
+    const _destQtyBefore = calcBatchQty(_destMomBatchId);
+    _destTx = {
+      id: Date.now() + 1 + Math.floor(Math.random()*1000),
+      batchId: _destMomBatchId,
+      date,
+      txType: 'Produced/Received',
+      qty,
+      weight: 0,
+      notes: 'Received from ' + batchId,
+      currentQtyBefore: _destQtyBefore,
+      plantPhase: _destPhase,
+      sourceBatchId: batchId,
+      synced: false
+    };
+    batchTxRecs.unshift(_destTx);
+    lsSet('gp-batchtx', batchTxRecs);
+    // Capture cloneDate on the destination mother if it's still unset.
+    // Clones-Internal silent capture applies — these are internal clones moving in.
+    const _destIdx = batchRecs.findIndex(r => r.batchId === _destMomBatchId && !r.type);
+    if(_destIdx >= 0 && !batchRecs[_destIdx].cloneDate){
+      batchRecs[_destIdx].cloneDate = date;
+      batchRecs[_destIdx].synced = false;
+      lsSet('gp-batch', batchRecs);
+    }
+  }
   // Stamp Sold Date on the batch record when the first Sold tx lands. Independent of the
   // Status=Closed flow that previously set soldDate — selling and closing aren't the same event.
   let _soldDateStamped = false;
@@ -6480,6 +6581,8 @@ async function summaryAddTransaction(){
   const _wwWrap = document.getElementById('tx-wet-weight-wrap'); if(_wwWrap) _wwWrap.style.display = 'none';
   const _cdInp = document.getElementById('tx-clone-date'); if(_cdInp) _cdInp.value = '';
   const _cdWrap = document.getElementById('tx-clone-date-wrap'); if(_cdWrap) _cdWrap.style.display = 'none';
+  const _dmInp = document.getElementById('tx-dest-mom'); if(_dmInp) _dmInp.value = '';
+  const _dmWrap = document.getElementById('tx-dest-mom-wrap'); if(_dmWrap) _dmWrap.style.display = 'none';
   const msg = document.getElementById('tx-msg');
   msg.style.display='block'; msg.style.color='var(--green)'; msg.textContent='Transaction saved!';
   setTimeout(()=>{ msg.style.display='none'; }, 3000);
@@ -6526,6 +6629,39 @@ async function summaryAddTransaction(){
       const _stRes = await atPost(cfg.batchtxTbl, f);
       tx.synced=true; if(_stRes && _stRes.id) tx.airtableId=_stRes.id; lsSet('gp-batchtx',batchTxRecs); setSyncPill('ok','Synced');
     }catch(e){ setSyncPill('err','Sync error'); toast('Transaction saved locally - Airtable: '+(e.message||'sync failed'),5000); }
+  }
+  // Sync the paired Produced/Received tx on the destination mother batch (if any)
+  if(_destTx && cfg.batchtxTbl && cfg.token && cfg.base){
+    try {
+      const _destAfter = calcBatchQty(_destTx.batchId);
+      const df = {
+        'Batch ID': [_destTx.batchId],
+        'Date': _destTx.date,
+        'Transaction Type': _destTx.txType,
+        'Plant Phase': _destTx.plantPhase || undefined,
+        'Quantity': _destTx.qty,
+        'Current Quantity After': _destAfter,
+        'Notes': _destTx.notes
+      };
+      Object.keys(df).forEach(k=>{ if(df[k]===undefined||df[k]===null||df[k]==='') delete df[k]; });
+      const _dRes = await atPost(cfg.batchtxTbl, df);
+      _destTx.synced = true;
+      if(_dRes && _dRes.id) _destTx.airtableId = _dRes.id;
+      lsSet('gp-batchtx', batchTxRecs);
+    } catch(e){ /* Sync Pending will retry */ }
+    // Also sync the destination batch (cloneDate may have just been captured)
+    if(cfg.batchTbl){
+      try {
+        const _di = batchRecs.findIndex(r => r.batchId === _destTx.batchId && !r.type);
+        if(_di >= 0){
+          const _dbRes = await atUpsert(cfg.batchTbl, buildBatchFields(batchRecs[_di]), ['Batch ID']);
+          batchRecs[_di].synced = true;
+          const _dbId = _dbRes && _dbRes.records && _dbRes.records[0] && _dbRes.records[0].id;
+          if(_dbId) batchRecs[_di].airtableId = _dbId;
+          lsSet('gp-batch', batchRecs);
+        }
+      } catch(e){ /* retry later */ }
+    }
   }
   // If the Harvested tx auto-advanced the phase to Drying (or zero-qty re-locked to Clones),
   // or the Clone Date was just captured on a Clones-External Produced/Received tx,
