@@ -6074,8 +6074,16 @@ function summaryUpdateTxTypeOptions(batchId){
   else                        opts = ['Produced/Received','Moved to Moms','Harvested'];
   // Drop Sold from the list if this batch already has a Sold tx (only one allowed)
   if(hasSold) opts = opts.filter(o=>o!=='Sold');
-  // Mother batches (M-XX-NNN) can never be sold — they're clone donors, not product.
-  if(isMotherBatch(batchId)) opts = opts.filter(o=>o!=='Sold');
+  // Mother batches (M-XX-NNN): special rules — these stay productive across the whole
+  // lifecycle. New clones can be taken at any time, so Produced/Received is ALWAYS
+  // available (regardless of plantPhase) until the batch is closed. Sold is never
+  // available — mothers are clone donors, not product.
+  if(isMotherBatch(batchId)){
+    opts = opts.filter(o=>o!=='Sold');
+    if(phase !== 'Delivered' && !opts.includes('Produced/Received')){
+      opts = ['Produced/Received', ...opts];
+    }
+  }
   // Drop Harvested from the list if this batch already has a Harvested tx — it's auto-created
   // by the Harvest Log when the final room is completed, so there's no need to add another.
   const hasHarvested = batchTxRecs.some(t=>t.batchId===batchId && t.txType==='Harvested');
@@ -6312,9 +6320,12 @@ async function summaryAddTransaction(){
     toast('Cannot save: balance would go below 0. Current: '+currentQtyBefore+', requested: '+qty+'.',5000);
     return;
   }
-  // Guard: in Flower phase, only Harvested is allowed
+  // Guard: in Flower phase, only Harvested is allowed — EXCEPT mother batches,
+  // which keep producing new clones throughout their lifecycle.
   const _bGuard = batchRecs.find(r=>r.batchId===batchId && !r.type);
-  if(_bGuard && _bGuard.plantPhase==='Flower' && txType!=='Harvested'){
+  const _isMomBatch = isMotherBatch(batchId);
+  if(_bGuard && _bGuard.plantPhase==='Flower' && txType!=='Harvested'
+     && !(_isMomBatch && txType==='Produced/Received')){
     toast('In Flower phase, only Harvested transactions are allowed.',5000);
     return;
   }
@@ -6323,13 +6334,16 @@ async function summaryAddTransaction(){
     toast('Cannot harvest plants while in Clones phase.',5000);
     return;
   }
-  // Guard: in Veg phase, no more Produced/Received transactions (additions stop once plants leave Clones)
-  if(_bGuard && _bGuard.plantPhase==='Veg' && txType==='Produced/Received'){
+  // Guard: in Veg phase, no more Produced/Received transactions (additions stop once
+  // plants leave Clones) — EXCEPT for mother batches, which can keep adding new clones.
+  if(_bGuard && _bGuard.plantPhase==='Veg' && txType==='Produced/Received' && !_isMomBatch){
     toast('Cannot add plants once the batch is in Veg phase.',5000);
     return;
   }
-  // Guard: in Drying phase, only Harvested rows are allowed (multi-day harvest).
-  if(_bGuard && _bGuard.plantPhase==='Drying' && txType!=='Harvested'){
+  // Guard: in Drying phase, only Harvested rows are allowed (multi-day harvest) —
+  // EXCEPT mother batches, where Produced/Received is allowed to seed the next round.
+  if(_bGuard && _bGuard.plantPhase==='Drying' && txType!=='Harvested'
+     && !(_isMomBatch && txType==='Produced/Received')){
     toast('In Drying phase, only Harvested transactions are allowed. Complete Post-Drying first.',5500);
     return;
   }
