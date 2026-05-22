@@ -3759,10 +3759,12 @@ function getFormBatchList(){
 function populateBatchDropdowns(){
   const list=getFormBatchList();
   // Phase filters per form:
-  //   EC + Runoff: hide harvested-or-beyond (Drying / Packaged / Delivered) — no more readings needed.
-  //   Waste:        hide only Delivered (Drying / Packaged still allow Dry Waste records).
+  //   EC:     hide harvested-or-beyond (Drying / Packaged / Delivered) — no more readings needed.
+  //   Runoff: Flower phase only — runoff sampling only applies to flowering plants.
+  //   Waste:  hide only Delivered (Drying / Packaged still allow Dry Waste records).
   const HARVESTED_PHASES = new Set(['Drying','Packaged','Delivered']);
-  const ecRoList = list.filter(b => !HARVESTED_PHASES.has(b.plantPhase));
+  const ecList    = list.filter(b => !HARVESTED_PHASES.has(b.plantPhase));
+  const roList    = list.filter(b => b.plantPhase === 'Flower');
   const wasteList = list.filter(b => b.plantPhase !== 'Delivered');
   function fillFormSelect(selId,placeholderText,items){
     const sel=document.getElementById(selId);
@@ -3772,8 +3774,8 @@ function populateBatchDropdowns(){
     items.forEach(b=>{const opt=document.createElement('option');opt.value=b.batchId;opt.textContent=b.batchId+(b.closed?' (harvested)':'');if(b.closed)opt.style.color='var(--text3)';sel.appendChild(opt);});
     sel.value=cur;
   }
-  fillFormSelect('ec-batch-select','-- select batch --',ecRoList);
-  fillFormSelect('ro-batch-select','-- select batch --',ecRoList);
+  fillFormSelect('ec-batch-select','-- select batch --',ecList);
+  fillFormSelect('ro-batch-select','-- select batch --',roList);
   fillFormSelect('waste-batch-select','-- select batch --',wasteList);
   // Post-Drying batch dropdown filters by Drying phase — handled separately
   if(typeof postDryPopulateBatches === 'function') postDryPopulateBatches();
