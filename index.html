@@ -3056,8 +3056,9 @@ function pestPopulateRooms(batchId){
   sel.style.background = rooms.length ? '' : 'var(--bg2)';
   sel.style.color = rooms.length ? '' : 'var(--text3)';
   sel.style.cursor = rooms.length ? '' : 'not-allowed';
-  // Auto-pick if only one room
-  if(rooms.length === 1) sel.value = rooms[0];
+  // Auto-pick if only one room — dispatch a change event so the downstream
+  // handler (room color strip, history filter, sequential unlock) fires.
+  autoSelectIfSingle('pest-room');
 }
 
 function pestRoomChanged(){
@@ -3974,7 +3975,7 @@ function ecBatchLookup(){
   roomEl.disabled=false; roomEl.style.background=''; roomEl.style.color=''; roomEl.style.cursor='';
   if(availableRooms.length){
     roomEl.innerHTML = '<option value="">select room</option>' + availableRooms.map(r => '<option'+(r===prevRoom?' selected':'')+'>'+r+'</option>').join('');
-    if(!roomEl.value && availableRooms.length===1){ roomEl.value = availableRooms[0]; roomEl.dispatchEvent(new Event('change',{bubbles:true})); }
+    autoSelectIfSingle('ec-room');
     let hint = roomEl.closest('.field').querySelector('.room-lock-hint');
     if(!hint){
       hint = document.createElement('div'); hint.className = 'room-lock-hint';
