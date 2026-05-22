@@ -5281,9 +5281,9 @@ function batchIdCheck(){
   const fields = ['batch-cultivar','batch-genetics-source','batch-notes'];
   if(formatOk && !exists){
     unlock(fields);
-    // Mother batches: auto-set Clones-Internal and lock the source select — every mom
-    // batch starts from clones taken off a non-mother plant. The "Plant ID" picker
-    // (driven by batchGeneticsChange) shows non-mother open batches as the source.
+    // Mother batches: auto-set Clones-Internal and lock the source select. The
+    // donor linkage is NOT captured at creation time — it's established later
+    // when a regular batch records a "Moved to Moms" tx targeting this mother.
     const gs = document.getElementById('batch-genetics-source');
     if(isMotherBatch(val)){
       gs.value = 'Clones-Internal';
@@ -5292,7 +5292,7 @@ function batchIdCheck(){
       gs.style.color = 'var(--text2)';
       gs.style.cursor = 'not-allowed';
       batchGeneticsChange();
-      msg.style.display='block'; msg.style.color='var(--green)'; msg.textContent='Mother stock batch — Clones-Internal locked; pick the Plant ID it came from.';
+      msg.style.display='block'; msg.style.color='var(--green)'; msg.textContent='Mother stock batch — Clones-Internal locked. Link a donor batch later via a "Moved to Moms" transaction.';
     } else {
       // Regular batch — let the user choose the source. If we previously auto-locked
       // it (because they had typed an M- ID and then backspaced), unlock it now.
@@ -5342,40 +5342,24 @@ function batchGeneticsChange(){
     extComp.disabled=true; extComp.style.background='var(--bg2)'; extComp.style.color='var(--text3)'; extComp.style.cursor='not-allowed';
     extComp.value='';
   }
-  // Mother / Plant ID — only visible / required for Clones-Internal.
-  if(sel === 'Clones-Internal'){
-    let options, emptyOptionLabel, fieldLabel, hintText, emptyListMsg, requiredMsg;
-    if(newBatchIsMother){
-      // Creating a NEW mother batch — donors are OPEN, NON-mother batches
-      // (regular cultivation batches whose plants are being moved to moms).
-      options = batchRecs
-        .filter(r => r && !r.type && !isMotherBatch(r.batchId) && (r.status || 'Open') !== 'Closed')
-        .map(r => r.batchId)
-        .sort();
-      emptyOptionLabel = '-- select source batch --';
-      fieldLabel = 'Plant ID';
-      hintText = '(Open non-mother batch the clones came from)';
-      emptyListMsg = 'No open non-mother batches available. Create a regular batch first.';
-      requiredMsg = 'Required — which regular batch did these mother clones come from?';
-    } else {
-      // Creating a regular batch — donors are existing M-* mother batches.
-      options = getMotherBatchIds();
-      emptyOptionLabel = '-- select mother batch --';
-      fieldLabel = 'Mother ID';
-      hintText = '(M-XX-NNN — clone donor batch)';
-      emptyListMsg = 'No mother batches exist yet. Create one with a M-XX-NNN ID first, then come back.';
-      requiredMsg = 'Required — which mother batch produced these clones?';
-    }
-    // Update the label text (preserve the red asterisk + the hint span)
+  // Mother / Plant ID — only relevant for regular Clones-Internal batches.
+  // Mother batches no longer need a donor at creation time — that link is
+  // captured later when a regular batch posts a "Moved to Moms" tx targeting
+  // this mother. So for new mother batches, the donor dropdown stays hidden.
+  if(sel === 'Clones-Internal' && !newBatchIsMother){
+    // Regular batch with internal clones — donors are existing M-* mother batches.
+    const options = getMotherBatchIds();
     if(momLbl){
-      momLbl.innerHTML = fieldLabel + ' <span style="color:var(--red);font-weight:700;">*</span> <span id="batch-mother-hint" style="font-size:10px;color:var(--text3);font-weight:400;">'+hintText+'</span>';
+      momLbl.innerHTML = 'Mother ID <span style="color:var(--red);font-weight:700;">*</span> <span id="batch-mother-hint" style="font-size:10px;color:var(--text3);font-weight:400;">(M-XX-NNN — clone donor batch)</span>';
     }
-    momSel.innerHTML = '<option value="">'+emptyOptionLabel+'</option>'
+    momSel.innerHTML = '<option value="">-- select mother batch --</option>'
       + options.map(o => '<option value="'+o+'">'+o+'</option>').join('');
     momWrap.style.display='';
     momSel.disabled = false; momSel.style.cursor='';
     momMsg.style.color = 'var(--amber)';
-    momMsg.textContent = options.length ? requiredMsg : emptyListMsg;
+    momMsg.textContent = options.length
+      ? 'Required — which mother batch produced these clones?'
+      : 'No mother batches exist yet. Create one with a M-XX-NNN ID first, then come back.';
   } else {
     momWrap.style.display='none';
     momSel.disabled = true; momSel.style.background='var(--bg2)'; momSel.style.color='var(--text3)'; momSel.style.cursor='not-allowed';
@@ -5415,7 +5399,8 @@ function batchMotherChanged(){
 function batchUpdateCreateBtn(){
   // Single source of truth for the Create Batch button's enabled state. Required:
   //   - Valid + unique Batch ID
-  //   - If Genetics Source is Clones-Internal, a Mother ID must be picked
+  //   - For REGULAR batches with Clones-Internal source: a Mother ID must be picked
+  //   - Mother batches don't need a donor at creation time
   const btn = document.getElementById('batch-create-btn');
   if(!btn) return;
   const val = document.getElementById('batch-id-input').value.trim();
@@ -5423,8 +5408,9 @@ function batchUpdateCreateBtn(){
   const exists = batchRecs.some(r => r.batchId === val.toUpperCase());
   const genetics = document.getElementById('batch-genetics-source').value;
   const mother = document.getElementById('batch-mother').value;
+  const _isNewMother = isMotherBatch(val);
   let ok = formatOk && !exists;
-  if(ok && genetics === 'Clones-Internal' && !mother) ok = false;
+  if(ok && genetics === 'Clones-Internal' && !mother && !_isNewMother) ok = false;
   btn.disabled = !ok;
   btn.style.opacity = ok ? '1' : '0.4';
   btn.style.cursor  = ok ? 'pointer' : 'not-allowed';
@@ -5440,34 +5426,21 @@ async function batchCreate(){
   const geneticsSource = document.getElementById('batch-genetics-source').value;
   const externalCompany = document.getElementById('batch-external-company').value.trim();
   const notes = document.getElementById('batch-notes').value.trim();
-  // Donor batch required for Clones-Internal.
-  //   - Regular batch being created → donor must be an M-* mother batch (Mother ID)
-  //   - Mother batch being created  → donor must be a non-mother open batch (Plant ID)
-  if(geneticsSource === 'Clones-Internal'){
-    const _newIsMother = isMotherBatch(batchId);
+  // Mother ID required for REGULAR Clones-Internal batches (mother batches no
+  // longer require a donor at creation — that link gets established later
+  // through a "Moved to Moms" tx targeting the mother).
+  if(geneticsSource === 'Clones-Internal' && !isMotherBatch(batchId)){
     if(!mother){
-      toast(_newIsMother ? 'Plant ID is required for new mother batches.' : 'Mother ID is required for Clones-Internal batches.');
+      toast('Mother ID is required for Clones-Internal batches.');
+      return;
+    }
+    if(!isMotherBatch(mother)){
+      toast('Mother ID must be an M-XX-NNN batch.', 5000);
       return;
     }
     if(!batchRecs.some(r => r.batchId === mother && !r.type)){
-      toast('Donor batch '+mother+' not found.', 5000);
+      toast('Mother batch '+mother+' not found. Create it first, then create this clone batch.', 5000);
       return;
-    }
-    if(_newIsMother){
-      if(isMotherBatch(mother)){
-        toast('Plant ID must be a regular (non-mother) batch.', 5000);
-        return;
-      }
-      const _src = batchRecs.find(r => r.batchId === mother && !r.type);
-      if(_src && (_src.status || 'Open') === 'Closed'){
-        toast('Source batch '+mother+' is closed — pick an open batch.', 5000);
-        return;
-      }
-    } else {
-      if(!isMotherBatch(mother)){
-        toast('Mother ID must be an M-XX-NNN batch.', 5000);
-        return;
-      }
     }
   }
   // All new batches start with qty=0, so the zero-qty rule applies: phase='Clones', rooms=['Veg'].
