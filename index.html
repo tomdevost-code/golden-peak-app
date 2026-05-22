@@ -543,8 +543,8 @@ tr:last-child td { border-bottom: none; }
 
         <!-- Step 1: Batch ID -->
         <div class="field" style="margin-bottom:10px;">
-          <label>Batch ID <span style="font-size:10px;color:var(--text3);font-weight:400;">(XX-NNN, e.g. SP-001 — or M-XX-NNN for a mother batch, e.g. M-SP-001)</span></label>
-          <input type="text" id="batch-id-input" placeholder="e.g. SP-001 or M-SP-001" style="font-family:var(--mono);text-transform:uppercase;" oninput="this.value=this.value.toUpperCase();batchIdCheck()" />
+          <label>Batch ID <span style="font-size:10px;color:var(--text3);font-weight:400;">(XXX-NNN, e.g. SPK-001 — or M-XXX-NNN for a mother batch, e.g. M-SPK-001)</span></label>
+          <input type="text" id="batch-id-input" placeholder="e.g. SPK-001 or M-SPK-001" style="font-family:var(--mono);text-transform:uppercase;" oninput="this.value=this.value.toUpperCase();batchIdCheck()" />
           <div id="batch-id-msg" style="display:none;font-size:11px;margin-top:4px;"></div>
         </div>
 
@@ -569,7 +569,7 @@ tr:last-child td { border-bottom: none; }
              For regular batches → "Mother ID" with M-* batches as options.
              For mother batches  → "Plant ID" with non-mother open batches as options. -->
         <div class="field" id="batch-mother-wrap" style="display:none;margin-bottom:10px;">
-          <label id="batch-mother-label">Mother ID <span style="color:var(--red);font-weight:700;">*</span> <span id="batch-mother-hint" style="font-size:10px;color:var(--text3);font-weight:400;">(M-XX-NNN — clone donor batch)</span></label>
+          <label id="batch-mother-label">Mother ID <span style="color:var(--red);font-weight:700;">*</span> <span id="batch-mother-hint" style="font-size:10px;color:var(--text3);font-weight:400;">(M-XXX-NNN — clone donor batch)</span></label>
           <select id="batch-mother" onchange="batchMotherChanged()" disabled style="background:var(--bg2);color:var(--text3);cursor:not-allowed;">
             <option value="">-- select --</option>
           </select>
@@ -2438,15 +2438,17 @@ function calcStage(vs,fs,d){if(fs&&d>=fs){const fd=daysBetween(fs,d);return{stag
 // Mother batches share the regular lifecycle (Clones → Veg → Flower → Drying)
 // for their use as clone donors and optional flower-out at end-of-life, but
 // they CANNOT advance to Packaged / Delivered and CANNOT have Sold txs.
-// Format: M-XX-NNN (e.g. M-SP-001). Regular batches stay as XX-NNN.
-const BATCH_ID_RE       = /^[A-Za-z]{2}-\d{3}$/;
-const MOTHER_BATCH_ID_RE = /^M-[A-Za-z]{2}-\d{3}$/i;
-const BATCH_ID_RE_ANY   = /^(M-)?[A-Za-z]{2}-\d{3}$/i;
+// Format: M-XXX-NNN (e.g. M-SPK-001). Regular batches are XXX-NNN (e.g. SPK-001).
+// {2,3} keeps existing 2-letter records (SP-001, M-SP-001) valid — new batches
+// going forward use 3 letters per the updated naming convention.
+const BATCH_ID_RE       = /^[A-Za-z]{2,3}-\d{3}$/;
+const MOTHER_BATCH_ID_RE = /^M-[A-Za-z]{2,3}-\d{3}$/i;
+const BATCH_ID_RE_ANY   = /^(M-)?[A-Za-z]{2,3}-\d{3}$/i;
 function isMotherBatch(batchId){
   return MOTHER_BATCH_ID_RE.test((batchId||'').toString().trim());
 }
 function getMotherBatchIds(){
-  // List of OPEN mother stock batches (M-XX-NNN). Used to populate the Mother ID
+  // List of OPEN mother stock batches (M-XXX-NNN). Used to populate the Mother ID
   // dropdown on the Batch creation page and the destination dropdown on a
   // Moved-to-Moms transaction. Closed mothers are excluded — they shouldn't be
   // pickable as destinations for new clones.
@@ -5332,7 +5334,7 @@ function batchIdCheck(){
     document.getElementById('batch-mother-wrap').style.display='none';
     document.getElementById('batch-external-wrap').style.display='none';
     if(val.length > 0 && !formatOk){
-      msg.style.display='block'; msg.style.color='var(--amber)'; msg.textContent='Format must be XX-NNN (regular) or M-XX-NNN (mother batch).';
+      msg.style.display='block'; msg.style.color='var(--amber)'; msg.textContent='Format must be XXX-NNN (regular) or M-XXX-NNN (mother batch).';
     } else if(exists){
       msg.style.display='block'; msg.style.color='var(--red)'; msg.textContent='Batch ID already exists.';
     } else { msg.style.display='none'; }
@@ -5371,7 +5373,7 @@ function batchGeneticsChange(){
     // Regular batch with internal clones — donors are existing M-* mother batches.
     const options = getMotherBatchIds();
     if(momLbl){
-      momLbl.innerHTML = 'Mother ID <span style="color:var(--red);font-weight:700;">*</span> <span id="batch-mother-hint" style="font-size:10px;color:var(--text3);font-weight:400;">(M-XX-NNN — clone donor batch)</span>';
+      momLbl.innerHTML = 'Mother ID <span style="color:var(--red);font-weight:700;">*</span> <span id="batch-mother-hint" style="font-size:10px;color:var(--text3);font-weight:400;">(M-XXX-NNN — clone donor batch)</span>';
     }
     momSel.innerHTML = '<option value="">-- select mother batch --</option>'
       + options.map(o => '<option value="'+o+'">'+o+'</option>').join('');
@@ -5380,7 +5382,7 @@ function batchGeneticsChange(){
     momMsg.style.color = 'var(--amber)';
     momMsg.textContent = options.length
       ? 'Required — which mother batch produced these clones?'
-      : 'No mother batches exist yet. Create one with a M-XX-NNN ID first, then come back.';
+      : 'No mother batches exist yet. Create one with a M-XXX-NNN ID first, then come back.';
   } else {
     momWrap.style.display='none';
     momSel.disabled = true; momSel.style.background='var(--bg2)'; momSel.style.color='var(--text3)'; momSel.style.cursor='not-allowed';
@@ -5440,7 +5442,7 @@ function batchUpdateCreateBtn(){
 async function batchCreate(){
   const batchId = document.getElementById('batch-id-input').value.trim().toUpperCase();
   if(!batchId){ toast('Enter a Batch ID.'); return; }
-  if(!BATCH_ID_RE_ANY.test(batchId)){ toast('Invalid Batch ID format. Use XX-NNN or M-XX-NNN.'); return; }
+  if(!BATCH_ID_RE_ANY.test(batchId)){ toast('Invalid Batch ID format. Use XXX-NNN or M-XXX-NNN.'); return; }
   if(batchRecs.some(r=>r.batchId===batchId)){ toast('Batch ID already exists.'); return; }
   const cultivar = document.getElementById('batch-cultivar').value.trim();
   const mother = document.getElementById('batch-mother').value.trim();
@@ -5456,7 +5458,7 @@ async function batchCreate(){
       return;
     }
     if(!isMotherBatch(mother)){
-      toast('Mother ID must be an M-XX-NNN batch.', 5000);
+      toast('Mother ID must be an M-XXX-NNN batch.', 5000);
       return;
     }
     if(!batchRecs.some(r => r.batchId === mother && !r.type)){
@@ -5485,7 +5487,7 @@ async function batchCreate(){
   // a stale "Plant ID" label until they retype.
   const _mlbl = document.getElementById('batch-mother-label');
   if(_mlbl){
-    _mlbl.innerHTML = 'Mother ID <span style="color:var(--red);font-weight:700;">*</span> <span id="batch-mother-hint" style="font-size:10px;color:var(--text3);font-weight:400;">(M-XX-NNN — clone donor batch)</span>';
+    _mlbl.innerHTML = 'Mother ID <span style="color:var(--red);font-weight:700;">*</span> <span id="batch-mother-hint" style="font-size:10px;color:var(--text3);font-weight:400;">(M-XXX-NNN — clone donor batch)</span>';
   }
   // Unlock the genetics-source select if it was auto-locked for a mother batch.
   const _gs = document.getElementById('batch-genetics-source');
@@ -6296,7 +6298,7 @@ function txTypeChanged(){
       if(destMsg){
         if(!moms.length){
           destMsg.style.color = 'var(--amber)';
-          destMsg.textContent = 'No mother batches available. Create one with a M-XX-NNN ID first.';
+          destMsg.textContent = 'No mother batches available. Create one with a M-XXX-NNN ID first.';
         } else {
           destMsg.style.color = 'var(--amber)';
           destMsg.textContent = 'Required — which mother batch are the plants moving INTO? A matching Produced/Received tx will be added there.';
@@ -6603,7 +6605,7 @@ async function summaryAddTransaction(){
       return;
     }
     if(!isMotherBatch(_destMomBatchId)){
-      toast('Destination must be a mother batch (M-XX-NNN).', 4500);
+      toast('Destination must be a mother batch (M-XXX-NNN).', 4500);
       return;
     }
     if(!batchRecs.some(r => r.batchId === _destMomBatchId && !r.type)){
