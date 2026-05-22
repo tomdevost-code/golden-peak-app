@@ -2522,7 +2522,8 @@ function harvestPopulateBatches(){
   const list = batchRecs.filter(b=>{
     if(b.type) return false;
     if(isBatchClosedRec(b)) return false; // closed batches never show in operational dropdowns
-    if(_harvestMomsOnly && !isMotherBatch(b.batchId)) return false;
+    // Moms toggle: hide moms when OFF, show only moms when ON.
+    if(_harvestMomsOnly !== isMotherBatch(b.batchId)) return false;
     if(!['Flower','Drying'].includes(b.plantPhase)) return false;
     // Must have at least one flower room that's still unharvested
     const rooms = Array.isArray(b.rooms) ? b.rooms.filter(r=>r!=='Veg') : [];
@@ -2830,7 +2831,8 @@ function bioPopulateBatches(){
       if(b.type || !b.batchId) return false;
       if(isBatchClosedRec(b)) return false;
       if(['Drying','Packaged','Delivered'].includes(b.plantPhase)) return false;
-      if(_bioMomsOnly && !isMotherBatch(b.batchId)) return false;
+      // Moms toggle is exclusive: hide moms when OFF, show only moms when ON.
+      if(_bioMomsOnly !== isMotherBatch(b.batchId)) return false;
       // Must have plants (at least one Produced/Received tx)
       return batchTxRecs.some(t => t.batchId === b.batchId && t.txType === 'Produced/Received');
     })
@@ -3037,7 +3039,8 @@ function pestPopulateBatches(){
   const _pestMomsOnly = (typeof momsOnlyFilter === 'function') && momsOnlyFilter('pest-batch-select');
   list.forEach(b => {
     if(['Drying','Packaged','Delivered'].includes(b.plantPhase)) return;
-    if(_pestMomsOnly && !isMotherBatch(b.batchId)) return;
+    // Moms toggle is exclusive: hide moms when OFF, show only moms when ON.
+    if(_pestMomsOnly !== isMotherBatch(b.batchId)) return;
     const opt = document.createElement('option');
     opt.value = b.batchId;
     opt.textContent = b.batchId + (b.cultivar ? ' — '+b.cultivar : '');
@@ -3333,7 +3336,7 @@ function postDryPopulateBatches(){
   const _pdMomsOnly = momsOnlyFilter('postdry-batch-select');
   const eligible = batchRecs
     .filter(b => !b.type && b.plantPhase === 'Drying' && !isBatchClosedRec(b))
-    .filter(b => !_pdMomsOnly || isMotherBatch(b.batchId))
+    .filter(b => _pdMomsOnly === isMotherBatch(b.batchId))  // moms toggle is exclusive
     .map(b => b.batchId)
     .sort();
   sel.innerHTML = '<option value="">-- select batch --</option>' +
@@ -3784,10 +3787,11 @@ function populateBatchDropdowns(){
     items.forEach(b=>{const opt=document.createElement('option');opt.value=b.batchId;opt.textContent=b.batchId+(b.closed?' (harvested)':'');if(b.closed)opt.style.color='var(--text3)';sel.appendChild(opt);});
     sel.value=cur;
   }
-  // Apply the per-select "Moms only" toggle on top of the phase-based lists.
-  const _ecFinal    = momsOnlyFilter('ec-batch-select')    ? ecList.filter(b => isMotherBatch(b.batchId))    : ecList;
-  const _roFinal    = momsOnlyFilter('ro-batch-select')    ? roList.filter(b => isMotherBatch(b.batchId))    : roList;
-  const _wasteFinal = momsOnlyFilter('waste-batch-select') ? wasteList.filter(b => isMotherBatch(b.batchId)) : wasteList;
+  // Apply the per-select Moms toggle on top of the phase-based lists. Default
+  // (button OFF) HIDES mom batches; pressing the button switches to moms ONLY.
+  const _ecFinal    = ecList.filter(b => momsOnlyFilter('ec-batch-select')       ?  isMotherBatch(b.batchId) : !isMotherBatch(b.batchId));
+  const _roFinal    = roList.filter(b => momsOnlyFilter('ro-batch-select')       ?  isMotherBatch(b.batchId) : !isMotherBatch(b.batchId));
+  const _wasteFinal = wasteList.filter(b => momsOnlyFilter('waste-batch-select') ?  isMotherBatch(b.batchId) : !isMotherBatch(b.batchId));
   fillFormSelect('ec-batch-select','-- select batch --',_ecFinal);
   fillFormSelect('ro-batch-select','-- select batch --',_roFinal);
   fillFormSelect('waste-batch-select','-- select batch --',_wasteFinal);
@@ -5794,7 +5798,8 @@ function summaryPopulateBatches(){
   const batches = batchRecs.filter(b => {
     if(b.type) return false;
     if(closedOnly ? !b.closedDate : !!b.closedDate) return false;
-    if(_sumMomsOnly && !isMotherBatch(b.batchId)) return false;
+    // Moms toggle is exclusive: hide moms when OFF, show only moms when ON.
+    if(_sumMomsOnly !== isMotherBatch(b.batchId)) return false;
     return true;
   });
   sel.innerHTML = '<option value="">-- select batch --</option>' +
