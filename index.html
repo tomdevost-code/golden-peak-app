@@ -6236,9 +6236,10 @@ function summaryUpdateTxTypeOptions(batchId){
   // Mother batches (M-XX-NNN): special rules — these stay productive across the whole
   // lifecycle. New clones can be taken at any time, so Produced/Received is ALWAYS
   // available (regardless of plantPhase) until the batch is closed. Sold is never
-  // available — mothers are clone donors, not product.
+  // available (mothers are clone donors, not product), and Moved to Moms is also
+  // disallowed — we don't transfer plants between mother batches.
   if(isMotherBatch(batchId)){
-    opts = opts.filter(o=>o!=='Sold');
+    opts = opts.filter(o => o !== 'Sold' && o !== 'Moved to Moms');
     if(phase !== 'Delivered' && !opts.includes('Produced/Received')){
       opts = ['Produced/Received', ...opts];
     }
@@ -6454,6 +6455,11 @@ async function summaryAddTransaction(){
       toast('This batch already has a Sold transaction — only one is allowed per batch.',5000);
       return;
     }
+  }
+  // Guard: Mother batches cannot move plants to another mother batch.
+  if(txType === 'Moved to Moms' && isMotherBatch(batchId)){
+    toast('Mother batches cannot move plants to other mother batches.',5000);
+    return;
   }
   // Read inputs based on tx type:
   //   Produced/Received, Moved to Moms → plant-count input
