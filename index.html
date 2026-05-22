@@ -511,7 +511,31 @@ tr:last-child td { border-bottom: none; }
     <!-- BATCH LOG -->
     <div class="page" id="page-batch">
       <!-- Active Batches List (top) -->
-      <div class="section-label">Active Batches</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+        <div class="section-label" id="batch-list-label" style="margin:0;">Active Batches</div>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text3);white-space:nowrap;">
+          <input type="checkbox" id="batch-list-closed-only" onchange="renderBatchLog()"> Closed only
+        </label>
+      </div>
+      <!-- Per-column filter bar — applied on top of the open/closed toggle. -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:8px;font-size:12px;">
+        <input type="text" id="batch-filter-id" placeholder="Filter Batch ID…" oninput="renderBatchLog()" style="font-family:var(--mono);text-transform:uppercase;border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;background:var(--bg);color:var(--text);" />
+        <input type="text" id="batch-filter-cultivar" placeholder="Filter Cultivar…" oninput="renderBatchLog()" style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;background:var(--bg);color:var(--text);" />
+        <select id="batch-filter-phase" onchange="renderBatchLog()" style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;background:var(--bg);color:var(--text);">
+          <option value="">All phases</option>
+          <option>Clones</option>
+          <option>Veg</option>
+          <option>Flower</option>
+          <option>Drying</option>
+          <option>Packaged</option>
+          <option>Delivered</option>
+        </select>
+        <select id="batch-filter-type" onchange="renderBatchLog()" style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;background:var(--bg);color:var(--text);">
+          <option value="">All types</option>
+          <option value="regular">Regular only</option>
+          <option value="mother">Mothers only</option>
+        </select>
+      </div>
       <div id="batch-active-list" style="margin-bottom:20px;"></div>
 
       <div class="card">
@@ -638,7 +662,7 @@ tr:last-child td { border-bottom: none; }
             <option value="">-- select batch --</option>
           </select>
           <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text3);white-space:nowrap;">
-            <input type="checkbox" id="summary-show-closed" onchange="summaryPopulateBatches()"> Show closed
+            <input type="checkbox" id="summary-show-closed" onchange="summaryPopulateBatches()"> Closed only
           </label>
         </div>
       </div>
@@ -5568,15 +5592,38 @@ function renderBatchLog(){
   populateBatchFilterDropdown();
   const list = document.getElementById('batch-active-list');
   if(!list) return;
-  // Only show OPEN batches — explicitly Status=Open (or unset, treated as Open) AND no closedDate.
+  // Read the filter bar.
+  const closedOnly = !!document.getElementById('batch-list-closed-only')?.checked;
+  const fId       = (document.getElementById('batch-filter-id')?.value || '').trim().toUpperCase();
+  const fCultivar = (document.getElementById('batch-filter-cultivar')?.value || '').trim().toLowerCase();
+  const fPhase    = (document.getElementById('batch-filter-phase')?.value || '').trim();
+  const fType     = (document.getElementById('batch-filter-type')?.value || '').trim();
+  // Section label reflects the closed/open toggle.
+  const lbl = document.getElementById('batch-list-label');
+  if(lbl) lbl.textContent = closedOnly ? 'Closed Batches' : 'Active Batches';
+  // Open/closed toggle is exclusive: closed-only when checked, open-only when not.
   const active = batchRecs.filter(b => {
     if(b.type) return false;
-    if(b.closedDate) return false;
-    if(b.status && b.status !== 'Open') return false;
+    const isClosed = !!b.closedDate || (b.status && b.status !== 'Open');
+    if(closedOnly){
+      if(!isClosed) return false;
+    } else {
+      if(isClosed) return false;
+    }
+    // Apply per-column filters
+    if(fId && !(b.batchId||'').toUpperCase().includes(fId)) return false;
+    if(fCultivar && !(b.cultivar||'').toLowerCase().includes(fCultivar)) return false;
+    if(fPhase && (b.plantPhase||'') !== fPhase) return false;
+    if(fType === 'regular' && isMotherBatch(b.batchId)) return false;
+    if(fType === 'mother' && !isMotherBatch(b.batchId)) return false;
     return true;
   }).sort((a,b) => (a.batchId||'').localeCompare(b.batchId||''));
   if(!active.length){
-    list.innerHTML='<div style="text-align:center;color:var(--text3);padding:30px 16px;font-size:13px;">No active batches. Create one above.</div>';
+    const filtered = (fId || fCultivar || fPhase || fType);
+    const emptyMsg = filtered
+      ? 'No batches match the current filters.'
+      : (closedOnly ? 'No closed batches yet.' : 'No active batches. Create one above.');
+    list.innerHTML='<div style="text-align:center;color:var(--text3);padding:30px 16px;font-size:13px;">'+emptyMsg+'</div>';
     return;
   }
   const today = localDate();
@@ -5629,10 +5676,13 @@ function renderBatchLog(){
 }
 // ── BATCH SUMMARY ────────────────────────────────────────────────────────────
 function summaryPopulateBatches(){
+  // Show-closed checkbox is now an EXCLUSIVE filter:
+  //   - unchecked → open batches only (closedDate is empty)
+  //   - checked   → CLOSED batches only (closedDate is set)
   const sel = document.getElementById('summary-batch-select');
-  const showClosed = document.getElementById('summary-show-closed').checked;
+  const closedOnly = document.getElementById('summary-show-closed').checked;
   const cur = sel.value;
-  const batches = batchRecs.filter(b => !b.type && (showClosed || !b.closedDate));
+  const batches = batchRecs.filter(b => !b.type && (closedOnly ? !!b.closedDate : !b.closedDate));
   sel.innerHTML = '<option value="">-- select batch --</option>' +
     batches.map(b => '<option value="'+b.batchId+'"'+(b.batchId===cur?' selected':'')+'>'+b.batchId+(b.cultivar?' – '+b.cultivar:'')+(b.closedDate?' [Closed]':'')+'</option>').join('');
   if(cur && batches.some(b=>b.batchId===cur)) summaryBatchChanged();
