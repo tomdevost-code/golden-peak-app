@@ -6580,16 +6580,18 @@ function summaryUpdateTxTypeOptions(batchId){
   if(!sel) return;
   const prev = sel.value;
   let opts;
-  // Sold is allowed ONLY in Veg phase (living plants sold for cloning/transplant) or Packaged
-  // phase (dried + packaged flower). Other phases can't generate a Sold transaction.
-  if(phase==='Flower')        opts = ['Harvested'];
-  else if(phase==='Drying')   opts = ['Harvested']; // additional Harvested rows allowed (multi-day)
-  else if(phase==='Packaged') opts = []; // nothing yet — user advances to Delivered first
+  // 'Harvested' and 'Phase Change' are AUTO-CREATED — never manually selectable:
+  //   Harvested  → created by the Harvest Log when a room's Complete Harvest fires
+  //   Phase Change → created by recordPhaseChangeTx on phase advances
+  // Sold is allowed ONLY in Delivered phase (post-delivery sale record).
+  if(phase==='Flower')        opts = []; // Flower → wait for harvest, all txs are auto
+  else if(phase==='Drying')   opts = []; // Drying → continue harvesting / auto Post-Dry
+  else if(phase==='Packaged') opts = []; // user advances to Delivered first
   else if(phase==='Delivered')opts = ['Sold']; // post-delivery: record the sale, then Close
   else if(phase==='Clones')   opts = hasTxs ? ['Produced/Received','Moved to Moms'] : ['Produced/Received'];
-  else if(phase==='Veg')      opts = ['Moved to Moms','Harvested']; // no Sold direct from Veg — advance to Delivered first
+  else if(phase==='Veg')      opts = ['Moved to Moms']; // Harvested is auto via Harvest Log
   else if(!hasTxs)            opts = ['Produced/Received'];
-  else                        opts = ['Produced/Received','Moved to Moms','Harvested'];
+  else                        opts = ['Produced/Received','Moved to Moms'];
   // Drop Sold from the list if this batch already has a Sold tx (only one allowed)
   if(hasSold) opts = opts.filter(o=>o!=='Sold');
   // Mother batches (M-XX-NNN): special rules — these stay productive across the whole
@@ -6603,10 +6605,6 @@ function summaryUpdateTxTypeOptions(batchId){
       opts = ['Produced/Received', ...opts];
     }
   }
-  // Drop Harvested from the list if this batch already has a Harvested tx — it's auto-created
-  // by the Harvest Log when the final room is completed, so there's no need to add another.
-  const hasHarvested = batchTxRecs.some(t=>t.batchId===batchId && t.txType==='Harvested');
-  if(hasHarvested) opts = opts.filter(o=>o!=='Harvested');
   sel.innerHTML = '<option value="">-- select type --</option>' + opts.map(o=>'<option'+(o===prev?' selected':'')+'>'+o+'</option>').join('');
   autoSelectIfSingle('tx-type');
   // Refresh the conditional source/destination dropdowns against the (possibly new)
@@ -6812,6 +6810,17 @@ async function summaryAddTransaction(){
   if(!batchId){ toast('Select a batch first.'); return; }
   const txType = document.getElementById('tx-type').value;
   if(!txType){ toast('Select a transaction type.'); return; }
+  // Defensive guard: 'Harvested' and 'Phase Change' are auto-created by other
+  // workflows and must never be saved manually here. Even if the dropdown were
+  // somehow showing them (stale state, etc.), block the save.
+  if(txType === 'Harvested'){
+    toast('Harvested transactions are created from the Harvest Log — record bins there and use Complete Harvest.', 6000);
+    return;
+  }
+  if(txType === 'Phase Change' || txType === 'Destroyed' || txType === 'Post-Dry Weight'){
+    toast(txType+' transactions are created automatically — not manually selectable.', 5000);
+    return;
+  }
   // Sold → weight only. Harvested → plant count AND wet weight. Others → plant count only.
   const isSold = (txType === 'Sold');
   const isHarvested = (txType === 'Harvested');
