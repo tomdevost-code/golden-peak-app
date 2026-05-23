@@ -675,6 +675,10 @@ tr:last-child td { border-bottom: none; }
              the Batch Summary card so growers see today's required tasks first. Hidden when
              the batch isn't in Flower phase or no milestones apply. -->
         <div id="summary-flower-alerts" style="display:none;margin-bottom:12px;"></div>
+        <!-- Report generator button — opens a printable consolidated report modal -->
+        <div style="margin-bottom:10px;text-align:right;">
+          <button onclick="openBatchReport()" style="background:var(--green);color:#fff;border:none;padding:8px 16px;border-radius:var(--radius-sm);font-size:13px;font-weight:600;cursor:pointer;">Generate Batch Report</button>
+        </div>
         <div class="card" style="margin-bottom:12px;">
           <div class="section-label">Batch Summary</div>
           <div class="g2" style="margin-bottom:8px;">
@@ -7228,6 +7232,311 @@ function summaryRenderHistory(batchId){
   html += '</table></div>';
   container.innerHTML = html;
 }
+
+// ─── PER-BATCH REPORT (v1) ───────────────────────────────────────────────────
+// Consolidated report for the currently-selected batch. Opens in a full-screen
+// modal with all the batch's data: header, lifecycle dates, totals, transactions,
+// EC log, runoff, harvest, post-dry, waste, bio control, pest ID. Has a Print
+// button that uses the browser's native print (the modal's CSS makes it
+// reasonably print-friendly).
+
+function openBatchReport(){
+  const batchId = document.getElementById('summary-batch-select').value;
+  if(!batchId){ toast('Select a batch first.'); return; }
+  let modal = document.getElementById('batch-report-modal');
+  if(!modal){
+    modal = document.createElement('div');
+    modal.id = 'batch-report-modal';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:2500;background:rgba(0,0,0,0.55);display:flex;align-items:flex-start;justify-content:center;padding:24px 12px;overflow-y:auto;';
+    modal.onclick = (e) => { if(e.target === modal) closeBatchReport(); };
+    document.body.appendChild(modal);
+  }
+  modal.style.display = 'flex';
+  renderBatchReport(batchId);
+}
+
+function closeBatchReport(){
+  const modal = document.getElementById('batch-report-modal');
+  if(modal) modal.style.display = 'none';
+}
+
+function renderBatchReport(batchId){
+  const modal = document.getElementById('batch-report-modal');
+  if(!modal) return;
+  const b = batchRecs.find(r => r.batchId === batchId && !r.type);
+  if(!b){ modal.innerHTML = '<div style="background:#fff;padding:20px;border-radius:8px;">Batch not found.</div>'; return; }
+
+  const today = localDate();
+  const fmtD = v => v || '—';
+  const fmtKg = v => (v > 0 ? (Math.round(v*1000)/1000).toFixed(3) + ' kg' : '—');
+  const fmtN  = v => (v != null && v !== '' ? String(v) : '—');
+
+  // Gather data
+  const txs       = batchTxRecs.filter(t => t.batchId === batchId).sort((a,c) => (a.date||'').localeCompare(c.date||''));
+  const ecs       = ecRecs.filter(r => r.batch === batchId).sort((a,c) => (a.date||'').localeCompare(c.date||''));
+  const ros       = roRecs.filter(r => r.batch === batchId).sort((a,c) => (a.date||'').localeCompare(c.date||''));
+  const wastes    = wasteRecs.filter(r => r.batch === batchId).sort((a,c) => (a.date||'').localeCompare(c.date||''));
+  const harvests  = harvestRecs.filter(r => r.batch === batchId).sort((a,c) => (a.date||'').localeCompare(c.date||''));
+  const postDrys  = postDryRecs.filter(r => r.batch === batchId).sort((a,c) => (a.binNumber||0) - (c.binNumber||0));
+  const bios      = bioRecs.filter(r => r.batch === batchId).sort((a,c) => (a.date||'').localeCompare(c.date||''));
+  const pests     = pestRecs.filter(r => r.batch === batchId).sort((a,c) => (a.date||'').localeCompare(c.date||''));
+
+  // Totals
+  const currentQty = calcBatchQty(batchId);
+  const harvestTxs = txs.filter(t => t.txType === 'Harvested');
+  const harvestedPlants = harvestTxs.reduce((s,t) => s + (parseInt(t.qty)||0), 0);
+  const harvestWeight   = harvestTxs.reduce((s,t) => s + (parseFloat(t.weight)||0), 0);
+  const postDryWeight   = parseFloat(b.postDryingWeight)||0;
+  const soldWeight      = txs.filter(t => t.txType === 'Sold').reduce((s,t) => s + (parseFloat(t.weight)||0), 0);
+  const destroyedPlants = txs.filter(t => t.txType === 'Destroyed').reduce((s,t) => s + (parseInt(t.qty)||0), 0);
+  const vegWaste = wastes.filter(r => r.type === 'Vegetative Waste').reduce((s,r) => s + (parseFloat(r.weight)||0), 0);
+  const dryWaste = wastes.filter(r => r.type === 'Dry Waste').reduce((s,r) => s + (parseFloat(r.weight)||0), 0);
+
+  const isMom = isMotherBatch(batchId);
+
+  // ── Build the report HTML ──
+  let s = ''; // sections accumulator
+
+  // Header card
+  s += sectionCard('Batch Overview',
+    twoCol([
+      ['Batch ID',        b.batchId + (isMom ? '  (Mother)' : '')],
+      ['Cultivar',        fmtN(b.cultivar)],
+      ['Mother ID',       fmtN(b.mother)],
+      ['Source of Genetics', fmtN(b.geneticsSource) + (b.externalCompany ? ' — '+b.externalCompany : '')],
+      ['Plant Phase',     getDisplayPhase(b)],
+      ['Status',          fmtN(b.status || 'Open')],
+      ['Rooms',           formatBatchRoomsForDisplay(b) || '—'],
+      ['Current Quantity', currentQty + ' plants'],
+      ['Notes',           fmtN(b.notes)]
+    ])
+  );
+
+  // Lifecycle dates
+  s += sectionCard('Lifecycle Dates',
+    twoCol([
+      ['Created Date',    fmtD(b.createdDate)],
+      ['Clone Date',      fmtD(b.cloneDate)],
+      ['Hydration Date',  fmtD(b.hydrationDate)],
+      ['Veg Start',       fmtD(b.vegStart)],
+      ['Flower Start',    fmtD(b.flowerStart)],
+      ['Harvest Date',    formatHarvestDatesForDisplay(b.batchId) || '—'],
+      ['Package Date',    fmtD(b.packagedDate)],
+      ['Sold Date',       fmtD(b.soldDate)],
+      ['Delivered Date',  fmtD(b.deliveredDate)],
+      ['Closed Date',     fmtD(b.closedDate)]
+    ])
+  );
+
+  // Batch totals
+  s += sectionCard('Batch Totals',
+    twoCol([
+      ['Plants Harvested',  harvestedPlants > 0 ? (harvestedPlants + ' plants') : '—'],
+      ['Harvest Weight',    fmtKg(harvestWeight)],
+      ['Post-Drying Weight', fmtKg(postDryWeight)],
+      ['Sold Weight',       fmtKg(soldWeight)],
+      ['Plants Destroyed',  destroyedPlants > 0 ? (destroyedPlants + ' plants') : '—'],
+      ['Veg Waste Weight',  fmtKg(vegWaste)],
+      ['Dry Waste Weight',  fmtKg(dryWaste)]
+    ])
+  );
+
+  // Transaction history
+  if(txs.length){
+    let running = 0;
+    const rows = txs.map(t => {
+      if(t.txType === 'Sold') {/* sold tracks weight, not plant qty */}
+      else {
+        const q = parseInt(t.qty)||0;
+        if(t.txType === 'Produced/Received') running += q;
+        else running -= q;
+        if(running < 0) running = 0;
+      }
+      const qtyStr = t.txType === 'Sold' ? fmtKg(parseFloat(t.weight)||0)
+                   : t.txType === 'Harvested' ? ((parseInt(t.qty)||0)+' / '+fmtKg(parseFloat(t.weight)||0))
+                   : t.txType === 'Phase Change' ? (t.weight > 0 ? fmtKg(t.weight) : '—')
+                   : (t.txType === 'Produced/Received' ? '+' : '-') + (parseInt(t.qty)||0);
+      return [t.date||'—', t.txType||'—', t.plantPhase||'—', qtyStr, String(running), t.notes||''];
+    });
+    s += sectionTable('Transaction History', ['Date','Type','Phase','Qty / Weight','Balance','Notes'], rows);
+  }
+
+  // EC log
+  if(ecs.length){
+    const rows = ecs.map(r => [
+      r.date||'—',
+      r.room||'—',
+      r.grower||'—',
+      r.wtype||'—',
+      (r.dripEc != null ? (Math.round(r.dripEc*100)/100).toFixed(2) : '—'),
+      (r.dripPh != null ? (Math.round(r.dripPh*100)/100).toFixed(2) : '—'),
+      r.totalML != null ? String(Math.round(r.totalML)) : '—',
+      r.flow != null ? String(Math.round(r.flow)) : '—',
+      r.notes||''
+    ]);
+    s += sectionTable('EC Log ('+ecs.length+')', ['Date','Room','Grower','Watering Type','Avg EC','Avg pH','Total ml','Flow L','Notes'], rows);
+  }
+
+  // Runoff log
+  if(ros.length){
+    const rows = ros.map(r => [
+      r.date||'—',
+      r.room||'—',
+      r.grower||'—',
+      (r.avgEC != null ? (Math.round(r.avgEC*100)/100).toFixed(2) : '—'),
+      (r.avgPH != null ? (Math.round(r.avgPH*100)/100).toFixed(2) : '—'),
+      (r.variance != null ? (Math.round(r.variance*100)/100).toFixed(2) : '—'),
+      r.notes||''
+    ]);
+    s += sectionTable('Runoff Log ('+ros.length+')', ['Date','Room','Grower','Avg EC','Avg pH','Variance','Notes'], rows);
+  }
+
+  // Harvest log
+  if(harvests.length){
+    const rows = harvests.map(r => [
+      r.date||'—',
+      r.room||'—',
+      r.grower||'—',
+      fmtN(r.binNumber),
+      fmtKg(parseFloat(r.tareWeight)||0),
+      fmtKg(parseFloat(r.totalWeight)||0),
+      fmtKg(parseFloat(r.netWeight)||0),
+      r.notes||''
+    ]);
+    s += sectionTable('Harvest Log ('+harvests.length+')', ['Date','Room','Grower','Bin #','Tare','Total','Net','Notes'], rows);
+  }
+
+  // Post-Dry log
+  if(postDrys.length){
+    const rows = postDrys.map(r => [
+      r.date||'—',
+      r.grower||'—',
+      fmtN(r.binNumber),
+      fmtN(r.containerType),
+      fmtKg(parseFloat(r.tareWeight)||0),
+      fmtKg(parseFloat(r.grossWeight)||0),
+      fmtKg(parseFloat(r.netWeight)||0),
+      r.notes||''
+    ]);
+    s += sectionTable('Post-Drying Containers ('+postDrys.length+')', ['Date','Grower','Container #','Type/Size','Tare','Gross','Net','Notes'], rows);
+  }
+
+  // Waste log
+  if(wastes.length){
+    const rows = wastes.map(r => [
+      r.date||'—',
+      r.room||'—',
+      r.grower||'—',
+      r.type||'—',
+      r.subtype||'—',
+      fmtKg(parseFloat(r.weight)||0),
+      (parseInt(r.plants)||0) > 0 ? String(r.plants) : '—',
+      r.notes||''
+    ]);
+    s += sectionTable('Waste Log ('+wastes.length+')', ['Date','Room','Grower','Type','Sub-Category','Weight','Plants','Notes'], rows);
+  }
+
+  // Bio Control log
+  if(bios.length){
+    const rows = bios.map(r => [
+      r.date||'—',
+      r.room||'—',
+      r.grower||'—',
+      r.product||'—',
+      (r.quantity != null ? r.quantity + (r.unit ? ' '+r.unit : '') : '—'),
+      r.reason||''
+    ]);
+    s += sectionTable('Bio Control Log ('+bios.length+')', ['Date','Room','Grower','Product','Quantity','Reason'], rows);
+  }
+
+  // Pest ID log
+  if(pests.length){
+    const rows = pests.map(r => [
+      r.date||'—',
+      r.room||'—',
+      r.grower||'—',
+      r.location||'—',
+      (r.cardNumber ? '#'+r.cardNumber : '—'),
+      Array.isArray(r.pests) ? r.pests.join(', ') : (r.pests||'—'),
+      r.quantity != null ? String(r.quantity) : '—',
+      r.notes||''
+    ]);
+    s += sectionTable('Pest ID Log ('+pests.length+')', ['Date','Room','Grower','Location','Card','Pests','Qty','Notes'], rows);
+  }
+
+  // Empty sections note
+  if(!txs.length && !ecs.length && !ros.length && !wastes.length && !harvests.length && !postDrys.length && !bios.length && !pests.length){
+    s += '<div style="padding:20px;text-align:center;color:var(--text3);font-size:13px;">No activity records yet for this batch.</div>';
+  }
+
+  // Wrap with header bar + print button
+  modal.innerHTML =
+    '<div id="batch-report-content" style="background:#fff;border-radius:10px;max-width:1100px;width:100%;max-height:95vh;overflow-y:auto;">'
+    + '<div class="report-no-print" style="position:sticky;top:0;background:#fff;border-bottom:1px solid var(--border);padding:14px 20px;display:flex;justify-content:space-between;align-items:center;gap:10px;z-index:5;">'
+    +   '<div>'
+    +     '<div style="font-size:18px;font-weight:700;color:var(--green);">Batch Report — '+b.batchId+'</div>'
+    +     '<div style="font-size:12px;color:var(--text3);font-family:var(--mono);">Generated '+today+'</div>'
+    +   '</div>'
+    +   '<div style="display:flex;gap:8px;">'
+    +     '<button onclick="window.print()" style="background:var(--green);color:#fff;border:none;padding:8px 14px;border-radius:6px;font-weight:600;cursor:pointer;font-size:12px;">Print</button>'
+    +     '<button onclick="closeBatchReport()" style="background:transparent;border:1px solid var(--border);padding:8px 14px;border-radius:6px;cursor:pointer;font-size:12px;">Close</button>'
+    +   '</div>'
+    + '</div>'
+    + '<div style="padding:20px;">' + s + '</div>'
+    + '</div>';
+}
+
+// ── Report-building helpers ──
+function sectionCard(title, body){
+  return '<div style="border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:14px;page-break-inside:avoid;">'
+       +   '<div style="font-size:11px;font-weight:600;color:var(--text3);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:10px;border-bottom:1px solid var(--border);padding-bottom:6px;">'+title+'</div>'
+       +   body
+       + '</div>';
+}
+function twoCol(pairs){
+  return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 20px;font-size:13px;">'
+       + pairs.map(([label,val]) =>
+           '<div style="display:flex;justify-content:space-between;gap:10px;border-bottom:1px dotted var(--border);padding:4px 0;">'
+           + '<span style="color:var(--text3);">'+label+'</span>'
+           + '<span style="color:var(--text);font-weight:600;text-align:right;">'+val+'</span>'
+           + '</div>'
+         ).join('')
+       + '</div>';
+}
+function sectionTable(title, headers, rows){
+  if(!rows.length) return '';
+  let html = '<div style="border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:14px;">'
+           +   '<div style="font-size:11px;font-weight:600;color:var(--text3);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:10px;border-bottom:1px solid var(--border);padding-bottom:6px;">'+title+'</div>'
+           +   '<div style="overflow-x:auto;">'
+           +   '<table style="width:100%;border-collapse:collapse;font-size:11px;">'
+           +     '<thead><tr style="background:#f5f5f5;">'
+           +       headers.map(h => '<th style="padding:6px 8px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);">'+h+'</th>').join('')
+           +     '</tr></thead>'
+           +     '<tbody>'
+           +       rows.map(r =>
+                     '<tr style="border-top:1px solid var(--bg2);">'
+                     + r.map(cell => '<td style="padding:5px 8px;color:var(--text2);">'+(cell == null ? '' : cell)+'</td>').join('')
+                     + '</tr>'
+                   ).join('')
+           +     '</tbody>'
+           +   '</table>'
+           +   '</div>'
+           + '</div>';
+  return html;
+}
+
+// Print styles — when printing, hide everything except the report modal contents.
+(function installReportPrintStyles(){
+  const style = document.createElement('style');
+  style.textContent = '@media print {'
+    + '  body * { visibility: hidden !important; }'
+    + '  #batch-report-modal, #batch-report-modal * { visibility: visible !important; }'
+    + '  #batch-report-modal { position: absolute !important; inset: 0 !important; background: #fff !important; padding: 0 !important; }'
+    + '  #batch-report-content { box-shadow: none !important; max-width: 100% !important; max-height: none !important; overflow: visible !important; }'
+    + '  .report-no-print { display: none !important; }'
+    + '}';
+  document.head.appendChild(style);
+})();
 
 </script>
 </body>
