@@ -2261,9 +2261,11 @@ function getDisplayPhase(batchRec){
     if(stillFlowering) return 'Drying / Flower';
   }
   // Mother multi-cohort indicator
+  // Only show 'Clones / Veg' or 'Clones / Flower' when a NEW Produced/Received tx
+  // has been recorded AFTER the batch advanced into the current phase. If the
+  // latest P/R happened on or before the phase advance, those plants matured
+  // into the new phase along with the rest — there's no separate clone cohort.
   if(isMotherBatch(batchRec.batchId) && (phase === 'Veg' || phase === 'Flower')){
-    // Latest Produced/Received tx for this batch — if it lands inside the
-    // cohort window, there are still un-matured clones present.
     let latestPR = null;
     batchTxRecs.forEach(t => {
       if(t.batchId === batchRec.batchId && t.txType === 'Produced/Received' && t.date){
@@ -2271,10 +2273,14 @@ function getDisplayPhase(batchRec){
       }
     });
     if(latestPR){
-      const _today = localDate();
-      const _age = daysBetween(latestPR, _today);
-      if(_age != null && _age >= 1 && _age <= MOM_CLONE_COHORT_DAYS){
-        return 'Clones / ' + phase;
+      const phaseStart = (phase === 'Veg') ? batchRec.vegStart : batchRec.flowerStart;
+      // Skip cohort indicator if the latest P/R happened before/at the phase advance.
+      if(!phaseStart || latestPR > phaseStart){
+        const _today = localDate();
+        const _age = daysBetween(latestPR, _today);
+        if(_age != null && _age >= 1 && _age <= MOM_CLONE_COHORT_DAYS){
+          return 'Clones / ' + phase;
+        }
       }
     }
   }
@@ -6041,14 +6047,19 @@ function summaryRefreshCurrentDay(batchId){
     });
     return latest;
   }
-  // Detect the multi-cohort case: mother batch + recent P/R tx.
+  // Detect the multi-cohort case: mother batch + recent P/R tx AFTER the phase advance.
+  // If the latest P/R was on or before the phase started, the cuttings matured into the
+  // current phase along with everything else — no separate clone cohort to display.
   let _cohortCloneDay = null;
   if(isMotherBatch(b.batchId) && ['Veg','Flower'].includes(b.plantPhase)){
     const latestPR = _latestPRDate();
     if(latestPR){
-      const _age = daysBetween(latestPR, _today);
-      if(_age != null && _age >= 1 && _age <= MOM_CLONE_COHORT_DAYS){
-        _cohortCloneDay = _age;
+      const phaseStart = (b.plantPhase === 'Veg') ? b.vegStart : b.flowerStart;
+      if(!phaseStart || latestPR > phaseStart){
+        const _age = daysBetween(latestPR, _today);
+        if(_age != null && _age >= 1 && _age <= MOM_CLONE_COHORT_DAYS){
+          _cohortCloneDay = _age;
+        }
       }
     }
   }
