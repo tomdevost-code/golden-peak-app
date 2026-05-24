@@ -6390,20 +6390,19 @@ async function momPhaseAdvance(){
 
 function summaryRefreshCurrentDay(batchId){
   // Refreshes the "Current Day" badge on the Summary Batch Info card.
-  // Clones → C{day} from cloneDate; Veg → V{day} from vegStart; Flower → F{day} from flowerStart;
-  // Drying → D{day} from harvestDate. Falls back to '—' with the phase name as the label.
-  // Mother batches with a recent Produced/Received tx (within MOM_CLONE_COHORT_DAYS)
-  // get a dual indicator like 'C5 / V12' or 'C3 / F28' to reflect that two cohorts
-  // coexist (the recent cuttings still in Clones + the older plants in Veg/Flower).
+  // Non-mothers (single-phase): Clones → C{day} from cloneDate; Veg → V{day} from
+  //   vegStart; Flower → F{day} from flowerStart; Drying → D{day} from harvestDate.
+  // Mothers (multi-phase): one day count per phase with >0 plants, joined with " / "
+  //   (e.g. "C5 / V12 / F25") on a single line, or stacked on multiple lines with
+  //   smaller font when 3+ phases are active.
   const _dayEl = document.getElementById('si-currentday');
   const _dayLbl = document.getElementById('si-currentday-label');
   if(!_dayEl || !_dayLbl) return;
   const b = batchRecs.find(r=>r.batchId===batchId && !r.type);
   if(!b){ _dayEl.textContent = '—'; _dayLbl.textContent = '—'; return; }
   const _today = localDate();
-  // Helper — for mom batches, find the most recent Produced/Received tx date so we
-  // can compute the latest clone cohort's day count separately from the batch's
-  // primary phase day count.
+  // Helper — find the most recent Produced/Received tx date for this batch.
+  // For mothers, this is the anchor for the latest clone cohort's day count.
   function _latestPRDate(){
     let latest = null;
     batchTxRecs.forEach(t => {
@@ -6413,44 +6412,68 @@ function summaryRefreshCurrentDay(batchId){
     });
     return latest;
   }
-  // Detect the multi-cohort case for mother batches by reading the real per-phase
-  // counts (batchRec.momPhaseCounts). If the Clones bucket has >0 plants AND
-  // the primary phase is Veg/Flower (= older plants are also present), show the
-  // clone-day count alongside the veg/flower-day count.
-  let _cohortCloneDay = null;
-  if(isMotherBatch(b.batchId) && ['Veg','Flower'].includes(b.plantPhase)){
+
+  // ── MOTHER BATCH: render a day count for every phase that has plants ──
+  if(isMotherBatch(b.batchId)){
     const c = ensureMomPhaseCounts(b);
-    if(c && (c.Clones || 0) > 0){
-      const latestPR = _latestPRDate();
-      if(latestPR){
-        const _age = daysBetween(latestPR, _today);
-        if(_age != null && _age >= 1) _cohortCloneDay = _age;
+    const parts = []; // [{label:'C5', desc:'clones'}, ...]
+    if(c){
+      if((c.Clones || 0) > 0){
+        // Clone day anchor: prefer the latest Produced/Received tx date (the newest cohort),
+        // falling back to batchRec.cloneDate. If no anchor exists, omit the C{n} part.
+        let cd = null;
+        const latestPR = _latestPRDate();
+        if(latestPR) cd = daysBetween(latestPR, _today);
+        else if(b.cloneDate) cd = daysBetween(b.cloneDate, _today);
+        if(cd != null && cd > 0) parts.push({label:'C'+cd, desc:'clones'});
+      }
+      if((c.Veg || 0) > 0 && b.vegStart){
+        const vd = daysBetween(b.vegStart, _today);
+        if(vd > 0) parts.push({label:'V'+vd, desc:'veg'});
+      }
+      if((c.Flower || 0) > 0 && b.flowerStart){
+        const fd = daysBetween(b.flowerStart, _today);
+        if(fd > 0) parts.push({label:'F'+fd, desc:'flower'});
+      }
+      if((c.Drying || 0) > 0 && b.harvestDate){
+        const dd = daysBetween(b.harvestDate, _today);
+        if(dd > 0) parts.push({label:'D'+dd, desc:'drying'});
       }
     }
+    if(parts.length === 0){
+      _dayEl.style.fontSize = '32px';
+      _dayEl.textContent = '—';
+      _dayLbl.textContent = b.plantPhase ? b.plantPhase.toLowerCase() : 'no plants';
+    } else if(parts.length === 1){
+      _dayEl.style.fontSize = '32px';
+      _dayEl.textContent = parts[0].label;
+      _dayLbl.textContent = parts[0].desc + ' day';
+    } else if(parts.length === 2){
+      _dayEl.style.fontSize = '28px';
+      _dayEl.textContent = parts.map(p=>p.label).join(' / ');
+      _dayLbl.textContent = parts.map(p=>p.desc).join(' / ') + ' day';
+    } else {
+      // 3+ phases — stack each phase on its own line, smaller font for readability.
+      _dayEl.style.fontSize = '16px';
+      _dayEl.innerHTML = parts.map(p=>p.label+' <span style="color:var(--text3);font-size:11px;font-weight:400;">'+p.desc+'</span>').join('<br>');
+      _dayLbl.textContent = parts.length + ' active phases';
+    }
+    return;
   }
+
+  // ── NON-MOTHER BATCHES (single-phase) — original logic ──
   if(b.plantPhase === 'Clones'){
     const cd = calcCloneDay(b.batchId, _today);
     if(cd && cd > 0){ _dayEl.textContent = 'C'+cd; _dayLbl.textContent = 'clone day'; }
     else { _dayEl.textContent = '—'; _dayLbl.textContent = 'add plants to start'; }
   } else if(b.plantPhase === 'Veg' && b.vegStart){
     const vd = daysBetween(b.vegStart, _today);
-    if(_cohortCloneDay != null && vd > 0){
-      // Two cohorts present — show both ages.
-      _dayEl.textContent = 'C'+_cohortCloneDay+' / V'+vd;
-      _dayLbl.textContent = 'clone day / veg day';
-    } else {
-      _dayEl.textContent = vd>0 ? ('V'+vd) : '—';
-      _dayLbl.textContent = 'veg day';
-    }
+    _dayEl.textContent = vd>0 ? ('V'+vd) : '—';
+    _dayLbl.textContent = 'veg day';
   } else if(b.plantPhase === 'Flower' && b.flowerStart){
     const fd = daysBetween(b.flowerStart, _today);
-    if(_cohortCloneDay != null && fd > 0){
-      _dayEl.textContent = 'C'+_cohortCloneDay+' / F'+fd;
-      _dayLbl.textContent = 'clone day / flower day';
-    } else {
-      _dayEl.textContent = fd>0 ? ('F'+fd) : '—';
-      _dayLbl.textContent = 'flower day';
-    }
+    _dayEl.textContent = fd>0 ? ('F'+fd) : '—';
+    _dayLbl.textContent = 'flower day';
   } else if(b.plantPhase === 'Drying'){
     // Drying: show D{n} - {Room} for each completed harvest (multi-day harvest → multiple lines).
     const dates = getPerRoomHarvestDates(b.batchId);
@@ -7042,6 +7065,16 @@ async function summaryUpdateBatch(){
     }
   }
   const plantPhase = document.getElementById('summary-phase').value;
+  // Validation: a batch in Flower phase cannot live only in the Veg room — flowering plants
+  // must be in at least one Flower room. (Mothers are exempt: they can keep Veg-room plants in
+  // earlier phases while a Flower-bucket cohort is recorded separately.)
+  if(plantPhase === 'Flower' && !isMotherBatch(batchId)){
+    const _hasFlowerRoom = rooms.some(r => r !== 'Veg');
+    if(!_hasFlowerRoom){
+      toast('A Flower-phase batch must be assigned to at least one Flower room — it cannot stay in the Veg room only.',6000);
+      return;
+    }
+  }
   const status = document.getElementById('summary-status').value;
   const closedDate = status==='Closed' ? document.getElementById('summary-closed-date').value : '';
   // Lifecycle dates are now event-driven — preserve existing values from the batch record
