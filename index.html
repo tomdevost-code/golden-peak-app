@@ -853,8 +853,9 @@ tr:last-child td { border-bottom: none; }
             </select>
             <div id="tx-dest-mom-msg" style="font-size:11px;color:var(--text3);margin-top:4px;"></div>
           </div>
-          <!-- Source Batch (for mom Produced/Received): where the cuttings came from. Can be
-               another open M-* batch (any phase) OR an open non-mom batch in Veg phase.
+          <!-- Source Batch (for mom Produced/Received): where the cuttings came from. Either
+               the current mom batch itself (self-source, the typical case) OR an open non-mom
+               batch in Veg phase that matches the mom's cultivar.
                Cuttings DON'T decrement the source — these are clones, not plant transfers. -->
           <div class="field" style="margin-bottom:10px;display:none;" id="tx-src-batch-wrap">
             <label>Cutting Source Batch <span style="color:var(--red);font-weight:700;">*</span></label>
@@ -6514,23 +6515,32 @@ function txTypeChanged(){
     }
   }
   // Cutting Source Batch: only relevant for a Produced/Received tx ON a mother
-  // batch. Eligible sources: other open mom batches (any phase) + open non-mom
-  // batches currently in Veg phase. Source is NOT decremented — clones are
-  // cuttings, not transfers, so the source plants stay where they are.
+  // batch. Eligible sources are restricted to:
+  //   • the CURRENT mom batch itself (self-source — cuttings off this mother's own plants)
+  //   • open NON-mother batches in Veg phase that match this mom's cultivar
+  // Source is NOT decremented — clones are cuttings, not transfers, so the source plants
+  // stay where they are.
   const srcWrap = document.getElementById('tx-src-batch-wrap');
   const srcSel  = document.getElementById('tx-src-batch');
   const srcMsg  = document.getElementById('tx-src-batch-msg');
   if(srcWrap && srcSel){
     const _curBatch = document.getElementById('summary-batch-select').value;
     if(t === 'Produced/Received' && isMotherBatch(_curBatch)){
-      // Eligible source batches:
-      //   - the CURRENT mom batch itself (taking new cuttings off existing plants — most common case)
-      //   - any other open mother batch (regardless of phase)
-      //   - any open non-mother batch with plantPhase === 'Veg'
-      // Source is NOT decremented — cuttings don't remove plants from the donor.
+      const _curRec = batchRecs.find(r => r.batchId === _curBatch && !r.type);
+      const _curCultivar = ((_curRec && _curRec.cultivar) || '').toString().trim().toLowerCase();
+      // Build the eligible source list:
+      //   1. The current mom batch itself (always allowed).
+      //   2. Non-mother open batches in Veg phase whose cultivar matches this mom's cultivar.
       const sources = batchRecs
         .filter(b => b && !b.type && b.batchId && !isBatchClosedRec(b))
-        .filter(b => isMotherBatch(b.batchId) || b.plantPhase === 'Veg')
+        .filter(b => {
+          if(b.batchId === _curBatch) return true; // self-source
+          if(isMotherBatch(b.batchId)) return false; // no other moms
+          if(b.plantPhase !== 'Veg') return false; // Veg-phase non-moms only
+          const _bCult = ((b.cultivar || '').toString().trim().toLowerCase());
+          // Cultivar must match the current mom's cultivar (case-insensitive, trimmed).
+          return _curCultivar && _bCult && _bCult === _curCultivar;
+        })
         .map(b => b.batchId)
         .sort();
       // Default: pre-select the current mom batch (self-source is the typical workflow).
@@ -6538,17 +6548,18 @@ function txTypeChanged(){
       const defaultPick = prev || (sources.includes(_curBatch) ? _curBatch : '');
       srcSel.innerHTML = '<option value="">-- select source batch --</option>'
         + sources.map(b => {
-            const label = b + (isMotherBatch(b) ? ' (mother)' : ' (Veg)') + (b === _curBatch ? ' — this batch' : '');
+            const label = b + (b === _curBatch ? ' — this batch' : ' (Veg)');
             return '<option value="'+b+'"'+(b===defaultPick?' selected':'')+'>'+label+'</option>';
           }).join('');
       srcWrap.style.display = '';
       if(srcMsg){
         if(!sources.length){
           srcMsg.style.color = 'var(--amber)';
-          srcMsg.textContent = 'No eligible source batches. Cuttings must come from a mother batch or a non-mother batch in Veg phase.';
+          srcMsg.textContent = 'No eligible source batches. Cuttings must come from this mother batch itself or a Veg-phase non-mother batch with the same cultivar'
+            + (_curCultivar ? (' ("'+(_curRec && _curRec.cultivar ? _curRec.cultivar : '')+'").') : ' (cultivar missing on this mother).');
         } else if(defaultPick === _curBatch){
           srcMsg.style.color = 'var(--text3)';
-          srcMsg.textContent = 'Defaulted to this batch (cuttings from its own plants). Change if the cuttings came from a different donor.';
+          srcMsg.textContent = 'Defaulted to this batch (cuttings from its own plants). Change if the cuttings came from a same-cultivar Veg batch.';
         } else {
           srcMsg.style.color = 'var(--amber)';
           srcMsg.textContent = 'Required — which batch did the cuttings come from? Source is not decremented (cuttings, not transfers).';
