@@ -553,7 +553,7 @@ tr:last-child td { border-bottom: none; }
         <!-- Step 2: Cultivar Name (unlocks after valid Batch ID) -->
         <div class="field" style="margin-bottom:10px;">
           <label>Cultivar Name</label>
-          <input type="text" id="batch-cultivar" placeholder="e.g. Blue Dream" disabled style="background:var(--bg2);color:var(--text3);cursor:not-allowed;" />
+          <input type="text" id="batch-cultivar" placeholder="e.g. Blue Dream" disabled oninput="batchCultivarChanged()" style="background:var(--bg2);color:var(--text3);cursor:not-allowed;" />
         </div>
 
         <!-- Step 3: Source of Genetics (moved up — drives whether Mother ID is shown/required) -->
@@ -5515,26 +5515,53 @@ function batchGeneticsChange(){
   // Mother batches no longer need a donor at creation time — that link is
   // captured later when a regular batch posts a "Moved to Moms" tx targeting
   // this mother. So for new mother batches, the donor dropdown stays hidden.
+  //
+  // CULTIVAR MATCH: the Mother ID dropdown only shows M-* batches whose
+  // cultivar matches the cultivar entered for this new batch (case-insensitive,
+  // trimmed). e.g. for a new SP-001 with cultivar "Blue Dream", only M-* batches
+  // with cultivar "Blue Dream" are listed.
   if(sel === 'Clones-Internal' && !newBatchIsMother){
-    // Regular batch with internal clones — donors are existing M-* mother batches.
-    const options = getMotherBatchIds();
+    const newCultivar = ((document.getElementById('batch-cultivar').value || '').trim());
+    const newCultivarKey = newCultivar.toLowerCase();
+    // Filter open moms by cultivar match.
+    const options = getMotherBatchIds().filter(mId => {
+      const mRec = batchRecs.find(r => r.batchId === mId && !r.type);
+      if(!mRec) return false;
+      const mCult = ((mRec.cultivar || '').toString().trim().toLowerCase());
+      return newCultivarKey && mCult && mCult === newCultivarKey;
+    });
     if(momLbl){
-      momLbl.innerHTML = 'Mother ID <span style="color:var(--red);font-weight:700;">*</span> <span id="batch-mother-hint" style="font-size:10px;color:var(--text3);font-weight:400;">(M-XXX-NNN — clone donor batch)</span>';
+      momLbl.innerHTML = 'Mother ID <span style="color:var(--red);font-weight:700;">*</span> <span id="batch-mother-hint" style="font-size:10px;color:var(--text3);font-weight:400;">(M-XXX-NNN — same-cultivar clone donor)</span>';
     }
     momSel.innerHTML = '<option value="">-- select mother batch --</option>'
       + options.map(o => '<option value="'+o+'">'+o+'</option>').join('');
     momWrap.style.display='';
     momSel.disabled = false; momSel.style.cursor='';
     momMsg.style.color = 'var(--amber)';
-    momMsg.textContent = options.length
-      ? 'Required — which mother batch produced these clones?'
-      : 'No mother batches exist yet. Create one with a M-XXX-NNN ID first, then come back.';
+    if(!newCultivar){
+      momMsg.textContent = 'Enter a Cultivar Name first — the mother list filters to same-cultivar M-* batches.';
+    } else if(!options.length){
+      momMsg.textContent = 'No open mother batches found for cultivar "'+newCultivar+'". Create a M-XXX-NNN of this cultivar first.';
+    } else {
+      momMsg.textContent = 'Required — which "'+newCultivar+'" mother batch produced these clones?';
+    }
   } else {
     momWrap.style.display='none';
     momSel.disabled = true; momSel.style.background='var(--bg2)'; momSel.style.color='var(--text3)'; momSel.style.cursor='not-allowed';
     momSel.value = '';
   }
   batchMotherChanged();
+}
+
+function batchCultivarChanged(){
+  // The Mother ID dropdown is filtered by cultivar match — when the user edits
+  // the Cultivar Name field on the new-batch form, re-run batchGeneticsChange
+  // so the dropdown contents (and the helper message) refresh against the new
+  // cultivar value. No-op when genetics source isn't Clones-Internal.
+  const sel = document.getElementById('batch-genetics-source');
+  if(sel && sel.value === 'Clones-Internal'){
+    batchGeneticsChange();
+  }
 }
 
 function batchMotherChanged(){
@@ -5607,8 +5634,20 @@ async function batchCreate(){
       toast('Mother ID must be an M-XXX-NNN batch.', 5000);
       return;
     }
-    if(!batchRecs.some(r => r.batchId === mother && !r.type)){
+    const _momRec = batchRecs.find(r => r.batchId === mother && !r.type);
+    if(!_momRec){
       toast('Mother batch '+mother+' not found. Create it first, then create this clone batch.', 5000);
+      return;
+    }
+    // Cultivar must match the chosen mother — clones inherit cultivar from their donor.
+    const _momCult = ((_momRec.cultivar || '').toString().trim().toLowerCase());
+    const _newCult = (cultivar || '').toString().trim().toLowerCase();
+    if(!_newCult){
+      toast('Cultivar Name is required (must match the mother\'s cultivar).', 5000);
+      return;
+    }
+    if(!_momCult || _momCult !== _newCult){
+      toast('Cultivar mismatch — '+mother+' is "'+(_momRec.cultivar||'(blank)')+'" but this batch is "'+cultivar+'". Mother and clone must share a cultivar.', 6000);
       return;
     }
   }
