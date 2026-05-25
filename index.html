@@ -2174,6 +2174,39 @@ function calcRoomPlantCount(batchId, room){
   }
   return Math.max(0, Math.min(totalQty, parseInt(dist[room])||0));
 }
+
+// Returns a Set of Flower room names that are currently occupied by OTHER open batches
+// (plants > 0). The Veg room is shared and never marked as exclusive. Used to enforce
+// the rule: once a batch has plants in a Flower room, that room can't be assigned to
+// any other batch until the first batch vacates it.
+function getRoomsOccupiedByOtherBatches(currentBatchId){
+  const occupied = new Set();
+  batchRecs.forEach(b => {
+    if(!b || b.type) return;
+    if(b.batchId === currentBatchId) return;
+    if(isBatchClosedRec(b)) return;
+    // Only Flower rooms are exclusive — Veg is a shared bay.
+    ['Flower 1','Flower 2','Flower 3','Flower 4','Flower 5'].forEach(r => {
+      if(calcRoomPlantCount(b.batchId, r) > 0) occupied.add(r);
+    });
+  });
+  return occupied;
+}
+
+// Pretty caller for the same data — returns a map of {room: batchId} of who's holding the room.
+// Used to compose error messages and disabled-room tooltips.
+function getRoomOccupancyOwners(currentBatchId){
+  const owners = {};
+  batchRecs.forEach(b => {
+    if(!b || b.type) return;
+    if(b.batchId === currentBatchId) return;
+    if(isBatchClosedRec(b)) return;
+    ['Flower 1','Flower 2','Flower 3','Flower 4','Flower 5'].forEach(r => {
+      if(!owners[r] && calcRoomPlantCount(b.batchId, r) > 0) owners[r] = b.batchId;
+    });
+  });
+  return owners;
+}
 function calcBatchQty(batchId){
   // Pure helper: returns the running plant-count balance for a batch (floor 0). No DOM side effects.
   // Sold transactions track weight, not plant count, so they don't affect this running balance.
@@ -6732,6 +6765,23 @@ function summaryRenderRoomChips(){
       '</div>';
     }
   });
+  // Show a list of rooms currently held by other batches — they can't be claimed until the
+  // owning batch vacates them. Helps the user understand why a room they expected isn't offered.
+  if(batchId){
+    const owners = getRoomOccupancyOwners(batchId);
+    const ownedRooms = Object.keys(owners).filter(r => !((batchRecs.find(x=>x.batchId===batchId && !x.type)?.rooms)||[]).includes(r));
+    if(ownedRooms.length){
+      availableHtml += ownedRooms.map(r => {
+        const cc = ROOM_CHIP_COLORS[r];
+        return '<div title="'+r+' is held by '+owners[r]+'" style="display:flex;align-items:center;gap:4px;background:var(--bg2);border:1px dashed var(--border);color:var(--text3);border-radius:20px;padding:3px 10px;font-size:12px;cursor:not-allowed;opacity:0.6;">'+
+          '<span style="width:7px;height:7px;border-radius:50%;background:'+cc.dot+';opacity:0.5;"></span>'+
+          '<span>'+r+'</span>'+
+          '<span style="font-size:10px;font-family:var(--mono);">→ '+owners[r]+'</span>'+
+        '</div>';
+      }).join('');
+      availableCount += ownedRooms.length;
+    }
+  }
   activeEl.innerHTML = activeHtml || '<div style="font-size:11px;color:var(--text3);font-style:italic;padding:4px 0;">No rooms selected</div>';
   availableEl.innerHTML = availableHtml || '<div style="font-size:11px;color:var(--text3);font-style:italic;padding:4px 0;">All rooms in use</div>';
   activeSection.style.display = activeCount ? '' : 'none';
@@ -6882,6 +6932,8 @@ function applyPhaseRoomLock(){
   const b = batchId ? batchRecs.find(r=>r.batchId===batchId && !r.type) : null;
   const savedPhase = b ? (b.plantPhase||'') : '';
   const roomsLocked = ['Flower','Drying','Packaged','Delivered'].includes(savedPhase);
+  // Flower rooms held by ANOTHER open batch are off-limits for this batch.
+  const occupiedByOthers = batchId ? getRoomsOccupiedByOtherBatches(batchId) : new Set();
   document.querySelectorAll('.summary-room-cb').forEach(cb=>{
     let allowed=true;
     if(dropdownPhase==='Clones'||dropdownPhase==='Seeds'){
@@ -6915,6 +6967,9 @@ function applyPhaseRoomLock(){
     }
     // Hard lock: saved phase is Flower or later
     if(roomsLocked) allowed = false;
+    // Exclusivity lock: Flower rooms occupied by another batch can't be claimed here.
+    // Skip rooms this batch is already in — those stay editable/visible for the current batch.
+    if(occupiedByOthers.has(cb.value) && !cb.checked) allowed = false;
     cb.disabled = !allowed;
     const label = cb.closest('label');
     if(label){
@@ -7253,6 +7308,14 @@ async function summaryUpdateBatch(){
       toast('A Flower-phase batch must be assigned to at least one Flower room — it cannot stay in the Veg room only.',6000);
       return;
     }
+  }
+  // Exclusivity: refuse to save Flower rooms that are already occupied by another open batch.
+  const _occOwners = getRoomOccupancyOwners(batchId);
+  const _conflicts = rooms.filter(r => r !== 'Veg' && _occOwners[r]);
+  if(_conflicts.length){
+    const _msg = _conflicts.map(r => r + ' (held by ' + _occOwners[r] + ')').join(', ');
+    toast('Cannot assign room(s) already in use: ' + _msg + '. Vacate the other batch first.', 7000);
+    return;
   }
   const status = document.getElementById('summary-status').value;
   const closedDate = status==='Closed' ? document.getElementById('summary-closed-date').value : '';
