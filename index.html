@@ -5768,6 +5768,13 @@ function batchIdCheck(){
       }
       msg.style.display='none';
     }
+    // Mother ID dropdown is now filtered by batch-ID prefix — re-run so it reflects the
+    // current ID as the user types (a regular Clones-Internal genetics source is required
+    // for the dropdown to actually appear; batchGeneticsChange handles that branch).
+    const _gsEl = document.getElementById('batch-genetics-source');
+    if(_gsEl && _gsEl.value === 'Clones-Internal' && !isMotherBatch(val)){
+      batchGeneticsChange();
+    }
   } else {
     lock(fields);
     // Hide/lock the conditional Mother ID + External Company fields too
@@ -5811,34 +5818,37 @@ function batchGeneticsChange(){
   // captured later when a regular batch posts a "Moved to Moms" tx targeting
   // this mother. So for new mother batches, the donor dropdown stays hidden.
   //
-  // CULTIVAR MATCH: the Mother ID dropdown only shows M-* batches whose
-  // cultivar matches the cultivar entered for this new batch (case-insensitive,
-  // trimmed). e.g. for a new SP-001 with cultivar "Blue Dream", only M-* batches
-  // with cultivar "Blue Dream" are listed.
+  // BATCH-ID PREFIX MATCH: the Mother ID dropdown shows only M-* batches whose
+  // letter prefix matches the new batch ID's letter prefix (case-insensitive).
+  // Example: a new SP-001 → eligible moms are M-SP-* only. A new SPK-001 →
+  // eligible moms are M-SPK-* only. Cultivar is NOT considered.
   if(sel === 'Clones-Internal' && !newBatchIsMother){
-    const newCultivar = ((document.getElementById('batch-cultivar').value || '').trim());
-    const newCultivarKey = newCultivar.toLowerCase();
-    // Filter open moms by cultivar match.
-    const options = getMotherBatchIds().filter(mId => {
-      const mRec = batchRecs.find(r => r.batchId === mId && !r.type);
-      if(!mRec) return false;
-      const mCult = ((mRec.cultivar || '').toString().trim().toLowerCase());
-      return newCultivarKey && mCult && mCult === newCultivarKey;
-    });
+    // Extract the new batch's letter prefix (the chars before the first dash).
+    // For "SP-001" this is "SP"; for "SPK-001" it's "SPK". Empty until the user
+    // types something valid.
+    const _idMatch = newBatchId.match(/^([A-Z]{2,3})-\d{3}$/i);
+    const newPrefix = _idMatch ? _idMatch[1].toUpperCase() : '';
+    // Filter open moms by letter-prefix match against M-<PREFIX>-NNN.
+    const options = newPrefix
+      ? getMotherBatchIds().filter(mId => {
+          const m = mId.match(/^M-([A-Z]{2,3})-\d{3}$/i);
+          return m && m[1].toUpperCase() === newPrefix;
+        })
+      : [];
     if(momLbl){
-      momLbl.innerHTML = 'Mother ID <span style="color:var(--red);font-weight:700;">*</span> <span id="batch-mother-hint" style="font-size:10px;color:var(--text3);font-weight:400;">(M-XXX-NNN — same-cultivar clone donor)</span>';
+      momLbl.innerHTML = 'Mother ID <span style="color:var(--red);font-weight:700;">*</span> <span id="batch-mother-hint" style="font-size:10px;color:var(--text3);font-weight:400;">(M-' + (newPrefix || 'XXX') + '-NNN — same-prefix clone donor)</span>';
     }
     momSel.innerHTML = '<option value="">-- select mother batch --</option>'
       + options.map(o => '<option value="'+o+'">'+o+'</option>').join('');
     momWrap.style.display='';
     momSel.disabled = false; momSel.style.cursor='';
     momMsg.style.color = 'var(--amber)';
-    if(!newCultivar){
-      momMsg.textContent = 'Enter a Cultivar Name first — the mother list filters to same-cultivar M-* batches.';
+    if(!newPrefix){
+      momMsg.textContent = 'Enter a valid Batch ID (XX-NNN or XXX-NNN) first — the mother list filters to M-* batches with the same letter prefix.';
     } else if(!options.length){
-      momMsg.textContent = 'No open mother batches found for cultivar "'+newCultivar+'". Create a M-XXX-NNN of this cultivar first.';
+      momMsg.textContent = 'No open mother batches found for prefix "'+newPrefix+'". Create M-'+newPrefix+'-NNN first on this page.';
     } else {
-      momMsg.textContent = 'Required — which "'+newCultivar+'" mother batch produced these clones?';
+      momMsg.textContent = 'Required — which M-'+newPrefix+'-* mother batch produced these clones?';
     }
   } else {
     momWrap.style.display='none';
@@ -5934,15 +5944,12 @@ async function batchCreate(){
       toast('Mother batch '+mother+' not found. Create it first, then create this clone batch.', 5000);
       return;
     }
-    // Cultivar must match the chosen mother — clones inherit cultivar from their donor.
-    const _momCult = ((_momRec.cultivar || '').toString().trim().toLowerCase());
-    const _newCult = (cultivar || '').toString().trim().toLowerCase();
-    if(!_newCult){
-      toast('Cultivar Name is required (must match the mother\'s cultivar).', 5000);
-      return;
-    }
-    if(!_momCult || _momCult !== _newCult){
-      toast('Cultivar mismatch — '+mother+' is "'+(_momRec.cultivar||'(blank)')+'" but this batch is "'+cultivar+'". Mother and clone must share a cultivar.', 6000);
+    // Prefix match — the mother's letter prefix (after "M-") must equal this batch's prefix.
+    // e.g. SP-001 can only descend from M-SP-NNN. Cultivar is not enforced here anymore.
+    const _newM = (batchId.match(/^([A-Z]{2,3})-\d{3}$/i) || [])[1];
+    const _momM = (mother.match(/^M-([A-Z]{2,3})-\d{3}$/i) || [])[1];
+    if(!_newM || !_momM || _newM.toUpperCase() !== _momM.toUpperCase()){
+      toast('Prefix mismatch — '+mother+' can\'t be the mother of '+batchId+'. Mother and clone must share the same letter prefix (e.g. SP-001 ⟵ M-SP-NNN).', 6500);
       return;
     }
   }
