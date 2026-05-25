@@ -5456,7 +5456,7 @@ const VEG_WASTE_SUBTYPES_CLONES = ['Dead Plant','Not Rooted','Extra Plants'];
 const VEG_WASTE_SUBTYPES_VEGFLOWER = ['Dead Plant','Extra Plants','Toping','De-Leaf','Pruning','Pre-Harvest De-Leaf','Harvest'];
 
 // Sub-categories that actually destroy whole plants (vs. leaf trim/pruning that only adds weight).
-const VEG_WASTE_DESTROYING_SUBTYPES = ['Dead Plant','Extra Plants'];
+const VEG_WASTE_DESTROYING_SUBTYPES = ['Dead Plant','Extra Plants','Not Rooted'];
 
 function wastePlantsToggle(){
   // Refresh the sub-category dropdown first (it may auto-pick a single available option),
@@ -5466,9 +5466,9 @@ function wastePlantsToggle(){
   const plantsEl=document.getElementById('waste-plants');
   const subtype = document.getElementById('waste-subtype')?.value || '';
   const isVeg = type==='Vegetative Waste';
-  // Plants Destroyed is only active when the sub-category counts whole plants — Dead Plant or
-  // Extra Plants. Toping / De-Leaf / Pruning / Pre-Harvest De-Leaf / Harvest / Not Rooted are
-  // leaf-weight-only events and shouldn't allow a plant count.
+  // Plants Destroyed is only active when the sub-category counts whole plants — Dead Plant,
+  // Extra Plants, or Not Rooted. Toping / De-Leaf / Pruning / Pre-Harvest De-Leaf / Harvest
+  // are leaf-weight-only events and shouldn't allow a plant count.
   const allowPlants = isVeg && VEG_WASTE_DESTROYING_SUBTYPES.includes(subtype);
   plantsEl.disabled = !allowPlants;
   plantsEl.style.background = allowPlants ? '' : 'var(--bg2)';
