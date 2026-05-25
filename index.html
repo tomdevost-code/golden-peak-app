@@ -1283,6 +1283,8 @@ tr:last-child td { border-bottom: none; }
         </div>
         <button class="btn-save" id="sync-pending-btn" onclick="syncPending()" style="margin-top:8px;background:var(--blue);">Sync Pending Records</button>
         <div class="conn-status" id="sync-pending-status"></div>
+        <button class="btn-save" onclick="dedupeBatchTxLocal()" style="margin-top:8px;background:var(--amber);color:#3B2A00;">Clean Up Duplicate Transactions</button>
+        <div class="conn-status" id="dedupe-tx-status"></div>
         <button class="btn-save" onclick="clearPendingRecords()" style="margin-top:8px;background:var(--red);">Clear Pending Records</button>
         <button class="btn-save" onclick="clearAllLocalData()" style="margin-top:8px;background:#7B0000;">Clear All Local Data</button>
       </div>
@@ -1716,6 +1718,15 @@ function _recordsLookEquivalent(local, remote, table){
 //   - new remote rows are unshifted onto the front
 //   - airtableId mismatch (corrupted link to wrong remote): clear the stale
 //     local airtableId, add remote as a new row
+function _batchtxNatKey(rec){
+  if(!rec) return '';
+  return [
+    (rec.batchId||'').toString().toUpperCase(),
+    rec.date||'',
+    (rec.txType||'').toString(),
+    (parseFloat(rec.qty)||0).toFixed(3)
+  ].join('|');
+}
 function mergeRemote(localArr, remoteRecs, mapper, ctx, table, lsKey){
   const byAt = {};
   localArr.forEach((r,i) => { if(r && r.airtableId) byAt[r.airtableId] = i; });
@@ -1731,6 +1742,17 @@ function mergeRemote(localArr, remoteRecs, mapper, ctx, table, lsKey){
       }
     });
   }
+  // Fallback natural-key index for batchtx — same race condition as `batch`. When a
+  // local tx exists without an airtableId (sync failed mid-save, offline insert,
+  // legacy data) we link the remote to it instead of duplicating.
+  const byTxNat = {};
+  if(table === 'batchtx'){
+    localArr.forEach((r,i) => {
+      if(!r || r.airtableId) return; // only index unlinked rows
+      const k = _batchtxNatKey(r);
+      if(k && byTxNat[k] === undefined) byTxNat[k] = i;
+    });
+  }
   let added = 0, updated = 0, conflicts = 0, repaired = 0, linked = 0;
   remoteRecs.forEach(rrec => {
     const mapped = mapper(rrec, ctx||{});
@@ -1742,6 +1764,19 @@ function mergeRemote(localArr, remoteRecs, mapper, ctx, table, lsKey){
       const k = String(mapped.batchId).toUpperCase();
       if(byBatchId[k] !== undefined){
         idx = byBatchId[k];
+        linked++;
+      }
+    }
+    // batchtx natural-key fallback: link by (batch|date|type|qty) when no airtableId match.
+    if(idx === undefined && table === 'batchtx'){
+      const k = _batchtxNatKey(mapped);
+      if(k && byTxNat[k] !== undefined){
+        idx = byTxNat[k];
+        // Adopt the remote's airtableId on the local row so we never re-link this entry again.
+        localArr[idx].airtableId = rrec.id;
+        byAt[rrec.id] = idx;
+        // Consume the slot so two remote rows with the same natural key don't both link here.
+        delete byTxNat[k];
         linked++;
       }
     }
@@ -5036,6 +5071,50 @@ function clearAllLocalData(){
   updatePendingBadge();
   toast('All local data cleared.');
 }
+// Remove duplicate Batch Transaction records from local storage. Same natural key
+// (batch + date + txType + qty) keeps ONE record per group — preferring the one with
+// an airtableId (linked to Airtable). This is a recovery action for the sync bug where
+// remote rows were appended on top of local rows that hadn't captured their airtableId.
+function dedupeBatchTxLocal(){
+  const groups = {};
+  batchTxRecs.forEach((r, i) => {
+    if(!r) return;
+    const k = _batchtxNatKey(r);
+    if(!k) return;
+    if(!groups[k]) groups[k] = [];
+    groups[k].push(i);
+  });
+  let dupes = 0;
+  const keepIdxs = new Set();
+  Object.values(groups).forEach(idxs => {
+    if(idxs.length === 1){ keepIdxs.add(idxs[0]); return; }
+    // Prefer the record that has an airtableId (canonical, linked to Airtable). If multiple
+    // have airtableIds, keep the first; everyone else is a duplicate.
+    let keeper = idxs.find(i => batchTxRecs[i] && batchTxRecs[i].airtableId);
+    if(keeper === undefined) keeper = idxs[0];
+    keepIdxs.add(keeper);
+    dupes += (idxs.length - 1);
+  });
+  if(!dupes){
+    const el = document.getElementById('dedupe-tx-status');
+    if(el){ el.textContent = 'No duplicate transactions found.'; el.style.color = 'var(--green)'; }
+    toast('No duplicate transactions found.', 3500);
+    return;
+  }
+  if(!confirm('Found '+dupes+' duplicate transaction(s) in local storage. Remove them? (Airtable is not affected — only the local duplicates are removed.)')) return;
+  batchTxRecs = batchTxRecs.filter((_, i) => keepIdxs.has(i));
+  lsSet('gp-batchtx', batchTxRecs);
+  updatePendingBadge();
+  // Refresh Summary if it's open so the cleaned-up qty + history show immediately.
+  const _sumSel = document.getElementById('summary-batch-select');
+  if(_sumSel && _sumSel.value){
+    if(typeof summaryBatchChanged === 'function') summaryBatchChanged();
+  }
+  const el = document.getElementById('dedupe-tx-status');
+  if(el){ el.textContent = 'Removed '+dupes+' duplicate transaction(s).'; el.style.color = 'var(--green)'; }
+  toast('Removed '+dupes+' duplicate transaction(s).', 4500);
+}
+
 function clearPendingRecords(){
   if(!confirm('This will permanently delete all unsynced records. This cannot be undone. Continue?'))return;
   ecRecs=ecRecs.filter(r=>r.synced);
