@@ -1284,6 +1284,7 @@ tr:last-child td { border-bottom: none; }
         <button class="btn-save" id="sync-pending-btn" onclick="syncPending()" style="margin-top:8px;background:var(--blue);">Sync Pending Records</button>
         <div class="conn-status" id="sync-pending-status"></div>
         <button class="btn-save" onclick="dedupeBatchTxLocal()" style="margin-top:8px;background:var(--amber);color:#3B2A00;">Clean Up Duplicate Transactions</button>
+        <button class="btn-save" onclick="diagnoseBatchTx()" style="margin-top:8px;background:var(--blue);">Diagnose Transactions (Console)</button>
         <div class="conn-status" id="dedupe-tx-status"></div>
         <button class="btn-save" onclick="clearPendingRecords()" style="margin-top:8px;background:var(--red);">Clear Pending Records</button>
         <button class="btn-save" onclick="clearAllLocalData()" style="margin-top:8px;background:#7B0000;">Clear All Local Data</button>
@@ -5071,38 +5072,53 @@ function clearAllLocalData(){
   updatePendingBadge();
   toast('All local data cleared.');
 }
-// Remove duplicate Batch Transaction records from local storage. Same natural key
-// (batch + date + txType + qty) keeps ONE record per group — preferring the one with
-// an airtableId (linked to Airtable). This is a recovery action for the sync bug where
-// remote rows were appended on top of local rows that hadn't captured their airtableId.
+// Remove duplicate Batch Transaction records from local storage. Multi-pass dedup —
+// passes are run in order and each one keeps the airtableId-bearing record where possible:
+//   1. Same airtableId         → identical Airtable linkage = same record.
+//   2. Same id (local field)   → catches collisions on Date.now() id.
+//   3. Same natural key        → batch + date + txType + qty.
+// Anything matched by an earlier pass is excluded from later passes.
+// Detailed console output is logged so we can diagnose why anything DIDN'T match.
 function dedupeBatchTxLocal(){
-  const groups = {};
-  batchTxRecs.forEach((r, i) => {
-    if(!r) return;
-    const k = _batchtxNatKey(r);
-    if(!k) return;
-    if(!groups[k]) groups[k] = [];
-    groups[k].push(i);
-  });
-  let dupes = 0;
-  const keepIdxs = new Set();
-  Object.values(groups).forEach(idxs => {
-    if(idxs.length === 1){ keepIdxs.add(idxs[0]); return; }
-    // Prefer the record that has an airtableId (canonical, linked to Airtable). If multiple
-    // have airtableIds, keep the first; everyone else is a duplicate.
-    let keeper = idxs.find(i => batchTxRecs[i] && batchTxRecs[i].airtableId);
-    if(keeper === undefined) keeper = idxs[0];
-    keepIdxs.add(keeper);
-    dupes += (idxs.length - 1);
-  });
+  console.log('[dedupe] Starting — total records:', batchTxRecs.length);
+  // Build remove set from passes
+  const removeIdxs = new Set();
+  const _passDedup = (keyFn, label) => {
+    const groups = {};
+    batchTxRecs.forEach((r, i) => {
+      if(!r) return;
+      if(removeIdxs.has(i)) return;
+      const k = keyFn(r);
+      if(!k) return;
+      if(!groups[k]) groups[k] = [];
+      groups[k].push(i);
+    });
+    let removed = 0;
+    Object.entries(groups).forEach(([k, idxs]) => {
+      if(idxs.length < 2) return;
+      // Keep the airtableId-bearing record; if multiple have airtableIds, keep the lowest index.
+      let keeper = idxs.find(i => batchTxRecs[i] && batchTxRecs[i].airtableId);
+      if(keeper === undefined) keeper = idxs[0];
+      idxs.forEach(i => { if(i !== keeper) removeIdxs.add(i); });
+      removed += (idxs.length - 1);
+      console.log('[dedupe] '+label+' duplicate group ('+idxs.length+'):', k, idxs.map(i => batchTxRecs[i]));
+    });
+    if(removed) console.log('[dedupe] '+label+' pass removed '+removed+' record(s).');
+    return removed;
+  };
+  const byAt = _passDedup(r => r.airtableId || '', 'airtableId');
+  const byId = _passDedup(r => r.id !== undefined ? ('id:'+r.id) : '', 'local id');
+  const byNat = _passDedup(r => _batchtxNatKey(r), 'natural key');
+  const dupes = removeIdxs.size;
   if(!dupes){
+    console.log('[dedupe] No duplicates found. First 5 records sampled:', batchTxRecs.slice(0, 5));
     const el = document.getElementById('dedupe-tx-status');
-    if(el){ el.textContent = 'No duplicate transactions found.'; el.style.color = 'var(--green)'; }
+    if(el){ el.textContent = 'No duplicate transactions found. (Check the console for a sample of the records.)'; el.style.color = 'var(--green)'; }
     toast('No duplicate transactions found.', 3500);
     return;
   }
-  if(!confirm('Found '+dupes+' duplicate transaction(s) in local storage. Remove them? (Airtable is not affected — only the local duplicates are removed.)')) return;
-  batchTxRecs = batchTxRecs.filter((_, i) => keepIdxs.has(i));
+  if(!confirm('Found '+dupes+' duplicate transaction(s) in local storage. (By airtableId: '+byAt+', by id: '+byId+', by natural key: '+byNat+'.) Remove them? (Airtable is not affected — only local duplicates are removed.)')) return;
+  batchTxRecs = batchTxRecs.filter((_, i) => !removeIdxs.has(i));
   lsSet('gp-batchtx', batchTxRecs);
   updatePendingBadge();
   // Refresh Summary if it's open so the cleaned-up qty + history show immediately.
@@ -5111,8 +5127,35 @@ function dedupeBatchTxLocal(){
     if(typeof summaryBatchChanged === 'function') summaryBatchChanged();
   }
   const el = document.getElementById('dedupe-tx-status');
-  if(el){ el.textContent = 'Removed '+dupes+' duplicate transaction(s).'; el.style.color = 'var(--green)'; }
+  if(el){ el.textContent = 'Removed '+dupes+' duplicate transaction(s) — '+batchTxRecs.length+' remain.'; el.style.color = 'var(--green)'; }
   toast('Removed '+dupes+' duplicate transaction(s).', 4500);
+}
+
+// Diagnostic-only — log every batch transaction grouped by batch so we can SEE what's
+// duplicated without modifying anything. Surfaces records in the console.
+function diagnoseBatchTx(){
+  console.log('[diagnose-tx] === Batch Transactions diagnostic ===');
+  console.log('[diagnose-tx] Total records:', batchTxRecs.length);
+  const byBatch = {};
+  batchTxRecs.forEach((r, i) => {
+    const b = (r && r.batchId) || '(no batchId)';
+    if(!byBatch[b]) byBatch[b] = [];
+    byBatch[b].push({i, ...r});
+  });
+  Object.entries(byBatch).forEach(([b, rows]) => {
+    console.log('[diagnose-tx] Batch '+b+' — '+rows.length+' record(s):');
+    console.table(rows.map(r => ({
+      i: r.i,
+      id: r.id,
+      airtableId: r.airtableId || '(none)',
+      date: r.date,
+      txType: r.txType,
+      qty: r.qty,
+      synced: r.synced,
+      notes: (r.notes||'').slice(0,40)
+    })));
+  });
+  toast('Diagnostic written to browser console (right-click → Inspect → Console).', 5500);
 }
 
 function clearPendingRecords(){
