@@ -6165,6 +6165,7 @@ function renderBatchLog(){
     '<th style="padding:8px 10px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);">Batch ID</th>'+
     '<th style="padding:8px 10px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Cultivar</th>'+
     '<th style="padding:8px 10px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Plant Phase</th>'+
+    '<th style="padding:8px 10px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Rooms</th>'+
     '<th style="padding:8px 10px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Current Day</th>'+
   '</tr></thead><tbody>';
   active.forEach(b => {
@@ -6195,10 +6196,15 @@ function renderBatchLog(){
     // already includes per-phase counts; the chip adds the total alongside.
     const _qty = (typeof calcBatchQty === 'function') ? calcBatchQty(b.batchId) : 0;
     const qtyChip = ' <span style="display:inline-block;background:var(--bg2);border:1px solid var(--border);color:var(--text2);font-size:10px;font-family:var(--mono);font-weight:600;padding:1px 6px;border-radius:8px;margin-left:6px;vertical-align:middle;">'+_qty+' plant'+(_qty===1?'':'s')+'</span>';
+    // Rooms cell — reuses the same formatter as the Summary Batch Info "Rooms" line so the
+    // two views stay consistent. Shows each flower room with its plant count, plus Veg when
+    // it still has unallocated plants. Dash when the batch has no rooms (post-Packaged).
+    const roomsLabel = (typeof formatBatchRoomsForDisplay === 'function') ? formatBatchRoomsForDisplay(b) : ((b.rooms && b.rooms.length) ? b.rooms.join(', ') : '—');
     html += '<tr'+rowStyle+'>'+
       '<td style="padding:8px 10px;font-family:var(--mono);font-weight:700;color:'+(rowIsClosed?'var(--text3)':'var(--green)')+';">'+b.batchId+closedTag+'</td>'+
       '<td style="padding:8px 10px;border-left:1px solid var(--border);">'+(b.cultivar || '—')+'</td>'+
       '<td style="padding:8px 10px;border-left:1px solid var(--border);color:var(--text2);">'+phase+qtyChip+'</td>'+
+      '<td style="padding:8px 10px;border-left:1px solid var(--border);color:var(--text2);font-family:var(--mono);font-size:12px;">'+roomsLabel+'</td>'+
       '<td style="padding:8px 10px;border-left:1px solid var(--border);font-family:var(--mono);font-weight:600;">'+dayLabel+'</td>'+
     '</tr>';
   });
