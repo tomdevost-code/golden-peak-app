@@ -2617,6 +2617,12 @@ function ensureMomPhaseCounts(batchRec){
   // Lazy-initializes momPhaseCounts on a mother batch. For new mothers (no field set)
   // the entire current quantity is placed in the batch's plantPhase bucket (or Clones
   // as a safe default). Returns the counts map. No-op for non-mothers (returns null).
+  // IMPORTANT: momPhaseCounts is a LOCAL-ONLY field (not in the Airtable schema, not
+  // in buildBatchFields, not in REMOTE_MAPPERS.batch). Lazy initialization MUST NOT
+  // mark the record unsynced — doing so creates phantom conflicts on the next pull
+  // because the pull sees synced=false but the remote has no corresponding change.
+  // Real cultivation changes (Phase Advance, manual save, transactions) set synced=false
+  // explicitly via their own paths.
   if(!batchRec || !isMotherBatch(batchRec.batchId)) return null;
   let changed = false;
   if(!batchRec.momPhaseCounts || typeof batchRec.momPhaseCounts !== 'object'){
@@ -2635,7 +2641,7 @@ function ensureMomPhaseCounts(batchRec){
     });
   }
   if(changed){
-    batchRec.synced = false;
+    // Persist to localStorage but do NOT flip synced — this is internal bookkeeping.
     lsSet('gp-batch', batchRecs);
   }
   return batchRec.momPhaseCounts;
@@ -2657,12 +2663,14 @@ function momPhaseTotal(batchRec){
 
 function momPhaseAdjust(batchRec, phase, delta){
   // Apply a delta (positive or negative) to a specific phase bucket. Floors at 0.
-  // Marks the batch unsynced and persists. Returns the new bucket value.
+  // Persists to localStorage. Does NOT mark synced=false — momPhaseCounts is a
+  // local-only field (see ensureMomPhaseCounts comment). The CALLER must dirty the
+  // sync state via its own path (e.g. momPhaseAdvance also sets plantPhase + dates,
+  // which need syncing, so it sets synced=false there).
   const c = ensureMomPhaseCounts(batchRec);
   if(!c) return 0;
   if(MOM_PHASES.indexOf(phase) < 0) return c[phase] || 0;
   c[phase] = Math.max(0, (+c[phase] || 0) + delta);
-  batchRec.synced = false;
   lsSet('gp-batch', batchRecs);
   return c[phase];
 }
@@ -2671,6 +2679,8 @@ function momPhaseSubtractJunior(batchRec, qty){
   // Subtracts qty plants from the most-junior phase first (Clones → Veg → Flower → Drying).
   // Used when plants leave the batch (Destroyed, Moved to Moms) without an explicit
   // source-phase. Returns true if the full qty was subtracted, false if buckets ran dry.
+  // Does NOT mark synced=false — see ensureMomPhaseCounts. The caller (waste flow,
+  // Moved-to-Moms tx flow) already handles sync for the actual data fields.
   const c = ensureMomPhaseCounts(batchRec);
   if(!c) return false;
   let rem = +qty || 0;
@@ -2680,7 +2690,6 @@ function momPhaseSubtractJunior(batchRec, qty){
     c[p] -= take;
     rem -= take;
   });
-  batchRec.synced = false;
   lsSet('gp-batch', batchRecs);
   return rem === 0;
 }
