@@ -2177,6 +2177,8 @@ function calcRoomPlantCount(batchId, room){
 function calcBatchQty(batchId){
   // Pure helper: returns the running plant-count balance for a batch (floor 0). No DOM side effects.
   // Sold transactions track weight, not plant count, so they don't affect this running balance.
+  // Phase Advance transactions only redistribute plants between phase buckets WITHIN the same
+  // mother batch (Clones → Veg etc.) — total plant count doesn't change, so they're skipped.
   // Multi-day harvest correction: per-room Complete Harvest events don't create individual
   // batchTx rows — the consolidated Harvested tx only fires once the final room is done. While
   // mid-harvest, the per-room harvest counts live in batchRec.harvestedPlants; we subtract them
@@ -2184,6 +2186,7 @@ function calcBatchQty(batchId){
   let qty=0;
   batchTxRecs.filter(t=>t.batchId===batchId).forEach(t=>{
     if(t.txType==='Sold') return; // weight tracked separately
+    if(t.txType==='Phase Advance') return; // internal cohort move — no net change
     const q=parseInt(t.qty)||0;
     if(t.txType==='Produced/Received') qty+=q; else qty-=q;
   });
