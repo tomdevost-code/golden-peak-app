@@ -6137,29 +6137,20 @@ function renderBatchLog(){
   active.forEach(b => {
     // Display phase reuses the same helper as Batch Mgmt — covers Sold override and Drying/Flower mix.
     const phase = (typeof getDisplayPhase === 'function') ? getDisplayPhase(b) : (b.plantPhase || '—');
-    // Compute Current Day label for the batch's current phase
+    // Current Day label — uses the same shared helper as the Batch Management page so the
+    // two views stay in lock-step (mothers show multi-phase, Flower+Veg-room split shows both,
+    // multi-day Drying shows per-room).
+    const _parts = (typeof computeBatchDayParts === 'function') ? computeBatchDayParts(b, today) : [];
     let dayLabel = '—';
-    if(b.plantPhase === 'Clones'){
-      const cd = calcCloneDay(b.batchId, today);
-      if(cd && cd > 0) dayLabel = 'C' + cd;
-    } else if(b.plantPhase === 'Veg' && b.vegStart){
-      const vd = daysBetween(b.vegStart, today);
-      if(vd > 0) dayLabel = 'V' + vd;
-    } else if(b.plantPhase === 'Flower' && b.flowerStart){
-      const fd = daysBetween(b.flowerStart, today);
-      if(fd > 0) dayLabel = 'F' + fd;
-    } else if(b.plantPhase === 'Drying'){
-      // Multi-day harvest support: list per-room drying days
-      const dates = (typeof getPerRoomHarvestDates === 'function') ? getPerRoomHarvestDates(b.batchId) : {};
-      const rooms = Object.keys(dates).sort();
-      if(rooms.length){
-        dayLabel = rooms.map(r => {
-          const dd = daysBetween(dates[r], today);
-          return (dd > 0 ? 'D'+dd : 'D—') + ' (' + r + ')';
-        }).join('<br>');
-      } else if(b.harvestDate){
-        const dd = daysBetween(b.harvestDate, today);
-        if(dd > 0) dayLabel = 'D' + dd;
+    if(_parts.length === 1){
+      dayLabel = _parts[0].label;
+    } else if(_parts.length > 1){
+      // Two parts → join on " / " for compactness; 3+ → stack with line breaks so the cell
+      // doesn't get too wide. Includes the small phase description in parentheses for clarity.
+      if(_parts.length === 2){
+        dayLabel = _parts.map(p => p.label).join(' / ');
+      } else {
+        dayLabel = _parts.map(p => p.label + ' <span style="color:var(--text3);font-size:11px;">('+p.desc+')</span>').join('<br>');
       }
     }
     // When the All filter is on, visually mark closed rows so they don't blend in.
@@ -6547,6 +6538,83 @@ async function momPhaseAdvance(){
   }
 }
 
+// Shared helper — returns an array of {label, desc} day-parts for a batch. Used by
+// both the Summary "Current Day" badge AND the Batches list "Current Day" cell so the
+// two views stay consistent.
+//   Mothers (multi-phase): one part per phase with >0 plants (e.g. C5 / V12 / F25)
+//   Non-mothers in Flower with Veg-room plants: V{n} + F{n}
+//   Non-mothers in Drying with multi-day harvest: D{n} per room
+//   Otherwise: single part for the current single phase.
+function computeBatchDayParts(b, today){
+  if(!b) return [];
+  const parts = [];
+  function _latestPRDate(){
+    let latest = null;
+    batchTxRecs.forEach(t => {
+      if(t.batchId === b.batchId && t.txType === 'Produced/Received' && t.date){
+        if(!latest || t.date > latest) latest = t.date;
+      }
+    });
+    return latest;
+  }
+  if(isMotherBatch(b.batchId)){
+    const c = ensureMomPhaseCounts(b);
+    if(!c) return parts;
+    if((c.Clones || 0) > 0){
+      let cd = null;
+      const lp = _latestPRDate();
+      if(lp) cd = daysBetween(lp, today);
+      else if(b.cloneDate) cd = daysBetween(b.cloneDate, today);
+      if(cd != null && cd > 0) parts.push({label:'C'+cd, desc:'clones'});
+    }
+    if((c.Veg || 0) > 0 && b.vegStart){
+      const vd = daysBetween(b.vegStart, today);
+      if(vd > 0) parts.push({label:'V'+vd, desc:'veg'});
+    }
+    if((c.Flower || 0) > 0 && b.flowerStart){
+      const fd = daysBetween(b.flowerStart, today);
+      if(fd > 0) parts.push({label:'F'+fd, desc:'flower'});
+    }
+    if((c.Drying || 0) > 0 && b.harvestDate){
+      const dd = daysBetween(b.harvestDate, today);
+      if(dd > 0) parts.push({label:'D'+dd, desc:'drying'});
+    }
+    return parts;
+  }
+  // Non-mother branches
+  if(b.plantPhase === 'Clones'){
+    const cd = calcCloneDay(b.batchId, today);
+    if(cd && cd > 0) parts.push({label:'C'+cd, desc:'clones'});
+  } else if(b.plantPhase === 'Veg' && b.vegStart){
+    const vd = daysBetween(b.vegStart, today);
+    if(vd > 0) parts.push({label:'V'+vd, desc:'veg'});
+  } else if(b.plantPhase === 'Flower'){
+    // Split: plants still in the Veg room remain in Veg phase. Show V part too.
+    const _veg = (typeof calcRoomPlantCount === 'function') ? calcRoomPlantCount(b.batchId, 'Veg') : 0;
+    if(_veg > 0 && b.vegStart){
+      const vd = daysBetween(b.vegStart, today);
+      if(vd > 0) parts.push({label:'V'+vd, desc:'veg'});
+    }
+    if(b.flowerStart){
+      const fd = daysBetween(b.flowerStart, today);
+      if(fd > 0) parts.push({label:'F'+fd, desc:'flower'});
+    }
+  } else if(b.plantPhase === 'Drying'){
+    const dates = (typeof getPerRoomHarvestDates === 'function') ? getPerRoomHarvestDates(b.batchId) : {};
+    const rooms = Object.keys(dates).sort();
+    if(rooms.length){
+      rooms.forEach(r => {
+        const dd = daysBetween(dates[r], today);
+        parts.push({label: (dd>0 ? 'D'+dd : 'D—'), desc:r});
+      });
+    } else if(b.harvestDate){
+      const dd = daysBetween(b.harvestDate, today);
+      if(dd > 0) parts.push({label:'D'+dd, desc:'drying'});
+    }
+  }
+  return parts;
+}
+
 function summaryRefreshCurrentDay(batchId){
   // Refreshes the "Current Day" badge on the Summary Batch Info card.
   // Non-mothers (single-phase): Clones → C{day} from cloneDate; Veg → V{day} from
@@ -6560,119 +6628,34 @@ function summaryRefreshCurrentDay(batchId){
   const b = batchRecs.find(r=>r.batchId===batchId && !r.type);
   if(!b){ _dayEl.textContent = '—'; _dayLbl.textContent = '—'; return; }
   const _today = localDate();
-  // Helper — find the most recent Produced/Received tx date for this batch.
-  // For mothers, this is the anchor for the latest clone cohort's day count.
-  function _latestPRDate(){
-    let latest = null;
-    batchTxRecs.forEach(t => {
-      if(t.batchId === b.batchId && t.txType === 'Produced/Received' && t.date){
-        if(!latest || t.date > latest) latest = t.date;
-      }
-    });
-    return latest;
-  }
-
-  // ── MOTHER BATCH: render a day count for every phase that has plants ──
-  if(isMotherBatch(b.batchId)){
-    const c = ensureMomPhaseCounts(b);
-    const parts = []; // [{label:'C5', desc:'clones'}, ...]
-    if(c){
-      if((c.Clones || 0) > 0){
-        // Clone day anchor: prefer the latest Produced/Received tx date (the newest cohort),
-        // falling back to batchRec.cloneDate. If no anchor exists, omit the C{n} part.
-        let cd = null;
-        const latestPR = _latestPRDate();
-        if(latestPR) cd = daysBetween(latestPR, _today);
-        else if(b.cloneDate) cd = daysBetween(b.cloneDate, _today);
-        if(cd != null && cd > 0) parts.push({label:'C'+cd, desc:'clones'});
-      }
-      if((c.Veg || 0) > 0 && b.vegStart){
-        const vd = daysBetween(b.vegStart, _today);
-        if(vd > 0) parts.push({label:'V'+vd, desc:'veg'});
-      }
-      if((c.Flower || 0) > 0 && b.flowerStart){
-        const fd = daysBetween(b.flowerStart, _today);
-        if(fd > 0) parts.push({label:'F'+fd, desc:'flower'});
-      }
-      if((c.Drying || 0) > 0 && b.harvestDate){
-        const dd = daysBetween(b.harvestDate, _today);
-        if(dd > 0) parts.push({label:'D'+dd, desc:'drying'});
-      }
-    }
-    if(parts.length === 0){
-      _dayEl.style.fontSize = '32px';
-      _dayEl.textContent = '—';
-      _dayLbl.textContent = b.plantPhase ? b.plantPhase.toLowerCase() : 'no plants';
-    } else if(parts.length === 1){
-      _dayEl.style.fontSize = '32px';
-      _dayEl.textContent = parts[0].label;
-      _dayLbl.textContent = parts[0].desc + ' day';
-    } else if(parts.length === 2){
-      _dayEl.style.fontSize = '28px';
-      _dayEl.textContent = parts.map(p=>p.label).join(' / ');
-      _dayLbl.textContent = parts.map(p=>p.desc).join(' / ') + ' day';
+  // Use the same shared helper as the Batches list so the two views stay in lock-step.
+  const parts = computeBatchDayParts(b, _today);
+  if(parts.length === 0){
+    _dayEl.style.fontSize = '32px';
+    if(b.plantPhase === 'Clones'){
+      _dayEl.textContent = '—'; _dayLbl.textContent = 'add plants to start';
     } else {
-      // 3+ phases — stack each phase on its own line, smaller font for readability.
-      _dayEl.style.fontSize = '16px';
-      _dayEl.innerHTML = parts.map(p=>p.label+' <span style="color:var(--text3);font-size:11px;font-weight:400;">'+p.desc+'</span>').join('<br>');
-      _dayLbl.textContent = parts.length + ' active phases';
+      _dayEl.textContent = '—'; _dayLbl.textContent = b.plantPhase ? b.plantPhase.toLowerCase() : '—';
     }
     return;
   }
-
-  // ── NON-MOTHER BATCHES (single-phase) — original logic ──
-  if(b.plantPhase === 'Clones'){
-    const cd = calcCloneDay(b.batchId, _today);
-    if(cd && cd > 0){ _dayEl.textContent = 'C'+cd; _dayLbl.textContent = 'clone day'; }
-    else { _dayEl.textContent = '—'; _dayLbl.textContent = 'add plants to start'; }
-  } else if(b.plantPhase === 'Veg' && b.vegStart){
-    const vd = daysBetween(b.vegStart, _today);
-    _dayEl.textContent = vd>0 ? ('V'+vd) : '—';
-    _dayLbl.textContent = 'veg day';
-  } else if(b.plantPhase === 'Flower' && b.flowerStart){
-    const fd = daysBetween(b.flowerStart, _today);
-    _dayEl.textContent = fd>0 ? ('F'+fd) : '—';
-    _dayLbl.textContent = 'flower day';
-  } else if(b.plantPhase === 'Drying'){
-    // Drying: show D{n} - {Room} for each completed harvest (multi-day harvest → multiple lines).
-    const dates = getPerRoomHarvestDates(b.batchId);
-    const rooms = Object.keys(dates).sort();
-    if(rooms.length === 0){
-      // Fall back to single batch harvestDate if no per-room data was captured
-      if(b.harvestDate){
-        const dd = daysBetween(b.harvestDate, _today);
-        _dayEl.style.fontSize = '32px';
-        _dayEl.textContent = dd>0 ? ('D'+dd) : '—';
-        _dayLbl.textContent = 'drying day';
-      } else {
-        _dayEl.style.fontSize = '32px';
-        _dayEl.textContent = '—';
-        _dayLbl.textContent = 'drying day';
-      }
-    } else if(rooms.length === 1){
-      const dd = daysBetween(dates[rooms[0]], _today);
-      _dayEl.style.fontSize = '32px';
-      _dayEl.textContent = dd>0 ? ('D'+dd) : '—';
-      _dayLbl.textContent = 'drying day — ' + rooms[0];
-    } else {
-      // Multi-day harvest: list each room's drying day on its own line, smaller font.
-      const parts = rooms.map(r => {
-        const dd = daysBetween(dates[r], _today);
-        return (dd>0 ? 'D'+dd : 'D—') + ' &mdash; ' + r;
-      });
-      _dayEl.style.fontSize = '14px';
-      _dayEl.innerHTML = parts.join('<br>');
-      _dayLbl.textContent = 'drying days';
-    }
-  } else {
+  if(parts.length === 1){
     _dayEl.style.fontSize = '32px';
-    _dayEl.textContent = '—';
-    _dayLbl.textContent = b.plantPhase ? b.plantPhase.toLowerCase() : '—';
+    _dayEl.textContent = parts[0].label;
+    _dayLbl.textContent = parts[0].desc + ' day';
+    return;
   }
-  // For single-value phases, ensure font size is reset to the default 32px
-  if(['Clones','Veg','Flower'].includes(b.plantPhase)){
-    _dayEl.style.fontSize = '32px';
+  if(parts.length === 2){
+    _dayEl.style.fontSize = '28px';
+    _dayEl.textContent = parts.map(p => p.label).join(' / ');
+    _dayLbl.textContent = parts.map(p => p.desc).join(' / ') + ' day';
+    return;
   }
+  // 3+ parts (multi-phase mom, or multi-day-harvest Drying): stack each on its own line,
+  // smaller font for readability. Include the phase/room name for clarity.
+  _dayEl.style.fontSize = '16px';
+  _dayEl.innerHTML = parts.map(p => p.label + ' <span style="color:var(--text3);font-size:11px;font-weight:400;">' + p.desc + '</span>').join('<br>');
+  _dayLbl.textContent = parts.length + ' active';
 }
 function summaryStatusChanged(){
   const closed = document.getElementById('summary-status').value === 'Closed';
