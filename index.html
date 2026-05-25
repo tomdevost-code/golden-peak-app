@@ -799,6 +799,13 @@ tr:last-child td { border-bottom: none; }
               <option>Packaged</option>
               <option>Delivered</option>
             </select>
+            <!-- Phase split (regular batches in Flower with plants still in Veg room).
+                 Hidden until a Flower batch has plants left in the Veg room. -->
+            <div id="summary-phase-split" style="display:none;margin-top:8px;padding:8px 10px;background:var(--amber-pale);border:1px solid var(--amber);border-radius:var(--radius-sm);font-size:12px;line-height:1.45;color:#3B2A00;">
+              <div style="font-weight:600;margin-bottom:3px;">Phase split:</div>
+              <div id="summary-phase-split-detail" style="font-family:var(--mono);"></div>
+              <div style="font-size:11px;color:#5B4400;margin-top:4px;">Plants in the Veg room remain in Veg phase until they're moved to a Flower room.</div>
+            </div>
           </div>
 
           <!-- Status -->
@@ -2362,6 +2369,17 @@ function getDisplayPhase(batchRec){
         // Compact label: "Clones (4) / Veg (6)"
         return active.map(p => p + ' ('+(c[p]||0)+')').join(' / ');
       }
+    }
+  }
+  // Regular (non-mother) batch in Flower phase: if any plants remain in the Veg room,
+  // those plants are conceptually still in Veg phase (they haven't moved to flower
+  // rooms yet). Surface a split label like "Veg (4) / Flower (16)".
+  if(phase === 'Flower' && !isMotherBatch(batchRec.batchId)){
+    const _veg = calcRoomPlantCount(batchRec.batchId, 'Veg');
+    if(_veg > 0){
+      const _total = calcBatchQty(batchRec.batchId);
+      const _flower = Math.max(0, _total - _veg);
+      return 'Veg ('+_veg+') / Flower ('+_flower+')';
     }
   }
   return phase;
@@ -6774,6 +6792,30 @@ function summaryRoomCheckChanged(cb){
   summaryUpdateVegLock();
   summaryRenderRoomChips();
 }
+// Refresh the "Phase split" amber info block under the Plant Phase dropdown. Visible only
+// when the batch is in Flower phase and the Veg room still holds plants (those plants
+// remain in Veg phase until they're moved into a Flower room). Mother batches are exempt
+// — they use the dedicated Phase Distribution card.
+function summaryUpdatePhaseSplit(){
+  const wrap = document.getElementById('summary-phase-split');
+  const detail = document.getElementById('summary-phase-split-detail');
+  if(!wrap || !detail) return;
+  const batchId = document.getElementById('summary-batch-select').value;
+  if(!batchId){ wrap.style.display = 'none'; return; }
+  const b = batchRecs.find(r => r.batchId === batchId && !r.type);
+  if(!b || isMotherBatch(batchId)){ wrap.style.display = 'none'; return; }
+  // Read the phase from the dropdown (so it reflects pending edits before save) — fall back
+  // to the saved phase on the record.
+  const _sel = document.getElementById('summary-phase');
+  const phase = (_sel && _sel.value) || b.plantPhase || '';
+  if(phase !== 'Flower'){ wrap.style.display = 'none'; return; }
+  const _veg = calcRoomPlantCount(batchId, 'Veg');
+  if(_veg <= 0){ wrap.style.display = 'none'; return; }
+  const _total = calcBatchQty(batchId);
+  const _flower = Math.max(0, _total - _veg);
+  detail.textContent = 'Veg ('+_veg+') / Flower ('+_flower+')';
+  wrap.style.display = '';
+}
 function summaryUpdateVegLock(){
   // Disable + uncheck Veg when the total plants assigned to Flower rooms reaches the batch quantity.
   // Also refresh the Veg "remaining" display and the distribution summary line.
@@ -6815,6 +6857,8 @@ function summaryUpdateVegLock(){
     const label = vegCb.closest('label');
     if(label){ label.style.opacity = '1'; label.style.cursor = 'pointer'; }
   }
+  // Refresh the Flower-with-Veg-plants split indicator (room counts just changed).
+  summaryUpdatePhaseSplit();
 }
 function applyPhaseRoomLock(){
   // Room rules combine two layers:
@@ -6882,6 +6926,8 @@ function applyPhaseRoomLock(){
   });
   // Re-render the chip view so disabled rooms lose their × button and locked rooms appear faded.
   summaryRenderRoomChips();
+  // Phase dropdown may have just changed (Veg→Flower etc.) — refresh the split indicator.
+  summaryUpdatePhaseSplit();
 }
 function getAllowedPhases(currentPhase, batchId){
   // Plant lifecycle — single linear path: Clones → Veg → Flower → Drying → Packaged → Delivered.
