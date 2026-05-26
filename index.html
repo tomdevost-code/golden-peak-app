@@ -1515,6 +1515,14 @@ const REMOTE_MAPPERS = {
         if(_parsed && typeof _parsed === 'object' && !Array.isArray(_parsed)) _harvWeights = _parsed;
       }
     } catch(e){ _harvWeights = {}; }
+    // Per-room plant counts at harvest (multi-day harvest support across laptops).
+    let _harvPlants = {};
+    try {
+      if(f['Harvested Plants'] && typeof f['Harvested Plants'] === 'string'){
+        const _parsed = JSON.parse(f['Harvested Plants']);
+        if(_parsed && typeof _parsed === 'object' && !Array.isArray(_parsed)) _harvPlants = _parsed;
+      }
+    } catch(e){ _harvPlants = {}; }
     // Completed Harvests is sent as a comma-separated string of flower-room names.
     const _completedHarvests = (f['Completed Harvests'] && typeof f['Completed Harvests'] === 'string')
       ? f['Completed Harvests'].split(',').map(s => s.trim()).filter(Boolean)
@@ -1541,6 +1549,7 @@ const REMOTE_MAPPERS = {
       roomDistribution: _roomDist,
       completedHarvests: _completedHarvests,
       harvestedWeights: _harvWeights,
+      harvestedPlants: _harvPlants,
       plantPhase: f['Plant Phase']||'Clones',
       status: f['Status']||'Open',
       closedDate: f['Closed Date']||'',
@@ -1775,6 +1784,81 @@ function _batchtxNatKey(rec){
     (parseFloat(rec.qty)||0).toFixed(3)
   ].join('|');
 }
+// Per-table natural-key functions. Two records sharing the same natural key are considered
+// "the same thing" for merge/dedup purposes. Each table picks the fields that uniquely
+// identify a real-world entry:
+//   ec       → one watering log per (batch, room, grower, date)
+//   ro       → one runoff sample-set per (batch, room, date)
+//   waste    → identified by batch + date + room + type + subtype + weight + plants
+//              (allows multiple distinct entries on the same day, but identical entries collapse)
+//   harvest  → one harvest bin entry per (batch, room, bin number)
+//   postdry  → one container per (batch, container/bin number)
+//   bio      → one bio control application per (batch, room, product, date)
+//   pest     → one pest sighting per (batch, room, card number, date) — falls back to location
+const NAT_KEY_FN = {
+  ec(r){
+    if(!r) return '';
+    return [
+      (r.batch||'').toString().toUpperCase(),
+      r.date||'',
+      (r.room||'').toString(),
+      (r.grower||'').toString()
+    ].join('|');
+  },
+  ro(r){
+    if(!r) return '';
+    return [
+      (r.batch||'').toString().toUpperCase(),
+      r.date||'',
+      (r.room||'').toString()
+    ].join('|');
+  },
+  waste(r){
+    if(!r) return '';
+    return [
+      (r.batch||'').toString().toUpperCase(),
+      r.date||'',
+      (r.room||'').toString(),
+      (r.type||'').toString(),
+      (r.subtype||'').toString(),
+      (parseFloat(r.weight)||0).toFixed(3),
+      (parseInt(r.plants)||0)
+    ].join('|');
+  },
+  harvest(r){
+    if(!r) return '';
+    return [
+      (r.batch||'').toString().toUpperCase(),
+      (r.room||'').toString(),
+      (parseInt(r.binNumber)||0)
+    ].join('|');
+  },
+  postdry(r){
+    if(!r) return '';
+    return [
+      (r.batch||'').toString().toUpperCase(),
+      (parseInt(r.binNumber)||0)
+    ].join('|');
+  },
+  bio(r){
+    if(!r) return '';
+    return [
+      (r.batch||'').toString().toUpperCase(),
+      r.date||'',
+      (r.room||'').toString(),
+      (r.product||'').toString()
+    ].join('|');
+  },
+  pest(r){
+    if(!r) return '';
+    return [
+      (r.batch||'').toString().toUpperCase(),
+      r.date||'',
+      (r.room||'').toString(),
+      (r.cardNumber != null ? String(r.cardNumber) : (r.location||'').toString())
+    ].join('|');
+  }
+};
 function mergeRemote(localArr, remoteRecs, mapper, ctx, table, lsKey){
   const byAt = {};
   localArr.forEach((r,i) => { if(r && r.airtableId) byAt[r.airtableId] = i; });
@@ -1790,24 +1874,26 @@ function mergeRemote(localArr, remoteRecs, mapper, ctx, table, lsKey){
       }
     });
   }
-  // Fallback natural-key index for batchtx — same race condition as `batch`. When a
-  // local tx exists without an airtableId (sync failed mid-save, offline insert,
-  // legacy data) we link the remote to it instead of duplicating.
-  const byTxNat = {};
-  // FULL natural-key index across ALL local batchtx records (linked or not). Used to
-  // detect Airtable-side duplicates — remote records sharing a natural key with a local
-  // record already linked to a DIFFERENT airtableId. Without this, the orphan keeps
-  // re-appearing on every pull because the airtableId map only catches the linked copy.
-  const localTxByNat = {};
-  if(table === 'batchtx'){
+  // Generic natural-key handling for every child table (ec, ro, waste, batchtx, harvest,
+  // postdry, bio, pest). Two parallel maps:
+  //   • natUnlinked[k] → idx of a LOCAL row WITHOUT airtableId. Used to link to a remote
+  //     copy of the same record so we don't append a duplicate.
+  //   • natAll[k]      → idx of ANY local row matching the natural key. Used to detect
+  //     Airtable-side duplicates (a remote row whose natural key matches a local already
+  //     linked to a DIFFERENT remote — i.e. orphan record in Airtable).
+  const natFn = (table === 'batchtx') ? _batchtxNatKey : NAT_KEY_FN[table];
+  const natUnlinked = {};
+  const natAll = {};
+  if(natFn){
     localArr.forEach((r,i) => {
-      const k = _batchtxNatKey(r);
-      if(k && localTxByNat[k] === undefined) localTxByNat[k] = i;
-      if(!r || r.airtableId) return; // unlinked-only index for the link fallback
-      if(k && byTxNat[k] === undefined) byTxNat[k] = i;
+      const k = natFn(r);
+      if(!k) return;
+      if(natAll[k] === undefined) natAll[k] = i;
+      if(!r || r.airtableId) return;
+      if(natUnlinked[k] === undefined) natUnlinked[k] = i;
     });
   }
-  let skippedTxDupes = 0;
+  let skippedDupes = 0;
   let added = 0, updated = 0, conflicts = 0, repaired = 0, linked = 0;
   remoteRecs.forEach(rrec => {
     const mapped = mapper(rrec, ctx||{});
@@ -1822,25 +1908,22 @@ function mergeRemote(localArr, remoteRecs, mapper, ctx, table, lsKey){
         linked++;
       }
     }
-    // batchtx natural-key fallback: link by (batch|date|type|qty) when no airtableId match.
-    if(idx === undefined && table === 'batchtx'){
-      const k = _batchtxNatKey(mapped);
-      if(k && byTxNat[k] !== undefined){
-        idx = byTxNat[k];
-        // Adopt the remote's airtableId on the local row so we never re-link this entry again.
+    // Generic natural-key fallback for child tables.
+    if(idx === undefined && natFn){
+      const k = natFn(mapped);
+      if(k && natUnlinked[k] !== undefined){
+        // Link an unlinked local row to the remote: adopt the remote airtableId.
+        idx = natUnlinked[k];
         localArr[idx].airtableId = rrec.id;
         byAt[rrec.id] = idx;
-        // Consume the slot so two remote rows with the same natural key don't both link here.
-        delete byTxNat[k];
+        delete natUnlinked[k];
         linked++;
-      } else if(k && localTxByNat[k] !== undefined){
-        // No unlinked slot, but a local record DOES exist with the same natural key — that
-        // local is already linked to a DIFFERENT Airtable record. This remote row is an
-        // Airtable-side duplicate (the canonical fix is to delete it via "Clean Up Airtable
-        // Duplicates" on Settings). Skip it here so it doesn't re-create the local duplicate
-        // on every pull, breaking the dedup-then-pull loop.
-        skippedTxDupes++;
-        console.warn('[mergeRemote] batchtx — skipping Airtable-side duplicate. natural key:', k, 'remote airtableId:', rrec.id, 'existing local airtableId:', (localArr[localTxByNat[k]]||{}).airtableId);
+      } else if(k && natAll[k] !== undefined){
+        // Local record already linked to a DIFFERENT airtableId. The remote is an
+        // Airtable-side orphan duplicate — skip it so we don't re-create the local
+        // dupe on every pull. The "Clean Up Airtable Duplicates" button removes them.
+        skippedDupes++;
+        console.warn('[mergeRemote] '+table+' — skipping Airtable-side duplicate. natural key:', k, 'remote airtableId:', rrec.id, 'existing local airtableId:', (localArr[natAll[k]]||{}).airtableId);
         return;
       }
     }
@@ -1885,8 +1968,8 @@ function mergeRemote(localArr, remoteRecs, mapper, ctx, table, lsKey){
   });
   if(repaired) console.log('[mergeRemote] '+table+' — repaired '+repaired+' stale airtableId link(s)');
   if(linked)   console.log('[mergeRemote] '+table+' — linked '+linked+' pre-existing local row(s) to remote by natural key');
-  if(skippedTxDupes) console.warn('[mergeRemote] '+table+' — '+skippedTxDupes+' Airtable-side duplicate(s) skipped. Run Settings → "Clean Up Airtable Duplicates" to remove them from Airtable.');
-  return {added, updated, conflicts, skippedTxDupes};
+  if(skippedDupes) console.warn('[mergeRemote] '+table+' — '+skippedDupes+' Airtable-side duplicate(s) skipped. Run Settings → "Clean Up Airtable Duplicates" to remove them from Airtable.');
+  return {added, updated, conflicts, skippedDupes};
 }
 
 // Top-level pull — fetch every configured table in parallel and merge.
@@ -2640,6 +2723,7 @@ function buildBatchFields(rec){
     'Room Distribution':(rec.roomDistribution && Object.keys(rec.roomDistribution).length) ? JSON.stringify(rec.roomDistribution) : undefined,
     'Completed Harvests':(rec.completedHarvests && rec.completedHarvests.length) ? rec.completedHarvests.join(', ') : undefined,
     'Harvested Weights':(rec.harvestedWeights && Object.keys(rec.harvestedWeights).length) ? JSON.stringify(rec.harvestedWeights) : undefined,
+    'Harvested Plants':(rec.harvestedPlants && Object.keys(rec.harvestedPlants).length) ? JSON.stringify(rec.harvestedPlants) : undefined,
     'Plant Phase':rec.plantPhase||undefined,
     'Status':rec.status||undefined,
     'Closed Date':rec.closedDate||undefined,
@@ -5251,37 +5335,13 @@ function dedupeBatchTxLocal(){
   toast('Removed '+dupes+' duplicate transaction(s).', 4500);
 }
 
-// Remove duplicate Batch Transaction records from AIRTABLE. Fetches all remote tx records,
-// groups them by natural key (batch + date + txType + qty), and for each group with 2+
-// remote records, deletes all but one from Airtable. The kept record is the one matching
-// a local airtableId (so we keep what the app thinks is canonical); if none match, the
-// first one is kept.
-//
-// This is the permanent fix for the dedup-then-pull loop — once the orphan records are
-// gone from Airtable, future pulls won't keep re-creating local duplicates.
-async function cleanAirtableDuplicateTx(){
-  if(!atReady()){ toast('Configure Airtable in Settings first.'); return; }
-  if(!cfg.batchtxTbl){ toast('Batch Transactions table ID is not set.'); return; }
-  const el = document.getElementById('clean-air-dupes-status');
-  const setStatus = (msg, color) => { if(el){ el.textContent = msg; el.style.color = color || 'var(--text2)'; } };
-  setStatus('Fetching all Batch Transactions from Airtable...', 'var(--text2)');
-  let remote;
-  try {
-    remote = await atFetchAll(cfg.batchtxTbl);
-  } catch(e){
-    setStatus('Fetch failed: '+e.message, 'var(--red)');
-    return;
-  }
-  console.log('[clean-air-dupes] Fetched', remote.length, 'remote Batch Transactions');
-  // Build a natural-key index over remote records using a parallel of _batchtxNatKey, but
-  // reading directly from Airtable fields. ctx.batchIdByRecId isn't available here — we
-  // resolve the linked Batch ID by reading remote.fields['Batch ID'] which is the linked
-  // record id; we need to translate via the local batchTxRecs.airtableId map.
-  const localByAirtableId = {};
-  batchTxRecs.forEach(r => { if(r && r.airtableId) localByAirtableId[r.airtableId] = r; });
-  function _natKeyFromRemote(rrec){
+// Remote-side natural-key functions. Mirror NAT_KEY_FN above but read directly from
+// the raw Airtable record's fields (no local mapper). The Batch ID portion uses the
+// linked-record id (same shape across all remote rows of the same batch, no resolution
+// needed). Used by cleanAirtableDuplicates to find orphan dupes server-side.
+const NAT_KEY_FN_REMOTE = {
+  batchtx(rrec){
     const f = rrec.fields || {};
-    // Use the linked record id as the batch key — same key shape across all remote rows for the same batch.
     const linkId = Array.isArray(f['Batch ID']) ? f['Batch ID'][0] : '';
     return [
       (linkId || '').toString(),
@@ -5289,41 +5349,191 @@ async function cleanAirtableDuplicateTx(){
       (f['Transaction Type'] || '').toString(),
       ((parseFloat(f['Quantity']) || 0).toFixed(3))
     ].join('|');
+  },
+  ec(rrec){
+    const f = rrec.fields || {};
+    const linkId = Array.isArray(f['Batch ID']) ? f['Batch ID'][0] : '';
+    return [
+      (linkId||'').toString(),
+      (f['Date']||'').toString(),
+      (f['Room']||'').toString(),
+      (f['Grower']||'').toString()
+    ].join('|');
+  },
+  ro(rrec){
+    const f = rrec.fields || {};
+    const linkId = Array.isArray(f['Batch ID']) ? f['Batch ID'][0] : '';
+    return [
+      (linkId||'').toString(),
+      (f['Date']||'').toString(),
+      (f['Room']||'').toString()
+    ].join('|');
+  },
+  waste(rrec){
+    const f = rrec.fields || {};
+    const linkId = Array.isArray(f['Batch ID']) ? f['Batch ID'][0] : '';
+    return [
+      (linkId||'').toString(),
+      (f['Date']||'').toString(),
+      (f['Room']||'').toString(),
+      (f['Waste Type']||'').toString(),
+      (f['Sub-Category']||'').toString(),
+      (parseFloat(f['Weight (kg)'])||0).toFixed(3),
+      (parseInt(f['Plants Destroyed'])||0)
+    ].join('|');
+  },
+  harvest(rrec){
+    const f = rrec.fields || {};
+    const linkId = Array.isArray(f['Batch ID']) ? f['Batch ID'][0] : '';
+    return [
+      (linkId||'').toString(),
+      (f['Room']||'').toString(),
+      (parseInt(f['Bin Number'])||0)
+    ].join('|');
+  },
+  postdry(rrec){
+    const f = rrec.fields || {};
+    const linkId = Array.isArray(f['Batch ID']) ? f['Batch ID'][0] : '';
+    return [
+      (linkId||'').toString(),
+      (parseInt(f['Container ID'])||0)
+    ].join('|');
+  },
+  bio(rrec){
+    const f = rrec.fields || {};
+    const linkId = Array.isArray(f['Batch ID']) ? f['Batch ID'][0] : '';
+    return [
+      (linkId||'').toString(),
+      (f['Date']||'').toString(),
+      (f['Room']||'').toString(),
+      (f['Product']||'').toString()
+    ].join('|');
+  },
+  pest(rrec){
+    const f = rrec.fields || {};
+    const linkId = Array.isArray(f['Batch ID']) ? f['Batch ID'][0] : '';
+    const card = f['Card Number'] != null ? String(f['Card Number']) : (f['Location']||'').toString();
+    return [
+      (linkId||'').toString(),
+      (f['Date']||'').toString(),
+      (f['Room']||'').toString(),
+      card
+    ].join('|');
   }
+};
+
+// Generic Airtable dedup helper — used by cleanAirtableDuplicates for every child table.
+// Returns { found, deleted, failed }.
+async function _cleanAirtableDupesForTable(tblId, localArr, remoteKeyFn, label){
+  if(!tblId) return { found:0, deleted:0, failed:0, skipped:true };
+  let remote;
+  try {
+    remote = await atFetchAll(tblId);
+  } catch(e){
+    console.error('[clean-air-dupes] '+label+' fetch failed:', e);
+    return { found:0, deleted:0, failed:0, error:e.message };
+  }
+  console.log('[clean-air-dupes]', label, '— fetched', remote.length, 'remote records');
+  const localByAirtableId = {};
+  localArr.forEach(r => { if(r && r.airtableId) localByAirtableId[r.airtableId] = r; });
   const groups = {};
   remote.forEach(rrec => {
-    const k = _natKeyFromRemote(rrec);
+    const k = remoteKeyFn(rrec);
     if(!k) return;
     if(!groups[k]) groups[k] = [];
     groups[k].push(rrec);
   });
-  // Build the delete list: for groups with >1, keep the one matching a local airtableId
-  // (or the first one if none match), delete the rest.
   const toDelete = [];
   Object.entries(groups).forEach(([k, recs]) => {
     if(recs.length < 2) return;
     let keeper = recs.find(rr => localByAirtableId[rr.id]);
     if(!keeper) keeper = recs[0];
     recs.forEach(rr => { if(rr.id !== keeper.id) toDelete.push(rr); });
-    console.log('[clean-air-dupes] Group ('+recs.length+'):', k, 'keeping', keeper.id, 'deleting', recs.filter(r => r.id !== keeper.id).map(r => r.id));
+    console.log('[clean-air-dupes]', label, 'group ('+recs.length+'):', k, 'keeping', keeper.id, 'deleting', recs.filter(r => r.id !== keeper.id).map(r => r.id));
   });
-  if(!toDelete.length){
-    setStatus('No Airtable duplicates found.', 'var(--green)');
+  let deleted = 0, failed = 0;
+  for(const rr of toDelete){
+    const ok = await atDelete(tblId, rr.id);
+    if(ok) deleted++; else failed++;
+  }
+  return { found: toDelete.length, deleted, failed };
+}
+
+// Remove duplicate records from AIRTABLE across every child table. Fetches all remote
+// records, groups by natural key (per-table), and for each group with 2+ remote records,
+// deletes all but one from Airtable. The kept record is the one matching a local
+// airtableId (so we keep what the app thinks is canonical); if none match, the first
+// is kept.
+//
+// This is the permanent fix for the dedup-then-pull loop — once the orphan records are
+// gone from Airtable, future pulls won't keep re-creating local duplicates.
+async function cleanAirtableDuplicateTx(){
+  if(!atReady()){ toast('Configure Airtable in Settings first.'); return; }
+  const el = document.getElementById('clean-air-dupes-status');
+  const setStatus = (msg, color) => { if(el){ el.textContent = msg; el.style.color = color || 'var(--text2)'; } };
+  // Tables to check. Each entry: { label, tblId, localArr, remoteKeyFn }
+  const tables = [
+    { label:'Batch Transactions', tblId:cfg.batchtxTbl, localArr:batchTxRecs, remoteKeyFn:NAT_KEY_FN_REMOTE.batchtx },
+    { label:'EC Log',             tblId:cfg.ecTbl,      localArr:ecRecs,       remoteKeyFn:NAT_KEY_FN_REMOTE.ec },
+    { label:'Runoff',             tblId:cfg.roTbl,      localArr:roRecs,       remoteKeyFn:NAT_KEY_FN_REMOTE.ro },
+    { label:'Waste',              tblId:cfg.wasteTbl,   localArr:wasteRecs,    remoteKeyFn:NAT_KEY_FN_REMOTE.waste },
+    { label:'Harvest',            tblId:cfg.harvestTbl, localArr:harvestRecs,  remoteKeyFn:NAT_KEY_FN_REMOTE.harvest },
+    { label:'Post-Drying',        tblId:cfg.postDryTbl, localArr:postDryRecs,  remoteKeyFn:NAT_KEY_FN_REMOTE.postdry },
+    { label:'Bio Control',        tblId:cfg.bioTbl,     localArr:bioRecs,      remoteKeyFn:NAT_KEY_FN_REMOTE.bio },
+    { label:'Pest ID',            tblId:cfg.pestTbl,    localArr:pestRecs,     remoteKeyFn:NAT_KEY_FN_REMOTE.pest }
+  ];
+  setStatus('Scanning Airtable for duplicates across '+tables.length+' tables...', 'var(--text2)');
+  // First pass: scan everything to find the total count.
+  const scan = [];
+  let totalDupes = 0;
+  for(const t of tables){
+    if(!t.tblId){
+      scan.push({...t, found:0, skipped:true});
+      continue;
+    }
+    try {
+      const remote = await atFetchAll(t.tblId);
+      const localByAt = {};
+      t.localArr.forEach(r => { if(r && r.airtableId) localByAt[r.airtableId] = r; });
+      const groups = {};
+      remote.forEach(rr => { const k = t.remoteKeyFn(rr); if(!k) return; (groups[k] = groups[k]||[]).push(rr); });
+      const groupedDupes = Object.values(groups).reduce((s, recs) => s + Math.max(0, recs.length - 1), 0);
+      scan.push({...t, remote, localByAt, groups, found: groupedDupes});
+      totalDupes += groupedDupes;
+    } catch(e){
+      scan.push({...t, found:0, error:e.message});
+      console.error('[clean-air-dupes] '+t.label+' scan failed:', e);
+    }
+  }
+  if(!totalDupes){
+    setStatus('No Airtable duplicates found across any table.', 'var(--green)');
     toast('No Airtable duplicates found.', 3500);
     return;
   }
-  if(!confirm('Found '+toDelete.length+' duplicate Batch Transaction record(s) in Airtable. Delete them from Airtable? This cannot be undone.')){
-    setStatus('Cancelled. '+toDelete.length+' Airtable duplicate(s) detected but not deleted.', 'var(--amber)');
+  // Build a per-table summary for the confirm.
+  const summary = scan.filter(s => s.found > 0).map(s => '  • '+s.label+': '+s.found).join('\n');
+  if(!confirm('Found '+totalDupes+' duplicate record(s) in Airtable:\n\n'+summary+'\n\nDelete them from Airtable? This cannot be undone.')){
+    setStatus('Cancelled. '+totalDupes+' Airtable duplicate(s) detected but not deleted.', 'var(--amber)');
     return;
   }
-  setStatus('Deleting '+toDelete.length+' duplicate(s) from Airtable...', 'var(--text2)');
-  let deleted = 0, failed = 0;
-  for(const rr of toDelete){
-    const ok = await atDelete(cfg.batchtxTbl, rr.id);
-    if(ok) deleted++; else failed++;
+  // Second pass: actually delete.
+  setStatus('Deleting '+totalDupes+' duplicate(s) from Airtable...', 'var(--text2)');
+  let totalDeleted = 0, totalFailed = 0;
+  for(const s of scan){
+    if(!s.groups || s.found === 0) continue;
+    for(const recs of Object.values(s.groups)){
+      if(recs.length < 2) continue;
+      let keeper = recs.find(rr => s.localByAt[rr.id]);
+      if(!keeper) keeper = recs[0];
+      for(const rr of recs){
+        if(rr.id === keeper.id) continue;
+        const ok = await atDelete(s.tblId, rr.id);
+        if(ok) totalDeleted++; else totalFailed++;
+      }
+    }
   }
-  setStatus('Deleted '+deleted+' duplicate(s) from Airtable.'+(failed?' '+failed+' delete(s) failed.':''), failed ? 'var(--amber)' : 'var(--green)');
-  toast('Cleaned '+deleted+' Airtable duplicate(s)' + (failed ? ' ('+failed+' failed)' : '') + '.', 5000);
+  setStatus('Deleted '+totalDeleted+' duplicate(s) from Airtable.'+(totalFailed?' '+totalFailed+' delete(s) failed.':''), totalFailed ? 'var(--amber)' : 'var(--green)');
+  toast('Cleaned '+totalDeleted+' Airtable duplicate(s)' + (totalFailed ? ' ('+totalFailed+' failed)' : '') + '.', 5000);
   // Refresh local from Airtable now that the duplicates are gone.
   pullFromAirtable({manual:true});
 }
