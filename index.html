@@ -1290,7 +1290,9 @@ tr:last-child td { border-bottom: none; }
         </div>
         <button class="btn-save" id="sync-pending-btn" onclick="syncPending()" style="margin-top:8px;background:var(--blue);">Sync Pending Records</button>
         <div class="conn-status" id="sync-pending-status"></div>
-        <button class="btn-save" onclick="dedupeBatchTxLocal()" style="margin-top:8px;background:var(--amber);color:#3B2A00;">Clean Up Duplicate Transactions</button>
+        <button class="btn-save" onclick="dedupeBatchTxLocal()" style="margin-top:8px;background:var(--amber);color:#3B2A00;">Clean Up Duplicate Transactions (Local)</button>
+        <button class="btn-save" onclick="cleanAirtableDuplicateTx()" style="margin-top:8px;background:#7B0000;">Clean Up Airtable Duplicates</button>
+        <div class="conn-status" id="clean-air-dupes-status"></div>
         <button class="btn-save" onclick="diagnoseBatchTx()" style="margin-top:8px;background:var(--blue);">Diagnose Transactions (Console)</button>
         <div class="conn-status" id="dedupe-tx-status"></div>
         <button class="btn-save" onclick="clearPendingRecords()" style="margin-top:8px;background:var(--red);">Clear Pending Records</button>
@@ -1449,6 +1451,20 @@ async function atUpsert(tbl,fields,mergeOn){const body={performUpsert:{fieldsToM
 
 // Paginated GET. Returns [] when the table is unconfigured. Resolves to an
 // array of Airtable record objects {id, createdTime, fields}.
+// Delete a record from Airtable by its airtableId. Returns true on success, false on failure.
+// Used to clean up Airtable-side duplicate transactions.
+async function atDelete(tbl, recordId){
+  if(!atReady() || !tbl || !recordId) return false;
+  try{
+    const url = 'https://api.airtable.com/v0/'+cfg.base+'/'+encodeURIComponent(tbl)+'/'+encodeURIComponent(recordId);
+    const r = await fetch(url, { method:'DELETE', headers:{'Authorization':'Bearer '+cfg.token} });
+    return r.ok;
+  } catch(e){
+    console.error('[atDelete] failed for', recordId, e);
+    return false;
+  }
+}
+
 async function atFetchAll(tbl){
   if(!atReady() || !tbl) return [];
   const out = [];
@@ -1482,6 +1498,27 @@ const REMOTE_MAPPERS = {
     const f = rec.fields || {};
     const bid = (f['Batch ID']||'').toString().trim().toUpperCase();
     if(!bid) return null;
+    // Parse the JSON-encoded per-flower-room distribution back into a plain object.
+    // Sent up by buildBatchFields as JSON.stringify(rec.roomDistribution).
+    let _roomDist = {};
+    try {
+      if(f['Room Distribution'] && typeof f['Room Distribution'] === 'string'){
+        const _parsed = JSON.parse(f['Room Distribution']);
+        if(_parsed && typeof _parsed === 'object' && !Array.isArray(_parsed)) _roomDist = _parsed;
+      }
+    } catch(e){ _roomDist = {}; }
+    // Same JSON shape for per-room wet harvest weights (multi-day harvest).
+    let _harvWeights = {};
+    try {
+      if(f['Harvested Weights'] && typeof f['Harvested Weights'] === 'string'){
+        const _parsed = JSON.parse(f['Harvested Weights']);
+        if(_parsed && typeof _parsed === 'object' && !Array.isArray(_parsed)) _harvWeights = _parsed;
+      }
+    } catch(e){ _harvWeights = {}; }
+    // Completed Harvests is sent as a comma-separated string of flower-room names.
+    const _completedHarvests = (f['Completed Harvests'] && typeof f['Completed Harvests'] === 'string')
+      ? f['Completed Harvests'].split(',').map(s => s.trim()).filter(Boolean)
+      : [];
     return {
       id: 'b_'+rec.id,
       airtableId: rec.id,
@@ -1501,6 +1538,9 @@ const REMOTE_MAPPERS = {
       soldDate: f['Sold Date']||'',
       deliveredDate: f['Delivered Date']||'',
       rooms: Array.isArray(f['Rooms']) ? f['Rooms'] : (f['Rooms'] ? String(f['Rooms']).split(',').map(s=>s.trim()).filter(Boolean) : []),
+      roomDistribution: _roomDist,
+      completedHarvests: _completedHarvests,
+      harvestedWeights: _harvWeights,
       plantPhase: f['Plant Phase']||'Clones',
       status: f['Status']||'Open',
       closedDate: f['Closed Date']||'',
@@ -1754,13 +1794,20 @@ function mergeRemote(localArr, remoteRecs, mapper, ctx, table, lsKey){
   // local tx exists without an airtableId (sync failed mid-save, offline insert,
   // legacy data) we link the remote to it instead of duplicating.
   const byTxNat = {};
+  // FULL natural-key index across ALL local batchtx records (linked or not). Used to
+  // detect Airtable-side duplicates — remote records sharing a natural key with a local
+  // record already linked to a DIFFERENT airtableId. Without this, the orphan keeps
+  // re-appearing on every pull because the airtableId map only catches the linked copy.
+  const localTxByNat = {};
   if(table === 'batchtx'){
     localArr.forEach((r,i) => {
-      if(!r || r.airtableId) return; // only index unlinked rows
       const k = _batchtxNatKey(r);
+      if(k && localTxByNat[k] === undefined) localTxByNat[k] = i;
+      if(!r || r.airtableId) return; // unlinked-only index for the link fallback
       if(k && byTxNat[k] === undefined) byTxNat[k] = i;
     });
   }
+  let skippedTxDupes = 0;
   let added = 0, updated = 0, conflicts = 0, repaired = 0, linked = 0;
   remoteRecs.forEach(rrec => {
     const mapped = mapper(rrec, ctx||{});
@@ -1786,6 +1833,15 @@ function mergeRemote(localArr, remoteRecs, mapper, ctx, table, lsKey){
         // Consume the slot so two remote rows with the same natural key don't both link here.
         delete byTxNat[k];
         linked++;
+      } else if(k && localTxByNat[k] !== undefined){
+        // No unlinked slot, but a local record DOES exist with the same natural key — that
+        // local is already linked to a DIFFERENT Airtable record. This remote row is an
+        // Airtable-side duplicate (the canonical fix is to delete it via "Clean Up Airtable
+        // Duplicates" on Settings). Skip it here so it doesn't re-create the local duplicate
+        // on every pull, breaking the dedup-then-pull loop.
+        skippedTxDupes++;
+        console.warn('[mergeRemote] batchtx — skipping Airtable-side duplicate. natural key:', k, 'remote airtableId:', rrec.id, 'existing local airtableId:', (localArr[localTxByNat[k]]||{}).airtableId);
+        return;
       }
     }
     if(idx !== undefined){
@@ -1829,7 +1885,8 @@ function mergeRemote(localArr, remoteRecs, mapper, ctx, table, lsKey){
   });
   if(repaired) console.log('[mergeRemote] '+table+' — repaired '+repaired+' stale airtableId link(s)');
   if(linked)   console.log('[mergeRemote] '+table+' — linked '+linked+' pre-existing local row(s) to remote by natural key');
-  return {added, updated, conflicts};
+  if(skippedTxDupes) console.warn('[mergeRemote] '+table+' — '+skippedTxDupes+' Airtable-side duplicate(s) skipped. Run Settings → "Clean Up Airtable Duplicates" to remove them from Airtable.');
+  return {added, updated, conflicts, skippedTxDupes};
 }
 
 // Top-level pull — fetch every configured table in parallel and merge.
@@ -5192,6 +5249,83 @@ function dedupeBatchTxLocal(){
   const el = document.getElementById('dedupe-tx-status');
   if(el){ el.textContent = 'Removed '+dupes+' duplicate transaction(s) — '+batchTxRecs.length+' remain.'; el.style.color = 'var(--green)'; }
   toast('Removed '+dupes+' duplicate transaction(s).', 4500);
+}
+
+// Remove duplicate Batch Transaction records from AIRTABLE. Fetches all remote tx records,
+// groups them by natural key (batch + date + txType + qty), and for each group with 2+
+// remote records, deletes all but one from Airtable. The kept record is the one matching
+// a local airtableId (so we keep what the app thinks is canonical); if none match, the
+// first one is kept.
+//
+// This is the permanent fix for the dedup-then-pull loop — once the orphan records are
+// gone from Airtable, future pulls won't keep re-creating local duplicates.
+async function cleanAirtableDuplicateTx(){
+  if(!atReady()){ toast('Configure Airtable in Settings first.'); return; }
+  if(!cfg.batchtxTbl){ toast('Batch Transactions table ID is not set.'); return; }
+  const el = document.getElementById('clean-air-dupes-status');
+  const setStatus = (msg, color) => { if(el){ el.textContent = msg; el.style.color = color || 'var(--text2)'; } };
+  setStatus('Fetching all Batch Transactions from Airtable...', 'var(--text2)');
+  let remote;
+  try {
+    remote = await atFetchAll(cfg.batchtxTbl);
+  } catch(e){
+    setStatus('Fetch failed: '+e.message, 'var(--red)');
+    return;
+  }
+  console.log('[clean-air-dupes] Fetched', remote.length, 'remote Batch Transactions');
+  // Build a natural-key index over remote records using a parallel of _batchtxNatKey, but
+  // reading directly from Airtable fields. ctx.batchIdByRecId isn't available here — we
+  // resolve the linked Batch ID by reading remote.fields['Batch ID'] which is the linked
+  // record id; we need to translate via the local batchTxRecs.airtableId map.
+  const localByAirtableId = {};
+  batchTxRecs.forEach(r => { if(r && r.airtableId) localByAirtableId[r.airtableId] = r; });
+  function _natKeyFromRemote(rrec){
+    const f = rrec.fields || {};
+    // Use the linked record id as the batch key — same key shape across all remote rows for the same batch.
+    const linkId = Array.isArray(f['Batch ID']) ? f['Batch ID'][0] : '';
+    return [
+      (linkId || '').toString(),
+      (f['Date'] || '').toString(),
+      (f['Transaction Type'] || '').toString(),
+      ((parseFloat(f['Quantity']) || 0).toFixed(3))
+    ].join('|');
+  }
+  const groups = {};
+  remote.forEach(rrec => {
+    const k = _natKeyFromRemote(rrec);
+    if(!k) return;
+    if(!groups[k]) groups[k] = [];
+    groups[k].push(rrec);
+  });
+  // Build the delete list: for groups with >1, keep the one matching a local airtableId
+  // (or the first one if none match), delete the rest.
+  const toDelete = [];
+  Object.entries(groups).forEach(([k, recs]) => {
+    if(recs.length < 2) return;
+    let keeper = recs.find(rr => localByAirtableId[rr.id]);
+    if(!keeper) keeper = recs[0];
+    recs.forEach(rr => { if(rr.id !== keeper.id) toDelete.push(rr); });
+    console.log('[clean-air-dupes] Group ('+recs.length+'):', k, 'keeping', keeper.id, 'deleting', recs.filter(r => r.id !== keeper.id).map(r => r.id));
+  });
+  if(!toDelete.length){
+    setStatus('No Airtable duplicates found.', 'var(--green)');
+    toast('No Airtable duplicates found.', 3500);
+    return;
+  }
+  if(!confirm('Found '+toDelete.length+' duplicate Batch Transaction record(s) in Airtable. Delete them from Airtable? This cannot be undone.')){
+    setStatus('Cancelled. '+toDelete.length+' Airtable duplicate(s) detected but not deleted.', 'var(--amber)');
+    return;
+  }
+  setStatus('Deleting '+toDelete.length+' duplicate(s) from Airtable...', 'var(--text2)');
+  let deleted = 0, failed = 0;
+  for(const rr of toDelete){
+    const ok = await atDelete(cfg.batchtxTbl, rr.id);
+    if(ok) deleted++; else failed++;
+  }
+  setStatus('Deleted '+deleted+' duplicate(s) from Airtable.'+(failed?' '+failed+' delete(s) failed.':''), failed ? 'var(--amber)' : 'var(--green)');
+  toast('Cleaned '+deleted+' Airtable duplicate(s)' + (failed ? ' ('+failed+' failed)' : '') + '.', 5000);
+  // Refresh local from Airtable now that the duplicates are gone.
+  pullFromAirtable({manual:true});
 }
 
 // Diagnostic-only — log every batch transaction grouped by batch so we can SEE what's
