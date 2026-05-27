@@ -1294,6 +1294,8 @@ tr:last-child td { border-bottom: none; }
         <div class="sfield"><label>Post-Drying Log Table ID</label><input type="text" id="s-postdry" placeholder="tblXXXXXXXXXXXXXX" /></div>
         <div class="sfield"><label>Biological Control Log Table ID</label><input type="text" id="s-bio" placeholder="tblXXXXXXXXXXXXXX" /></div>
         <div class="sfield"><label>Pest Identification Log Table ID</label><input type="text" id="s-pest" placeholder="tblXXXXXXXXXXXXXX" /></div>
+        <div class="sfield"><label>Batch Cleaning Log Table ID <span style="font-size:10px;color:var(--text3);font-weight:400;">(Sanitation)</span></label><input type="text" id="s-sanclean" placeholder="tblXXXXXXXXXXXXXX" /></div>
+        <div class="sfield"><label>Tool Cleaning Log Table ID <span style="font-size:10px;color:var(--text3);font-weight:400;">(Sanitation)</span></label><input type="text" id="s-santool" placeholder="tblXXXXXXXXXXXXXX" /></div>
         <button class="btn-save" onclick="saveSettings()">Save and Test Connection</button>
         <div class="conn-status" id="conn-status"></div>
         <div style="margin-top:14px;padding-top:12px;border-top:1px dashed var(--border);">
@@ -1398,9 +1400,9 @@ tr:last-child td { border-bottom: none; }
       <div class="card">
         <div class="section-label">Tool Cleaning Log</div>
 
-        <div class="g2" style="margin-bottom:10px;">
-          <div class="field"><label>Date</label><input type="date" id="santool-date" /></div>
-          <div class="field"><label>Time</label><input type="time" id="santool-time" /></div>
+        <div class="field" style="margin-bottom:10px;">
+          <label>Date</label>
+          <input type="date" id="santool-date" />
         </div>
 
         <div class="field" style="margin-bottom:10px;">
@@ -1970,6 +1972,44 @@ const REMOTE_MAPPERS = {
       synced: true
     };
   },
+  sanclean(rec, ctx){
+    const f = rec.fields || {};
+    const link = Array.isArray(f['Batch ID']) ? f['Batch ID'][0] : null;
+    const batch = link ? (ctx.batchIdByRecId[link]||'') : '';
+    if(!batch) return null;
+    return {
+      id: 'sc_'+rec.id,
+      airtableId: rec.id,
+      date: f['Date']||'',
+      time: f['Time']||'',
+      grower: f['Grower']||'',
+      batch,
+      room: f['Room']||'',
+      template: f['Log Template']||'',
+      phase: f['Phase']||'',
+      task: f['Task']||'',
+      notes: f['Notes']||'',
+      synced: true
+    };
+  },
+  santool(rec, ctx){
+    const f = rec.fields || {};
+    const link = Array.isArray(f['Batch ID']) ? f['Batch ID'][0] : null;
+    const batch = link ? (ctx.batchIdByRecId[link]||'') : '';
+    // Tool cleaning records can be batch-less (general tool maintenance not tied to a batch).
+    return {
+      id: 'st_'+rec.id,
+      airtableId: rec.id,
+      date: f['Date']||'',
+      grower: f['Grower']||'',
+      batch: batch || '',
+      tool: f['Tool']||'',
+      cleaned: !!f['Cleaned'],
+      sanitized: !!f['Sanitized'],
+      notes: f['Notes']||'',
+      synced: true
+    };
+  },
 };
 
 // Conflicts queue — populated by mergeRemote when a pull arrives for a record
@@ -2092,6 +2132,29 @@ const NAT_KEY_FN = {
       r.date||'',
       (r.room||'').toString(),
       (r.cardNumber != null ? String(r.cardNumber) : (r.location||'').toString())
+    ].join('|');
+  },
+  sanclean(r){
+    if(!r) return '';
+    // Same task can only be logged ONCE per (batch, template, phase, date). Re-logging the
+    // same task on the same day is blocked at save time.
+    return [
+      (r.batch||'').toString().toUpperCase(),
+      r.date||'',
+      (r.template||'').toString(),
+      (r.phase||'').toString(),
+      (r.task||'').toString()
+    ].join('|');
+  },
+  santool(r){
+    if(!r) return '';
+    // Tool cleaning natural key: batch + date + tool + cleaned/sanitized flags.
+    return [
+      (r.batch||'').toString().toUpperCase(),
+      r.date||'',
+      (r.tool||'').toString(),
+      r.cleaned ? 'C' : '',
+      r.sanitized ? 'S' : ''
     ].join('|');
   }
 };
@@ -2225,7 +2288,7 @@ async function pullFromAirtable(opts){
   isPulling = true;
   if(opts.manual) setSyncPill('ing','Syncing…');
   try {
-    const [batches, ecs, ros, ws, txs, hs, pds, bs, ps] = await Promise.all([
+    const [batches, ecs, ros, ws, txs, hs, pds, bs, ps, scs, sts] = await Promise.all([
       atFetchAll(cfg.batchTbl),
       atFetchAll(cfg.ecTbl),
       atFetchAll(cfg.roTbl),
@@ -2234,7 +2297,9 @@ async function pullFromAirtable(opts){
       atFetchAll(cfg.harvestTbl),
       atFetchAll(cfg.postDryTbl),
       atFetchAll(cfg.bioTbl),
-      atFetchAll(cfg.pestTbl)
+      atFetchAll(cfg.pestTbl),
+      atFetchAll(cfg.sanCleanTbl),
+      atFetchAll(cfg.sanToolTbl)
     ]);
     // Resolve linked-record refs by building recordId→Batch-ID-string lookup
     const batchIdByRecId = {};
@@ -2257,23 +2322,27 @@ async function pullFromAirtable(opts){
     summary.postdry = mergeRemote(postDryRecs, pds,     REMOTE_MAPPERS.postdry, ctx, 'postdry', 'gp-postdry');
     summary.bio     = mergeRemote(bioRecs,     bs,      REMOTE_MAPPERS.bio,     ctx, 'bio',     'gp-bio');
     summary.pest    = mergeRemote(pestRecs,    ps,      REMOTE_MAPPERS.pest,    ctx, 'pest',    'gp-pest');
+    summary.sanclean= mergeRemote(sanCleanRecs, scs,    REMOTE_MAPPERS.sanclean,ctx, 'sanclean','gp-sanclean');
+    summary.santool = mergeRemote(sanToolRecs,  sts,    REMOTE_MAPPERS.santool, ctx, 'santool', 'gp-santool');
     // Sweep the conflict queue — drop any entries whose local row no longer
     // matches the remote (could happen if mergeRemote just repaired a stale
     // airtableId link, or if the local was deleted out from under us).
     _pendingConflicts = _pendingConflicts.filter(c => {
-      const arr = {batch:batchRecs, ec:ecRecs, ro:roRecs, waste:wasteRecs, batchtx:batchTxRecs, harvest:harvestRecs, postdry:postDryRecs, bio:bioRecs, pest:pestRecs}[c.table] || [];
+      const arr = {batch:batchRecs, ec:ecRecs, ro:roRecs, waste:wasteRecs, batchtx:batchTxRecs, harvest:harvestRecs, postdry:postDryRecs, bio:bioRecs, pest:pestRecs, sanclean:sanCleanRecs, santool:sanToolRecs}[c.table] || [];
       const stillLocal = arr.find(r => r && r.airtableId === c.airtableId);
       if(!stillLocal) return false;
       return _recordsLookEquivalent(stillLocal, c.remote, c.table);
     });
-    lsSet('gp-ec',      ecRecs);
-    lsSet('gp-ro',      roRecs);
-    lsSet('gp-waste',   wasteRecs);
-    lsSet('gp-batchtx', batchTxRecs);
-    lsSet('gp-harvest', harvestRecs);
-    lsSet('gp-postdry', postDryRecs);
-    lsSet('gp-bio',     bioRecs);
-    lsSet('gp-pest',    pestRecs);
+    lsSet('gp-ec',       ecRecs);
+    lsSet('gp-ro',       roRecs);
+    lsSet('gp-waste',    wasteRecs);
+    lsSet('gp-batchtx',  batchTxRecs);
+    lsSet('gp-harvest',  harvestRecs);
+    lsSet('gp-postdry',  postDryRecs);
+    lsSet('gp-bio',      bioRecs);
+    lsSet('gp-pest',     pestRecs);
+    lsSet('gp-sanclean', sanCleanRecs);
+    lsSet('gp-santool',  sanToolRecs);
     const totalAdded    = Object.values(summary).reduce((s,o)=>s+o.added, 0);
     const totalUpdated  = Object.values(summary).reduce((s,o)=>s+o.updated, 0);
     const totalConflicts= Object.values(summary).reduce((s,o)=>s+o.conflicts, 0);
@@ -2413,7 +2482,7 @@ function renderConflictsModal(){
     renderConflictBanner();
     return;
   }
-  const tableLabels = {batch:'Batch', ec:'EC Log', ro:'Runoff', waste:'Waste', batchtx:'Batch Transaction', harvest:'Harvest', postdry:'Post-Drying', bio:'Bio Control', pest:'Pest ID'};
+  const tableLabels = {batch:'Batch', ec:'EC Log', ro:'Runoff', waste:'Waste', batchtx:'Batch Transaction', harvest:'Harvest', postdry:'Post-Drying', bio:'Bio Control', pest:'Pest ID', sanclean:'Batch Cleaning', santool:'Tool Cleaning'};
   const items = _pendingConflicts.map((c, i) => {
     const diffs = _conflictDiffFields(c.local, c.remote);
     const label = tableLabels[c.table] || c.table;
@@ -2455,7 +2524,7 @@ function renderConflictsModal(){
 async function resolveConflict(idx, choice){
   const c = _pendingConflicts[idx];
   if(!c) return;
-  const arrName = {batch:'batchRecs', ec:'ecRecs', ro:'roRecs', waste:'wasteRecs', batchtx:'batchTxRecs', harvest:'harvestRecs', postdry:'postDryRecs', bio:'bioRecs', pest:'pestRecs'}[c.table];
+  const arrName = {batch:'batchRecs', ec:'ecRecs', ro:'roRecs', waste:'wasteRecs', batchtx:'batchTxRecs', harvest:'harvestRecs', postdry:'postDryRecs', bio:'bioRecs', pest:'pestRecs', sanclean:'sanCleanRecs', santool:'sanToolRecs'}[c.table];
   const arr = arrName ? window[arrName] : null;
   if(!arr){ _pendingConflicts.splice(idx,1); renderConflictsModal(); renderConflictBanner(); return; }
   // Find the local row by airtableId (index may have shifted since the
@@ -5559,8 +5628,8 @@ function migrateRoomNames(){
 }
 function clearAllLocalData(){
   if(!confirm('This will permanently delete ALL local records including synced data, batch IDs, transactions, and dropdowns. This cannot be undone. Continue?'))return;
-  ecRecs=[];roRecs=[];wasteRecs=[];batchRecs=[];batchTxRecs=[];harvestRecs=[];postDryRecs=[];bioRecs=[];pestRecs=[];
-  lsSet('gp-ec',[]);lsSet('gp-ro',[]);lsSet('gp-waste',[]);lsSet('gp-batch',[]);lsSet('gp-batchtx',[]);lsSet('gp-harvest',[]);lsSet('gp-postdry',[]);lsSet('gp-bio',[]);lsSet('gp-pest',[]);
+  ecRecs=[];roRecs=[];wasteRecs=[];batchRecs=[];batchTxRecs=[];harvestRecs=[];postDryRecs=[];bioRecs=[];pestRecs=[];sanCleanRecs=[];sanToolRecs=[];
+  lsSet('gp-ec',[]);lsSet('gp-ro',[]);lsSet('gp-waste',[]);lsSet('gp-batch',[]);lsSet('gp-batchtx',[]);lsSet('gp-harvest',[]);lsSet('gp-postdry',[]);lsSet('gp-bio',[]);lsSet('gp-pest',[]);lsSet('gp-sanclean',[]);lsSet('gp-santool',[]);
   populateBatchDropdowns();renderEC();renderRO();
   ecClear();roClear();
   summaryPopulateBatches();
@@ -5710,6 +5779,28 @@ const NAT_KEY_FN_REMOTE = {
       (f['Room']||'').toString(),
       card
     ].join('|');
+  },
+  sanclean(rrec){
+    const f = rrec.fields || {};
+    const linkId = Array.isArray(f['Batch ID']) ? f['Batch ID'][0] : '';
+    return [
+      (linkId||'').toString(),
+      (f['Date']||'').toString(),
+      (f['Log Template']||'').toString(),
+      (f['Phase']||'').toString(),
+      (f['Task']||'').toString()
+    ].join('|');
+  },
+  santool(rrec){
+    const f = rrec.fields || {};
+    const linkId = Array.isArray(f['Batch ID']) ? f['Batch ID'][0] : '';
+    return [
+      (linkId||'').toString(),
+      (f['Date']||'').toString(),
+      (f['Tool']||'').toString(),
+      f['Cleaned'] ? 'C' : '',
+      f['Sanitized'] ? 'S' : ''
+    ].join('|');
   }
 };
 
@@ -5771,7 +5862,9 @@ async function cleanAirtableDuplicateTx(){
     { label:'Harvest',            tblId:cfg.harvestTbl, localArr:harvestRecs,  remoteKeyFn:NAT_KEY_FN_REMOTE.harvest },
     { label:'Post-Drying',        tblId:cfg.postDryTbl, localArr:postDryRecs,  remoteKeyFn:NAT_KEY_FN_REMOTE.postdry },
     { label:'Bio Control',        tblId:cfg.bioTbl,     localArr:bioRecs,      remoteKeyFn:NAT_KEY_FN_REMOTE.bio },
-    { label:'Pest ID',            tblId:cfg.pestTbl,    localArr:pestRecs,     remoteKeyFn:NAT_KEY_FN_REMOTE.pest }
+    { label:'Pest ID',            tblId:cfg.pestTbl,    localArr:pestRecs,     remoteKeyFn:NAT_KEY_FN_REMOTE.pest },
+    { label:'Batch Cleaning',     tblId:cfg.sanCleanTbl,localArr:sanCleanRecs, remoteKeyFn:NAT_KEY_FN_REMOTE.sanclean },
+    { label:'Tool Cleaning',      tblId:cfg.sanToolTbl, localArr:sanToolRecs,  remoteKeyFn:NAT_KEY_FN_REMOTE.santool }
   ];
   setStatus('Scanning Airtable for duplicates across '+tables.length+' tables...', 'var(--text2)');
   // First pass: scan everything to find the total count.
@@ -5867,7 +5960,9 @@ function clearPendingRecords(){
   postDryRecs=postDryRecs.filter(r=>r.synced);
   bioRecs=bioRecs.filter(r=>r.synced);
   pestRecs=pestRecs.filter(r=>r.synced);
-  lsSet('gp-ec',ecRecs);lsSet('gp-ro',roRecs);lsSet('gp-waste',wasteRecs);lsSet('gp-batch',batchRecs);lsSet('gp-batchtx',batchTxRecs);lsSet('gp-harvest',harvestRecs);lsSet('gp-postdry',postDryRecs);lsSet('gp-bio',bioRecs);lsSet('gp-pest',pestRecs);
+  sanCleanRecs=sanCleanRecs.filter(r=>r.synced);
+  sanToolRecs=sanToolRecs.filter(r=>r.synced);
+  lsSet('gp-ec',ecRecs);lsSet('gp-ro',roRecs);lsSet('gp-waste',wasteRecs);lsSet('gp-batch',batchRecs);lsSet('gp-batchtx',batchTxRecs);lsSet('gp-harvest',harvestRecs);lsSet('gp-postdry',postDryRecs);lsSet('gp-bio',bioRecs);lsSet('gp-pest',pestRecs);lsSet('gp-sanclean',sanCleanRecs);lsSet('gp-santool',sanToolRecs);
   populateBatchDropdowns();renderEC();renderRO();
   summaryPopulateBatches();
   updatePendingBadge();
@@ -5888,7 +5983,9 @@ async function syncPending(){
   const pendingPostDry=postDryRecs.filter(r=>!r.synced);
   const pendingBio=bioRecs.filter(r=>!r.synced);
   const pendingPest=pestRecs.filter(r=>!r.synced);
-  const total=pendingEC.length+pendingRO.length+pendingWaste.length+pendingBatch.length+pendingBatchTx.length+pendingHarvest.length+pendingPostDry.length+pendingBio.length+pendingPest.length;
+  const pendingSanClean=sanCleanRecs.filter(r=>!r.synced);
+  const pendingSanTool=sanToolRecs.filter(r=>!r.synced);
+  const total=pendingEC.length+pendingRO.length+pendingWaste.length+pendingBatch.length+pendingBatchTx.length+pendingHarvest.length+pendingPostDry.length+pendingBio.length+pendingPest.length+pendingSanClean.length+pendingSanTool.length;
   if(!total){st.style.display='block';st.style.background='var(--green-pale)';st.style.color='var(--green)';st.textContent='No pending records - everything is synced.';updatePendingBadge();return;}
   st.style.display='block';st.style.background='var(--bg2)';st.style.color='var(--text2)';st.textContent='Syncing '+total+' record(s)...';
   btn.disabled=true;setSyncPill('ing','Syncing...');
@@ -6008,14 +6105,38 @@ async function syncPending(){
     }
     lsSet('gp-pest',pestRecs);
   }
+  if(cfg.sanCleanTbl){
+    for(const r of pendingSanClean){
+      try{
+        const f = buildSanCleanFields(r);
+        const scRes = await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+cfg.sanCleanTbl,{method:'POST',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify({fields:f,typecast:true})});
+        if(!scRes.ok){const err=await scRes.json();throw new Error('SanClean '+scRes.status+': '+(err.error&&err.error.message||JSON.stringify(err)));}
+        try{const _j=await scRes.json(); if(_j && _j.id) r.airtableId=_j.id;}catch(_){}
+        r.synced=true;ok++;
+      }catch(e){fail++;lastErr=e.message;}
+    }
+    lsSet('gp-sanclean',sanCleanRecs);
+  }
+  if(cfg.sanToolTbl){
+    for(const r of pendingSanTool){
+      try{
+        const f = buildSanToolFields(r);
+        const stRes = await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+cfg.sanToolTbl,{method:'POST',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify({fields:f,typecast:true})});
+        if(!stRes.ok){const err=await stRes.json();throw new Error('SanTool '+stRes.status+': '+(err.error&&err.error.message||JSON.stringify(err)));}
+        try{const _j=await stRes.json(); if(_j && _j.id) r.airtableId=_j.id;}catch(_){}
+        r.synced=true;ok++;
+      }catch(e){fail++;lastErr=e.message;}
+    }
+    lsSet('gp-santool',sanToolRecs);
+  }
   updatePendingBadge();
   btn.disabled=false;
   if(fail===0){setSyncPill('ok','Synced');st.style.background='var(--green-pale)';st.style.color='var(--green)';st.textContent='Done! '+ok+' record(s) synced to Airtable.';}
   else if(ok>0){setSyncPill('err','Partial sync');st.style.background='var(--amber-pale)';st.style.color='var(--amber)';st.textContent=ok+' synced, '+fail+' failed. Check connection and retry.';}
   else{setSyncPill('err','Sync failed');st.style.background='var(--red-pale)';st.style.color='var(--red)';st.textContent='Sync failed: '+(lastErr||'Check your Airtable connection.');}
 }
-function applySettings(){document.getElementById('s-token').value=cfg.token||'';document.getElementById('s-base').value=cfg.base||'';document.getElementById('s-ec').value=cfg.ecTbl||'';document.getElementById('s-ro').value=cfg.roTbl||'';document.getElementById('s-waste').value=cfg.wasteTbl||'';document.getElementById('s-batch').value=cfg.batchTbl||'';document.getElementById('s-batchtx').value=cfg.batchtxTbl||'';const sh=document.getElementById('s-harvest'); if(sh) sh.value=cfg.harvestTbl||'';const spd=document.getElementById('s-postdry'); if(spd) spd.value=cfg.postDryTbl||'';const sbio=document.getElementById('s-bio'); if(sbio) sbio.value=cfg.bioTbl||'';const spest=document.getElementById('s-pest'); if(spest) spest.value=cfg.pestTbl||'';setSyncPill(atReady()?'ok':'off',atReady()?'Airtable connected':'Not configured');}
-async function saveSettings(){cfg={token:document.getElementById('s-token').value.trim(),base:document.getElementById('s-base').value.trim(),ecTbl:document.getElementById('s-ec').value.trim(),roTbl:document.getElementById('s-ro').value.trim(),wasteTbl:document.getElementById('s-waste').value.trim(),batchTbl:document.getElementById('s-batch').value.trim(),batchtxTbl:document.getElementById('s-batchtx').value.trim(),harvestTbl:(document.getElementById('s-harvest')?.value||'').trim(),postDryTbl:(document.getElementById('s-postdry')?.value||'').trim(),bioTbl:(document.getElementById('s-bio')?.value||'').trim(),pestTbl:(document.getElementById('s-pest')?.value||'').trim()};const st=document.getElementById('conn-status');st.style.display='block';st.style.background='var(--bg2)';st.style.color='var(--text2)';st.textContent='Testing connection...';if(!atReady()){st.textContent='Please fill in all fields.';st.style.background='var(--amber-pale)';st.style.color='var(--amber)';return;}try{const r=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+cfg.ecTbl+'?maxRecords=1',{headers:{'Authorization':'Bearer '+cfg.token}});if(r.ok){lsSet('gp-cfg',cfg);applySettings();st.textContent='Connected! Credentials saved.';st.style.background='var(--green-pale)';st.style.color='var(--green)';startAutoSync();}else{st.textContent='Failed ('+r.status+'). Check your credentials.';st.style.background='var(--red-pale)';st.style.color='var(--red)';}}catch(e){st.textContent='Could not reach Airtable. Check internet connection.';st.style.background='var(--red-pale)';st.style.color='var(--red)';}}
+function applySettings(){document.getElementById('s-token').value=cfg.token||'';document.getElementById('s-base').value=cfg.base||'';document.getElementById('s-ec').value=cfg.ecTbl||'';document.getElementById('s-ro').value=cfg.roTbl||'';document.getElementById('s-waste').value=cfg.wasteTbl||'';document.getElementById('s-batch').value=cfg.batchTbl||'';document.getElementById('s-batchtx').value=cfg.batchtxTbl||'';const sh=document.getElementById('s-harvest'); if(sh) sh.value=cfg.harvestTbl||'';const spd=document.getElementById('s-postdry'); if(spd) spd.value=cfg.postDryTbl||'';const sbio=document.getElementById('s-bio'); if(sbio) sbio.value=cfg.bioTbl||'';const spest=document.getElementById('s-pest'); if(spest) spest.value=cfg.pestTbl||'';const ssc=document.getElementById('s-sanclean'); if(ssc) ssc.value=cfg.sanCleanTbl||'';const sst=document.getElementById('s-santool'); if(sst) sst.value=cfg.sanToolTbl||'';setSyncPill(atReady()?'ok':'off',atReady()?'Airtable connected':'Not configured');}
+async function saveSettings(){cfg={token:document.getElementById('s-token').value.trim(),base:document.getElementById('s-base').value.trim(),ecTbl:document.getElementById('s-ec').value.trim(),roTbl:document.getElementById('s-ro').value.trim(),wasteTbl:document.getElementById('s-waste').value.trim(),batchTbl:document.getElementById('s-batch').value.trim(),batchtxTbl:document.getElementById('s-batchtx').value.trim(),harvestTbl:(document.getElementById('s-harvest')?.value||'').trim(),postDryTbl:(document.getElementById('s-postdry')?.value||'').trim(),bioTbl:(document.getElementById('s-bio')?.value||'').trim(),pestTbl:(document.getElementById('s-pest')?.value||'').trim(),sanCleanTbl:(document.getElementById('s-sanclean')?.value||'').trim(),sanToolTbl:(document.getElementById('s-santool')?.value||'').trim()};const st=document.getElementById('conn-status');st.style.display='block';st.style.background='var(--bg2)';st.style.color='var(--text2)';st.textContent='Testing connection...';if(!atReady()){st.textContent='Please fill in all fields.';st.style.background='var(--amber-pale)';st.style.color='var(--amber)';return;}try{const r=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+cfg.ecTbl+'?maxRecords=1',{headers:{'Authorization':'Bearer '+cfg.token}});if(r.ok){lsSet('gp-cfg',cfg);applySettings();st.textContent='Connected! Credentials saved.';st.style.background='var(--green-pale)';st.style.color='var(--green)';startAutoSync();}else{st.textContent='Failed ('+r.status+'). Check your credentials.';st.style.background='var(--red-pale)';st.style.color='var(--red)';}}catch(e){st.textContent='Could not reach Airtable. Check internet connection.';st.style.background='var(--red-pale)';st.style.color='var(--red)';}}
 
 function localDate(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 const today=localDate();
@@ -9085,18 +9206,42 @@ async function sanclSaveTask(taskName){
   sanclRenderTasks();
   sanclRenderRecent();
   if(typeof updatePendingBadge === 'function') updatePendingBadge();
-  // Airtable sync will be wired in a follow-up — for now the record stays synced:false and
-  // shows on the pending count. Phase 2 will POST to the Batch Cleaning Log table.
+  // Sync the new record to Airtable. Failure is non-fatal — stays synced:false and Sync Pending retries.
+  if(cfg.sanCleanTbl && cfg.token && cfg.base){
+    try {
+      const f = buildSanCleanFields(rec);
+      const res = await atPost(cfg.sanCleanTbl, f);
+      rec.synced = true;
+      if(res && res.id) rec.airtableId = res.id;
+      lsSet('gp-sanclean', sanCleanRecs);
+      if(typeof updatePendingBadge === 'function') updatePendingBadge();
+    } catch(e){ /* retry via Sync Pending */ }
+  }
+}
+
+// Build the Airtable field payload for a Batch Cleaning Log record. Mirrors the schema
+// agreed in the design (Batch ID linked, Date, Time, Grower, Log Template, Phase, Task, Room, Notes).
+function buildSanCleanFields(rec){
+  const f = {
+    'Batch ID': rec.batch ? [rec.batch] : undefined,
+    'Date':     rec.date || undefined,
+    'Time':     rec.time || undefined,
+    'Grower':   rec.grower || undefined,
+    'Log Template': rec.template || undefined,
+    'Phase':    rec.phase || undefined,
+    'Task':     rec.task || undefined,
+    'Room':     rec.room || undefined,
+    'Notes':    rec.notes || undefined
+  };
+  Object.keys(f).forEach(k => { if(f[k] === undefined || f[k] === null || f[k] === '') delete f[k]; });
+  return f;
 }
 
 // ── TOOL CLEANING LOG ───────────────────────────────────────────────────────
 function santoolEnter(){
-  // Default date + time to now.
+  // Default date to today.
   const today = (typeof localDate === 'function') ? localDate() : new Date().toISOString().slice(0,10);
-  const now = new Date();
-  const time = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
   const dEl = document.getElementById('santool-date'); if(dEl && !dEl.value) dEl.value = today;
-  const tEl = document.getElementById('santool-time'); if(tEl && !tEl.value) tEl.value = time;
   // Populate batch dropdown from open batches (mothers + regular).
   const sel = document.getElementById('santool-batch');
   if(sel){
@@ -9112,12 +9257,12 @@ function santoolEnter(){
 function santoolRenderRecent(){
   const list = document.getElementById('santool-recent-list');
   if(!list) return;
-  const recs = sanToolRecs.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||'')||(b.time||'').localeCompare(a.time||'')).slice(0,10);
+  const recs = sanToolRecs.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||'')||(b.id||0)-(a.id||0)).slice(0,10);
   if(!recs.length){ list.innerHTML = '<span style="color:var(--text3);font-style:italic;">No entries yet.</span>'; return; }
   list.innerHTML = recs.map(r => {
     const initials = (r.grower||'').split(' ').map(s=>s[0]||'').join('').toUpperCase();
     const flags = (r.cleaned?'C':'') + (r.sanitized?'S':'') || '—';
-    return (r.date||'')+' '+(r.time||'')+' · '+(r.batch||'(no batch)')+' · '+(r.tool||'')+' · '+flags+' · '+initials;
+    return (r.date||'')+' · '+(r.batch||'(no batch)')+' · '+(r.tool||'')+' · '+flags+' · '+initials;
   }).join('<br>');
 }
 
@@ -9126,7 +9271,6 @@ async function santoolSave(){
   const tool      = ((document.getElementById('santool-tool')||{}).value || '').trim();
   const batch     = (document.getElementById('santool-batch')||{}).value || '';
   const date      = (document.getElementById('santool-date')||{}).value || '';
-  const time      = (document.getElementById('santool-time')||{}).value || '';
   const cleaned   = !!(document.getElementById('santool-cleaned')||{}).checked;
   const sanitized = !!(document.getElementById('santool-sanitized')||{}).checked;
   const notes     = (document.getElementById('santool-notes')||{}).value || '';
@@ -9136,7 +9280,7 @@ async function santoolSave(){
   if(!date){ toast('Pick a date.'); return; }
   const rec = {
     id: Date.now() + Math.floor(Math.random()*1000),
-    date, time,
+    date,
     grower, batch, tool,
     cleaned, sanitized,
     notes,
@@ -9152,6 +9296,32 @@ async function santoolSave(){
   const sEl=document.getElementById('santool-sanitized'); if(sEl) sEl.checked=false;
   santoolRenderRecent();
   if(typeof updatePendingBadge === 'function') updatePendingBadge();
+  // Sync the new record to Airtable. Failure is non-fatal — Sync Pending retries.
+  if(cfg.sanToolTbl && cfg.token && cfg.base){
+    try {
+      const f = buildSanToolFields(rec);
+      const res = await atPost(cfg.sanToolTbl, f);
+      rec.synced = true;
+      if(res && res.id) rec.airtableId = res.id;
+      lsSet('gp-santool', sanToolRecs);
+      if(typeof updatePendingBadge === 'function') updatePendingBadge();
+    } catch(e){ /* retry via Sync Pending */ }
+  }
+}
+
+// Build the Airtable field payload for a Tool Cleaning Log record.
+function buildSanToolFields(rec){
+  const f = {
+    'Batch ID':  rec.batch ? [rec.batch] : undefined,
+    'Date':      rec.date || undefined,
+    'Grower':    rec.grower || undefined,
+    'Tool':      rec.tool || undefined,
+    'Cleaned':   !!rec.cleaned,
+    'Sanitized': !!rec.sanitized,
+    'Notes':     rec.notes || undefined
+  };
+  Object.keys(f).forEach(k => { if(f[k] === undefined || f[k] === null || f[k] === '') delete f[k]; });
+  return f;
 }
 
 </script>
