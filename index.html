@@ -41,12 +41,21 @@ html, body { height: 100%; background-color: var(--bg); background-image: url('d
 .sync-pill.err { color: var(--red); background: var(--red-pale); border-color: var(--red); }
 .sync-pill.ing { color: var(--amber); background: var(--amber-pale); border-color: var(--amber); }
 .content { flex: 1; padding: 20px 16px 100px; }
+/* Section toggle — pill switcher between Cultivation and Sanitation sections, just under the topbar */
+.section-toggle { display: flex; gap: 4px; background: var(--bg2); border: 1px solid var(--border); border-radius: 999px; padding: 3px; margin: 12px 16px 0; }
+.section-toggle button { flex: 1; padding: 7px 12px; border: none; background: transparent; border-radius: 999px; font-family: var(--sans); font-size: 12px; font-weight: 500; color: var(--text2); cursor: pointer; transition: background 0.15s, color 0.15s; }
+.section-toggle button.active { background: var(--card); color: var(--green); box-shadow: 0 1px 2px rgba(0,0,0,0.06); }
 .bottom-nav { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 820px; background: var(--card); border-top: 1px solid var(--border); display: flex; z-index: 100; }
+.bottom-nav.section-hidden { display: none; }
 .bnav-btn { flex: 1; padding: 10px 4px 14px; border: none; background: transparent; cursor: pointer; font-family: var(--sans); display: flex; flex-direction: column; align-items: center; gap: 3px; color: var(--text3); transition: color 0.15s; font-size: 10px; font-weight: 500; letter-spacing: 0.02em; }
 .bnav-btn svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .bnav-btn.active { color: var(--green); }
 .page { display: none; }
 .page.active { display: block; }
+/* When the Sanitation section is active, every cultivation page is force-hidden via this body class.
+   The sanitation pages have data-section="sanitation" and are shown via .page.active normally. */
+body.section-sanitation .page[data-section="cultivation"] { display: none !important; }
+body.section-cultivation .page[data-section="sanitation"] { display: none !important; }
 /* On wider screens, dock the EC Recent Entries panel to the right so it stays visible while filling out the form */
 @media (min-width: 1100px){
   .ec-recent-section{
@@ -161,6 +170,13 @@ tr:last-child td { border-bottom: none; }
       <div><h1>Golden Peak</h1><p>Field Log System</p></div>
     </div>
     <div class="sync-pill" id="global-sync">Not configured</div>
+  </div>
+
+  <!-- Section toggle — switches between the Cultivation set of pages and the Sanitation set.
+       Selection persists across reloads via the gp-section localStorage key. -->
+  <div class="section-toggle" id="section-toggle">
+    <button id="section-cultivation-btn" class="active" onclick="setAppSection('cultivation')">Cultivation</button>
+    <button id="section-sanitation-btn" onclick="setAppSection('sanitation')">Sanitation</button>
   </div>
 
   <div class="content">
@@ -1315,9 +1331,125 @@ tr:last-child td { border-bottom: none; }
       </div>
     </div>
 
+    <!-- ═══ SANITATION SECTION PAGES — only visible when the section toggle is on Sanitation ═══ -->
+
+    <!-- Batch Room Cleaning Log -->
+    <div class="page" id="page-sancleaning" data-section="sanitation">
+      <div class="card">
+        <div class="section-label">Batch Room Cleaning Log</div>
+        <div id="sancl-room-strip" style="height:6px;background:var(--green);border-radius:var(--radius-sm);margin:-4px 0 14px;transition:background 0.2s;"></div>
+
+        <div class="field" style="margin-bottom:10px;">
+          <label>Grower <span style="color:var(--red);font-weight:700;">*</span></label>
+          <select id="sancl-grower" onchange="sanclChanged()">
+            <option value="">-- select grower --</option>
+            <option>Jordan Elliott</option>
+            <option>Brandon Cail</option>
+            <option>Tom Devost</option>
+          </select>
+        </div>
+
+        <div class="field" style="margin-bottom:10px;">
+          <label>Log Template <span style="color:var(--red);font-weight:700;">*</span> <span style="font-size:10px;color:var(--text3);font-weight:400;">— Mother-Veg / Drying / Transplant / Grow Room / Trimming</span></label>
+          <select id="sancl-template" onchange="sanclChanged()">
+            <option value="">-- select template --</option>
+            <option value="Mother-Veg">Mother-Veg Room</option>
+            <option value="Drying">Drying Room</option>
+            <option value="Transplant">Transplant Room</option>
+            <option value="Grow Room">Grow Room</option>
+            <option value="Trimming">Trimming Room</option>
+          </select>
+        </div>
+
+        <div class="field" style="margin-bottom:10px;">
+          <label>Batch <span style="color:var(--red);font-weight:700;">*</span> <span style="font-size:10px;color:var(--text3);font-weight:400;" id="sancl-batch-hint"></span></label>
+          <select id="sancl-batch" onchange="sanclChanged()">
+            <option value="">-- select batch --</option>
+          </select>
+        </div>
+
+        <div class="field" style="margin-bottom:10px;">
+          <label>Phase</label>
+          <div id="sancl-phase-tabs" style="display:flex;gap:4px;flex-wrap:wrap;"></div>
+          <input type="hidden" id="sancl-phase" value="" />
+        </div>
+
+        <div id="sancl-batch-info" style="font-size:12px;color:var(--text2);background:var(--bg2);border-radius:var(--radius-sm);padding:8px 10px;margin-bottom:10px;display:none;font-family:var(--mono);"></div>
+      </div>
+
+      <div class="card" id="sancl-tasks-card" style="display:none;">
+        <div class="section-label" id="sancl-tasks-label">Tasks</div>
+        <div style="font-size:11px;color:var(--text3);margin:-4px 0 10px;">Tap a task to log it for today. Already-logged tasks for this batch + phase appear faded with the date/initials.</div>
+        <div id="sancl-tasks-list" style="display:flex;flex-direction:column;gap:6px;"></div>
+        <div class="field" style="margin-top:12px;">
+          <label>Notes (optional — applies to the next task you log)</label>
+          <textarea id="sancl-notes" rows="2" placeholder="e.g. used SHYIELD per SOP"></textarea>
+        </div>
+      </div>
+
+      <div class="card" id="sancl-recent-card" style="display:none;">
+        <div class="section-label">Recent Entries</div>
+        <div id="sancl-recent-list" style="font-size:12px;font-family:var(--mono);color:var(--text2);line-height:1.7;"></div>
+      </div>
+    </div>
+
+    <!-- Tool Cleaning Log -->
+    <div class="page" id="page-santool" data-section="sanitation">
+      <div class="card">
+        <div class="section-label">Tool Cleaning Log</div>
+
+        <div class="g2" style="margin-bottom:10px;">
+          <div class="field"><label>Date</label><input type="date" id="santool-date" /></div>
+          <div class="field"><label>Time</label><input type="time" id="santool-time" /></div>
+        </div>
+
+        <div class="field" style="margin-bottom:10px;">
+          <label>Grower <span style="color:var(--red);font-weight:700;">*</span></label>
+          <select id="santool-grower">
+            <option value="">-- select grower --</option>
+            <option>Jordan Elliott</option>
+            <option>Brandon Cail</option>
+            <option>Tom Devost</option>
+          </select>
+        </div>
+
+        <div class="field" style="margin-bottom:10px;">
+          <label>Batch <span style="font-size:10px;color:var(--text3);font-weight:400;">(optional — leave blank for non-batch tools)</span></label>
+          <select id="santool-batch">
+            <option value="">-- no batch --</option>
+          </select>
+        </div>
+
+        <div class="field" style="margin-bottom:10px;">
+          <label>Tool <span style="color:var(--red);font-weight:700;">*</span></label>
+          <input type="text" id="santool-tool" placeholder="e.g. Scissors, Pruners, Tote 4" />
+        </div>
+
+        <div class="field" style="margin-bottom:10px;">
+          <label>Cleaning</label>
+          <div style="display:flex;gap:14px;font-size:13px;padding:4px 0;">
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="santool-cleaned" /> Cleaned</label>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="santool-sanitized" /> Sanitized</label>
+          </div>
+        </div>
+
+        <div class="field" style="margin-bottom:14px;">
+          <label>Notes</label>
+          <textarea id="santool-notes" rows="2" placeholder="e.g. SHYIELD wipe-down"></textarea>
+        </div>
+
+        <button class="btn-save" onclick="santoolSave()">Save Tool Cleaning</button>
+      </div>
+
+      <div class="card">
+        <div class="section-label">Recent Entries</div>
+        <div id="santool-recent-list" style="font-size:12px;font-family:var(--mono);color:var(--text2);line-height:1.7;"></div>
+      </div>
+    </div>
+
   </div>
 
-  <nav class="bottom-nav">
+  <nav class="bottom-nav" id="nav-cultivation">
     <button class="bnav-btn" id="bn-batch" onclick="switchPage('batch',this)">
       <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
       Batches
@@ -1364,17 +1496,121 @@ tr:last-child td { border-bottom: none; }
       <span id="pending-badge" style="display:none;position:absolute;top:6px;right:12px;background:var(--red);color:white;font-size:9px;font-weight:700;font-family:var(--mono);border-radius:20px;padding:1px 5px;min-width:16px;text-align:center;"></span>
     </button>
   </nav>
+
+  <!-- Sanitation section bottom nav — only visible when section toggle is on "Sanitation". -->
+  <nav class="bottom-nav section-hidden" id="nav-sanitation">
+    <button class="bnav-btn" id="bn-sancleaning" onclick="switchPage('sancleaning',this)">
+      <svg viewBox="0 0 24 24"><path d="M3 21v-4a8 8 0 0116 0v4M11 7V3M9 5h4M7 21h10"/></svg>
+      Batch Clean
+    </button>
+    <button class="bnav-btn" id="bn-santool" onclick="switchPage('santool',this)">
+      <svg viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>
+      Tool Clean
+    </button>
+    <button class="bnav-btn" id="bn-settings-san" onclick="switchPage('settings',this)" style="position:relative;">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+      Settings
+      <span id="pending-badge-san" style="display:none;position:absolute;top:6px;right:12px;background:var(--red);color:white;font-size:9px;font-weight:700;font-family:var(--mono);border-radius:20px;padding:1px 5px;min-width:16px;text-align:center;"></span>
+    </button>
+  </nav>
 </div>
 <div class="toast" id="toast"></div>
 
 <script>
 const EC_LO=2.2,EC_HI=2.3,PH_EC_LO=6.2,PH_EC_HI=6.3;
 const RO_PH_LO=6.0,RO_PH_HI=6.5,RO_VAR_LO=0.3,RO_VAR_HI=0.5,RO_VAR_ALERT=1.0;
-let ecRecs=[],roRecs=[],wasteRecs=[],batchRecs=[],batchTxRecs=[],harvestRecs=[],postDryRecs=[],bioRecs=[],pestRecs=[],cfg={token:'',base:'',ecTbl:'',roTbl:'',wasteTbl:'',batchTbl:'',batchtxTbl:'',harvestTbl:'',postDryTbl:'',bioTbl:'',pestTbl:''};
+let ecRecs=[],roRecs=[],wasteRecs=[],batchRecs=[],batchTxRecs=[],harvestRecs=[],postDryRecs=[],bioRecs=[],pestRecs=[],sanCleanRecs=[],sanToolRecs=[],cfg={token:'',base:'',ecTbl:'',roTbl:'',wasteTbl:'',batchTbl:'',batchtxTbl:'',harvestTbl:'',postDryTbl:'',bioTbl:'',pestTbl:'',sanCleanTbl:'',sanToolTbl:''};
+
+// ── SANITATION ──────────────────────────────────────────────────────────────
+// Section toggle: 'cultivation' or 'sanitation'. Drives which pages are visible and which
+// bottom nav is shown. Persisted to localStorage.
+let appSection = 'cultivation';
+
+// Default last-page-visited per section so the back-and-forth feels natural.
+let lastPagePerSection = { cultivation: 'summary', sanitation: 'sancleaning' };
+
+// Hardcoded cleaning task templates from the FORM-SA-021 paper form. Each entry: { template,
+// phase, name, order }. Templates: Mother-Veg, Drying, Transplant, Grow Room, Trimming.
+// Order is the display index (1-based) within the (template, phase) group.
+// Editable later via Airtable, but starts hardcoded so the app works out of the box.
+const SAN_TASK_TEMPLATES = [
+  // Mother-Veg (Ongoing only — the form has no Pre/Post phases)
+  {template:'Mother-Veg', phase:'Ongoing', name:'Remove debris from floor & grow tables', order:1},
+  {template:'Mother-Veg', phase:'Ongoing', name:'Mop floor', order:2},
+  {template:'Mother-Veg', phase:'Ongoing', name:'Clean saucers & dollies', order:3},
+  {template:'Mother-Veg', phase:'Ongoing', name:'Wipe down walls & doors', order:4},
+  {template:'Mother-Veg', phase:'Ongoing', name:'Wipe down light fixtures & HVAC', order:5},
+  {template:'Mother-Veg', phase:'Ongoing', name:'Clean grow tables', order:6},
+  {template:'Mother-Veg', phase:'Ongoing', name:'Wipe down floors', order:7},
+  {template:'Mother-Veg', phase:'Ongoing', name:'Sanitize grow tables, saucers & dollies', order:8},
+  {template:'Mother-Veg', phase:'Ongoing', name:'Sanitize walls & floors', order:9},
+  // Drying
+  {template:'Drying', phase:'Pre', name:'Wipe down walls, light fixtures, fans', order:1},
+  {template:'Drying', phase:'Pre', name:'Vacuum floor', order:2},
+  {template:'Drying', phase:'Pre', name:'Mop floor', order:3},
+  {template:'Drying', phase:'Pre', name:'Sanitize walls, floor and all fixtures', order:4},
+  {template:'Drying', phase:'Ongoing', name:'Sanitize door handles', order:1},
+  // Transplant
+  {template:'Transplant', phase:'Pre', name:'Wipe down walls & doors & fixtures', order:1},
+  {template:'Transplant', phase:'Pre', name:'Vacuum floor', order:2},
+  {template:'Transplant', phase:'Pre', name:'Mop floors', order:3},
+  {template:'Transplant', phase:'Pre', name:'Sanitize walls & floors & fixtures', order:4},
+  {template:'Transplant', phase:'During', name:'Sweep floors', order:1},
+  {template:'Transplant', phase:'During', name:'Remove debris', order:2},
+  {template:'Transplant', phase:'Post', name:'Remove debris & soil from tables', order:1},
+  {template:'Transplant', phase:'Post', name:'Wipe down tables', order:2},
+  {template:'Transplant', phase:'Post', name:'Sweep floors', order:3},
+  {template:'Transplant', phase:'Post', name:'Wipe down walls, doors & fixtures', order:4},
+  {template:'Transplant', phase:'Post', name:'Vacuum floors', order:5},
+  {template:'Transplant', phase:'Post', name:'Mop floors', order:6},
+  {template:'Transplant', phase:'Post', name:'Sanitize walls, doors, & fixtures', order:7},
+  {template:'Transplant', phase:'Post', name:'Sanitize floors', order:8},
+  {template:'Transplant', phase:'Post', name:'Empty trash', order:9},
+  // Grow Room
+  {template:'Grow Room', phase:'Post-Harvest', name:'Remove pots', order:1},
+  {template:'Grow Room', phase:'Post-Harvest', name:'Remove irrigation lines and clean', order:2},
+  {template:'Grow Room', phase:'Post-Harvest', name:'Hand remove all plant debris', order:3},
+  {template:'Grow Room', phase:'Post-Harvest', name:'Remove capillary mats & pressure wash', order:4},
+  {template:'Grow Room', phase:'Post-Harvest', name:'Remove & clean saucers', order:5},
+  {template:'Grow Room', phase:'Post-Harvest', name:'Wipe down light fixtures & ducts', order:6},
+  {template:'Grow Room', phase:'Post-Harvest', name:'Vacuum & clean grow tables', order:7},
+  {template:'Grow Room', phase:'Post-Harvest', name:'Wipe down walls', order:8},
+  {template:'Grow Room', phase:'Post-Harvest', name:'Vacuum floor', order:9},
+  {template:'Grow Room', phase:'Post-Harvest', name:'Mop floor', order:10},
+  {template:'Grow Room', phase:'Post-Harvest', name:'Sanitize irrigation lines', order:11},
+  {template:'Grow Room', phase:'Post-Harvest', name:'Sanitize entire room', order:12},
+  {template:'Grow Room', phase:'Post-Harvest', name:'Sanitize capillary mats & saucers', order:13},
+  {template:'Grow Room', phase:'Ongoing', name:'Clean walls', order:1},
+  {template:'Grow Room', phase:'Ongoing', name:'Clean floor', order:2},
+  {template:'Grow Room', phase:'Ongoing', name:'Sanitize door handles', order:3},
+  // Trimming
+  {template:'Trimming', phase:'Pre', name:'Vacuum floor', order:1},
+  {template:'Trimming', phase:'Pre', name:'Sanitize floor', order:2},
+  {template:'Trimming', phase:'Pre', name:'Wipe down walls and light fixtures', order:3},
+  {template:'Trimming', phase:'Pre', name:'Install tarp', order:4},
+  {template:'Trimming', phase:'Pre', name:'Install & sanitize tables & chairs', order:5},
+  {template:'Trimming', phase:'Pre', name:'Sanitize tarp & walls', order:6},
+  {template:'Trimming', phase:'Ongoing', name:'Remove debris from floor', order:1},
+  {template:'Trimming', phase:'Ongoing', name:'Sanitize door handles', order:2}
+];
+
+// Returns the list of phases that exist for a given template (in display order).
+function sanGetPhasesForTemplate(template){
+  const seen = []; const out = [];
+  SAN_TASK_TEMPLATES.forEach(t => { if(t.template===template && !seen.includes(t.phase)){ seen.push(t.phase); out.push(t.phase); } });
+  return out;
+}
+
+// Returns the tasks for a given (template, phase) sorted by their display order.
+function sanGetTasks(template, phase){
+  return SAN_TASK_TEMPLATES
+    .filter(t => t.template===template && t.phase===phase)
+    .sort((a,b) => a.order - b.order);
+}
 
 function lsGet(k){try{return JSON.parse(localStorage.getItem(k)||'null');}catch(e){return null;}}
 function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
-function loadAll(){ecRecs=lsGet('gp-ec')||[];roRecs=lsGet('gp-ro')||[];wasteRecs=lsGet('gp-waste')||[];batchRecs=lsGet('gp-batch')||[];batchTxRecs=lsGet('gp-batchtx')||[];harvestRecs=lsGet('gp-harvest')||[];postDryRecs=lsGet('gp-postdry')||[];bioRecs=lsGet('gp-bio')||[];pestRecs=lsGet('gp-pest')||[];wasteRecs.forEach(r=>{if(r.type==='Vegetative waste')r.type='Vegetative Waste';});lsSet('gp-waste',wasteRecs);const s=lsGet('gp-cfg');if(s){cfg=s;applySettings();}dedupeBatchRecs();backfillHarvestedTxs();reconcileAllPackagedBatches();}
+function loadAll(){ecRecs=lsGet('gp-ec')||[];roRecs=lsGet('gp-ro')||[];wasteRecs=lsGet('gp-waste')||[];batchRecs=lsGet('gp-batch')||[];batchTxRecs=lsGet('gp-batchtx')||[];harvestRecs=lsGet('gp-harvest')||[];postDryRecs=lsGet('gp-postdry')||[];bioRecs=lsGet('gp-bio')||[];pestRecs=lsGet('gp-pest')||[];sanCleanRecs=lsGet('gp-sanclean')||[];sanToolRecs=lsGet('gp-santool')||[];wasteRecs.forEach(r=>{if(r.type==='Vegetative waste')r.type='Vegetative Waste';});lsSet('gp-waste',wasteRecs);const s=lsGet('gp-cfg');if(s){cfg=s;applySettings();}dedupeBatchRecs();backfillHarvestedTxs();reconcileAllPackagedBatches();}
 
 function backfillHarvestedTxs(){
   // One-time data fix: prior to the per-room Harvested tx code, a Complete Harvest only created
@@ -2913,7 +3149,58 @@ function setAvg(id,val,lo,hi){const el=document.getElementById(id);if(val===null
 function stageLabel(r){if(!r.stage||!r.day)return'<span style="color:var(--text3)">-</span>';return r.stage==='flower'?'<span class="flower-txt">F'+r.day+'</span>':'<span class="veg-txt">V'+r.day+'</span>';}
 function toast(msg,dur){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),dur||2500);}
 
-function switchPage(page,btn){document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.bnav-btn').forEach(b=>b.classList.remove('active'));document.getElementById('page-'+page).classList.add('active');btn.classList.add('active');if(page==='report'){renderEC();renderRO();}if(page==='waste'){renderWaste();}if(page==='batch'){renderBatchLog();}if(page==='summary'){summaryPopulateBatches();}if(page==='harvest'){harvestPopulateBatches();harvestRefreshDate();harvestPopulateBinNumbers();}if(page==='postdry'){postDryPopulateBatches();postDrySetupChanged();}if(page==='bio'){bioRefreshDate();bioSeqUnlock();}if(page==='pest'){pestRefreshDate();pestPopulateBatches();pestSeqUnlock();}}
+function switchPage(page,btn){document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.bnav-btn').forEach(b=>b.classList.remove('active'));document.getElementById('page-'+page).classList.add('active');btn.classList.add('active');if(page==='report'){renderEC();renderRO();}if(page==='waste'){renderWaste();}if(page==='batch'){renderBatchLog();}if(page==='summary'){summaryPopulateBatches();}if(page==='harvest'){harvestPopulateBatches();harvestRefreshDate();harvestPopulateBinNumbers();}if(page==='postdry'){postDryPopulateBatches();postDrySetupChanged();}if(page==='bio'){bioRefreshDate();bioSeqUnlock();}if(page==='pest'){pestRefreshDate();pestPopulateBatches();pestSeqUnlock();}if(page==='sancleaning'){sanclEnter();}if(page==='santool'){santoolEnter();}
+  // Remember the last-page-visited per section so toggling sections returns the user to where they left off.
+  if(page === 'settings') {
+    // Settings is shared between sections — don't update per-section memory.
+  } else {
+    const sec = ['sancleaning','santool'].includes(page) ? 'sanitation' : 'cultivation';
+    lastPagePerSection[sec] = page;
+    lsSet('gp-section-last', lastPagePerSection);
+  }
+}
+
+// ── SECTION TOGGLE ────────────────────────────────────────────────────────────
+// Switch between the Cultivation and Sanitation sections. Each section has its own bottom
+// nav and its own set of pages (linked via data-section attribute, set in initSections).
+function setAppSection(section){
+  if(section !== 'cultivation' && section !== 'sanitation') section = 'cultivation';
+  appSection = section;
+  lsSet('gp-section', section);
+  // Update body class — drives CSS visibility for data-section pages.
+  document.body.classList.toggle('section-cultivation', section === 'cultivation');
+  document.body.classList.toggle('section-sanitation', section === 'sanitation');
+  // Toggle button active state.
+  const cb = document.getElementById('section-cultivation-btn');
+  const sb = document.getElementById('section-sanitation-btn');
+  if(cb) cb.classList.toggle('active', section === 'cultivation');
+  if(sb) sb.classList.toggle('active', section === 'sanitation');
+  // Show the section's bottom nav, hide the other.
+  const navC = document.getElementById('nav-cultivation');
+  const navS = document.getElementById('nav-sanitation');
+  if(navC) navC.classList.toggle('section-hidden', section !== 'cultivation');
+  if(navS) navS.classList.toggle('section-hidden', section !== 'sanitation');
+  // Restore the last page visited in this section.
+  const lastPage = lastPagePerSection[section] || (section === 'sanitation' ? 'sancleaning' : 'summary');
+  const targetBtn = document.getElementById('bn-' + lastPage) ||
+                    document.getElementById('bn-' + lastPage + (section === 'sanitation' && lastPage === 'settings' ? '-san' : ''));
+  if(targetBtn) switchPage(lastPage, targetBtn);
+}
+
+// Initialise sections on boot: tag every existing cultivation page with data-section, restore
+// the previous section + last page from localStorage, set the right body class. Idempotent.
+function initSections(){
+  // Tag every page that doesn't already have a data-section as cultivation. Sanitation pages
+  // are tagged inline in the HTML.
+  document.querySelectorAll('.page').forEach(p => {
+    if(!p.dataset.section) p.dataset.section = 'cultivation';
+  });
+  // Restore last section / last page from localStorage.
+  const stored = lsGet('gp-section');
+  const storedLast = lsGet('gp-section-last');
+  if(storedLast && typeof storedLast === 'object') lastPagePerSection = {...lastPagePerSection, ...storedLast};
+  setAppSection(stored === 'sanitation' ? 'sanitation' : 'cultivation');
+}
 // ── HARVEST LOG ──────────────────────────────────────────────────────────────
 function harvestRefreshDate(){const t=localDate();const el=document.getElementById('harvest-date'); if(el) el.value=t;}
 function harvestPopulateBinNumbers(){
@@ -5191,9 +5478,13 @@ function roClear(){for(let i=1;i<=8;i++){document.getElementById('ro-ec-'+i).val
 
 // Pending badge
 function updatePendingBadge(){
-  const n=(ecRecs.filter(r=>!r.synced).length)+(roRecs.filter(r=>!r.synced).length)+(wasteRecs.filter(r=>!r.synced).length)+(batchRecs.filter(r=>!r.synced).length)+(batchTxRecs.filter(r=>!r.synced).length)+(harvestRecs.filter(r=>!r.synced).length)+(postDryRecs.filter(r=>!r.synced).length)+(bioRecs.filter(r=>!r.synced).length)+(pestRecs.filter(r=>!r.synced).length);
-  const b=document.getElementById('pending-badge');
-  if(n>0){b.textContent=n;b.style.display='block';}else{b.style.display='none';}
+  const n=(ecRecs.filter(r=>!r.synced).length)+(roRecs.filter(r=>!r.synced).length)+(wasteRecs.filter(r=>!r.synced).length)+(batchRecs.filter(r=>!r.synced).length)+(batchTxRecs.filter(r=>!r.synced).length)+(harvestRecs.filter(r=>!r.synced).length)+(postDryRecs.filter(r=>!r.synced).length)+(bioRecs.filter(r=>!r.synced).length)+(pestRecs.filter(r=>!r.synced).length)+(sanCleanRecs.filter(r=>!r.synced).length)+(sanToolRecs.filter(r=>!r.synced).length);
+  // Update both Settings badges (cultivation nav + sanitation nav) — same count visible in both sections.
+  ['pending-badge','pending-badge-san'].forEach(id => {
+    const b=document.getElementById(id);
+    if(!b) return;
+    if(n>0){b.textContent=n;b.style.display='block';}else{b.style.display='none';}
+  });
 }
 
 // Batch status — which rooms a batch currently occupies
@@ -5734,7 +6025,7 @@ document.getElementById('ro-date').readOnly=true;
 document.getElementById('ro-date').style.background='var(--bg2)';
 document.getElementById('ro-date').style.color='var(--text3)';
 document.getElementById('ro-date').style.cursor='default';
-buildECEvents();buildROSamples();loadAll();installMomsFilterButtons();populateBatchDropdowns();setVegMin();applyCascadeLocks();updatePendingBadge();ecSeqUnlock();wasteSeqUnlock();summaryPopulateBatches();document.getElementById('waste-date').textContent=new Date().toISOString().split('T')[0];
+buildECEvents();buildROSamples();loadAll();installMomsFilterButtons();populateBatchDropdowns();setVegMin();applyCascadeLocks();updatePendingBadge();ecSeqUnlock();wasteSeqUnlock();summaryPopulateBatches();initSections();document.getElementById('waste-date').textContent=new Date().toISOString().split('T')[0];
 // Kick off auto-sync (60s polling) if Airtable is configured. Idempotent —
 // also re-invoked from saveSettings() so a fresh token starts the timer.
 startAutoSync();
@@ -8591,6 +8882,277 @@ function sectionTable(title, headers, rows){
     + '}';
   document.head.appendChild(style);
 })();
+
+// ════════════════════════════════════════════════════════════════════════════════
+// SANITATION PAGE HANDLERS
+// Batch Cleaning Log (page-sancleaning) — per-batch room cleaning, tap-to-log tasks.
+// Tool Cleaning Log (page-santool) — per-tool / per-batch cleaning record with Cleaned/Sanitized.
+// ════════════════════════════════════════════════════════════════════════════════
+
+// Map a template name → which batch phases are eligible. Used to filter the Batch dropdown.
+// Empty array means "any open batch". Mothers handled via isMotherBatch.
+const SAN_TEMPLATE_BATCH_FILTER = {
+  'Mother-Veg':  { motherOnly:true,  phases:['Clones','Veg','Flower','Drying'] }, // mom stock at any cultivation phase
+  'Drying':      { motherOnly:false, phases:['Drying'] },
+  'Transplant':  { motherOnly:false, phases:['Clones','Veg'] }, // pre/during/post transplant
+  'Grow Room':   { motherOnly:false, phases:['Veg','Flower','Drying'] }, // grow-room lifecycle
+  'Trimming':    { motherOnly:false, phases:['Drying','Packaged'] } // trim happens after drying
+};
+
+// Populate the Batch dropdown on the Sanitation Cleaning Log based on the current template.
+function sanclPopulateBatchOptions(){
+  const sel = document.getElementById('sancl-batch');
+  if(!sel) return;
+  const template = (document.getElementById('sancl-template')||{}).value || '';
+  const cur = sel.value;
+  const hint = document.getElementById('sancl-batch-hint');
+  if(!template){
+    sel.innerHTML = '<option value="">-- pick a template first --</option>';
+    if(hint) hint.textContent = '';
+    return;
+  }
+  const filter = SAN_TEMPLATE_BATCH_FILTER[template] || { motherOnly:false, phases:[] };
+  const eligible = batchRecs.filter(b => {
+    if(!b || b.type) return false;
+    if(isBatchClosedRec && isBatchClosedRec(b)) return false;
+    if(filter.motherOnly !== isMotherBatch(b.batchId)) return false;
+    if(filter.phases.length && !filter.phases.includes(b.plantPhase||'')) return false;
+    return true;
+  }).sort((a,b) => (a.batchId||'').localeCompare(b.batchId||''));
+  sel.innerHTML = '<option value="">-- select batch --</option>' +
+    eligible.map(b => '<option value="'+b.batchId+'"'+(b.batchId===cur?' selected':'')+'>'+b.batchId+(b.cultivar?' – '+b.cultivar:'')+'</option>').join('');
+  if(hint){
+    if(!eligible.length) hint.textContent = '— no open batches match this template';
+    else hint.textContent = '— filtered to '+(filter.motherOnly?'mother ':'')+'batches in '+(filter.phases.join('/'))+' phase';
+  }
+}
+
+// Build the Phase tabs for the current template.
+function sanclRenderPhaseTabs(){
+  const tabsEl = document.getElementById('sancl-phase-tabs');
+  if(!tabsEl) return;
+  const template = (document.getElementById('sancl-template')||{}).value || '';
+  const phases = template ? sanGetPhasesForTemplate(template) : [];
+  const curPhase = (document.getElementById('sancl-phase')||{}).value || '';
+  if(!phases.length){
+    tabsEl.innerHTML = '<div style="font-size:11px;color:var(--text3);font-style:italic;padding:4px 0;">pick a template first</div>';
+    return;
+  }
+  // Default to first phase if nothing selected (or current selection is no longer valid).
+  const selected = phases.includes(curPhase) ? curPhase : phases[0];
+  document.getElementById('sancl-phase').value = selected;
+  tabsEl.innerHTML = phases.map(p => {
+    const isActive = p === selected;
+    return '<button type="button" onclick="sanclPhasePick(\''+p.replace(/'/g,"\\'")+'\')" style="flex:1;font-size:11px;padding:7px 8px;border-radius:var(--radius-sm);border:1px solid '+(isActive?'var(--green)':'var(--border)')+';background:'+(isActive?'var(--green-pale)':'var(--card)')+';color:'+(isActive?'var(--green)':'var(--text2)')+';font-weight:'+(isActive?'600':'400')+';cursor:pointer;font-family:var(--sans);">'+p+'</button>';
+  }).join('');
+}
+
+function sanclPhasePick(phase){
+  document.getElementById('sancl-phase').value = phase;
+  sanclRenderPhaseTabs();
+  sanclRenderTasks();
+}
+
+// Reflect Batch Info chip + colour strip when a batch is picked.
+function sanclRenderBatchInfo(){
+  const el = document.getElementById('sancl-batch-info');
+  const strip = document.getElementById('sancl-room-strip');
+  if(!el) return;
+  const bid = (document.getElementById('sancl-batch')||{}).value || '';
+  if(!bid){ el.style.display='none'; if(strip) strip.style.background='var(--green)'; return; }
+  const b = batchRecs.find(r => r.batchId === bid && !r.type);
+  if(!b){ el.style.display='none'; return; }
+  const rooms = (typeof formatBatchRoomsForDisplay === 'function') ? formatBatchRoomsForDisplay(b) : ((b.rooms||[]).join(', ') || '—');
+  el.innerHTML = '<strong>'+b.batchId+'</strong> · '+(b.cultivar||'—')+' · '+(b.plantPhase||'—')+' · '+rooms;
+  el.style.display='';
+  // Colour the strip to match the first flower room (visual cue for which room is being cleaned).
+  if(strip){
+    const firstFlower = (b.rooms||[]).find(r => r !== 'Veg');
+    const colours = { 'Flower 1':'#C0392B','Flower 2':'#E67E22','Flower 3':'#27AE60','Flower 4':'#8E44AD','Flower 5':'#6D4C41' };
+    strip.style.background = colours[firstFlower] || 'var(--green)';
+  }
+}
+
+// Render the tasks list for the current (template, phase). Tasks already logged TODAY for this
+// (batch, template, phase) appear faded with date/initials. Tap an un-logged task → save it.
+function sanclRenderTasks(){
+  const card = document.getElementById('sancl-tasks-card');
+  const list = document.getElementById('sancl-tasks-list');
+  const label = document.getElementById('sancl-tasks-label');
+  if(!card || !list) return;
+  const template = (document.getElementById('sancl-template')||{}).value || '';
+  const phase = (document.getElementById('sancl-phase')||{}).value || '';
+  const batch = (document.getElementById('sancl-batch')||{}).value || '';
+  const grower = (document.getElementById('sancl-grower')||{}).value || '';
+  if(!template || !phase || !batch || !grower){
+    card.style.display='none';
+    return;
+  }
+  card.style.display='';
+  if(label) label.textContent = 'Tasks · '+template+' — '+phase;
+  const tasks = sanGetTasks(template, phase);
+  const today = (typeof localDate === 'function') ? localDate() : new Date().toISOString().slice(0,10);
+  // Has a given task been logged TODAY for this batch + phase?
+  function loggedToday(taskName){
+    return sanCleanRecs.find(r => r.batch===batch && r.template===template && r.phase===phase && r.task===taskName && r.date===today);
+  }
+  list.innerHTML = tasks.map(t => {
+    const done = loggedToday(t.name);
+    if(done){
+      const initials = (done.grower||'').split(' ').map(s=>s[0]||'').join('').toUpperCase();
+      return '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--green-pale);border:1px solid var(--green-light);border-radius:var(--radius-sm);">'+
+        '<span style="width:18px;height:18px;border-radius:4px;background:var(--green);color:#fff;font-size:12px;display:flex;align-items:center;justify-content:center;">✓</span>'+
+        '<div style="flex:1;font-size:13px;color:var(--text);">'+t.name+'</div>'+
+        '<div style="font-size:10px;color:var(--text2);font-family:var(--mono);">'+(done.date||today)+' · '+initials+'</div>'+
+      '</div>';
+    }
+    const safe = t.name.replace(/'/g,"\\'");
+    return '<div onclick="sanclSaveTask(\''+safe+'\')" style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--card);border:1px dashed var(--border);border-radius:var(--radius-sm);cursor:pointer;transition:background 0.15s;" onmouseover="this.style.background=\'var(--bg2)\'" onmouseout="this.style.background=\'var(--card)\'">'+
+      '<span style="width:18px;height:18px;border-radius:4px;border:1.5px solid var(--border);"></span>'+
+      '<div style="flex:1;font-size:13px;color:var(--text);">'+t.name+'</div>'+
+      '<div style="font-size:10px;color:var(--text3);">tap to log</div>'+
+    '</div>';
+  }).join('');
+}
+
+// Render the Recent Entries card (newest first, limit 10).
+function sanclRenderRecent(){
+  const card = document.getElementById('sancl-recent-card');
+  const list = document.getElementById('sancl-recent-list');
+  if(!card || !list) return;
+  const batch = (document.getElementById('sancl-batch')||{}).value || '';
+  if(!batch){ card.style.display='none'; return; }
+  const recs = sanCleanRecs
+    .filter(r => r.batch === batch)
+    .sort((a,b) => (b.date||'').localeCompare(a.date||'') || (b.time||'').localeCompare(a.time||''))
+    .slice(0,10);
+  if(!recs.length){ card.style.display='none'; return; }
+  card.style.display='';
+  list.innerHTML = recs.map(r => {
+    const initials = (r.grower||'').split(' ').map(s=>s[0]||'').join('').toUpperCase();
+    return (r.date||'')+' · '+(r.template||'')+' · '+(r.phase||'')+' · '+(r.task||'')+' · '+initials;
+  }).join('<br>');
+}
+
+function sanclEnter(){ sanclChanged(); }
+
+// Fired whenever any of grower / template / batch changes. Refreshes downstream UI.
+function sanclChanged(){
+  sanclPopulateBatchOptions();
+  sanclRenderPhaseTabs();
+  sanclRenderBatchInfo();
+  sanclRenderTasks();
+  sanclRenderRecent();
+}
+
+// Save a single task as a sanCleanRec. Today + current grower + template + phase + batch + task.
+async function sanclSaveTask(taskName){
+  const grower   = (document.getElementById('sancl-grower')||{}).value || '';
+  const template = (document.getElementById('sancl-template')||{}).value || '';
+  const phase    = (document.getElementById('sancl-phase')||{}).value || '';
+  const batch    = (document.getElementById('sancl-batch')||{}).value || '';
+  const notes    = (document.getElementById('sancl-notes')||{}).value || '';
+  if(!grower){ toast('Pick a grower first.'); return; }
+  if(!template){ toast('Pick a template first.'); return; }
+  if(!batch){ toast('Pick a batch first.'); return; }
+  if(!phase){ toast('Pick a phase first.'); return; }
+  const today = (typeof localDate === 'function') ? localDate() : new Date().toISOString().slice(0,10);
+  const now = new Date();
+  const time = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+  // Guard against double-tap — if this task is already logged today for this batch/phase, refuse silently.
+  const dupe = sanCleanRecs.find(r => r.batch===batch && r.template===template && r.phase===phase && r.task===taskName && r.date===today);
+  if(dupe){
+    toast(taskName+' was already logged today.', 3500);
+    return;
+  }
+  // Pull the batch's current room as the room for this cleaning record.
+  const b = batchRecs.find(r => r.batchId === batch && !r.type);
+  const room = b ? (((b.rooms||[]).find(r => r !== 'Veg')) || (b.rooms||[])[0] || '') : '';
+  const rec = {
+    id: Date.now() + Math.floor(Math.random()*1000),
+    date: today, time,
+    grower, batch, room,
+    template, phase, task: taskName,
+    notes: notes || '',
+    synced: false
+  };
+  sanCleanRecs.unshift(rec);
+  lsSet('gp-sanclean', sanCleanRecs);
+  // Clear the notes field after logging so it doesn't accidentally carry across to the next task.
+  const notesEl = document.getElementById('sancl-notes');
+  if(notesEl) notesEl.value = '';
+  toast('Logged: '+taskName, 2500);
+  sanclRenderTasks();
+  sanclRenderRecent();
+  if(typeof updatePendingBadge === 'function') updatePendingBadge();
+  // Airtable sync will be wired in a follow-up — for now the record stays synced:false and
+  // shows on the pending count. Phase 2 will POST to the Batch Cleaning Log table.
+}
+
+// ── TOOL CLEANING LOG ───────────────────────────────────────────────────────
+function santoolEnter(){
+  // Default date + time to now.
+  const today = (typeof localDate === 'function') ? localDate() : new Date().toISOString().slice(0,10);
+  const now = new Date();
+  const time = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+  const dEl = document.getElementById('santool-date'); if(dEl && !dEl.value) dEl.value = today;
+  const tEl = document.getElementById('santool-time'); if(tEl && !tEl.value) tEl.value = time;
+  // Populate batch dropdown from open batches (mothers + regular).
+  const sel = document.getElementById('santool-batch');
+  if(sel){
+    const cur = sel.value;
+    const eligible = batchRecs.filter(b => b && !b.type && !(typeof isBatchClosedRec==='function' && isBatchClosedRec(b)))
+                              .sort((a,b) => (a.batchId||'').localeCompare(b.batchId||''));
+    sel.innerHTML = '<option value="">-- no batch --</option>' +
+      eligible.map(b => '<option value="'+b.batchId+'"'+(b.batchId===cur?' selected':'')+'>'+b.batchId+(b.cultivar?' – '+b.cultivar:'')+'</option>').join('');
+  }
+  santoolRenderRecent();
+}
+
+function santoolRenderRecent(){
+  const list = document.getElementById('santool-recent-list');
+  if(!list) return;
+  const recs = sanToolRecs.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||'')||(b.time||'').localeCompare(a.time||'')).slice(0,10);
+  if(!recs.length){ list.innerHTML = '<span style="color:var(--text3);font-style:italic;">No entries yet.</span>'; return; }
+  list.innerHTML = recs.map(r => {
+    const initials = (r.grower||'').split(' ').map(s=>s[0]||'').join('').toUpperCase();
+    const flags = (r.cleaned?'C':'') + (r.sanitized?'S':'') || '—';
+    return (r.date||'')+' '+(r.time||'')+' · '+(r.batch||'(no batch)')+' · '+(r.tool||'')+' · '+flags+' · '+initials;
+  }).join('<br>');
+}
+
+async function santoolSave(){
+  const grower    = (document.getElementById('santool-grower')||{}).value || '';
+  const tool      = ((document.getElementById('santool-tool')||{}).value || '').trim();
+  const batch     = (document.getElementById('santool-batch')||{}).value || '';
+  const date      = (document.getElementById('santool-date')||{}).value || '';
+  const time      = (document.getElementById('santool-time')||{}).value || '';
+  const cleaned   = !!(document.getElementById('santool-cleaned')||{}).checked;
+  const sanitized = !!(document.getElementById('santool-sanitized')||{}).checked;
+  const notes     = (document.getElementById('santool-notes')||{}).value || '';
+  if(!grower){ toast('Pick a grower first.'); return; }
+  if(!tool){ toast('Enter a tool name.'); return; }
+  if(!cleaned && !sanitized){ toast('Check at least Cleaned or Sanitized.'); return; }
+  if(!date){ toast('Pick a date.'); return; }
+  const rec = {
+    id: Date.now() + Math.floor(Math.random()*1000),
+    date, time,
+    grower, batch, tool,
+    cleaned, sanitized,
+    notes,
+    synced: false
+  };
+  sanToolRecs.unshift(rec);
+  lsSet('gp-santool', sanToolRecs);
+  toast('Tool cleaning saved.', 2500);
+  // Clear the tool + notes + checkboxes for the next entry; preserve grower/batch/date so a series of tools logs fast.
+  const tEl=document.getElementById('santool-tool'); if(tEl) tEl.value='';
+  const nEl=document.getElementById('santool-notes'); if(nEl) nEl.value='';
+  const cEl=document.getElementById('santool-cleaned'); if(cEl) cEl.checked=false;
+  const sEl=document.getElementById('santool-sanitized'); if(sEl) sEl.checked=false;
+  santoolRenderRecent();
+  if(typeof updatePendingBadge === 'function') updatePendingBadge();
+}
 
 </script>
 </body>
