@@ -9104,15 +9104,15 @@ function sanclGetCustomTasks(template){
   return Array.isArray(arr) ? arr.slice() : [];
 }
 
-// Populate the Room dropdown based on the selected template. For batch-linked templates we
-// intersect template.roomOptions with the BATCH's current rooms (only show rooms the batch is
-// actually in). For Utility Areas (no batch) we show the full utility room list.
+// Populate the Room dropdown based on the selected template. The full template room list is
+// always shown so the grower can log cleanings BEFORE a batch enters a room (e.g. prepping the
+// Trim room ahead of harvest) and AFTER a batch has left (e.g. post-harvest flower room clean).
+// Room and batch are independent — the grower picks both based on what they're actually doing.
 function sanclPopulateRoomOptions(){
   const sel = document.getElementById('sancl-room');
   if(!sel) return;
   const cur = sel.value;
   const template = (document.getElementById('sancl-template')||{}).value || '';
-  const batch = (document.getElementById('sancl-batch')||{}).value || '';
   const hint = document.getElementById('sancl-room-hint');
   const cfg = SAN_TEMPLATE_BATCH_FILTER[template];
   if(!template || !cfg){
@@ -9120,20 +9120,11 @@ function sanclPopulateRoomOptions(){
     if(hint) hint.textContent = '';
     return;
   }
-  let options = cfg.roomOptions ? cfg.roomOptions.slice() : [];
-  // For batch-linked templates with a batch picked, narrow to rooms the batch occupies (case-insensitive substring match).
-  if(!cfg.batchOptional && batch){
-    const b = batchRecs.find(r => r.batchId === batch && !r.type);
-    if(b && Array.isArray(b.rooms) && b.rooms.length){
-      const inBatch = (room) => b.rooms.some(br => (room||'').toLowerCase().includes((br||'').toLowerCase()) || (br||'').toLowerCase().includes((room||'').toLowerCase()));
-      const narrowed = options.filter(inBatch);
-      if(narrowed.length) options = narrowed;
-    }
-  }
+  const options = cfg.roomOptions ? cfg.roomOptions.slice() : [];
   sel.innerHTML = '<option value="">-- select room --</option>' +
     options.map(r => '<option value="'+r+'"'+(r===cur?' selected':'')+'>'+r+'</option>').join('');
   if(hint){
-    if(!options.length) hint.textContent = '— no eligible rooms';
+    if(!options.length) hint.textContent = '— no rooms configured for this template';
     else if(cfg.batchOptional) hint.textContent = '— utility-area rooms';
     else hint.textContent = '— pick the room being cleaned';
   }
