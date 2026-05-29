@@ -1609,12 +1609,12 @@ const SAN_TASK_TEMPLATES = [
 // dropdown and the Room dropdown on the Batch Cleaning Log page. Co-located with
 // SAN_TASK_TEMPLATES so both constants initialize at the same point in the script.
 const SAN_TEMPLATE_BATCH_FILTER = {
-  'Mother-Veg':    { motherOnly:true,  phases:['Clones','Veg','Flower','Drying'], batchOptional:false, roomOptions:['Mother/Clone (109)','Veg'] },
-  'Drying':        { motherOnly:false, phases:['Drying'],                          batchOptional:false, roomOptions:['Drying (110)'] },
+  'Mother-Veg':    { motherOnly:true,  phases:['Clones','Veg','Flower','Drying'], batchOptional:false, roomOptions:['Mother/Veg'] },
+  'Drying':        { motherOnly:false, phases:['Drying'],                          batchOptional:false, roomOptions:['Dry 1','Dry 2'] },
   'Grow Room':     { motherOnly:false, phases:['Veg','Flower','Drying'],           batchOptional:false, roomOptions:['Flower 1','Flower 2','Flower 3','Flower 4','Flower 5'] },
-  'Trimming':      { motherOnly:false, phases:['Drying','Packaged'],               batchOptional:false, roomOptions:['Trimming (111)'] },
+  'Trimming':      { motherOnly:false, phases:['Drying','Packaged'],               batchOptional:false, roomOptions:['Trim'] },
   'Utility Areas': { motherOnly:false, phases:[], batchOptional:true,
-                     roomOptions:['Shipping/Receiving (100)','Destruction (101)','Office (102)','Soils Storage (103)','Transplant Room (104)','Hallways (106 & 117)','Storage (107)','Secure Storage (108)','Bathroom (113)','Lunch Room (114)','Vestibule (115)','Change/Equipment Cleaning (116)'] }
+                     roomOptions:['Shipping/Receiving','Destruction','Office','Watering Room','Hallways','Storage','Secure Storage','Bathroom','Lunch Room','Vestibule','Change/Equipment Cleaning'] }
 };
 
 // Returns the list of phases that exist for a given template (in display order).
