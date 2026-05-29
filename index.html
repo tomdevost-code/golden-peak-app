@@ -9058,18 +9058,20 @@ function sanclPopulateBatchOptions(){
   }
   if(field) field.style.display = '';
   if(req) req.style.display = '';
+  // Filter is intentionally permissive — only motherOnly matters. Phase filter was too narrow
+  // (e.g. cleaning a Grow Room before a Clones-phase batch enters it would have failed). The
+  // grower picks the batch they're actually cleaning for; the room dropdown narrows further.
   const eligible = batchRecs.filter(b => {
     if(!b || b.type) return false;
     if(isBatchClosedRec && isBatchClosedRec(b)) return false;
     if(filter.motherOnly !== isMotherBatch(b.batchId)) return false;
-    if(filter.phases.length && !filter.phases.includes(b.plantPhase||'')) return false;
     return true;
   }).sort((a,b) => (a.batchId||'').localeCompare(b.batchId||''));
   sel.innerHTML = '<option value="">-- select batch --</option>' +
-    eligible.map(b => '<option value="'+b.batchId+'"'+(b.batchId===cur?' selected':'')+'>'+b.batchId+(b.cultivar?' – '+b.cultivar:'')+'</option>').join('');
+    eligible.map(b => '<option value="'+b.batchId+'"'+(b.batchId===cur?' selected':'')+'>'+b.batchId+(b.cultivar?' – '+b.cultivar:'')+(b.plantPhase?' · '+b.plantPhase:'')+'</option>').join('');
   if(hint){
-    if(!eligible.length) hint.textContent = '— no open batches match this template';
-    else hint.textContent = '— filtered to '+(filter.motherOnly?'mother ':'')+'batches in '+(filter.phases.join('/'))+' phase';
+    if(!eligible.length) hint.textContent = filter.motherOnly ? '— no open mother batches yet' : '— no open batches yet';
+    else hint.textContent = filter.motherOnly ? '— mother batches only' : '— open batches';
   }
 }
 
