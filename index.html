@@ -1352,28 +1352,29 @@ tr:last-child td { border-bottom: none; }
         </div>
 
         <div class="field" style="margin-bottom:10px;">
-          <label>Log Template <span style="color:var(--red);font-weight:700;">*</span> <span style="font-size:10px;color:var(--text3);font-weight:400;">— Mother-Veg / Drying / Transplant / Grow Room / Trimming</span></label>
+          <label>Log Template <span style="color:var(--red);font-weight:700;">*</span> <span style="font-size:10px;color:var(--text3);font-weight:400;">— Mother-Veg / Drying / Grow Room / Trimming / Utility Areas</span></label>
           <select id="sancl-template" onchange="sanclChanged()">
             <option value="">-- select template --</option>
             <option value="Mother-Veg">Mother-Veg Room</option>
             <option value="Drying">Drying Room</option>
-            <option value="Transplant">Transplant Room</option>
             <option value="Grow Room">Grow Room</option>
             <option value="Trimming">Trimming Room</option>
+            <option value="Utility Areas">Utility Areas</option>
           </select>
         </div>
 
-        <div class="field" style="margin-bottom:10px;">
-          <label>Batch <span style="color:var(--red);font-weight:700;">*</span> <span style="font-size:10px;color:var(--text3);font-weight:400;" id="sancl-batch-hint"></span></label>
+        <div class="field" id="sancl-batch-field" style="margin-bottom:10px;">
+          <label>Batch <span id="sancl-batch-req" style="color:var(--red);font-weight:700;">*</span> <span style="font-size:10px;color:var(--text3);font-weight:400;" id="sancl-batch-hint"></span></label>
           <select id="sancl-batch" onchange="sanclChanged()">
             <option value="">-- select batch --</option>
           </select>
         </div>
 
         <div class="field" style="margin-bottom:10px;">
-          <label>Phase</label>
-          <div id="sancl-phase-tabs" style="display:flex;gap:4px;flex-wrap:wrap;"></div>
-          <input type="hidden" id="sancl-phase" value="" />
+          <label>Room <span style="color:var(--red);font-weight:700;">*</span> <span style="font-size:10px;color:var(--text3);font-weight:400;" id="sancl-room-hint"></span></label>
+          <select id="sancl-room" onchange="sanclChanged()">
+            <option value="">-- select room --</option>
+          </select>
         </div>
 
         <div id="sancl-batch-info" style="font-size:12px;color:var(--text2);background:var(--bg2);border-radius:var(--radius-sm);padding:8px 10px;margin-bottom:10px;display:none;font-family:var(--mono);"></div>
@@ -1381,8 +1382,20 @@ tr:last-child td { border-bottom: none; }
 
       <div class="card" id="sancl-tasks-card" style="display:none;">
         <div class="section-label" id="sancl-tasks-label">Tasks</div>
-        <div style="font-size:11px;color:var(--text3);margin:-4px 0 10px;">Tap a task to log it for today. Already-logged tasks for this batch + phase appear faded with the date/initials.</div>
+        <div style="font-size:11px;color:var(--text3);margin:-4px 0 10px;">Tap a task to log it for today. Already-logged tasks for this batch + room appear faded with the date/initials.</div>
         <div id="sancl-tasks-list" style="display:flex;flex-direction:column;gap:6px;"></div>
+
+        <!-- Custom task add input — lets the user extend the template with site-specific tasks.
+             Custom tasks are persisted per template in localStorage (gp-san-custom-tasks). -->
+        <div style="margin-top:10px;padding:8px 10px;background:var(--bg2);border:1px dashed var(--border);border-radius:var(--radius-sm);">
+          <label style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:4px;">Add a custom task to this template</label>
+          <div style="display:flex;gap:6px;">
+            <input type="text" id="sancl-custom-input" placeholder="e.g. Wipe down PPE rack" style="flex:1;font-size:13px;padding:6px 8px;font-family:var(--sans);" onkeydown="if(event.key==='Enter'){event.preventDefault();sanclAddCustomTask();}" />
+            <button type="button" class="btn-secondary" onclick="sanclAddCustomTask()" style="white-space:nowrap;">+ Add</button>
+          </div>
+          <div style="font-size:10px;color:var(--text3);margin-top:4px;">Custom tasks show with a × to remove. The original SOP tasks can't be removed.</div>
+        </div>
+
         <div class="field" style="margin-top:12px;">
           <label>Notes (optional — applies to the next task you log)</label>
           <textarea id="sancl-notes" rows="2" placeholder="e.g. used SHYIELD per SOP"></textarea>
@@ -1552,22 +1565,18 @@ const SAN_TASK_TEMPLATES = [
   {template:'Drying', phase:'Pre', name:'Mop floor', order:3},
   {template:'Drying', phase:'Pre', name:'Sanitize walls, floor and all fixtures', order:4},
   {template:'Drying', phase:'Ongoing', name:'Sanitize door handles', order:1},
-  // Transplant
-  {template:'Transplant', phase:'Pre', name:'Wipe down walls & doors & fixtures', order:1},
-  {template:'Transplant', phase:'Pre', name:'Vacuum floor', order:2},
-  {template:'Transplant', phase:'Pre', name:'Mop floors', order:3},
-  {template:'Transplant', phase:'Pre', name:'Sanitize walls & floors & fixtures', order:4},
-  {template:'Transplant', phase:'During', name:'Sweep floors', order:1},
-  {template:'Transplant', phase:'During', name:'Remove debris', order:2},
-  {template:'Transplant', phase:'Post', name:'Remove debris & soil from tables', order:1},
-  {template:'Transplant', phase:'Post', name:'Wipe down tables', order:2},
-  {template:'Transplant', phase:'Post', name:'Sweep floors', order:3},
-  {template:'Transplant', phase:'Post', name:'Wipe down walls, doors & fixtures', order:4},
-  {template:'Transplant', phase:'Post', name:'Vacuum floors', order:5},
-  {template:'Transplant', phase:'Post', name:'Mop floors', order:6},
-  {template:'Transplant', phase:'Post', name:'Sanitize walls, doors, & fixtures', order:7},
-  {template:'Transplant', phase:'Post', name:'Sanitize floors', order:8},
-  {template:'Transplant', phase:'Post', name:'Empty trash', order:9},
+  // Utility Areas — common cleaning tasks for non-cultivation rooms (Office, Hallways, Bathroom,
+  // Lunch Room, Vestibule, Change Room, Storage, Soils Storage, Destruction, Shipping/Receiving,
+  // Transplant Room, etc.). Per SOP-SA-016 these aren't batch-linked.
+  {template:'Utility Areas', phase:'General', name:'Keep tidy', order:1},
+  {template:'Utility Areas', phase:'General', name:'Remove debris from floor', order:2},
+  {template:'Utility Areas', phase:'General', name:'Empty trash', order:3},
+  {template:'Utility Areas', phase:'General', name:'Vacuum floor', order:4},
+  {template:'Utility Areas', phase:'General', name:'Mop floor', order:5},
+  {template:'Utility Areas', phase:'General', name:'Wipe down walls', order:6},
+  {template:'Utility Areas', phase:'General', name:'Wipe down light fixtures & other fixtures/equipment', order:7},
+  {template:'Utility Areas', phase:'General', name:'Sanitize walls & floors', order:8},
+  {template:'Utility Areas', phase:'General', name:'Sanitize door handles', order:9},
   // Grow Room
   {template:'Grow Room', phase:'Post-Harvest', name:'Remove pots', order:1},
   {template:'Grow Room', phase:'Post-Harvest', name:'Remove irrigation lines and clean', order:2},
@@ -2136,13 +2145,14 @@ const NAT_KEY_FN = {
   },
   sanclean(r){
     if(!r) return '';
-    // Same task can only be logged ONCE per (batch, template, phase, date). Re-logging the
-    // same task on the same day is blocked at save time.
+    // Same task can only be logged ONCE per (batch, room, template, task, date). Re-logging
+    // the same task in the same room on the same day is blocked at save time. Phase is NOT in
+    // the key — it's derived from the task name and not user-picked.
     return [
       (r.batch||'').toString().toUpperCase(),
       r.date||'',
+      (r.room||'').toString(),
       (r.template||'').toString(),
-      (r.phase||'').toString(),
       (r.task||'').toString()
     ].join('|');
   },
@@ -5786,8 +5796,8 @@ const NAT_KEY_FN_REMOTE = {
     return [
       (linkId||'').toString(),
       (f['Date']||'').toString(),
+      (f['Room']||'').toString(),
       (f['Log Template']||'').toString(),
-      (f['Phase']||'').toString(),
       (f['Task']||'').toString()
     ].join('|');
   },
@@ -9010,19 +9020,25 @@ function sectionTable(title, headers, rows){
 // Tool Cleaning Log (page-santool) — per-tool / per-batch cleaning record with Cleaned/Sanitized.
 // ════════════════════════════════════════════════════════════════════════════════
 
-// Map a template name → which batch phases are eligible. Used to filter the Batch dropdown.
-// Empty array means "any open batch". Mothers handled via isMotherBatch.
+// Map a template name → batch filter rules + room option list. Used to filter the Batch
+// dropdown and the Room dropdown. batchOptional=true means a Batch can be omitted (utility
+// area cleanings aren't batch-linked per SOP-SA-016). roomOptions is the list of valid
+// rooms shown in the dropdown for this template.
 const SAN_TEMPLATE_BATCH_FILTER = {
-  'Mother-Veg':  { motherOnly:true,  phases:['Clones','Veg','Flower','Drying'] }, // mom stock at any cultivation phase
-  'Drying':      { motherOnly:false, phases:['Drying'] },
-  'Transplant':  { motherOnly:false, phases:['Clones','Veg'] }, // pre/during/post transplant
-  'Grow Room':   { motherOnly:false, phases:['Veg','Flower','Drying'] }, // grow-room lifecycle
-  'Trimming':    { motherOnly:false, phases:['Drying','Packaged'] } // trim happens after drying
+  'Mother-Veg':    { motherOnly:true,  phases:['Clones','Veg','Flower','Drying'], batchOptional:false, roomOptions:['Mother/Clone (109)','Veg'] },
+  'Drying':        { motherOnly:false, phases:['Drying'],                          batchOptional:false, roomOptions:['Drying (110)'] },
+  'Grow Room':     { motherOnly:false, phases:['Veg','Flower','Drying'],           batchOptional:false, roomOptions:['Flower 1','Flower 2','Flower 3','Flower 4','Flower 5'] },
+  'Trimming':      { motherOnly:false, phases:['Drying','Packaged'],               batchOptional:false, roomOptions:['Trimming (111)'] },
+  'Utility Areas': { motherOnly:false, phases:[], batchOptional:true,
+                     roomOptions:['Shipping/Receiving (100)','Destruction (101)','Office (102)','Soils Storage (103)','Transplant Room (104)','Hallways (106 & 117)','Storage (107)','Secure Storage (108)','Bathroom (113)','Lunch Room (114)','Vestibule (115)','Change/Equipment Cleaning (116)'] }
 };
 
 // Populate the Batch dropdown on the Sanitation Cleaning Log based on the current template.
+// Hides the Batch field entirely for batch-optional templates (Utility Areas).
 function sanclPopulateBatchOptions(){
   const sel = document.getElementById('sancl-batch');
+  const field = document.getElementById('sancl-batch-field');
+  const req = document.getElementById('sancl-batch-req');
   if(!sel) return;
   const template = (document.getElementById('sancl-template')||{}).value || '';
   const cur = sel.value;
@@ -9030,9 +9046,18 @@ function sanclPopulateBatchOptions(){
   if(!template){
     sel.innerHTML = '<option value="">-- pick a template first --</option>';
     if(hint) hint.textContent = '';
+    if(field) field.style.display = '';
     return;
   }
-  const filter = SAN_TEMPLATE_BATCH_FILTER[template] || { motherOnly:false, phases:[] };
+  const filter = SAN_TEMPLATE_BATCH_FILTER[template] || { motherOnly:false, phases:[], batchOptional:false };
+  // Utility Areas (batchOptional) — hide the Batch field entirely; record saves with no batch.
+  if(filter.batchOptional){
+    sel.value = '';
+    if(field) field.style.display = 'none';
+    return;
+  }
+  if(field) field.style.display = '';
+  if(req) req.style.display = '';
   const eligible = batchRecs.filter(b => {
     if(!b || b.type) return false;
     if(isBatchClosedRec && isBatchClosedRec(b)) return false;
@@ -9048,30 +9073,52 @@ function sanclPopulateBatchOptions(){
   }
 }
 
-// Build the Phase tabs for the current template.
-function sanclRenderPhaseTabs(){
-  const tabsEl = document.getElementById('sancl-phase-tabs');
-  if(!tabsEl) return;
-  const template = (document.getElementById('sancl-template')||{}).value || '';
-  const phases = template ? sanGetPhasesForTemplate(template) : [];
-  const curPhase = (document.getElementById('sancl-phase')||{}).value || '';
-  if(!phases.length){
-    tabsEl.innerHTML = '<div style="font-size:11px;color:var(--text3);font-style:italic;padding:4px 0;">pick a template first</div>';
-    return;
-  }
-  // Default to first phase if nothing selected (or current selection is no longer valid).
-  const selected = phases.includes(curPhase) ? curPhase : phases[0];
-  document.getElementById('sancl-phase').value = selected;
-  tabsEl.innerHTML = phases.map(p => {
-    const isActive = p === selected;
-    return '<button type="button" onclick="sanclPhasePick(\''+p.replace(/'/g,"\\'")+'\')" style="flex:1;font-size:11px;padding:7px 8px;border-radius:var(--radius-sm);border:1px solid '+(isActive?'var(--green)':'var(--border)')+';background:'+(isActive?'var(--green-pale)':'var(--card)')+';color:'+(isActive?'var(--green)':'var(--text2)')+';font-weight:'+(isActive?'600':'400')+';cursor:pointer;font-family:var(--sans);">'+p+'</button>';
-  }).join('');
+// Custom task storage — per template, persisted in localStorage. Keyed by template name.
+//   { 'Grow Room': ['Wipe down PPE rack', ...], 'Utility Areas': [...] }
+function sanclLoadCustomTasks(){
+  const stored = lsGet('gp-san-custom-tasks');
+  return (stored && typeof stored === 'object' && !Array.isArray(stored)) ? stored : {};
+}
+function sanclSaveCustomTasks(map){ lsSet('gp-san-custom-tasks', map); }
+function sanclGetCustomTasks(template){
+  const map = sanclLoadCustomTasks();
+  const arr = map[template];
+  return Array.isArray(arr) ? arr.slice() : [];
 }
 
-function sanclPhasePick(phase){
-  document.getElementById('sancl-phase').value = phase;
-  sanclRenderPhaseTabs();
-  sanclRenderTasks();
+// Populate the Room dropdown based on the selected template. For batch-linked templates we
+// intersect template.roomOptions with the BATCH's current rooms (only show rooms the batch is
+// actually in). For Utility Areas (no batch) we show the full utility room list.
+function sanclPopulateRoomOptions(){
+  const sel = document.getElementById('sancl-room');
+  if(!sel) return;
+  const cur = sel.value;
+  const template = (document.getElementById('sancl-template')||{}).value || '';
+  const batch = (document.getElementById('sancl-batch')||{}).value || '';
+  const hint = document.getElementById('sancl-room-hint');
+  const cfg = SAN_TEMPLATE_BATCH_FILTER[template];
+  if(!template || !cfg){
+    sel.innerHTML = '<option value="">-- pick a template first --</option>';
+    if(hint) hint.textContent = '';
+    return;
+  }
+  let options = cfg.roomOptions ? cfg.roomOptions.slice() : [];
+  // For batch-linked templates with a batch picked, narrow to rooms the batch occupies (case-insensitive substring match).
+  if(!cfg.batchOptional && batch){
+    const b = batchRecs.find(r => r.batchId === batch && !r.type);
+    if(b && Array.isArray(b.rooms) && b.rooms.length){
+      const inBatch = (room) => b.rooms.some(br => (room||'').toLowerCase().includes((br||'').toLowerCase()) || (br||'').toLowerCase().includes((room||'').toLowerCase()));
+      const narrowed = options.filter(inBatch);
+      if(narrowed.length) options = narrowed;
+    }
+  }
+  sel.innerHTML = '<option value="">-- select room --</option>' +
+    options.map(r => '<option value="'+r+'"'+(r===cur?' selected':'')+'>'+r+'</option>').join('');
+  if(hint){
+    if(!options.length) hint.textContent = '— no eligible rooms';
+    else if(cfg.batchOptional) hint.textContent = '— utility-area rooms';
+    else hint.textContent = '— pick the room being cleaned';
+  }
 }
 
 // Reflect Batch Info chip + colour strip when a batch is picked.
@@ -9094,46 +9141,103 @@ function sanclRenderBatchInfo(){
   }
 }
 
-// Render the tasks list for the current (template, phase). Tasks already logged TODAY for this
-// (batch, template, phase) appear faded with date/initials. Tap an un-logged task → save it.
+// Render the full flat tasks list for the current template (SOP tasks + custom tasks).
+// Tasks already logged TODAY for this (batch, room, task) appear faded with date/initials.
+// Custom tasks get an × button to remove them. Tap an un-logged task → save it.
 function sanclRenderTasks(){
   const card = document.getElementById('sancl-tasks-card');
   const list = document.getElementById('sancl-tasks-list');
   const label = document.getElementById('sancl-tasks-label');
   if(!card || !list) return;
   const template = (document.getElementById('sancl-template')||{}).value || '';
-  const phase = (document.getElementById('sancl-phase')||{}).value || '';
-  const batch = (document.getElementById('sancl-batch')||{}).value || '';
-  const grower = (document.getElementById('sancl-grower')||{}).value || '';
-  if(!template || !phase || !batch || !grower){
+  const batch    = (document.getElementById('sancl-batch')||{}).value || '';
+  const room     = (document.getElementById('sancl-room')||{}).value || '';
+  const grower   = (document.getElementById('sancl-grower')||{}).value || '';
+  const tplCfg   = SAN_TEMPLATE_BATCH_FILTER[template] || null;
+  const batchOk  = !!batch || (tplCfg && tplCfg.batchOptional);
+  if(!template || !grower || !room || !batchOk){
     card.style.display='none';
     return;
   }
   card.style.display='';
-  if(label) label.textContent = 'Tasks · '+template+' — '+phase;
-  const tasks = sanGetTasks(template, phase);
-  const today = (typeof localDate === 'function') ? localDate() : new Date().toISOString().slice(0,10);
-  // Has a given task been logged TODAY for this batch + phase?
-  function loggedToday(taskName){
-    return sanCleanRecs.find(r => r.batch===batch && r.template===template && r.phase===phase && r.task===taskName && r.date===today);
+  if(label) label.textContent = 'Tasks · '+template + (room ? ' — '+room : '');
+  // Pull all SOP-defined tasks for this template across all phases, in order.
+  const sopTasks = SAN_TASK_TEMPLATES
+    .filter(t => t.template === template)
+    .map(t => ({ name:t.name, phase:t.phase, custom:false }))
+    .sort((a,b) => {
+      // Keep the SAN_TASK_TEMPLATES array's natural insertion order: phase-then-order.
+      const arr = SAN_TASK_TEMPLATES.filter(x => x.template === template);
+      return arr.findIndex(x => x.name === a.name && x.phase === a.phase) - arr.findIndex(x => x.name === b.name && x.phase === b.phase);
+    });
+  const customTasks = sanclGetCustomTasks(template).map(name => ({ name, phase:'Custom', custom:true }));
+  const allTasks = sopTasks.concat(customTasks);
+  if(!allTasks.length){
+    list.innerHTML = '<div style="font-size:11px;color:var(--text3);font-style:italic;padding:4px 0;">no tasks defined</div>';
+    return;
   }
-  list.innerHTML = tasks.map(t => {
+  const today = (typeof localDate === 'function') ? localDate() : new Date().toISOString().slice(0,10);
+  // Has a given task been logged TODAY for this batch + room + template?
+  function loggedToday(taskName){
+    return sanCleanRecs.find(r => (r.batch||'')===batch && r.template===template && r.room===room && r.task===taskName && r.date===today);
+  }
+  list.innerHTML = allTasks.map(t => {
     const done = loggedToday(t.name);
+    const safe = t.name.replace(/'/g,"\\'");
     if(done){
       const initials = (done.grower||'').split(' ').map(s=>s[0]||'').join('').toUpperCase();
       return '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--green-pale);border:1px solid var(--green-light);border-radius:var(--radius-sm);">'+
         '<span style="width:18px;height:18px;border-radius:4px;background:var(--green);color:#fff;font-size:12px;display:flex;align-items:center;justify-content:center;">✓</span>'+
-        '<div style="flex:1;font-size:13px;color:var(--text);">'+t.name+'</div>'+
+        '<div style="flex:1;font-size:13px;color:var(--text);">'+t.name+(t.custom?' <span style="font-size:10px;color:var(--text3);">(custom)</span>':'')+'</div>'+
         '<div style="font-size:10px;color:var(--text2);font-family:var(--mono);">'+(done.date||today)+' · '+initials+'</div>'+
       '</div>';
     }
-    const safe = t.name.replace(/'/g,"\\'");
+    const removeBtn = t.custom
+      ? '<span onclick="event.stopPropagation();sanclRemoveCustomTask(\''+safe+'\')" style="font-size:14px;color:var(--red);cursor:pointer;padding:0 4px;" title="Remove custom task">×</span>'
+      : '';
     return '<div onclick="sanclSaveTask(\''+safe+'\')" style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--card);border:1px dashed var(--border);border-radius:var(--radius-sm);cursor:pointer;transition:background 0.15s;" onmouseover="this.style.background=\'var(--bg2)\'" onmouseout="this.style.background=\'var(--card)\'">'+
       '<span style="width:18px;height:18px;border-radius:4px;border:1.5px solid var(--border);"></span>'+
-      '<div style="flex:1;font-size:13px;color:var(--text);">'+t.name+'</div>'+
+      '<div style="flex:1;font-size:13px;color:var(--text);">'+t.name+(t.custom?' <span style="font-size:10px;color:var(--text3);">(custom)</span>':'')+'</div>'+
       '<div style="font-size:10px;color:var(--text3);">tap to log</div>'+
+      removeBtn +
     '</div>';
   }).join('');
+}
+
+// Add a custom task to the current template. Persists in localStorage so subsequent visits
+// to this template show the task.
+function sanclAddCustomTask(){
+  const template = (document.getElementById('sancl-template')||{}).value || '';
+  if(!template){ toast('Pick a template first.'); return; }
+  const inputEl = document.getElementById('sancl-custom-input');
+  const name = (inputEl ? inputEl.value : '').trim();
+  if(!name){ toast('Type a task name first.'); return; }
+  // Refuse duplicates of either an SOP task or an existing custom task for this template.
+  const sopNames = SAN_TASK_TEMPLATES.filter(t => t.template === template).map(t => t.name.toLowerCase());
+  if(sopNames.includes(name.toLowerCase())){ toast('Task already exists in the SOP list.'); return; }
+  const existing = sanclGetCustomTasks(template).map(s => s.toLowerCase());
+  if(existing.includes(name.toLowerCase())){ toast('Task already exists.'); return; }
+  const map = sanclLoadCustomTasks();
+  if(!Array.isArray(map[template])) map[template] = [];
+  map[template].push(name);
+  sanclSaveCustomTasks(map);
+  if(inputEl) inputEl.value = '';
+  toast('Added: '+name, 2000);
+  sanclRenderTasks();
+}
+
+// Remove a custom task. SOP tasks are never removable.
+function sanclRemoveCustomTask(name){
+  const template = (document.getElementById('sancl-template')||{}).value || '';
+  if(!template) return;
+  if(!confirm('Remove custom task "'+name+'" from this template? Past records keep this task.')) return;
+  const map = sanclLoadCustomTasks();
+  if(Array.isArray(map[template])){
+    map[template] = map[template].filter(n => n !== name);
+    sanclSaveCustomTasks(map);
+  }
+  toast('Removed.', 2000);
+  sanclRenderTasks();
 }
 
 // Render the Recent Entries card (newest first, limit 10).
@@ -9157,38 +9261,41 @@ function sanclRenderRecent(){
 
 function sanclEnter(){ sanclChanged(); }
 
-// Fired whenever any of grower / template / batch changes. Refreshes downstream UI.
+// Fired whenever any of grower / template / batch / room changes. Refreshes downstream UI.
 function sanclChanged(){
   sanclPopulateBatchOptions();
-  sanclRenderPhaseTabs();
+  sanclPopulateRoomOptions();
   sanclRenderBatchInfo();
   sanclRenderTasks();
   sanclRenderRecent();
 }
 
-// Save a single task as a sanCleanRec. Today + current grower + template + phase + batch + task.
+// Save a single task as a sanCleanRec. Today + current grower + template + batch + room + task.
+// Phase is derived from the SOP task definition (or 'Custom' for user-added tasks).
 async function sanclSaveTask(taskName){
   const grower   = (document.getElementById('sancl-grower')||{}).value || '';
   const template = (document.getElementById('sancl-template')||{}).value || '';
-  const phase    = (document.getElementById('sancl-phase')||{}).value || '';
   const batch    = (document.getElementById('sancl-batch')||{}).value || '';
+  const room     = (document.getElementById('sancl-room')||{}).value || '';
   const notes    = (document.getElementById('sancl-notes')||{}).value || '';
+  const tplCfg   = SAN_TEMPLATE_BATCH_FILTER[template];
+  const batchOk  = !!batch || (tplCfg && tplCfg.batchOptional);
   if(!grower){ toast('Pick a grower first.'); return; }
   if(!template){ toast('Pick a template first.'); return; }
-  if(!batch){ toast('Pick a batch first.'); return; }
-  if(!phase){ toast('Pick a phase first.'); return; }
+  if(!batchOk){ toast('Pick a batch first.'); return; }
+  if(!room){ toast('Pick a room first.'); return; }
   const today = (typeof localDate === 'function') ? localDate() : new Date().toISOString().slice(0,10);
   const now = new Date();
   const time = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
-  // Guard against double-tap — if this task is already logged today for this batch/phase, refuse silently.
-  const dupe = sanCleanRecs.find(r => r.batch===batch && r.template===template && r.phase===phase && r.task===taskName && r.date===today);
+  // Look up the task's SOP phase (or 'Custom' if it's a user-added task).
+  const sopTask = SAN_TASK_TEMPLATES.find(t => t.template === template && t.name === taskName);
+  const phase = sopTask ? sopTask.phase : 'Custom';
+  // Guard against double-tap — if this task is already logged today for this batch/room, refuse silently.
+  const dupe = sanCleanRecs.find(r => (r.batch||'')===batch && r.template===template && r.room===room && r.task===taskName && r.date===today);
   if(dupe){
     toast(taskName+' was already logged today.', 3500);
     return;
   }
-  // Pull the batch's current room as the room for this cleaning record.
-  const b = batchRecs.find(r => r.batchId === batch && !r.type);
-  const room = b ? (((b.rooms||[]).find(r => r !== 'Veg')) || (b.rooms||[])[0] || '') : '';
   const rec = {
     id: Date.now() + Math.floor(Math.random()*1000),
     date: today, time,
