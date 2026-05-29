@@ -1605,6 +1605,18 @@ const SAN_TASK_TEMPLATES = [
   {template:'Trimming', phase:'Ongoing', name:'Sanitize door handles', order:2}
 ];
 
+// Map a template name → batch filter rules + room option list. Used to filter the Batch
+// dropdown and the Room dropdown on the Batch Cleaning Log page. Co-located with
+// SAN_TASK_TEMPLATES so both constants initialize at the same point in the script.
+const SAN_TEMPLATE_BATCH_FILTER = {
+  'Mother-Veg':    { motherOnly:true,  phases:['Clones','Veg','Flower','Drying'], batchOptional:false, roomOptions:['Mother/Clone (109)','Veg'] },
+  'Drying':        { motherOnly:false, phases:['Drying'],                          batchOptional:false, roomOptions:['Drying (110)'] },
+  'Grow Room':     { motherOnly:false, phases:['Veg','Flower','Drying'],           batchOptional:false, roomOptions:['Flower 1','Flower 2','Flower 3','Flower 4','Flower 5'] },
+  'Trimming':      { motherOnly:false, phases:['Drying','Packaged'],               batchOptional:false, roomOptions:['Trimming (111)'] },
+  'Utility Areas': { motherOnly:false, phases:[], batchOptional:true,
+                     roomOptions:['Shipping/Receiving (100)','Destruction (101)','Office (102)','Soils Storage (103)','Transplant Room (104)','Hallways (106 & 117)','Storage (107)','Secure Storage (108)','Bathroom (113)','Lunch Room (114)','Vestibule (115)','Change/Equipment Cleaning (116)'] }
+};
+
 // Returns the list of phases that exist for a given template (in display order).
 function sanGetPhasesForTemplate(template){
   const seen = []; const out = [];
@@ -9020,18 +9032,7 @@ function sectionTable(title, headers, rows){
 // Tool Cleaning Log (page-santool) — per-tool / per-batch cleaning record with Cleaned/Sanitized.
 // ════════════════════════════════════════════════════════════════════════════════
 
-// Map a template name → batch filter rules + room option list. Used to filter the Batch
-// dropdown and the Room dropdown. batchOptional=true means a Batch can be omitted (utility
-// area cleanings aren't batch-linked per SOP-SA-016). roomOptions is the list of valid
-// rooms shown in the dropdown for this template.
-const SAN_TEMPLATE_BATCH_FILTER = {
-  'Mother-Veg':    { motherOnly:true,  phases:['Clones','Veg','Flower','Drying'], batchOptional:false, roomOptions:['Mother/Clone (109)','Veg'] },
-  'Drying':        { motherOnly:false, phases:['Drying'],                          batchOptional:false, roomOptions:['Drying (110)'] },
-  'Grow Room':     { motherOnly:false, phases:['Veg','Flower','Drying'],           batchOptional:false, roomOptions:['Flower 1','Flower 2','Flower 3','Flower 4','Flower 5'] },
-  'Trimming':      { motherOnly:false, phases:['Drying','Packaged'],               batchOptional:false, roomOptions:['Trimming (111)'] },
-  'Utility Areas': { motherOnly:false, phases:[], batchOptional:true,
-                     roomOptions:['Shipping/Receiving (100)','Destruction (101)','Office (102)','Soils Storage (103)','Transplant Room (104)','Hallways (106 & 117)','Storage (107)','Secure Storage (108)','Bathroom (113)','Lunch Room (114)','Vestibule (115)','Change/Equipment Cleaning (116)'] }
-};
+// (SAN_TEMPLATE_BATCH_FILTER is defined alongside SAN_TASK_TEMPLATES at the top of the script.)
 
 // Populate the Batch dropdown on the Sanitation Cleaning Log based on the current template.
 // Hides the Batch field entirely for batch-optional templates (Utility Areas).
@@ -9039,8 +9040,10 @@ function sanclPopulateBatchOptions(){
   const sel = document.getElementById('sancl-batch');
   const field = document.getElementById('sancl-batch-field');
   const req = document.getElementById('sancl-batch-req');
-  if(!sel) return;
-  const template = (document.getElementById('sancl-template')||{}).value || '';
+  if(!sel){ console.log('[sancl] populate: sancl-batch select not found'); return; }
+  const tmpEl = document.getElementById('sancl-template');
+  const template = (tmpEl||{}).value || '';
+  console.log('[sancl] populate called. template=', JSON.stringify(template), 'tmpEl exists=', !!tmpEl, 'batchRecs.length=', batchRecs.length);
   const cur = sel.value;
   const hint = document.getElementById('sancl-batch-hint');
   if(!template){
@@ -9061,17 +9064,30 @@ function sanclPopulateBatchOptions(){
   // Filter is intentionally permissive — only motherOnly matters. Phase filter was too narrow
   // (e.g. cleaning a Grow Room before a Clones-phase batch enters it would have failed). The
   // grower picks the batch they're actually cleaning for; the room dropdown narrows further.
+  // Diagnostic counters so the hint can explain what's being filtered.
+  let totalNonType = 0, rejClosed = 0, rejMomMismatch = 0;
   const eligible = batchRecs.filter(b => {
     if(!b || b.type) return false;
-    if(isBatchClosedRec && isBatchClosedRec(b)) return false;
-    if(filter.motherOnly !== isMotherBatch(b.batchId)) return false;
+    totalNonType++;
+    if(isBatchClosedRec && isBatchClosedRec(b)){ rejClosed++; return false; }
+    if(filter.motherOnly !== isMotherBatch(b.batchId)){ rejMomMismatch++; return false; }
     return true;
   }).sort((a,b) => (a.batchId||'').localeCompare(b.batchId||''));
+  console.log('[sancl] template=',template,'totalBatches=',batchRecs.length,'nonType=',totalNonType,'closed=',rejClosed,'momMismatch=',rejMomMismatch,'eligible=',eligible.length);
   sel.innerHTML = '<option value="">-- select batch --</option>' +
     eligible.map(b => '<option value="'+b.batchId+'"'+(b.batchId===cur?' selected':'')+'>'+b.batchId+(b.cultivar?' – '+b.cultivar:'')+(b.plantPhase?' · '+b.plantPhase:'')+'</option>').join('');
   if(hint){
-    if(!eligible.length) hint.textContent = filter.motherOnly ? '— no open mother batches yet' : '— no open batches yet';
-    else hint.textContent = filter.motherOnly ? '— mother batches only' : '— open batches';
+    if(!eligible.length){
+      let why = '';
+      if(totalNonType === 0) why = ' (no batches in localStorage)';
+      else if(filter.motherOnly && rejMomMismatch === totalNonType) why = ' (you have '+totalNonType+' open batch'+(totalNonType===1?'':'es')+' but none are mother batches)';
+      else if(!filter.motherOnly && rejMomMismatch === totalNonType) why = ' (you have '+totalNonType+' open batch'+(totalNonType===1?'':'es')+' but they\'re all mothers)';
+      else if(rejClosed === totalNonType) why = ' (all '+totalNonType+' batches are closed)';
+      else why = ' (closed: '+rejClosed+', wrong type: '+rejMomMismatch+', total: '+totalNonType+')';
+      hint.textContent = '— no matching batches'+why;
+    } else {
+      hint.textContent = filter.motherOnly ? '— mother batches only' : '— open batches';
+    }
   }
 }
 
