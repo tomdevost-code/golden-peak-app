@@ -1623,12 +1623,14 @@ const SAN_TASK_TEMPLATES = [
 // Map a template name → batch filter rules + room option list. Used to filter the Batch
 // dropdown and the Room dropdown on the Batch Cleaning Log page. Co-located with
 // SAN_TASK_TEMPLATES so both constants initialize at the same point in the script.
+// anyBatch:true means the dropdown lists every open batch (mom + regular) and skips the
+// motherOnly check. Use it for templates where any batch may be the subject of cleaning.
 const SAN_TEMPLATE_BATCH_FILTER = {
-  'Mother-Veg':    { motherOnly:true,  phases:['Clones','Veg','Flower','Drying'], batchOptional:false, roomOptions:['Mother/Veg'] },
-  'Drying':        { motherOnly:false, phases:['Drying'],                          batchOptional:false, roomOptions:['Dry 1','Dry 2'] },
-  'Grow Room':     { motherOnly:false, phases:['Veg','Flower','Drying'],           batchOptional:false, roomOptions:['Flower 1','Flower 2','Flower 3','Flower 4','Flower 5'] },
-  'Trimming':      { motherOnly:false, phases:['Drying','Packaged'],               batchOptional:false, roomOptions:['Trim'] },
-  'Utility Areas': { motherOnly:false, phases:[], batchOptional:true,
+  'Mother-Veg':    { anyBatch:true,                    batchOptional:false, roomOptions:['Mother/Veg'] },
+  'Drying':        { motherOnly:false,                 batchOptional:false, roomOptions:['Dry 1','Dry 2'] },
+  'Grow Room':     { motherOnly:false,                 batchOptional:false, roomOptions:['Flower 1','Flower 2','Flower 3','Flower 4','Flower 5'] },
+  'Trimming':      { anyBatch:true,                    batchOptional:false, roomOptions:['Trim'] },
+  'Utility Areas': { motherOnly:false,                 batchOptional:true,
                      roomOptions:['Shipping/Receiving','Destruction','Office','Watering Room','Hallways','Storage','Secure Storage','Bathroom','Lunch Room','Vestibule','Change/Equipment Cleaning'] }
 };
 
@@ -9209,32 +9211,31 @@ function sanclPopulateBatchOptions(){
   }
   if(field) field.style.display = '';
   if(req) req.style.display = '';
-  // Filter is intentionally permissive — only motherOnly matters. Phase filter was too narrow
-  // (e.g. cleaning a Grow Room before a Clones-phase batch enters it would have failed). The
-  // grower picks the batch they're actually cleaning for; the room dropdown narrows further.
-  // Diagnostic counters so the hint can explain what's being filtered.
-  let totalNonType = 0, rejClosed = 0, rejMomMismatch = 0;
+  // Filter rules:
+  //   anyBatch:true   → every open batch shows (mother + regular) — used for templates that
+  //                     can apply to any kind of batch (Mother-Veg, Trimming).
+  //   motherOnly:true → only mother batches show.
+  //   motherOnly:false→ only non-mother batches show.
+  // Phase filter is intentionally NOT used — cleaning may happen before a batch enters a
+  // phase or after it leaves; the grower picks the batch they're cleaning for.
   const eligible = batchRecs.filter(b => {
     if(!b || b.type) return false;
-    totalNonType++;
-    if(isBatchClosedRec && isBatchClosedRec(b)){ rejClosed++; return false; }
-    if(filter.motherOnly !== isMotherBatch(b.batchId)){ rejMomMismatch++; return false; }
+    if(isBatchClosedRec && isBatchClosedRec(b)) return false;
+    if(filter.anyBatch) return true;
+    if(filter.motherOnly !== isMotherBatch(b.batchId)) return false;
     return true;
   }).sort((a,b) => (a.batchId||'').localeCompare(b.batchId||''));
-  console.log('[sancl] template=',template,'totalBatches=',batchRecs.length,'nonType=',totalNonType,'closed=',rejClosed,'momMismatch=',rejMomMismatch,'eligible=',eligible.length);
   sel.innerHTML = '<option value="">-- select batch --</option>' +
     eligible.map(b => '<option value="'+b.batchId+'"'+(b.batchId===cur?' selected':'')+'>'+b.batchId+(b.cultivar?' – '+b.cultivar:'')+(b.plantPhase?' · '+b.plantPhase:'')+'</option>').join('');
   if(hint){
     if(!eligible.length){
-      let why = '';
-      if(totalNonType === 0) why = ' (no batches in localStorage)';
-      else if(filter.motherOnly && rejMomMismatch === totalNonType) why = ' (you have '+totalNonType+' open batch'+(totalNonType===1?'':'es')+' but none are mother batches)';
-      else if(!filter.motherOnly && rejMomMismatch === totalNonType) why = ' (you have '+totalNonType+' open batch'+(totalNonType===1?'':'es')+' but they\'re all mothers)';
-      else if(rejClosed === totalNonType) why = ' (all '+totalNonType+' batches are closed)';
-      else why = ' (closed: '+rejClosed+', wrong type: '+rejMomMismatch+', total: '+totalNonType+')';
-      hint.textContent = '— no matching batches'+why;
+      hint.textContent = filter.anyBatch ? '— no open batches yet'
+                       : filter.motherOnly ? '— no open mother batches yet'
+                       : '— no open batches yet';
     } else {
-      hint.textContent = filter.motherOnly ? '— mother batches only' : '— open batches';
+      hint.textContent = filter.anyBatch ? '— any open batch'
+                       : filter.motherOnly ? '— mother batches only'
+                       : '— open batches';
     }
   }
 }
@@ -9343,10 +9344,21 @@ function sanclPopulateRoomOptions(){
     return;
   }
   const options = cfg.roomOptions ? cfg.roomOptions.slice() : [];
-  sel.innerHTML = '<option value="">-- select room --</option>' +
-    options.map(r => '<option value="'+r+'"'+(r===cur?' selected':'')+'>'+r+'</option>').join('');
+  // If there's only one possible room, auto-select it so the grower doesn't have to. Otherwise
+  // preserve the current selection (if still valid) or fall back to the unselected prompt.
+  let preselect = '';
+  if(options.length === 1) preselect = options[0];
+  else if(options.includes(cur)) preselect = cur;
+  sel.innerHTML = (options.length === 1
+      ? '' // skip the "-- select room --" placeholder when there's only one valid choice
+      : '<option value="">-- select room --</option>'
+    ) +
+    options.map(r => '<option value="'+r+'"'+(r===preselect?' selected':'')+'>'+r+'</option>').join('');
+  // Make sure the DOM element actually reflects the preselected value.
+  sel.value = preselect;
   if(hint){
     if(!options.length) hint.textContent = '— no rooms configured for this template';
+    else if(options.length === 1) hint.textContent = '— only room for this template';
     else if(cfg.batchOptional) hint.textContent = '— utility-area rooms';
     else hint.textContent = '— pick the room being cleaned';
   }
