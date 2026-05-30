@@ -1547,6 +1547,11 @@ let ecRecs=[],roRecs=[],wasteRecs=[],batchRecs=[],batchTxRecs=[],harvestRecs=[],
 // bottom nav is shown. Persisted to localStorage.
 let appSection = 'cultivation';
 
+// Tasks the user has tapped to select for the next Save on the Batch Cleaning page. Declared
+// up here (not inline with the sanitation handlers) so it's initialized before initSections
+// runs at boot — switchPage('sancleaning', ...) calls sanclChanged which reads this Set.
+let sanclSelectedTasks = new Set();
+
 // Default last-page-visited per section so the back-and-forth feels natural.
 let lastPagePerSection = { cultivation: 'summary', sanitation: 'sancleaning' };
 
@@ -9543,9 +9548,9 @@ function sanclRenderRecent(){
   }).join('<br>');
 }
 
-// Tasks the user has tapped to select for the next Save. Cleared whenever the form changes
-// (template / batch / room / grower change resets the selection because the target moved).
-let sanclSelectedTasks = new Set();
+// (sanclSelectedTasks is declared near the top of the script alongside the in-memory data
+// arrays, to dodge the TDZ — boot can call sanclChanged before the bottom of the script runs
+// when the last-visited section was Sanitation.)
 
 function sanclEnter(){ sanclChanged(); }
 
