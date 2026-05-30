@@ -1386,14 +1386,17 @@ tr:last-child td { border-bottom: none; }
         <div id="sancl-tasks-list" style="display:flex;flex-direction:column;gap:6px;"></div>
 
         <!-- Custom task add input — lets the user extend the template with site-specific tasks.
-             Custom tasks are persisted per template in localStorage (gp-san-custom-tasks). -->
+             Edits (additions, renames, removals) persist per template in localStorage. -->
         <div style="margin-top:10px;padding:8px 10px;background:var(--bg2);border:1px dashed var(--border);border-radius:var(--radius-sm);">
-          <label style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:4px;">Add a custom task to this template</label>
+          <label style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:4px;">Add a task to this template</label>
           <div style="display:flex;gap:6px;">
             <input type="text" id="sancl-custom-input" placeholder="e.g. Wipe down PPE rack" style="flex:1;font-size:13px;padding:6px 8px;font-family:var(--sans);" onkeydown="if(event.key==='Enter'){event.preventDefault();sanclAddCustomTask();}" />
             <button type="button" class="btn-secondary" onclick="sanclAddCustomTask()" style="white-space:nowrap;">+ Add</button>
           </div>
-          <div style="font-size:10px;color:var(--text3);margin-top:4px;">Custom tasks show with a × to remove. The original SOP tasks can't be removed.</div>
+          <div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;color:var(--text3);margin-top:6px;">
+            <span>Tap ✎ on any task to rename, × to remove.</span>
+            <a href="#" onclick="event.preventDefault();sanclResetTemplate();" style="color:var(--text2);text-decoration:underline;">↻ Reset to defaults</a>
+          </div>
         </div>
 
         <div class="field" style="margin-top:12px;">
@@ -9091,17 +9094,73 @@ function sanclPopulateBatchOptions(){
   }
 }
 
-// Custom task storage — per template, persisted in localStorage. Keyed by template name.
-//   { 'Grow Room': ['Wipe down PPE rack', ...], 'Utility Areas': [...] }
-function sanclLoadCustomTasks(){
-  const stored = lsGet('gp-san-custom-tasks');
-  return (stored && typeof stored === 'object' && !Array.isArray(stored)) ? stored : {};
+// Per-template task edits — the editable layer on top of SAN_TASK_TEMPLATES (the SOP defaults).
+// Stored in localStorage as gp-san-task-edits:
+//   { '<template>': { removed: [<sopName>, ...], renamed: { <sopName>: <newName>, ... },
+//                     added:   [<customName>, ...] } }
+// Past records keep whatever task name they were saved with — edits only affect what's offered
+// in the live UI going forward. Migration from the previous gp-san-custom-tasks shape (which
+// only supported additions) runs automatically on first read.
+function sanclLoadTaskEdits(){
+  const stored = lsGet('gp-san-task-edits');
+  if(stored && typeof stored === 'object' && !Array.isArray(stored)) return stored;
+  // One-time migration of the old additions-only storage.
+  const legacy = lsGet('gp-san-custom-tasks');
+  if(legacy && typeof legacy === 'object' && !Array.isArray(legacy)){
+    const migrated = {};
+    Object.keys(legacy).forEach(tpl => {
+      migrated[tpl] = { removed: [], renamed: {}, added: Array.isArray(legacy[tpl]) ? legacy[tpl].slice() : [] };
+    });
+    lsSet('gp-san-task-edits', migrated);
+    return migrated;
+  }
+  return {};
 }
-function sanclSaveCustomTasks(map){ lsSet('gp-san-custom-tasks', map); }
-function sanclGetCustomTasks(template){
-  const map = sanclLoadCustomTasks();
-  const arr = map[template];
-  return Array.isArray(arr) ? arr.slice() : [];
+function sanclSaveTaskEdits(map){ lsSet('gp-san-task-edits', map); }
+
+// Read the edits object for one template, with safe defaults.
+function sanclGetTemplateEdits(template){
+  const m = sanclLoadTaskEdits();
+  const e = m[template] || {};
+  return {
+    removed: Array.isArray(e.removed) ? e.removed.slice() : [],
+    renamed: (e.renamed && typeof e.renamed === 'object' && !Array.isArray(e.renamed)) ? Object.assign({}, e.renamed) : {},
+    added:   Array.isArray(e.added) ? e.added.slice() : []
+  };
+}
+function sanclSetTemplateEdits(template, edits){
+  const m = sanclLoadTaskEdits();
+  m[template] = {
+    removed: Array.isArray(edits.removed) ? edits.removed : [],
+    renamed: (edits.renamed && typeof edits.renamed === 'object') ? edits.renamed : {},
+    added:   Array.isArray(edits.added) ? edits.added : []
+  };
+  sanclSaveTaskEdits(m);
+}
+
+// Returns the effective task list for a template — SOP tasks with edits applied, then customs.
+// Each entry: { name (displayed), phase, sop (true|false), originalName (SOP key — for SOP renames),
+//               renamed (boolean) }.
+function sanclGetEffectiveTasks(template){
+  const edits = sanclGetTemplateEdits(template);
+  const sopList = SAN_TASK_TEMPLATES.filter(t => t.template === template);
+  const visible = sopList
+    .filter(t => !edits.removed.includes(t.name))
+    .map(t => ({
+      name: edits.renamed[t.name] || t.name,
+      phase: t.phase,
+      sop: true,
+      originalName: t.name,
+      renamed: !!edits.renamed[t.name]
+    }));
+  const customs = edits.added.map(name => ({
+    name,
+    phase: 'Custom',
+    sop: false,
+    originalName: name,
+    renamed: false
+  }));
+  return visible.concat(customs);
 }
 
 // Populate the Room dropdown based on the selected template. The full template room list is
@@ -9170,19 +9229,10 @@ function sanclRenderTasks(){
   }
   card.style.display='';
   if(label) label.textContent = 'Tasks · '+template + (room ? ' — '+room : '');
-  // Pull all SOP-defined tasks for this template across all phases, in order.
-  const sopTasks = SAN_TASK_TEMPLATES
-    .filter(t => t.template === template)
-    .map(t => ({ name:t.name, phase:t.phase, custom:false }))
-    .sort((a,b) => {
-      // Keep the SAN_TASK_TEMPLATES array's natural insertion order: phase-then-order.
-      const arr = SAN_TASK_TEMPLATES.filter(x => x.template === template);
-      return arr.findIndex(x => x.name === a.name && x.phase === a.phase) - arr.findIndex(x => x.name === b.name && x.phase === b.phase);
-    });
-  const customTasks = sanclGetCustomTasks(template).map(name => ({ name, phase:'Custom', custom:true }));
-  const allTasks = sopTasks.concat(customTasks);
+  // Effective task list (SOP tasks with edits applied + custom additions).
+  const allTasks = sanclGetEffectiveTasks(template);
   if(!allTasks.length){
-    list.innerHTML = '<div style="font-size:11px;color:var(--text3);font-style:italic;padding:4px 0;">no tasks defined</div>';
+    list.innerHTML = '<div style="font-size:11px;color:var(--text3);font-style:italic;padding:4px 0;">no tasks defined — add one below, or tap "Reset to defaults" to restore the SOP list</div>';
     return;
   }
   const today = (typeof localDate === 'function') ? localDate() : new Date().toISOString().slice(0,10);
@@ -9190,62 +9240,125 @@ function sanclRenderTasks(){
   function loggedToday(taskName){
     return sanCleanRecs.find(r => (r.batch||'')===batch && r.template===template && r.room===room && r.task===taskName && r.date===today);
   }
+  // Build the rows. Every task — SOP or custom — gets ✎ (rename) and × (delete) buttons.
   list.innerHTML = allTasks.map(t => {
     const done = loggedToday(t.name);
-    const safe = t.name.replace(/'/g,"\\'");
+    const safeDisplay = t.name.replace(/'/g,"\\'");
+    // For renames/deletes we pass the SOP originalName (or the custom name) — that's the key
+    // for storage. Otherwise the rename would lose track of which SOP entry was renamed.
+    const safeKey = (t.originalName || t.name).replace(/'/g,"\\'");
+    const isSopFlag = t.sop ? '1' : '0';
+    const tag = t.sop
+      ? (t.renamed ? ' <span style="font-size:10px;color:var(--text3);">(renamed from '+t.originalName+')</span>' : '')
+      : ' <span style="font-size:10px;color:var(--text3);">(custom)</span>';
     if(done){
       const initials = (done.grower||'').split(' ').map(s=>s[0]||'').join('').toUpperCase();
       return '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--green-pale);border:1px solid var(--green-light);border-radius:var(--radius-sm);">'+
         '<span style="width:18px;height:18px;border-radius:4px;background:var(--green);color:#fff;font-size:12px;display:flex;align-items:center;justify-content:center;">✓</span>'+
-        '<div style="flex:1;font-size:13px;color:var(--text);">'+t.name+(t.custom?' <span style="font-size:10px;color:var(--text3);">(custom)</span>':'')+'</div>'+
+        '<div style="flex:1;font-size:13px;color:var(--text);">'+t.name+tag+'</div>'+
         '<div style="font-size:10px;color:var(--text2);font-family:var(--mono);">'+(done.date||today)+' · '+initials+'</div>'+
       '</div>';
     }
-    const removeBtn = t.custom
-      ? '<span onclick="event.stopPropagation();sanclRemoveCustomTask(\''+safe+'\')" style="font-size:14px;color:var(--red);cursor:pointer;padding:0 4px;" title="Remove custom task">×</span>'
-      : '';
-    return '<div onclick="sanclSaveTask(\''+safe+'\')" style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--card);border:1px dashed var(--border);border-radius:var(--radius-sm);cursor:pointer;transition:background 0.15s;" onmouseover="this.style.background=\'var(--bg2)\'" onmouseout="this.style.background=\'var(--card)\'">'+
+    // The icon buttons stop propagation so they don't also trigger the log-task tap.
+    const editBtn = '<span onclick="event.stopPropagation();sanclRenameTask(\''+safeKey+'\','+isSopFlag+')" style="font-size:13px;color:var(--text2);cursor:pointer;padding:0 4px;" title="Rename">✎</span>';
+    const delBtn  = '<span onclick="event.stopPropagation();sanclDeleteTask(\''+safeKey+'\','+isSopFlag+')" style="font-size:14px;color:var(--red);cursor:pointer;padding:0 4px;" title="Remove">×</span>';
+    return '<div onclick="sanclSaveTask(\''+safeDisplay+'\')" style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--card);border:1px dashed var(--border);border-radius:var(--radius-sm);cursor:pointer;transition:background 0.15s;" onmouseover="this.style.background=\'var(--bg2)\'" onmouseout="this.style.background=\'var(--card)\'">'+
       '<span style="width:18px;height:18px;border-radius:4px;border:1.5px solid var(--border);"></span>'+
-      '<div style="flex:1;font-size:13px;color:var(--text);">'+t.name+(t.custom?' <span style="font-size:10px;color:var(--text3);">(custom)</span>':'')+'</div>'+
+      '<div style="flex:1;font-size:13px;color:var(--text);">'+t.name+tag+'</div>'+
       '<div style="font-size:10px;color:var(--text3);">tap to log</div>'+
-      removeBtn +
+      editBtn + delBtn +
     '</div>';
   }).join('');
 }
 
-// Add a custom task to the current template. Persists in localStorage so subsequent visits
-// to this template show the task.
+// Add a NEW custom task to the current template. Persists in the edits store.
 function sanclAddCustomTask(){
   const template = (document.getElementById('sancl-template')||{}).value || '';
   if(!template){ toast('Pick a template first.'); return; }
   const inputEl = document.getElementById('sancl-custom-input');
   const name = (inputEl ? inputEl.value : '').trim();
   if(!name){ toast('Type a task name first.'); return; }
-  // Refuse duplicates of either an SOP task or an existing custom task for this template.
-  const sopNames = SAN_TASK_TEMPLATES.filter(t => t.template === template).map(t => t.name.toLowerCase());
-  if(sopNames.includes(name.toLowerCase())){ toast('Task already exists in the SOP list.'); return; }
-  const existing = sanclGetCustomTasks(template).map(s => s.toLowerCase());
-  if(existing.includes(name.toLowerCase())){ toast('Task already exists.'); return; }
-  const map = sanclLoadCustomTasks();
-  if(!Array.isArray(map[template])) map[template] = [];
-  map[template].push(name);
-  sanclSaveCustomTasks(map);
+  // Refuse duplicates against the currently-visible effective list.
+  const effective = sanclGetEffectiveTasks(template).map(t => t.name.toLowerCase());
+  if(effective.includes(name.toLowerCase())){ toast('A task with that name already exists.'); return; }
+  // If the name matches a SOP task that's been "removed", un-remove it instead of duplicating.
+  const edits = sanclGetTemplateEdits(template);
+  const sopHit = SAN_TASK_TEMPLATES.find(t => t.template === template && t.name.toLowerCase() === name.toLowerCase());
+  if(sopHit && edits.removed.includes(sopHit.name)){
+    edits.removed = edits.removed.filter(n => n !== sopHit.name);
+    sanclSetTemplateEdits(template, edits);
+    if(inputEl) inputEl.value = '';
+    toast('Restored: '+sopHit.name, 2000);
+    sanclRenderTasks();
+    return;
+  }
+  edits.added.push(name);
+  sanclSetTemplateEdits(template, edits);
   if(inputEl) inputEl.value = '';
   toast('Added: '+name, 2000);
   sanclRenderTasks();
 }
 
-// Remove a custom task. SOP tasks are never removable.
-function sanclRemoveCustomTask(name){
+// Rename an existing task — SOP or custom. originalName is the storage key:
+//   • SOP task   → the original SAN_TASK_TEMPLATES name (renames stored in edits.renamed[orig] = new)
+//   • Custom    → the current custom name (renamed in-place in edits.added)
+function sanclRenameTask(originalName, isSop){
   const template = (document.getElementById('sancl-template')||{}).value || '';
   if(!template) return;
-  if(!confirm('Remove custom task "'+name+'" from this template? Past records keep this task.')) return;
-  const map = sanclLoadCustomTasks();
-  if(Array.isArray(map[template])){
-    map[template] = map[template].filter(n => n !== name);
-    sanclSaveCustomTasks(map);
+  const edits = sanclGetTemplateEdits(template);
+  const currentDisplay = isSop
+    ? (edits.renamed[originalName] || originalName)
+    : originalName;
+  const next = prompt('Rename task:', currentDisplay);
+  if(next == null) return; // cancelled
+  const trimmed = next.trim();
+  if(!trimmed){ toast('Task name cannot be empty.'); return; }
+  if(trimmed === currentDisplay) return; // no change
+  // Refuse collisions with another visible task.
+  const effective = sanclGetEffectiveTasks(template);
+  const collision = effective.find(t => t.name.toLowerCase() === trimmed.toLowerCase() && t.originalName !== originalName);
+  if(collision){ toast('A task with that name already exists.'); return; }
+  if(isSop){
+    // SOP rename — if user is restoring to the original SOP name, clear the rename.
+    if(trimmed === originalName) delete edits.renamed[originalName];
+    else edits.renamed[originalName] = trimmed;
+  } else {
+    // Custom rename — replace in the added array.
+    edits.added = edits.added.map(n => n === originalName ? trimmed : n);
   }
+  sanclSetTemplateEdits(template, edits);
+  toast('Renamed.', 2000);
+  sanclRenderTasks();
+}
+
+// Delete a task — SOP or custom. SOP deletes go to edits.removed (recoverable via Reset).
+function sanclDeleteTask(originalName, isSop){
+  const template = (document.getElementById('sancl-template')||{}).value || '';
+  if(!template) return;
+  const edits = sanclGetTemplateEdits(template);
+  const label = isSop
+    ? 'SOP task "'+originalName+'"'
+    : 'custom task "'+originalName+'"';
+  if(!confirm('Remove '+label+' from this template? Past records keep this task name.\n\nFor SOP tasks, "Reset to defaults" at the bottom of the list restores it.')) return;
+  if(isSop){
+    if(!edits.removed.includes(originalName)) edits.removed.push(originalName);
+    // Clear any rename so the SOP key stays clean.
+    delete edits.renamed[originalName];
+  } else {
+    edits.added = edits.added.filter(n => n !== originalName);
+  }
+  sanclSetTemplateEdits(template, edits);
   toast('Removed.', 2000);
+  sanclRenderTasks();
+}
+
+// Restore the template to the SOP defaults — clears removed, renamed, and added.
+function sanclResetTemplate(){
+  const template = (document.getElementById('sancl-template')||{}).value || '';
+  if(!template){ toast('Pick a template first.'); return; }
+  if(!confirm('Reset the "'+template+'" task list to SOP defaults?\nThis clears all custom additions, renames, and removals for this template. Past records are not affected.')) return;
+  sanclSetTemplateEdits(template, { removed:[], renamed:{}, added:[] });
+  toast('Reset to defaults.', 2500);
   sanclRenderTasks();
 }
 
@@ -9296,9 +9409,9 @@ async function sanclSaveTask(taskName){
   const today = (typeof localDate === 'function') ? localDate() : new Date().toISOString().slice(0,10);
   const now = new Date();
   const time = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
-  // Look up the task's SOP phase (or 'Custom' if it's a user-added task).
-  const sopTask = SAN_TASK_TEMPLATES.find(t => t.template === template && t.name === taskName);
-  const phase = sopTask ? sopTask.phase : 'Custom';
+  // Look up the task's phase from the effective task list — handles SOP renames and customs.
+  const effectiveTask = sanclGetEffectiveTasks(template).find(t => t.name === taskName);
+  const phase = effectiveTask ? effectiveTask.phase : 'Custom';
   // Guard against double-tap — if this task is already logged today for this batch/room, refuse silently.
   const dupe = sanCleanRecs.find(r => (r.batch||'')===batch && r.template===template && r.room===room && r.task===taskName && r.date===today);
   if(dupe){
