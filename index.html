@@ -9626,17 +9626,14 @@ async function sanclSaveSelectedTasks(){
     newRecs.push(rec);
   });
   lsSet('gp-sanclean', sanCleanRecs);
-  sanclSelectedTasks.clear();
-  // Clear the notes field after saving so it doesn't accidentally carry to the next save.
-  const notesEl = document.getElementById('sancl-notes');
-  if(notesEl) notesEl.value = '';
   const savedCount = newRecs.length;
   toast(savedCount > 0
-    ? 'Saved '+savedCount+' task'+(savedCount===1?'':'s')+(skipped?' ('+skipped+' already logged today)':'')
+    ? 'Saved '+savedCount+' task'+(savedCount===1?'':'s')+(skipped?' ('+skipped+' already logged today)':'')+'. Pick a new batch/room to log more.'
     : 'Nothing saved — all selected tasks were already logged today.', 3500);
-  sanclRenderTasks();
-  sanclRenderRecent();
-  sanclUpdateSaveButton();
+  // Reset the form so the grower can move on to a different batch/room/template.
+  // (We only reset if at least one record was saved — if everything was a duplicate, leave the
+  // form alone so the grower can adjust and try again.)
+  if(savedCount > 0) sanclResetForm();
   if(typeof updatePendingBadge === 'function') updatePendingBadge();
   // Sync each new record to Airtable in parallel. Failures stay synced:false.
   if(cfg.sanCleanTbl && cfg.token && cfg.base){
@@ -9651,6 +9648,26 @@ async function sanclSaveSelectedTasks(){
     lsSet('gp-sanclean', sanCleanRecs);
     if(typeof updatePendingBadge === 'function') updatePendingBadge();
   }
+}
+
+// Reset the Batch Cleaning Log form to its empty state. Called after a successful save so the
+// grower can move on to a different batch/room/template without manually clearing each field.
+function sanclResetForm(){
+  // Clear the four pickers so the user starts fresh.
+  ['sancl-grower','sancl-template','sancl-batch','sancl-room','sancl-notes','sancl-custom-input'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.value = '';
+  });
+  // Reset the room strip colour to the default green.
+  const strip = document.getElementById('sancl-room-strip');
+  if(strip) strip.style.background = 'var(--green)';
+  // Hide the conditional cards (tasks list + batch info chip + recent entries).
+  const tasksCard = document.getElementById('sancl-tasks-card'); if(tasksCard) tasksCard.style.display = 'none';
+  const recentCard = document.getElementById('sancl-recent-card'); if(recentCard) recentCard.style.display = 'none';
+  const batchInfo = document.getElementById('sancl-batch-info'); if(batchInfo) batchInfo.style.display = 'none';
+  // Drop the in-memory selection and refresh the downstream UI.
+  sanclSelectedTasks.clear();
+  sanclChanged();
 }
 
 // Build the Airtable field payload for a Batch Cleaning Log record. Mirrors the schema
