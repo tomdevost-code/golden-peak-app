@@ -1442,12 +1442,18 @@ tr:last-child td { border-bottom: none; }
         </div>
 
         <div class="field" style="margin-bottom:10px;">
-          <label>Tool <span style="color:var(--red);font-weight:700;">*</span></label>
-          <input type="text" id="santool-tool" placeholder="e.g. Scissors, Pruners, Tote 4" />
+          <label>Tools <span style="color:var(--red);font-weight:700;">*</span> <span style="font-size:10px;color:var(--text3);font-weight:400;">— add one or more, suggestions come from past entries</span></label>
+          <div style="display:flex;gap:6px;">
+            <input type="text" id="santool-tool" list="santool-tool-suggestions" placeholder="e.g. Scissors, Pruners, Tote 4" style="flex:1;" onkeydown="if(event.key==='Enter'){event.preventDefault();santoolAddTool();}" />
+            <button type="button" class="btn-secondary" onclick="santoolAddTool()" style="white-space:nowrap;">+ Add</button>
+          </div>
+          <datalist id="santool-tool-suggestions"></datalist>
+          <!-- Selected tool chips render here. Each chip has a × to remove. -->
+          <div id="santool-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;min-height:8px;"></div>
         </div>
 
         <div class="field" style="margin-bottom:10px;">
-          <label>Cleaning</label>
+          <label>Cleaning <span style="font-size:10px;color:var(--text3);font-weight:400;">— applies to every tool above</span></label>
           <div style="display:flex;gap:14px;font-size:13px;padding:4px 0;">
             <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="santool-cleaned" /> Cleaned</label>
             <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="santool-sanitized" /> Sanitized</label>
@@ -1459,7 +1465,7 @@ tr:last-child td { border-bottom: none; }
           <textarea id="santool-notes" rows="2" placeholder="e.g. SHYIELD wipe-down"></textarea>
         </div>
 
-        <button class="btn-save" onclick="santoolSave()">Save Tool Cleaning</button>
+        <button id="santool-save-btn" class="btn-save" onclick="santoolSave()" disabled style="opacity:0.5;cursor:not-allowed;">Save (0 tools)</button>
       </div>
 
       <div class="card">
@@ -1551,6 +1557,9 @@ let appSection = 'cultivation';
 // up here (not inline with the sanitation handlers) so it's initialized before initSections
 // runs at boot — switchPage('sancleaning', ...) calls sanclChanged which reads this Set.
 let sanclSelectedTasks = new Set();
+
+// Tools added as chips on the Tool Cleaning page. Order matters (display + save order).
+let santoolSelectedTools = [];
 
 // Default last-page-visited per section so the back-and-forth feels natural.
 let lastPagePerSection = { cultivation: 'summary', sanitation: 'sancleaning' };
@@ -9702,7 +9711,87 @@ function santoolEnter(){
     sel.innerHTML = '<option value="">-- no batch --</option>' +
       eligible.map(b => '<option value="'+b.batchId+'"'+(b.batchId===cur?' selected':'')+'>'+b.batchId+(b.cultivar?' – '+b.cultivar:'')+'</option>').join('');
   }
+  santoolRefreshSuggestions();
+  santoolRenderChips();
+  santoolUpdateSaveButton();
   santoolRenderRecent();
+}
+
+// Populate the autosuggest datalist from unique tool names in sanToolRecs (case-insensitive
+// dedupe, alphabetised). Browser shows these as the user types into the Tool input.
+function santoolRefreshSuggestions(){
+  const dl = document.getElementById('santool-tool-suggestions');
+  if(!dl) return;
+  const seen = new Set();
+  const tools = [];
+  sanToolRecs.forEach(r => {
+    const name = (r.tool||'').trim();
+    if(!name) return;
+    const key = name.toLowerCase();
+    if(seen.has(key)) return;
+    seen.add(key);
+    tools.push(name);
+  });
+  tools.sort((a,b) => a.localeCompare(b));
+  dl.innerHTML = tools.map(t => '<option value="'+t.replace(/"/g,'&quot;')+'"></option>').join('');
+}
+
+// Render the chip strip below the Tool input. Each chip = one selected tool with a × remove.
+function santoolRenderChips(){
+  const wrap = document.getElementById('santool-chips');
+  if(!wrap) return;
+  if(!santoolSelectedTools.length){
+    wrap.innerHTML = '<span style="font-size:11px;color:var(--text3);font-style:italic;">No tools added yet — type a name above and press Enter or + Add.</span>';
+    return;
+  }
+  wrap.innerHTML = santoolSelectedTools.map((name, i) => {
+    const safe = name.replace(/"/g,'&quot;').replace(/'/g,"\\'");
+    return '<span style="display:inline-flex;align-items:center;gap:6px;padding:5px 4px 5px 10px;background:var(--green-pale);border:1px solid var(--green-light);color:var(--green);border-radius:20px;font-size:12px;font-weight:500;">'+
+      name +
+      '<span onclick="santoolRemoveTool('+i+')" style="cursor:pointer;font-size:14px;font-weight:700;padding:0 6px;line-height:1;" title="Remove">×</span>'+
+    '</span>';
+  }).join('');
+}
+
+// Sync the Save button label + enabled state to the number of selected tools.
+function santoolUpdateSaveButton(){
+  const btn = document.getElementById('santool-save-btn');
+  if(!btn) return;
+  const n = santoolSelectedTools.length;
+  btn.textContent = 'Save ('+n+' tool'+(n===1?'':'s')+')';
+  btn.disabled = n === 0;
+  btn.style.opacity = n === 0 ? '0.5' : '1';
+  btn.style.cursor = n === 0 ? 'not-allowed' : 'pointer';
+}
+
+// Add the current Tool input value as a chip and clear the input ready for the next tool.
+// Duplicates (case-insensitive) are silently ignored so the grower can mash Enter without
+// worry. Empty/whitespace-only entries are also rejected.
+function santoolAddTool(){
+  const inp = document.getElementById('santool-tool');
+  if(!inp) return;
+  const name = (inp.value || '').trim();
+  if(!name){ inp.focus(); return; }
+  const existing = santoolSelectedTools.map(s => s.toLowerCase());
+  if(existing.includes(name.toLowerCase())){
+    toast(name+' is already in the list.', 2500);
+    inp.value = '';
+    inp.focus();
+    return;
+  }
+  santoolSelectedTools.push(name);
+  inp.value = '';
+  inp.focus();
+  santoolRenderChips();
+  santoolUpdateSaveButton();
+}
+
+// Remove a chip by index (from the × button).
+function santoolRemoveTool(idx){
+  if(idx < 0 || idx >= santoolSelectedTools.length) return;
+  santoolSelectedTools.splice(idx, 1);
+  santoolRenderChips();
+  santoolUpdateSaveButton();
 }
 
 function santoolRenderRecent(){
@@ -9717,47 +9806,67 @@ function santoolRenderRecent(){
   }).join('<br>');
 }
 
+// Save EVERY chip-added tool as its own sanToolRec. Same Date, Grower, Batch, Notes, and the
+// global Cleaned/Sanitized state apply to every tool. Records sync in parallel; failures stay
+// synced:false for Sync Pending to retry. After save the form resets and the recent + autosuggest
+// lists refresh so the newly-saved tools show up immediately.
 async function santoolSave(){
   const grower    = (document.getElementById('santool-grower')||{}).value || '';
-  const tool      = ((document.getElementById('santool-tool')||{}).value || '').trim();
   const batch     = (document.getElementById('santool-batch')||{}).value || '';
   const date      = (document.getElementById('santool-date')||{}).value || '';
   const cleaned   = !!(document.getElementById('santool-cleaned')||{}).checked;
   const sanitized = !!(document.getElementById('santool-sanitized')||{}).checked;
   const notes     = (document.getElementById('santool-notes')||{}).value || '';
+  // Pull anything still in the Tool input (in case the user typed but didn't tap Add) so we don't lose it.
+  const pending = ((document.getElementById('santool-tool')||{}).value || '').trim();
+  if(pending){ santoolAddTool(); }
   if(!grower){ toast('Pick a grower first.'); return; }
-  if(!tool){ toast('Enter a tool name.'); return; }
+  if(!santoolSelectedTools.length){ toast('Add at least one tool first.'); return; }
   if(!cleaned && !sanitized){ toast('Check at least Cleaned or Sanitized.'); return; }
   if(!date){ toast('Pick a date.'); return; }
-  const rec = {
-    id: Date.now() + Math.floor(Math.random()*1000),
+  // One record per tool. Snapshot the array so iteration isn't affected by the later reset.
+  const tools = santoolSelectedTools.slice();
+  const newRecs = tools.map((tool, i) => ({
+    id: Date.now() + Math.floor(Math.random()*1000000) + i,
     date,
     grower, batch, tool,
     cleaned, sanitized,
     notes,
     synced: false
-  };
-  sanToolRecs.unshift(rec);
+  }));
+  newRecs.forEach(rec => sanToolRecs.unshift(rec));
   lsSet('gp-santool', sanToolRecs);
-  toast('Tool cleaning saved.', 2500);
-  // Clear the tool + notes + checkboxes for the next entry; preserve grower/batch/date so a series of tools logs fast.
-  const tEl=document.getElementById('santool-tool'); if(tEl) tEl.value='';
-  const nEl=document.getElementById('santool-notes'); if(nEl) nEl.value='';
-  const cEl=document.getElementById('santool-cleaned'); if(cEl) cEl.checked=false;
-  const sEl=document.getElementById('santool-sanitized'); if(sEl) sEl.checked=false;
+  toast('Saved '+newRecs.length+' tool cleaning'+(newRecs.length===1?'':'s')+'.', 3000);
+  santoolResetForm();
+  santoolRefreshSuggestions(); // pick up newly-used tool names for next time
   santoolRenderRecent();
   if(typeof updatePendingBadge === 'function') updatePendingBadge();
-  // Sync the new record to Airtable. Failure is non-fatal — Sync Pending retries.
+  // Sync each new record to Airtable in parallel. Failures stay synced:false.
   if(cfg.sanToolTbl && cfg.token && cfg.base){
-    try {
-      const f = buildSanToolFields(rec);
-      const res = await atPost(cfg.sanToolTbl, f);
-      rec.synced = true;
-      if(res && res.id) rec.airtableId = res.id;
-      lsSet('gp-santool', sanToolRecs);
-      if(typeof updatePendingBadge === 'function') updatePendingBadge();
-    } catch(e){ /* retry via Sync Pending */ }
+    await Promise.all(newRecs.map(async rec => {
+      try {
+        const f = buildSanToolFields(rec);
+        const res = await atPost(cfg.sanToolTbl, f);
+        rec.synced = true;
+        if(res && res.id) rec.airtableId = res.id;
+      } catch(e){ /* Sync Pending retries */ }
+    }));
+    lsSet('gp-santool', sanToolRecs);
+    if(typeof updatePendingBadge === 'function') updatePendingBadge();
   }
+}
+
+// Reset the Tool Cleaning Log form so the grower can move on to a different batch/tool set.
+function santoolResetForm(){
+  santoolSelectedTools = [];
+  ['santool-tool','santool-batch','santool-notes'].forEach(id => {
+    const el = document.getElementById(id); if(el) el.value = '';
+  });
+  // Don't reset grower or date — typically the grower is the same and cleaning happens today.
+  const cEl = document.getElementById('santool-cleaned'); if(cEl) cEl.checked = false;
+  const sEl = document.getElementById('santool-sanitized'); if(sEl) sEl.checked = false;
+  santoolRenderChips();
+  santoolUpdateSaveButton();
 }
 
 // Build the Airtable field payload for a Tool Cleaning Log record.
