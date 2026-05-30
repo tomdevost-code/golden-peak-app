@@ -1420,11 +1420,6 @@ tr:last-child td { border-bottom: none; }
         <div class="section-label">Tool Cleaning Log</div>
 
         <div class="field" style="margin-bottom:10px;">
-          <label>Date</label>
-          <input type="date" id="santool-date" />
-        </div>
-
-        <div class="field" style="margin-bottom:10px;">
           <label>Grower <span style="color:var(--red);font-weight:700;">*</span></label>
           <select id="santool-grower">
             <option value="">-- select grower --</option>
@@ -9699,9 +9694,7 @@ function buildSanCleanFields(rec){
 
 // ── TOOL CLEANING LOG ───────────────────────────────────────────────────────
 function santoolEnter(){
-  // Default date to today.
-  const today = (typeof localDate === 'function') ? localDate() : new Date().toISOString().slice(0,10);
-  const dEl = document.getElementById('santool-date'); if(dEl && !dEl.value) dEl.value = today;
+  // Date is implicit — set to today at save time (matches the Batch Cleaning flow). No input shown.
   // Populate batch dropdown from open batches (mothers + regular).
   const sel = document.getElementById('santool-batch');
   if(sel){
@@ -9813,7 +9806,8 @@ function santoolRenderRecent(){
 async function santoolSave(){
   const grower    = (document.getElementById('santool-grower')||{}).value || '';
   const batch     = (document.getElementById('santool-batch')||{}).value || '';
-  const date      = (document.getElementById('santool-date')||{}).value || '';
+  // Date is implicit — stamped at save time with today's local date, like Batch Cleaning does.
+  const date      = (typeof localDate === 'function') ? localDate() : new Date().toISOString().slice(0,10);
   const cleaned   = !!(document.getElementById('santool-cleaned')||{}).checked;
   const sanitized = !!(document.getElementById('santool-sanitized')||{}).checked;
   const notes     = (document.getElementById('santool-notes')||{}).value || '';
@@ -9823,7 +9817,6 @@ async function santoolSave(){
   if(!grower){ toast('Pick a grower first.'); return; }
   if(!santoolSelectedTools.length){ toast('Add at least one tool first.'); return; }
   if(!cleaned && !sanitized){ toast('Check at least Cleaned or Sanitized.'); return; }
-  if(!date){ toast('Pick a date.'); return; }
   // One record per tool. Snapshot the array so iteration isn't affected by the later reset.
   const tools = santoolSelectedTools.slice();
   const newRecs = tools.map((tool, i) => ({
@@ -9862,7 +9855,7 @@ function santoolResetForm(){
   ['santool-tool','santool-batch','santool-notes'].forEach(id => {
     const el = document.getElementById(id); if(el) el.value = '';
   });
-  // Don't reset grower or date — typically the grower is the same and cleaning happens today.
+  // Don't reset grower — typically the grower is the same for a series of tool cleanings.
   const cEl = document.getElementById('santool-cleaned'); if(cEl) cEl.checked = false;
   const sEl = document.getElementById('santool-sanitized'); if(sEl) sEl.checked = false;
   santoolRenderChips();
