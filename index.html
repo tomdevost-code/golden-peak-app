@@ -2045,7 +2045,6 @@ const REMOTE_MAPPERS = {
       batch,
       room: f['Room']||'',
       template: f['Log Template']||'',
-      phase: f['Phase']||'',
       task: f['Task']||'',
       notes: f['Notes']||'',
       synced: true
@@ -9073,11 +9072,10 @@ function renderBatchReport(batchId){
       r.template||'—',
       r.room||'—',
       r.task||'—',
-      r.phase||'—',
       r.grower||'—',
       r.notes||''
     ]);
-    s += sectionTable('Batch Cleaning Log ('+cleans.length+')', ['Date','Template','Room','Task','Phase','Grower','Notes'], rows);
+    s += sectionTable('Batch Cleaning Log ('+cleans.length+')', ['Date','Template','Room','Task','Grower','Notes'], rows);
   }
 
   // Tool Cleaning Log — tool cleanings tied to this batch.
@@ -9610,20 +9608,17 @@ async function sanclSaveSelectedTasks(){
   if(!room){ toast('Pick a room first.'); return; }
   if(sanclSelectedTasks.size === 0){ toast('Tap one or more tasks to select them first.'); return; }
   const today = (typeof localDate === 'function') ? localDate() : new Date().toISOString().slice(0,10);
-  const effective = sanclGetEffectiveTasks(template);
   const newRecs = [];
   let skipped = 0;
   sanclSelectedTasks.forEach(taskName => {
     // Skip anything that's already logged today (defensive — selected rows shouldn't include them).
     const dupe = sanCleanRecs.find(r => (r.batch||'')===batch && r.template===template && r.room===room && r.task===taskName && r.date===today);
     if(dupe){ skipped++; return; }
-    const t = effective.find(e => e.name === taskName);
-    const phase = t ? t.phase : 'Custom';
     const rec = {
       id: Date.now() + Math.floor(Math.random()*1000000),
       date: today,
       grower, batch, room,
-      template, phase, task: taskName,
+      template, task: taskName,
       notes: notes || '',
       synced: false
     };
@@ -9675,16 +9670,14 @@ function sanclResetForm(){
   sanclChanged();
 }
 
-// Build the Airtable field payload for a Batch Cleaning Log record. Mirrors the schema
-// agreed in the design (Batch ID linked, Date, Time, Grower, Log Template, Phase, Task, Room, Notes).
+// Build the Airtable field payload for a Batch Cleaning Log record.
+// 'Phase' and 'Time' fields have been removed from Airtable + the app.
 function buildSanCleanFields(rec){
   const f = {
     'Batch ID': rec.batch ? [rec.batch] : undefined,
     'Date':     rec.date || undefined,
-    // 'Time' field was removed from Airtable + the app — date alone is enough granularity.
     'Grower':   rec.grower || undefined,
     'Log Template': rec.template || undefined,
-    'Phase':    rec.phase || undefined,
     'Task':     rec.task || undefined,
     'Room':     rec.room || undefined,
     'Notes':    rec.notes || undefined
