@@ -2041,7 +2041,6 @@ const REMOTE_MAPPERS = {
       id: 'sc_'+rec.id,
       airtableId: rec.id,
       date: f['Date']||'',
-      time: f['Time']||'',
       grower: f['Grower']||'',
       batch,
       room: f['Room']||'',
@@ -8881,7 +8880,7 @@ function renderBatchReport(batchId){
   const postDrys  = postDryRecs.filter(r => r.batch === batchId).sort((a,c) => (a.binNumber||0) - (c.binNumber||0));
   const bios      = bioRecs.filter(r => r.batch === batchId).sort((a,c) => (a.date||'').localeCompare(c.date||''));
   const pests     = pestRecs.filter(r => r.batch === batchId).sort((a,c) => (a.date||'').localeCompare(c.date||''));
-  const cleans    = sanCleanRecs.filter(r => (r.batch||'') === batchId).sort((a,c) => (a.date||'').localeCompare(c.date||'') || (a.time||'').localeCompare(c.time||''));
+  const cleans    = sanCleanRecs.filter(r => (r.batch||'') === batchId).sort((a,c) => (a.date||'').localeCompare(c.date||'') || (a.id||0)-(c.id||0));
   const toolCleans= sanToolRecs.filter(r => (r.batch||'') === batchId).sort((a,c) => (a.date||'').localeCompare(c.date||''));
 
   // Totals
@@ -9071,7 +9070,6 @@ function renderBatchReport(batchId){
   if(cleans.length){
     const rows = cleans.map(r => [
       r.date||'—',
-      r.time||'—',
       r.template||'—',
       r.room||'—',
       r.task||'—',
@@ -9079,7 +9077,7 @@ function renderBatchReport(batchId){
       r.grower||'—',
       r.notes||''
     ]);
-    s += sectionTable('Batch Cleaning Log ('+cleans.length+')', ['Date','Time','Template','Room','Task','Phase','Grower','Notes'], rows);
+    s += sectionTable('Batch Cleaning Log ('+cleans.length+')', ['Date','Template','Room','Task','Phase','Grower','Notes'], rows);
   }
 
   // Tool Cleaning Log — tool cleanings tied to this batch.
@@ -9547,7 +9545,7 @@ function sanclRenderRecent(){
   if(!batch){ card.style.display='none'; return; }
   const recs = sanCleanRecs
     .filter(r => r.batch === batch)
-    .sort((a,b) => (b.date||'').localeCompare(a.date||'') || (b.time||'').localeCompare(a.time||''))
+    .sort((a,b) => (b.date||'').localeCompare(a.date||'') || (b.id||0)-(a.id||0))
     .slice(0,10);
   if(!recs.length){ card.style.display='none'; return; }
   card.style.display='';
@@ -9612,8 +9610,6 @@ async function sanclSaveSelectedTasks(){
   if(!room){ toast('Pick a room first.'); return; }
   if(sanclSelectedTasks.size === 0){ toast('Tap one or more tasks to select them first.'); return; }
   const today = (typeof localDate === 'function') ? localDate() : new Date().toISOString().slice(0,10);
-  const now = new Date();
-  const time = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
   const effective = sanclGetEffectiveTasks(template);
   const newRecs = [];
   let skipped = 0;
@@ -9625,7 +9621,7 @@ async function sanclSaveSelectedTasks(){
     const phase = t ? t.phase : 'Custom';
     const rec = {
       id: Date.now() + Math.floor(Math.random()*1000000),
-      date: today, time,
+      date: today,
       grower, batch, room,
       template, phase, task: taskName,
       notes: notes || '',
@@ -9685,7 +9681,7 @@ function buildSanCleanFields(rec){
   const f = {
     'Batch ID': rec.batch ? [rec.batch] : undefined,
     'Date':     rec.date || undefined,
-    'Time':     rec.time || undefined,
+    // 'Time' field was removed from Airtable + the app — date alone is enough granularity.
     'Grower':   rec.grower || undefined,
     'Log Template': rec.template || undefined,
     'Phase':    rec.phase || undefined,
