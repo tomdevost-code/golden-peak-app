@@ -1383,7 +1383,7 @@ tr:last-child td { border-bottom: none; }
 
       <div class="card" id="sancl-tasks-card" style="display:none;">
         <div class="section-label" id="sancl-tasks-label">Tasks</div>
-        <div style="font-size:11px;color:var(--text3);margin:-4px 0 10px;">Tap a task to log it for today. Already-logged tasks for this batch + room appear faded with the date/initials.</div>
+        <div style="font-size:11px;color:var(--text3);margin:-4px 0 10px;">Tap tasks to select them, then tap Save. Already-logged tasks for today appear faded with the date/initials and can't be re-selected (one log per task per room per day).</div>
         <div id="sancl-tasks-list" style="display:flex;flex-direction:column;gap:6px;"></div>
 
         <!-- Custom task add input — lets the user extend the template with site-specific tasks.
@@ -1401,9 +1401,11 @@ tr:last-child td { border-bottom: none; }
         </div>
 
         <div class="field" style="margin-top:12px;">
-          <label>Notes (optional — applies to the next task you log)</label>
+          <label>Notes (optional — applied to every task saved in this batch)</label>
           <textarea id="sancl-notes" rows="2" placeholder="e.g. used SHYIELD per SOP"></textarea>
         </div>
+
+        <button id="sancl-save-btn" class="btn-save" onclick="sanclSaveSelectedTasks()" disabled style="margin-top:10px;opacity:0.5;cursor:not-allowed;">Save (0 selected)</button>
       </div>
 
       <div class="card" id="sancl-recent-card" style="display:none;">
@@ -8875,6 +8877,8 @@ function renderBatchReport(batchId){
   const postDrys  = postDryRecs.filter(r => r.batch === batchId).sort((a,c) => (a.binNumber||0) - (c.binNumber||0));
   const bios      = bioRecs.filter(r => r.batch === batchId).sort((a,c) => (a.date||'').localeCompare(c.date||''));
   const pests     = pestRecs.filter(r => r.batch === batchId).sort((a,c) => (a.date||'').localeCompare(c.date||''));
+  const cleans    = sanCleanRecs.filter(r => (r.batch||'') === batchId).sort((a,c) => (a.date||'').localeCompare(c.date||'') || (a.time||'').localeCompare(c.time||''));
+  const toolCleans= sanToolRecs.filter(r => (r.batch||'') === batchId).sort((a,c) => (a.date||'').localeCompare(c.date||''));
 
   // Totals
   const currentQty = calcBatchQty(batchId);
@@ -9059,8 +9063,36 @@ function renderBatchReport(batchId){
     s += sectionTable('Pest ID Log ('+pests.length+')', ['Date','Room','Grower','Location','Card','Pests','Qty','Notes'], rows);
   }
 
+  // Batch Cleaning Log — every sanitation task logged against this batch.
+  if(cleans.length){
+    const rows = cleans.map(r => [
+      r.date||'—',
+      r.time||'—',
+      r.template||'—',
+      r.room||'—',
+      r.task||'—',
+      r.phase||'—',
+      r.grower||'—',
+      r.notes||''
+    ]);
+    s += sectionTable('Batch Cleaning Log ('+cleans.length+')', ['Date','Time','Template','Room','Task','Phase','Grower','Notes'], rows);
+  }
+
+  // Tool Cleaning Log — tool cleanings tied to this batch.
+  if(toolCleans.length){
+    const rows = toolCleans.map(r => [
+      r.date||'—',
+      r.tool||'—',
+      r.cleaned ? '✓' : '—',
+      r.sanitized ? '✓' : '—',
+      r.grower||'—',
+      r.notes||''
+    ]);
+    s += sectionTable('Tool Cleaning Log ('+toolCleans.length+')', ['Date','Tool','Cleaned','Sanitized','Grower','Notes'], rows);
+  }
+
   // Empty sections note
-  if(!txs.length && !ecs.length && !ros.length && !wastes.length && !harvests.length && !postDrys.length && !bios.length && !pests.length){
+  if(!txs.length && !ecs.length && !ros.length && !wastes.length && !harvests.length && !postDrys.length && !bios.length && !pests.length && !cleans.length && !toolCleans.length){
     s += '<div style="padding:20px;text-align:center;color:var(--text3);font-size:13px;">No activity records yet for this batch.</div>';
   }
 
@@ -9381,13 +9413,21 @@ function sanclRenderTasks(){
         '<div style="font-size:10px;color:var(--text2);font-family:var(--mono);">'+(done.date||today)+' · '+initials+'</div>'+
       '</div>';
     }
-    // The icon buttons stop propagation so they don't also trigger the log-task tap.
+    // Icon buttons stop propagation so they don't also trigger the row-select toggle.
     const editBtn = '<span onclick="event.stopPropagation();sanclRenameTask(\''+safeKey+'\','+isSopFlag+')" style="font-size:13px;color:var(--text2);cursor:pointer;padding:0 4px;" title="Rename">✎</span>';
     const delBtn  = '<span onclick="event.stopPropagation();sanclDeleteTask(\''+safeKey+'\','+isSopFlag+')" style="font-size:14px;color:var(--red);cursor:pointer;padding:0 4px;" title="Remove">×</span>';
-    return '<div onclick="sanclSaveTask(\''+safeDisplay+'\')" style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--card);border:1px dashed var(--border);border-radius:var(--radius-sm);cursor:pointer;transition:background 0.15s;" onmouseover="this.style.background=\'var(--bg2)\'" onmouseout="this.style.background=\'var(--card)\'">'+
-      '<span style="width:18px;height:18px;border-radius:4px;border:1.5px solid var(--border);"></span>'+
+    // Row click toggles selection. Selected rows have a filled checkbox + green border tint.
+    const isSel = sanclSelectedTasks.has(t.name);
+    const box = isSel
+      ? '<span style="width:18px;height:18px;border-radius:4px;background:var(--green);color:#fff;font-size:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">✓</span>'
+      : '<span style="width:18px;height:18px;border-radius:4px;border:1.5px solid var(--border);flex-shrink:0;"></span>';
+    const rowBg     = isSel ? 'var(--green-pale)' : 'var(--card)';
+    const rowBorder = isSel ? '1px solid var(--green-light)' : '1px dashed var(--border)';
+    const rowHint   = isSel ? 'selected' : 'tap to select';
+    return '<div onclick="sanclToggleSelectTask(\''+safeDisplay+'\')" style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:'+rowBg+';border:'+rowBorder+';border-radius:var(--radius-sm);cursor:pointer;transition:background 0.15s;">'+
+      box +
       '<div style="flex:1;font-size:13px;color:var(--text);">'+t.name+tag+'</div>'+
-      '<div style="font-size:10px;color:var(--text3);">tap to log</div>'+
+      '<div style="font-size:10px;color:var(--text3);">'+rowHint+'</div>'+
       editBtn + delBtn +
     '</div>';
   }).join('');
@@ -9503,20 +9543,48 @@ function sanclRenderRecent(){
   }).join('<br>');
 }
 
+// Tasks the user has tapped to select for the next Save. Cleared whenever the form changes
+// (template / batch / room / grower change resets the selection because the target moved).
+let sanclSelectedTasks = new Set();
+
 function sanclEnter(){ sanclChanged(); }
 
+// Toggle a task name in the selection set. Called by row clicks.
+function sanclToggleSelectTask(taskName){
+  if(sanclSelectedTasks.has(taskName)) sanclSelectedTasks.delete(taskName);
+  else sanclSelectedTasks.add(taskName);
+  sanclRenderTasks();
+  sanclUpdateSaveButton();
+}
+
+// Sync the Save button's label and enabled state to the selection size.
+function sanclUpdateSaveButton(){
+  const btn = document.getElementById('sancl-save-btn');
+  if(!btn) return;
+  const n = sanclSelectedTasks.size;
+  btn.textContent = 'Save ('+n+' selected)';
+  btn.disabled = n === 0;
+  btn.style.opacity = n === 0 ? '0.5' : '1';
+  btn.style.cursor = n === 0 ? 'not-allowed' : 'pointer';
+}
+
 // Fired whenever any of grower / template / batch / room changes. Refreshes downstream UI.
+// Clearing the selection prevents stale picks from leaking across batch/room changes (a Save
+// after switching context would otherwise log against the wrong target).
 function sanclChanged(){
+  sanclSelectedTasks.clear();
   sanclPopulateBatchOptions();
   sanclPopulateRoomOptions();
   sanclRenderBatchInfo();
   sanclRenderTasks();
   sanclRenderRecent();
+  sanclUpdateSaveButton();
 }
 
-// Save a single task as a sanCleanRec. Today + current grower + template + batch + room + task.
-// Phase is derived from the SOP task definition (or 'Custom' for user-added tasks).
-async function sanclSaveTask(taskName){
+// Save ALL currently-selected tasks as sanCleanRecs in one batch. One record per task,
+// stamped with today's date + current grower + template + batch + room + per-task phase.
+// Records sync to Airtable in parallel; failures stay synced:false and Sync Pending retries.
+async function sanclSaveSelectedTasks(){
   const grower   = (document.getElementById('sancl-grower')||{}).value || '';
   const template = (document.getElementById('sancl-template')||{}).value || '';
   const batch    = (document.getElementById('sancl-batch')||{}).value || '';
@@ -9528,45 +9596,55 @@ async function sanclSaveTask(taskName){
   if(!template){ toast('Pick a template first.'); return; }
   if(!batchOk){ toast('Pick a batch first.'); return; }
   if(!room){ toast('Pick a room first.'); return; }
+  if(sanclSelectedTasks.size === 0){ toast('Tap one or more tasks to select them first.'); return; }
   const today = (typeof localDate === 'function') ? localDate() : new Date().toISOString().slice(0,10);
   const now = new Date();
   const time = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
-  // Look up the task's phase from the effective task list — handles SOP renames and customs.
-  const effectiveTask = sanclGetEffectiveTasks(template).find(t => t.name === taskName);
-  const phase = effectiveTask ? effectiveTask.phase : 'Custom';
-  // Guard against double-tap — if this task is already logged today for this batch/room, refuse silently.
-  const dupe = sanCleanRecs.find(r => (r.batch||'')===batch && r.template===template && r.room===room && r.task===taskName && r.date===today);
-  if(dupe){
-    toast(taskName+' was already logged today.', 3500);
-    return;
-  }
-  const rec = {
-    id: Date.now() + Math.floor(Math.random()*1000),
-    date: today, time,
-    grower, batch, room,
-    template, phase, task: taskName,
-    notes: notes || '',
-    synced: false
-  };
-  sanCleanRecs.unshift(rec);
+  const effective = sanclGetEffectiveTasks(template);
+  const newRecs = [];
+  let skipped = 0;
+  sanclSelectedTasks.forEach(taskName => {
+    // Skip anything that's already logged today (defensive — selected rows shouldn't include them).
+    const dupe = sanCleanRecs.find(r => (r.batch||'')===batch && r.template===template && r.room===room && r.task===taskName && r.date===today);
+    if(dupe){ skipped++; return; }
+    const t = effective.find(e => e.name === taskName);
+    const phase = t ? t.phase : 'Custom';
+    const rec = {
+      id: Date.now() + Math.floor(Math.random()*1000000),
+      date: today, time,
+      grower, batch, room,
+      template, phase, task: taskName,
+      notes: notes || '',
+      synced: false
+    };
+    sanCleanRecs.unshift(rec);
+    newRecs.push(rec);
+  });
   lsSet('gp-sanclean', sanCleanRecs);
-  // Clear the notes field after logging so it doesn't accidentally carry across to the next task.
+  sanclSelectedTasks.clear();
+  // Clear the notes field after saving so it doesn't accidentally carry to the next save.
   const notesEl = document.getElementById('sancl-notes');
   if(notesEl) notesEl.value = '';
-  toast('Logged: '+taskName, 2500);
+  const savedCount = newRecs.length;
+  toast(savedCount > 0
+    ? 'Saved '+savedCount+' task'+(savedCount===1?'':'s')+(skipped?' ('+skipped+' already logged today)':'')
+    : 'Nothing saved — all selected tasks were already logged today.', 3500);
   sanclRenderTasks();
   sanclRenderRecent();
+  sanclUpdateSaveButton();
   if(typeof updatePendingBadge === 'function') updatePendingBadge();
-  // Sync the new record to Airtable. Failure is non-fatal — stays synced:false and Sync Pending retries.
+  // Sync each new record to Airtable in parallel. Failures stay synced:false.
   if(cfg.sanCleanTbl && cfg.token && cfg.base){
-    try {
-      const f = buildSanCleanFields(rec);
-      const res = await atPost(cfg.sanCleanTbl, f);
-      rec.synced = true;
-      if(res && res.id) rec.airtableId = res.id;
-      lsSet('gp-sanclean', sanCleanRecs);
-      if(typeof updatePendingBadge === 'function') updatePendingBadge();
-    } catch(e){ /* retry via Sync Pending */ }
+    await Promise.all(newRecs.map(async rec => {
+      try {
+        const f = buildSanCleanFields(rec);
+        const res = await atPost(cfg.sanCleanTbl, f);
+        rec.synced = true;
+        if(res && res.id) rec.airtableId = res.id;
+      } catch(e){ /* Sync Pending retries */ }
+    }));
+    lsSet('gp-sanclean', sanCleanRecs);
+    if(typeof updatePendingBadge === 'function') updatePendingBadge();
   }
 }
 
