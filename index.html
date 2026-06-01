@@ -925,6 +925,7 @@ tr:last-child td { border-bottom: none; }
               <option>Produced/Received</option>
               <option>Moved to Moms</option>
               <option>Sold</option>
+              <option>Sent to Lab</option>
               <option>Harvested</option>
             </select>
           </div>
@@ -962,6 +963,43 @@ tr:last-child td { border-bottom: none; }
           <div class="field" style="margin-bottom:10px;display:none;" id="tx-wet-weight-wrap">
             <label id="tx-wet-weight-label">Weight (kg)</label>
             <input type="number" id="tx-wet-weight" placeholder="0.000" min="0" step="0.001" style="font-size:14px;font-family:var(--mono);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;" />
+          </div>
+          <!-- Sale Stage: shown only for Sold. Routes the weight into the right CTLS section:
+               Dry → Section 5 sold weight; Fresh → Section 4 fresh-sold-to-processor;
+               Clone → Section 2 clones-sold (plant count). -->
+          <div class="field" style="margin-bottom:10px;display:none;" id="tx-sale-stage-wrap">
+            <label>Sale Stage <span style="font-size:10px;color:var(--text3);font-weight:400;">— Dry is the default; Fresh is wet-to-processor; Clone is live-plant sale</span></label>
+            <select id="tx-sale-stage" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;">
+              <option value="Dry" selected>Dry (cured flower)</option>
+              <option value="Fresh">Fresh (wet to processor)</option>
+              <option value="Clone">Clone (live plants)</option>
+            </select>
+          </div>
+          <!-- Sent to Lab fields: shown only for the Sent to Lab tx type. Captures Destination
+               Type and Material Type. Weight + Plant Count are reused from above. -->
+          <div class="field" style="margin-bottom:10px;display:none;" id="tx-lab-dest-wrap">
+            <label>Destination Type <span style="color:var(--red);font-weight:700;">*</span></label>
+            <select id="tx-lab-dest" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;">
+              <option value="">-- select destination --</option>
+              <option>Lab (Testing)</option>
+              <option>Processor</option>
+              <option>R&D / University</option>
+              <option>Other</option>
+            </select>
+          </div>
+          <div class="field" style="margin-bottom:10px;display:none;" id="tx-lab-material-wrap">
+            <label>Material Type <span style="color:var(--red);font-weight:700;">*</span></label>
+            <select id="tx-lab-material" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;">
+              <option value="">-- select material --</option>
+              <option>Plants</option>
+              <option>Leaf</option>
+              <option>Dry Flower</option>
+              <option>Other</option>
+            </select>
+          </div>
+          <div class="field" style="margin-bottom:10px;display:none;" id="tx-lab-name-wrap">
+            <label>Destination Name <span style="font-size:10px;color:var(--text3);font-weight:400;">— free text (lab/processor/university name)</span></label>
+            <input type="text" id="tx-lab-name" placeholder="e.g. AnalyTest Labs, ABC Processor" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;" />
           </div>
           <div class="field" style="margin-bottom:10px;display:none;" id="tx-clone-date-wrap">
             <label>Cloning Date</label>
@@ -1967,7 +2005,13 @@ const REMOTE_MAPPERS = {
       date: f['Date']||'',
       txType: f['Transaction Type']||'',
       qty: parseFloat(f['Quantity'])||0,
+      weight: parseFloat(f['Weight (kg)'])||0,
       runningQty: parseInt(f['Current Quantity After'])||0,
+      plantPhase: f['Plant Phase']||'',
+      saleStage: f['Sale Stage']||'',
+      labDestType: f['Lab Destination Type']||'',
+      labMaterialType: f['Lab Material Type']||'',
+      labDestName: f['Lab Destination Name']||'',
       notes: f['Notes']||'',
       synced: true
     };
@@ -6194,7 +6238,7 @@ async function syncPending(){
         let running=0;
         for(const t of sorted){const q=parseInt(t.qty)||0;if(t.txType==='Produced/Received')running+=q;else running-=q;if(t.id===tx.id)break;}
         if(running<0)running=0;
-        const f={'Batch ID':tx.batchId?[tx.batchId]:undefined,'Date':tx.date,'Transaction Type':tx.txType,'Plant Phase':tx.plantPhase||undefined,'Quantity':tx.qty,'Weight (kg)':tx.weight||undefined,'Current Quantity After':running,'Notes':tx.notes||undefined};
+        const f={'Batch ID':tx.batchId?[tx.batchId]:undefined,'Date':tx.date,'Transaction Type':tx.txType,'Plant Phase':tx.plantPhase||undefined,'Quantity':tx.qty,'Weight (kg)':tx.weight||undefined,'Current Quantity After':running,'Sale Stage':tx.saleStage||undefined,'Lab Destination Type':tx.labDestType||undefined,'Lab Material Type':tx.labMaterialType||undefined,'Lab Destination Name':tx.labDestName||undefined,'Notes':tx.notes||undefined};
         Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
         const txRes=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+cfg.batchtxTbl,{method:'POST',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify({fields:f,typecast:true})});
         if(!txRes.ok){const err=await txRes.json();throw new Error('Tx '+txRes.status+': '+(err.error&&err.error.message||JSON.stringify(err)));}
@@ -6404,11 +6448,11 @@ function wasteBatchSelect(){
 }
 
 // Vegetative Waste sub-category options by plant phase
-const VEG_WASTE_SUBTYPES_CLONES = ['Dead Plant','Not Rooted','Extra Plants'];
+const VEG_WASTE_SUBTYPES_CLONES = ['Dead Plant','Not Rooted','Not Germinated','Extra Plants'];
 const VEG_WASTE_SUBTYPES_VEGFLOWER = ['Dead Plant','Extra Plants','Toping','De-Leaf','Pruning','Pre-Harvest De-Leaf','Harvest'];
 
 // Sub-categories that actually destroy whole plants (vs. leaf trim/pruning that only adds weight).
-const VEG_WASTE_DESTROYING_SUBTYPES = ['Dead Plant','Extra Plants','Not Rooted'];
+const VEG_WASTE_DESTROYING_SUBTYPES = ['Dead Plant','Extra Plants','Not Rooted','Not Germinated'];
 
 function wastePlantsToggle(){
   // Refresh the sub-category dropdown first (it may auto-pick a single available option),
@@ -8009,6 +8053,21 @@ function txTypeChanged(){
     wetInp.style.color = 'var(--text)';
     wetInp.style.cursor = '';
     pcInp.value = '';
+  } else if(t === 'Sent to Lab'){
+    // Sent to Lab: optional plant count + optional weight. Both are user-entered.
+    pcWrap.style.display = '';
+    pcInp.readOnly = false;
+    pcInp.style.background = 'var(--bg)';
+    pcInp.style.color = 'var(--text)';
+    pcInp.style.cursor = '';
+    pcInp.value = '';
+    wetWrap.style.display = '';
+    wetLbl.innerHTML = 'Weight (kg) <span style="color:var(--text3);font-weight:400;font-size:11px;">(optional)</span>';
+    wetInp.readOnly = false;
+    wetInp.style.background = 'var(--bg)';
+    wetInp.style.color = 'var(--text)';
+    wetInp.style.cursor = '';
+    wetInp.value = '';
   } else if(t === 'Harvested'){
     wetWrap.style.display = '';
     wetLbl.innerHTML = 'Wet Weight (kg) <span style="color:var(--text3);font-weight:400;font-size:11px;">(auto-filled from Harvest Log)</span>';
@@ -8116,6 +8175,34 @@ function txTypeChanged(){
       srcSel.value = '';
     }
   }
+  // Sale Stage dropdown — visible only for Sold tx. Routes weight into the right CTLS section.
+  const saleStageWrap = document.getElementById('tx-sale-stage-wrap');
+  if(saleStageWrap){
+    if(t === 'Sold') saleStageWrap.style.display = '';
+    else {
+      saleStageWrap.style.display = 'none';
+      const ss = document.getElementById('tx-sale-stage'); if(ss) ss.value = 'Dry';
+    }
+  }
+  // Sent to Lab fields — Destination Type, Material Type, Destination Name. Only visible
+  // when the tx type is Sent to Lab.
+  const labDestWrap = document.getElementById('tx-lab-dest-wrap');
+  const labMatWrap  = document.getElementById('tx-lab-material-wrap');
+  const labNameWrap = document.getElementById('tx-lab-name-wrap');
+  if(labDestWrap && labMatWrap && labNameWrap){
+    if(t === 'Sent to Lab'){
+      labDestWrap.style.display = '';
+      labMatWrap.style.display = '';
+      labNameWrap.style.display = '';
+    } else {
+      labDestWrap.style.display = 'none';
+      labMatWrap.style.display = 'none';
+      labNameWrap.style.display = 'none';
+      const _ld = document.getElementById('tx-lab-dest'); if(_ld) _ld.value = '';
+      const _lm = document.getElementById('tx-lab-material'); if(_lm) _lm.value = '';
+      const _ln = document.getElementById('tx-lab-name'); if(_ln) _ln.value = '';
+    }
+  }
   // Clone Date input: shown only when:
   //   - txType is Produced/Received
   //   - the batch's geneticsSource is Clones-External
@@ -8162,6 +8249,11 @@ function summaryUpdateTxTypeOptions(batchId){
   else                        opts = ['Produced/Received','Moved to Moms'];
   // Drop Sold from the list if this batch already has a Sold tx (only one allowed)
   if(hasSold) opts = opts.filter(o=>o!=='Sold');
+  // Sent to Lab is allowed any time there are plants/material to send — meaning anywhere a
+  // regular manual tx is allowed (not in the auto-only Flower/Drying/Packaged phases).
+  if(opts.length > 0 || phase === 'Delivered'){
+    if(!opts.includes('Sent to Lab')) opts.push('Sent to Lab');
+  }
   // Mother batches (M-XX-NNN): special rules — these stay productive across the whole
   // lifecycle. New clones can be taken at any time, so Produced/Received is ALWAYS
   // available (regardless of plantPhase) until the batch is closed. Sold is never
@@ -8429,18 +8521,34 @@ async function summaryAddTransaction(){
   }
   // Read inputs based on tx type:
   //   Produced/Received, Moved to Moms → plant-count input
-  //   Sold                              → wet-weight input (relabeled as Weight (kg))
+  //   Sold                              → wet-weight input (relabeled as Weight (kg)) + Sale Stage
+  //   Sent to Lab                       → both plant-count + weight (either or both, at least one)
   //   Harvested                          → wet-weight input (auto-filled, read-only)
+  const isSentToLab = (txType === 'Sent to Lab');
   const _pcVal = document.getElementById('tx-plant-count').value;
   const _wwVal = document.getElementById('tx-wet-weight').value;
   const qty = (isSold || isHarvested) ? 0 : (parseInt(_pcVal) || 0);
-  let weight = (isSold || isHarvested) ? (parseFloat(_wwVal) || 0) : 0;
-  if(isHarvested){
+  let weight = (isSold || isHarvested || isSentToLab) ? (parseFloat(_wwVal) || 0) : 0;
+  // Sent to Lab fields: Destination Type, Material Type, Destination Name (optional).
+  let _labDest = '', _labMaterial = '', _labName = '';
+  if(isSentToLab){
+    _labDest     = (document.getElementById('tx-lab-dest')||{}).value || '';
+    _labMaterial = (document.getElementById('tx-lab-material')||{}).value || '';
+    _labName     = ((document.getElementById('tx-lab-name')||{}).value || '').trim();
+    if(!_labDest){ toast('Pick a destination type for the Sent to Lab transaction.'); return; }
+    if(!_labMaterial){ toast('Pick a material type (Plants / Leaf / Dry Flower / Other).'); return; }
+    if(qty <= 0 && weight <= 0){ toast('Enter a plant count, a weight, or both for the Sent to Lab record.'); return; }
+  } else if(isHarvested){
     if(weight <= 0){ toast('Enter a valid wet weight (kg).'); return; }
   } else if(isSold){
     if(weight <= 0){ toast('Enter a valid weight (kg).'); return; }
   } else {
     if(!qty || qty <= 0){ toast('Enter a valid plant count.'); return; }
+  }
+  // Sale Stage on Sold tx (Fresh / Dry / Clone). Routes weight into the right CTLS section.
+  let _saleStage = '';
+  if(isSold){
+    _saleStage = (document.getElementById('tx-sale-stage')||{}).value || 'Dry';
   }
   // Mother batches receiving Produced/Received clones need a Cutting Source Batch
   // (another mother, or a non-mom batch in Veg). Source is NOT decremented — these
@@ -8604,6 +8712,12 @@ async function summaryAddTransaction(){
   const tx = { id: Date.now(), batchId, date, txType, qty, weight, notes: _txNotes, currentQtyBefore, plantPhase: _txPhase, synced: false };
   if(txType === 'Moved to Moms' && _destMomBatchId) tx.destBatchId = _destMomBatchId;
   if(txType === 'Produced/Received' && _srcCuttingBatchId) tx.sourceBatchId = _srcCuttingBatchId;
+  if(txType === 'Sold' && _saleStage) tx.saleStage = _saleStage;
+  if(txType === 'Sent to Lab'){
+    tx.labDestType = _labDest;
+    tx.labMaterialType = _labMaterial;
+    tx.labDestName = _labName || undefined;
+  }
   batchTxRecs.unshift(tx);
   lsSet('gp-batchtx', batchTxRecs);
   // Mother batch phase-count maintenance:
@@ -8742,7 +8856,7 @@ async function summaryAddTransaction(){
   if(cfg.batchtxTbl && cfg.token && cfg.base){
     try{
       const currentQty = summaryCalcQty(batchId);
-      const f={'Batch ID':tx.batchId?[tx.batchId]:undefined,'Date':tx.date,'Transaction Type':tx.txType,'Plant Phase':tx.plantPhase||undefined,'Quantity':tx.qty,'Weight (kg)':tx.weight||undefined,'Current Quantity After':currentQty,'Notes':tx.notes||undefined};
+      const f={'Batch ID':tx.batchId?[tx.batchId]:undefined,'Date':tx.date,'Transaction Type':tx.txType,'Plant Phase':tx.plantPhase||undefined,'Quantity':tx.qty,'Weight (kg)':tx.weight||undefined,'Current Quantity After':currentQty,'Sale Stage':tx.saleStage||undefined,'Lab Destination Type':tx.labDestType||undefined,'Lab Material Type':tx.labMaterialType||undefined,'Lab Destination Name':tx.labDestName||undefined,'Notes':tx.notes||undefined};
       Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
       const _stRes = await atPost(cfg.batchtxTbl, f);
       tx.synced=true; if(_stRes && _stRes.id) tx.airtableId=_stRes.id; lsSet('gp-batchtx',batchTxRecs); setSyncPill('ok','Synced');
@@ -9962,21 +10076,35 @@ function fmtKgOrDash(n){ return (!n || n === 0) ? '—' : fmtKg3(n); }
 
 // SECTION 1 — Seeds
 // "Bought seeds" = total Produced/Received quantity on batches with geneticsSource='Seeds' in the month.
-// Other Seeds metrics need new tracking — flagged in the Gaps list.
+// "Not germinated" = Vegetative Waste records on Seeds-batches with Sub-Category=Not Germinated.
+// "Germinated" = bought − notGerminated − other destroyed (best inference).
+// "Sold" = Sold tx weight/qty on Seeds-batches with Sale Stage=Clone (rarely used).
 function ctlsSeedsMetrics(from, to){
   const txs = _txsInRange(from, to);
+  const wastes = _wastesInRange(from, to);
   const bought = txs
     .filter(t => t.txType === 'Produced/Received' && _isSeedsBatch(t.batchId))
     .reduce((s,t) => s + (parseInt(t.qty)||0), 0);
-  // Destroyed-seed tx (auto-created from Vegetative Waste on Seeds-genetics batches)
+  // Not germinated — explicit waste records with Sub-Category = 'Not Germinated' on Seeds batches.
+  const notGerminated = wastes
+    .filter(w => _isSeedsBatch(w.batch) && (w.subtype||'') === 'Not Germinated')
+    .reduce((s,w) => s + (parseInt(w.plants)||0), 0);
+  // Destroyed-seed tx (auto-created from any Vegetative Waste on Seeds-genetics batches with plants > 0).
   const destroyed = txs
     .filter(t => t.txType === 'Destroyed' && _isSeedsBatch(t.batchId))
     .reduce((s,t) => s + (parseInt(t.qty)||0), 0);
+  // Germinated count — inferred: bought - notGerminated (everything that wasn't tagged as not-germinated germinated).
+  // If bought is zero, leave as null so the report shows "—".
+  const germinated = bought > 0 ? Math.max(0, bought - notGerminated) : null;
+  // Seeds sold — Sold tx on Seeds batches.
+  const sold = txs
+    .filter(t => t.txType === 'Sold' && _isSeedsBatch(t.batchId))
+    .reduce((s,t) => s + (parseInt(t.qty)||0) + (parseFloat(t.weight)||0), 0);
   return {
     bought,
-    germinated: null,        // gap — no separate "germinated" event today
-    notGerminated: null,     // gap
-    sold: null,              // gap — Sold tx is dry-flower-flagged today
+    germinated,
+    notGerminated,
+    sold: sold || null,
     destroyed
   };
 }
@@ -10016,8 +10144,18 @@ function ctlsVegMetrics(from, to){
   // Waste records for cross-reference (the destroy txs are auto-created from these).
   const vegWastes = _wastesInRange(from, to).filter(w => (w.type||'') === 'Vegetative Waste');
   const vegWasteCount = vegWastes.length;
-  // Sold clones — Sold tx where source batch's plantPhase at time of sale isn't Drying/Packaged.
-  // We don't reliably track that today; show — for v1.
+  // Sold clones — Sold tx with Sale Stage = Clone.
+  const soldClones = txs
+    .filter(t => t.txType === 'Sold' && (t.saleStage||'') === 'Clone' && !_isSeedsBatch(t.batchId))
+    .reduce((s,t) => s + (parseInt(t.qty)||0), 0);
+  // Sent to lab — total plant count across Sent to Lab tx in the month.
+  const sentToLabPlants = txs
+    .filter(t => t.txType === 'Sent to Lab')
+    .reduce((s,t) => s + (parseInt(t.qty)||0), 0);
+  // Leaf testing weight — Sent to Lab tx with Material Type=Leaf.
+  const leafTestingWeight = txs
+    .filter(t => t.txType === 'Sent to Lab' && (t.labMaterialType||'') === 'Leaf')
+    .reduce((s,t) => s + (parseFloat(t.weight)||0), 0);
   return {
     produced,
     broughtInExternal,
@@ -10026,9 +10164,9 @@ function ctlsVegMetrics(from, to){
     destroyedVeg,
     destroyedAll,
     vegWasteCount,
-    sold: null,           // gap — Sold workflow is dry-flower-only today
-    sentToLab: null,      // gap — no Sent-to-Lab tx type yet
-    leafTestingWeight: null // gap
+    sold: soldClones || null,
+    sentToLab: sentToLabPlants || null,
+    leafTestingWeight: leafTestingWeight || null
   };
 }
 
@@ -10096,6 +10234,10 @@ function ctlsFreshMetrics(from, to){
   const postDrySampleTotal = postDryRetention + postDryCOA + postDryTesting;
   // Loss on drying — difference between wet and post-dry. Negative-or-positive depending on data.
   const lossOnDrying = (wetTotal && postDryTotal) ? (wetTotal - postDryTotal) : null;
+  // Fresh sold to processor — Sold tx in the month with Sale Stage = Fresh.
+  const soldFreshToProcessor = _txsInRange(from, to)
+    .filter(t => t.txType === 'Sold' && (t.saleStage||'') === 'Fresh')
+    .reduce((s,t) => s + (parseFloat(t.weight)||0), 0);
   return {
     wetTotal,
     postDryTotal,
@@ -10105,26 +10247,31 @@ function ctlsFreshMetrics(from, to){
     postDryTesting,
     postDrySampleTotal,
     lossOnDrying,
-    soldFreshToProcessor: null    // gap — no Sold-Fresh distinction yet
+    soldFreshToProcessor: soldFreshToProcessor || null
   };
 }
 
 // SECTION 5 — Dry Cannabis (weights only)
 function ctlsDryMetrics(from, to){
-  // Bill of lading / Quantity Sold = sum of weight on Sold tx in the month.
-  const soldWeight = _txsInRange(from, to)
-    .filter(t => t.txType === 'Sold')
+  const txs = _txsInRange(from, to);
+  // Bill of lading / Quantity Sold = sum of weight on Sold tx WHERE Sale Stage = Dry (or empty for backward compat).
+  const soldWeight = txs
+    .filter(t => t.txType === 'Sold' && (!t.saleStage || t.saleStage === 'Dry'))
     .reduce((s,t) => s + (parseFloat(t.weight)||0), 0);
   // Dry Waste = sum of Weight (kg) on Waste records where Waste Type = Dry Waste in the month.
   const dryWasteWeight = _wastesInRange(from, to)
     .filter(w => (w.type||'') === 'Dry Waste')
     .reduce((s,w) => s + (parseFloat(w.weight)||0), 0);
+  // Processor sample weight — Sent to Lab tx where Destination = Processor and Material = Dry Flower.
+  const processorSampleWeight = txs
+    .filter(t => t.txType === 'Sent to Lab' && (t.labDestType||'') === 'Processor' && (t.labMaterialType||'') === 'Dry Flower')
+    .reduce((s,t) => s + (parseFloat(t.weight)||0), 0);
   // Cross-ref fresh section for sample weights + loss on drying.
   const fresh = ctlsFreshMetrics(from, to);
   return {
-    retentionSampleWeight: fresh.postDryRetention,           // now computed from Sample Type
+    retentionSampleWeight: fresh.postDryRetention,                  // from post-dry Sample Type
     testingSampleWeight:   fresh.postDryCOA + fresh.postDryTesting, // COA + Testing roll up to "testing samples"
-    processorSampleWeight: null, // still a gap — captured by future Sent-to-Lab/Processor tx
+    processorSampleWeight: processorSampleWeight || null,
     soldWeight,
     dryWasteWeight,
     lossOnDrying: fresh.lossOnDrying
@@ -10186,11 +10333,11 @@ function ctlsGenerateReport(){
 
   // Section 1 — Seeds
   html += _ctlsBlock('1. Seeds', [
-    {label:'Bought seeds', note:'count', value: v(seeds.bought, 'seeds')},
-    {label:'Quantity germinated', value: v(seeds.germinated, 'seeds', true, 'Seeds — germinated count (no germination event in app)'), gap:true},
-    {label:'Quantity not germinated', value: v(seeds.notGerminated, 'seeds', true, 'Seeds — not germinated count'), gap:true},
-    {label:'Seeds sold', value: v(seeds.sold, 'seeds', true, 'Seeds — sold (no seed-sales tx type)'), gap:true},
-    {label:'Seeds destroyed', value: v(seeds.destroyed, 'seeds')}
+    {label:'Bought seeds', note:'Produced/Received on Seeds-genetics batches', value: v(seeds.bought, 'seeds')},
+    {label:'Quantity germinated', note:'bought − not-germinated', value: v(seeds.germinated, 'seeds')},
+    {label:'Quantity not germinated', note:'Veg Waste with Sub-Category = Not Germinated', value: v(seeds.notGerminated, 'seeds')},
+    {label:'Seeds sold', value: v(seeds.sold, 'seeds')},
+    {label:'Seeds destroyed (all reasons)', value: v(seeds.destroyed, 'seeds')}
   ]);
 
   // Section 2 — Veg & Clones
@@ -10202,9 +10349,9 @@ function ctlsGenerateReport(){
     {label:'Destroyed in Veg/Clone phase', value: v(veg.destroyedVeg, 'plants')},
     {label:'Destroyed (all phases — cross-check vs Section 3)', value: v(veg.destroyedAll, 'plants')},
     {label:'Vegetative Waste records in the month', value: v(veg.vegWasteCount, 'records')},
-    {label:'Sold (clones/Veg)', value: v(veg.sold, 'plants', true, 'Veg/Clone — sold (Sold tx is dry-flower-only today)'), gap:true},
-    {label:'Sent to lab / testing (R&amp;D)', value: v(veg.sentToLab, 'plants', true, 'Veg/Clone — sent to lab (no Sent-to-Lab tx type)'), gap:true},
-    {label:'Weight of leaf material sent to labs', value: v(veg.leafTestingWeight, 'kg', true, 'Veg/Clone — leaf-testing weight'), gap:true}
+    {label:'Sold (clones/Veg)', note:'Sold tx · Sale Stage = Clone', value: v(veg.sold, 'plants')},
+    {label:'Sent to lab / testing (R&amp;D)', note:'Sent to Lab tx · plant count', value: v(veg.sentToLab, 'plants')},
+    {label:'Weight of leaf material sent to labs', note:'Sent to Lab tx · Material = Leaf', value: v(veg.leafTestingWeight, 'kg')}
   ]);
 
   // Section 3 — Whole Plant (Flower)
@@ -10224,15 +10371,15 @@ function ctlsGenerateReport(){
     {label:'  — COA sample weight', note:'containers tagged COA', value: v(fresh.postDryCOA, 'kg')},
     {label:'  — Testing sample weight', note:'containers tagged Testing', value: v(fresh.postDryTesting, 'kg')},
     {label:'Loss on drying (wet − post-dry)', value: v(fresh.lossOnDrying, 'kg')},
-    {label:'Fresh cannabis sold to processor', value: v(fresh.soldFreshToProcessor, 'kg', true, 'Fresh — sold-to-processor (no Fresh vs Dry sale distinction)'), gap:true}
+    {label:'Fresh cannabis sold to processor', note:'Sold tx · Sale Stage = Fresh', value: v(fresh.soldFreshToProcessor, 'kg')}
   ]);
 
   // Section 5 — Dry Cannabis (weights)
   html += _ctlsBlock('5. Dry Cannabis (weights)', [
     {label:'Retention sample weight', note:'from Post-Drying Sample Type = Retention', value: v(dry.retentionSampleWeight, 'kg')},
     {label:'Weight sent for testing samples', note:'Post-Drying Sample Type = COA + Testing', value: v(dry.testingSampleWeight, 'kg')},
-    {label:'Weight of dried flower sent to processor for samples', value: v(dry.processorSampleWeight, 'kg', true, 'Dry — processor sample weight (no Sent-to-Processor tx yet)'), gap:true},
-    {label:'Bill of lading / Quantity Sold', note:'sum of Sold tx weight in month', value: v(dry.soldWeight, 'kg')},
+    {label:'Weight of dried flower sent to processor for samples', note:'Sent to Lab · Processor · Dry Flower', value: v(dry.processorSampleWeight, 'kg')},
+    {label:'Bill of lading / Quantity Sold', note:'Sold tx · Sale Stage = Dry', value: v(dry.soldWeight, 'kg')},
     {label:'Weight of cannabis destroyed (Dry Waste)', value: v(dry.dryWasteWeight, 'kg')},
     {label:'Loss on drying (cross-ref)', value: v(dry.lossOnDrying, 'kg')}
   ]);
