@@ -1093,6 +1093,14 @@ tr:last-child td { border-bottom: none; }
           <div class="field" style="margin-bottom:10px;"><label>Type / Size</label>
             <input type="text" id="postdry-type" placeholder="e.g. Black tote 30L, Glass jar 500g..." />
           </div>
+          <div class="field" style="margin-bottom:10px;"><label>Sample Type <span style="font-size:10px;color:var(--text3);font-weight:400;">— defaults to Sold (sale inventory). Tag samples so they show separately on the CTLS report.</span></label>
+            <select id="postdry-sampletype">
+              <option value="Sold" selected>Sold (sale inventory)</option>
+              <option value="Retention">Retention sample</option>
+              <option value="COA">COA sample</option>
+              <option value="Testing">Testing sample</option>
+            </select>
+          </div>
           <div class="field" style="margin-bottom:10px;"><label>Notes</label>
             <textarea id="postdry-notes" rows="2" placeholder="Optional notes about this container..." style="width:100%;font-size:14px;font-family:var(--sans);border-radius:var(--radius-sm);border:1px solid var(--border);padding:10px;background:var(--card);color:var(--text);outline:none;resize:vertical;"></textarea>
           </div>
@@ -2000,6 +2008,7 @@ const REMOTE_MAPPERS = {
       grossWeight: parseFloat(f['Gross Weight (kg)'])||0,
       netWeight: parseFloat(f['Net Weight (kg)'])||0,
       containerType: f['Type/Size']||'',
+      sampleType: f['Sample Type']||'Sold',
       notes: f['Notes']||'',
       synced: true
     };
@@ -4307,6 +4316,7 @@ async function postDrySave(){
   const tare = parseFloat(document.getElementById('postdry-tare').value);
   const gross = parseFloat(document.getElementById('postdry-gross').value);
   const containerType = document.getElementById('postdry-type').value.trim();
+  const sampleType = (document.getElementById('postdry-sampletype')||{}).value || 'Sold';
   const notes = document.getElementById('postdry-notes').value.trim();
   if(!grower){ toast('Please select a grower.'); return; }
   if(!batch){ toast('Please select a batch (must be in Drying phase).'); return; }
@@ -4318,7 +4328,7 @@ async function postDrySave(){
   const rec = {
     id: Date.now(), date, grower, batch, binNumber,
     tareWeight: tare, grossWeight: gross, netWeight,
-    containerType, notes, synced: false
+    containerType, sampleType, notes, synced: false
   };
   postDryRecs.unshift(rec);
   lsSet('gp-postdry', postDryRecs);
@@ -4326,6 +4336,8 @@ async function postDrySave(){
   document.getElementById('postdry-tare').value = '';
   document.getElementById('postdry-gross').value = '';
   document.getElementById('postdry-type').value = '';
+  // Sample Type resets to Sold (the default) so the next container doesn't accidentally inherit a sample tag.
+  const _stEl = document.getElementById('postdry-sampletype'); if(_stEl) _stEl.value = 'Sold';
   document.getElementById('postdry-notes').value = '';
   document.getElementById('postdry-net').textContent = '— kg';
   postDrySetupChanged();
@@ -4344,6 +4356,7 @@ async function postDrySave(){
         'Gross Weight (kg)': rec.grossWeight,
         'Net Weight (kg)': rec.netWeight,
         'Type/Size': rec.containerType || undefined,
+        'Sample Type': rec.sampleType || undefined,
         'Notes': rec.notes || undefined
       };
       Object.keys(f).forEach(k=>{ if(f[k]===undefined||f[k]===null||f[k]==='') delete f[k]; });
@@ -10072,14 +10085,25 @@ function ctlsFreshMetrics(from, to){
   const harvests = _harvestsInRange(from, to);
   // Total harvested weight (wet) = sum of net weights on Harvest Log records in the month.
   const wetTotal = harvests.reduce((s,h) => s + (parseFloat(h.netWeight)||0), 0);
-  // Post-drying total — sum of net container weights in the month.
-  const postDryTotal = _postDrysInRange(from, to).reduce((s,p) => s + (parseFloat(p.netWeight)||0), 0);
+  // Post-drying total — sum of net container weights in the month, broken out by Sample Type.
+  // Defaults missing-sampleType records (older data) to 'Sold' so totals stay correct.
+  const postDrys = _postDrysInRange(from, to);
+  const postDryTotal     = postDrys.reduce((s,p) => s + (parseFloat(p.netWeight)||0), 0);
+  const postDrySold      = postDrys.filter(p => (p.sampleType||'Sold') === 'Sold').reduce((s,p) => s + (parseFloat(p.netWeight)||0), 0);
+  const postDryRetention = postDrys.filter(p => (p.sampleType||'') === 'Retention').reduce((s,p) => s + (parseFloat(p.netWeight)||0), 0);
+  const postDryCOA       = postDrys.filter(p => (p.sampleType||'') === 'COA').reduce((s,p) => s + (parseFloat(p.netWeight)||0), 0);
+  const postDryTesting   = postDrys.filter(p => (p.sampleType||'') === 'Testing').reduce((s,p) => s + (parseFloat(p.netWeight)||0), 0);
+  const postDrySampleTotal = postDryRetention + postDryCOA + postDryTesting;
   // Loss on drying — difference between wet and post-dry. Negative-or-positive depending on data.
   const lossOnDrying = (wetTotal && postDryTotal) ? (wetTotal - postDryTotal) : null;
   return {
     wetTotal,
     postDryTotal,
-    postDryIncludesSamples: null, // gap — no separation
+    postDrySold,
+    postDryRetention,
+    postDryCOA,
+    postDryTesting,
+    postDrySampleTotal,
     lossOnDrying,
     soldFreshToProcessor: null    // gap — no Sold-Fresh distinction yet
   };
@@ -10095,12 +10119,12 @@ function ctlsDryMetrics(from, to){
   const dryWasteWeight = _wastesInRange(from, to)
     .filter(w => (w.type||'') === 'Dry Waste')
     .reduce((s,w) => s + (parseFloat(w.weight)||0), 0);
-  // Loss on drying (same as Section 4) for cross-reference.
+  // Cross-ref fresh section for sample weights + loss on drying.
   const fresh = ctlsFreshMetrics(from, to);
   return {
-    retentionSampleWeight: null, // gap
-    testingSampleWeight: null,   // gap
-    processorSampleWeight: null, // gap
+    retentionSampleWeight: fresh.postDryRetention,           // now computed from Sample Type
+    testingSampleWeight:   fresh.postDryCOA + fresh.postDryTesting, // COA + Testing roll up to "testing samples"
+    processorSampleWeight: null, // still a gap — captured by future Sent-to-Lab/Processor tx
     soldWeight,
     dryWasteWeight,
     lossOnDrying: fresh.lossOnDrying
@@ -10194,17 +10218,20 @@ function ctlsGenerateReport(){
   // Section 4 — Fresh Cannabis (wet)
   html += _ctlsBlock('4. Fresh Cannabis (wet)', [
     {label:'Total harvested weight (wet)', note:'sum of Harvest Log net weights', value: v(fresh.wetTotal, 'kg')},
-    {label:'Post-drying weight (includes retention + COA samples)', value: v(fresh.postDryTotal, 'kg')},
-    {label:'Sample weights inside post-drying', value: v(fresh.postDryIncludesSamples, 'kg', true, 'Fresh — sample weight separation in post-dry'), gap:true},
+    {label:'Post-drying total weight', note:'all containers, all sample types', value: v(fresh.postDryTotal, 'kg')},
+    {label:'  — Sold inventory weight', note:'containers tagged Sold', value: v(fresh.postDrySold, 'kg')},
+    {label:'  — Retention sample weight', note:'containers tagged Retention', value: v(fresh.postDryRetention, 'kg')},
+    {label:'  — COA sample weight', note:'containers tagged COA', value: v(fresh.postDryCOA, 'kg')},
+    {label:'  — Testing sample weight', note:'containers tagged Testing', value: v(fresh.postDryTesting, 'kg')},
     {label:'Loss on drying (wet − post-dry)', value: v(fresh.lossOnDrying, 'kg')},
     {label:'Fresh cannabis sold to processor', value: v(fresh.soldFreshToProcessor, 'kg', true, 'Fresh — sold-to-processor (no Fresh vs Dry sale distinction)'), gap:true}
   ]);
 
   // Section 5 — Dry Cannabis (weights)
   html += _ctlsBlock('5. Dry Cannabis (weights)', [
-    {label:'Retention sample weight', value: v(dry.retentionSampleWeight, 'kg', true, 'Dry — retention sample weight'), gap:true},
-    {label:'Weight sent for testing samples', value: v(dry.testingSampleWeight, 'kg', true, 'Dry — testing sample weight'), gap:true},
-    {label:'Weight of dried flower sent to processor for samples', value: v(dry.processorSampleWeight, 'kg', true, 'Dry — processor sample weight'), gap:true},
+    {label:'Retention sample weight', note:'from Post-Drying Sample Type = Retention', value: v(dry.retentionSampleWeight, 'kg')},
+    {label:'Weight sent for testing samples', note:'Post-Drying Sample Type = COA + Testing', value: v(dry.testingSampleWeight, 'kg')},
+    {label:'Weight of dried flower sent to processor for samples', value: v(dry.processorSampleWeight, 'kg', true, 'Dry — processor sample weight (no Sent-to-Processor tx yet)'), gap:true},
     {label:'Bill of lading / Quantity Sold', note:'sum of Sold tx weight in month', value: v(dry.soldWeight, 'kg')},
     {label:'Weight of cannabis destroyed (Dry Waste)', value: v(dry.dryWasteWeight, 'kg')},
     {label:'Loss on drying (cross-ref)', value: v(dry.lossOnDrying, 'kg')}
