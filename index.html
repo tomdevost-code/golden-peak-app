@@ -376,6 +376,23 @@ tr:last-child td { border-bottom: none; }
 
     <!-- REPORT -->
     <div class="page" id="page-report">
+      <!-- CTLS Monthly Report — pulls every metric needed for Health Canada / Revenue Canada
+           monthly compliance filings into a single printable view. Computed entirely from
+           existing batch / tx / harvest / postdry / waste data; metrics we don't track yet
+           render as "—" with a Gaps footer listing what still needs source data. -->
+      <div class="card" style="margin-bottom:14px;border:2px solid var(--green);">
+        <div class="section-label" style="color:var(--green);">CTLS Monthly Report</div>
+        <p style="font-size:12px;color:var(--text2);line-height:1.5;margin:-4px 0 10px;">For Health Canada &amp; Revenue Canada compliance filings under the Cannabis Act. Pick a month and Generate — the report uses all of your batch, transaction, harvest, post-drying, and waste data to compute the metrics in each of the 5 sections.</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+          <div class="field" style="flex:1;min-width:160px;margin:0;">
+            <label>Reporting month</label>
+            <input type="month" id="ctls-month" style="font-family:var(--mono);" />
+          </div>
+          <button class="btn-save" onclick="ctlsGenerateReport()" style="white-space:nowrap;background:var(--green);">Generate Report</button>
+        </div>
+        <div id="ctls-report-output" style="margin-top:14px;"></div>
+      </div>
+
       <div class="rep-tabs">
         <button class="rep-tab active" onclick="switchRepTab('ec',this)">EC Log</button>
         <button class="rep-tab" onclick="switchRepTab('ro',this)">Runoff Log</button>
@@ -3335,7 +3352,7 @@ function setAvg(id,val,lo,hi){const el=document.getElementById(id);if(val===null
 function stageLabel(r){if(!r.stage||!r.day)return'<span style="color:var(--text3)">-</span>';return r.stage==='flower'?'<span class="flower-txt">F'+r.day+'</span>':'<span class="veg-txt">V'+r.day+'</span>';}
 function toast(msg,dur){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),dur||2500);}
 
-function switchPage(page,btn){document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.bnav-btn').forEach(b=>b.classList.remove('active'));document.getElementById('page-'+page).classList.add('active');btn.classList.add('active');if(page==='report'){renderEC();renderRO();}if(page==='waste'){renderWaste();}if(page==='batch'){renderBatchLog();}if(page==='summary'){summaryPopulateBatches();}if(page==='harvest'){harvestPopulateBatches();harvestRefreshDate();harvestPopulateBinNumbers();}if(page==='postdry'){postDryPopulateBatches();postDrySetupChanged();}if(page==='bio'){bioRefreshDate();bioSeqUnlock();}if(page==='pest'){pestRefreshDate();pestPopulateBatches();pestSeqUnlock();}if(page==='sancleaning'){sanclEnter();}if(page==='santool'){santoolEnter();}
+function switchPage(page,btn){document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.bnav-btn').forEach(b=>b.classList.remove('active'));document.getElementById('page-'+page).classList.add('active');btn.classList.add('active');if(page==='report'){renderEC();renderRO();ctlsDefaultMonth();}if(page==='waste'){renderWaste();}if(page==='batch'){renderBatchLog();}if(page==='summary'){summaryPopulateBatches();}if(page==='harvest'){harvestPopulateBatches();harvestRefreshDate();harvestPopulateBinNumbers();}if(page==='postdry'){postDryPopulateBatches();postDrySetupChanged();}if(page==='bio'){bioRefreshDate();bioSeqUnlock();}if(page==='pest'){pestRefreshDate();pestPopulateBatches();pestSeqUnlock();}if(page==='sancleaning'){sanclEnter();}if(page==='santool'){santoolEnter();}
   // Remember the last-page-visited per section so toggling sections returns the user to where they left off.
   if(page === 'settings') {
     // Settings is shared between sections — don't update per-section memory.
@@ -9871,6 +9888,344 @@ function buildSanToolFields(rec){
   return f;
 }
 
-</script>
+// ════════════════════════════════════════════════════════════════════════════════
+// CTLS MONTHLY REPORT
+// Aggregates everything required by Health Canada / Revenue Canada monthly reporting:
+//   Section 1 — Seeds
+//   Section 2 — Veg Plants & Clones
+//   Section 3 — Whole Cannabis Plants (Flowering)
+//   Section 4 — Fresh Cannabis (wet)
+//   Section 5 — Dry Cannabis (weights)
+// Computes from existing batch / batchTx / harvest / postdry / waste data. Anything we
+// don't yet track is rendered as "—" and itemised in the Gaps footer so the user can see
+// exactly which trackers still need to be added.
+// ════════════════════════════════════════════════════════════════════════════════
+
+// Default the month picker to the previous calendar month (Health Canada filings are for
+// the prior month). Called on Reports-page entry via switchPage.
+function ctlsDefaultMonth(){
+  const d = new Date();
+  d.setDate(1);
+  d.setMonth(d.getMonth() - 1);
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const el = document.getElementById('ctls-month');
+  if(el && !el.value) el.value = y+'-'+m;
+}
+
+// Inclusive-from / exclusive-to date strings for the picked YYYY-MM month.
+function ctlsMonthRange(ym){
+  if(!ym || !/^\d{4}-\d{2}$/.test(ym)) return null;
+  const [y,m] = ym.split('-').map(n => parseInt(n,10));
+  const from = y+'-'+String(m).padStart(2,'0')+'-01';
+  const next = new Date(y, m, 1); // m is 1-indexed; Date is 0-indexed, so this is the 1st of NEXT month
+  const ny = next.getFullYear();
+  const nm = String(next.getMonth()+1).padStart(2,'0');
+  const to = ny+'-'+String(nm).padStart(2,'0')+'-01';
+  return { from, to, ym };
+}
+
+// Helpers ─────────────────────────────────────────────────────────────────────
+function _inRange(dateStr, from, to){
+  if(!dateStr) return false;
+  return dateStr >= from && dateStr < to;
+}
+function _txsInRange(from, to){ return batchTxRecs.filter(t => _inRange(t.date, from, to)); }
+function _wastesInRange(from, to){ return wasteRecs.filter(w => _inRange(w.date, from, to)); }
+function _harvestsInRange(from, to){ return harvestRecs.filter(h => _inRange(h.date, from, to)); }
+function _postDrysInRange(from, to){ return postDryRecs.filter(p => _inRange(p.date, from, to)); }
+function _isSeedsBatch(batchId){
+  const b = batchRecs.find(r => r.batchId === batchId && !r.type);
+  return b && (b.geneticsSource||'').toLowerCase() === 'seeds';
+}
+function _isMomBatch(batchId){ return typeof isMotherBatch === 'function' ? isMotherBatch(batchId) : false; }
+function _isExternalCloneBatch(batchId){
+  const b = batchRecs.find(r => r.batchId === batchId && !r.type);
+  return b && (b.geneticsSource||'').toLowerCase() === 'clones-external';
+}
+function fmt(n){ if(n == null || isNaN(n)) return '—'; return Math.round(n).toString(); }
+function fmtKg3(n){ if(n == null || isNaN(n)) return '—'; return (Math.round(n*1000)/1000).toFixed(3)+' kg'; }
+function fmtKgOrDash(n){ return (!n || n === 0) ? '—' : fmtKg3(n); }
+
+// SECTION 1 — Seeds
+// "Bought seeds" = total Produced/Received quantity on batches with geneticsSource='Seeds' in the month.
+// Other Seeds metrics need new tracking — flagged in the Gaps list.
+function ctlsSeedsMetrics(from, to){
+  const txs = _txsInRange(from, to);
+  const bought = txs
+    .filter(t => t.txType === 'Produced/Received' && _isSeedsBatch(t.batchId))
+    .reduce((s,t) => s + (parseInt(t.qty)||0), 0);
+  // Destroyed-seed tx (auto-created from Vegetative Waste on Seeds-genetics batches)
+  const destroyed = txs
+    .filter(t => t.txType === 'Destroyed' && _isSeedsBatch(t.batchId))
+    .reduce((s,t) => s + (parseInt(t.qty)||0), 0);
+  return {
+    bought,
+    germinated: null,        // gap — no separate "germinated" event today
+    notGerminated: null,     // gap
+    sold: null,              // gap — Sold tx is dry-flower-flagged today
+    destroyed
+  };
+}
+
+// SECTION 2 — Veg Plants & Clones (non-mother batches in Clones/Veg phase OR mother batches)
+// Produced, Brought-in-external, Moved-to-Moms, Destroyed, Sold, Sent-to-lab metrics.
+function ctlsVegMetrics(from, to){
+  const txs = _txsInRange(from, to);
+  // "How many produced" = Produced/Received qty on non-Seeds batches in the month
+  const produced = txs
+    .filter(t => t.txType === 'Produced/Received' && !_isSeedsBatch(t.batchId))
+    .reduce((s,t) => s + (parseInt(t.qty)||0), 0);
+  // "Brought in from other producer" — Produced/Received qty where the destination batch's
+  // geneticsSource is 'Clones-External' AND this is the FIRST Produced/Received for that batch
+  // (subsequent P/R on the same batch would be cuttings from this batch, not new external imports).
+  let broughtInExternal = 0;
+  batchRecs.forEach(b => {
+    if(!b || b.type) return;
+    if(!_isExternalCloneBatch(b.batchId)) return;
+    const firstPR = batchTxRecs
+      .filter(t => t.batchId === b.batchId && t.txType === 'Produced/Received')
+      .sort((a,c) => (a.date||'').localeCompare(c.date||'') || (a.id||0)-(c.id||0))[0];
+    if(firstPR && _inRange(firstPR.date, from, to)) broughtInExternal += (parseInt(firstPR.qty)||0);
+  });
+  // Moved to Moms — straight tx count.
+  const movedToMoms = txs
+    .filter(t => t.txType === 'Moved to Moms')
+    .reduce((s,t) => s + (parseInt(t.qty)||0), 0);
+  // Destroyed (across all phases — split out flower destroys in Section 3 below).
+  const destroyedAll = txs
+    .filter(t => t.txType === 'Destroyed')
+    .reduce((s,t) => s + (parseInt(t.qty)||0), 0);
+  // Destroyed specifically in Veg/Clone phase — read from the destroy tx's plantPhase.
+  const destroyedVeg = txs
+    .filter(t => t.txType === 'Destroyed' && ['Clones','Veg','Seeds'].includes(t.plantPhase||''))
+    .reduce((s,t) => s + (parseInt(t.qty)||0), 0);
+  // Waste records for cross-reference (the destroy txs are auto-created from these).
+  const vegWastes = _wastesInRange(from, to).filter(w => (w.type||'') === 'Vegetative Waste');
+  const vegWasteCount = vegWastes.length;
+  // Sold clones — Sold tx where source batch's plantPhase at time of sale isn't Drying/Packaged.
+  // We don't reliably track that today; show — for v1.
+  return {
+    produced,
+    broughtInExternal,
+    movedToMoms,
+    movedFromMoms: movedToMoms, // every Moved-to-Moms decrements from a source; same count from the other side
+    destroyedVeg,
+    destroyedAll,
+    vegWasteCount,
+    sold: null,           // gap — Sold workflow is dry-flower-only today
+    sentToLab: null,      // gap — no Sent-to-Lab tx type yet
+    leafTestingWeight: null // gap
+  };
+}
+
+// SECTION 3 — Whole Cannabis Plants (Flowering)
+function ctlsFlowerMetrics(from, to){
+  const txs = _txsInRange(from, to);
+  // Flipped to Flower during the month = Phase Change tx where toPhase=Flower (Veg→Flower).
+  // For non-mom batches we also detect this from batchRec.flowerStart falling in range.
+  const flippedToFlowerThisMonth = batchRecs.reduce((sum, b) => {
+    if(!b || b.type) return sum;
+    if(!b.flowerStart || !_inRange(b.flowerStart, from, to)) return sum;
+    // Count plants in the batch at the time of flowering — best proxy is the total qty over
+    // its lifetime, but for now use plants flipped today (calcBatchQty as of flowerStart).
+    const qtyAtFlip = batchTxRecs
+      .filter(t => t.batchId === b.batchId && t.date <= b.flowerStart && t.txType === 'Produced/Received')
+      .reduce((s,t) => s + (parseInt(t.qty)||0), 0)
+      - batchTxRecs
+        .filter(t => t.batchId === b.batchId && t.date <= b.flowerStart && !['Produced/Received','Sold','Phase Advance','Phase Change'].includes(t.txType||''))
+        .reduce((s,t) => s + (parseInt(t.qty)||0), 0);
+    return sum + Math.max(0, qtyAtFlip);
+  }, 0);
+  // Already in flower from previous month = sum across batches whose flowerStart < from
+  // and harvestDate >= from (still flowering at start of month).
+  const alreadyInFlower = batchRecs.reduce((sum, b) => {
+    if(!b || b.type) return sum;
+    if(!b.flowerStart) return sum;
+    if(b.flowerStart >= from) return sum;
+    if(b.harvestDate && b.harvestDate < from) return sum; // already harvested before this month
+    // Snapshot of plants at the start of this month
+    const sortedTxs = batchTxRecs
+      .filter(t => t.batchId === b.batchId && (t.date||'') < from)
+      .sort((a,c) => (a.date||'').localeCompare(c.date||''));
+    let qty = 0;
+    sortedTxs.forEach(t => {
+      const q = parseInt(t.qty)||0;
+      if(t.txType === 'Sold' || t.txType === 'Phase Advance' || t.txType === 'Phase Change') return;
+      if(t.txType === 'Produced/Received') qty += q; else qty -= q;
+    });
+    return sum + Math.max(0, qty);
+  }, 0);
+  // Destroyed during flower = Destroyed tx where plantPhase=Flower OR room is a flower room.
+  const destroyedFlower = txs
+    .filter(t => t.txType === 'Destroyed' && ((t.plantPhase||'') === 'Flower' || /Flower/i.test(t.room||'')))
+    .reduce((s,t) => s + (parseInt(t.qty)||0), 0);
+  // Harvested = sum of Harvested tx qty in the month.
+  const harvested = txs
+    .filter(t => t.txType === 'Harvested')
+    .reduce((s,t) => s + (parseInt(t.qty)||0), 0);
+  return { flippedToFlowerThisMonth, alreadyInFlower, destroyedFlower, harvested };
+}
+
+// SECTION 4 — Fresh Cannabis (wet) weights
+function ctlsFreshMetrics(from, to){
+  const harvests = _harvestsInRange(from, to);
+  // Total harvested weight (wet) = sum of net weights on Harvest Log records in the month.
+  const wetTotal = harvests.reduce((s,h) => s + (parseFloat(h.netWeight)||0), 0);
+  // Post-drying total — sum of net container weights in the month.
+  const postDryTotal = _postDrysInRange(from, to).reduce((s,p) => s + (parseFloat(p.netWeight)||0), 0);
+  // Loss on drying — difference between wet and post-dry. Negative-or-positive depending on data.
+  const lossOnDrying = (wetTotal && postDryTotal) ? (wetTotal - postDryTotal) : null;
+  return {
+    wetTotal,
+    postDryTotal,
+    postDryIncludesSamples: null, // gap — no separation
+    lossOnDrying,
+    soldFreshToProcessor: null    // gap — no Sold-Fresh distinction yet
+  };
+}
+
+// SECTION 5 — Dry Cannabis (weights only)
+function ctlsDryMetrics(from, to){
+  // Bill of lading / Quantity Sold = sum of weight on Sold tx in the month.
+  const soldWeight = _txsInRange(from, to)
+    .filter(t => t.txType === 'Sold')
+    .reduce((s,t) => s + (parseFloat(t.weight)||0), 0);
+  // Dry Waste = sum of Weight (kg) on Waste records where Waste Type = Dry Waste in the month.
+  const dryWasteWeight = _wastesInRange(from, to)
+    .filter(w => (w.type||'') === 'Dry Waste')
+    .reduce((s,w) => s + (parseFloat(w.weight)||0), 0);
+  // Loss on drying (same as Section 4) for cross-reference.
+  const fresh = ctlsFreshMetrics(from, to);
+  return {
+    retentionSampleWeight: null, // gap
+    testingSampleWeight: null,   // gap
+    processorSampleWeight: null, // gap
+    soldWeight,
+    dryWasteWeight,
+    lossOnDrying: fresh.lossOnDrying
+  };
+}
+
+// Build a single-section block: title + a 2-column key/value table.
+function _ctlsBlock(title, rows){
+  let html = '<div style="border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:14px;background:#fff;">';
+  html += '<div style="font-size:12px;font-weight:700;color:var(--green);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:10px;border-bottom:1px solid var(--border);padding-bottom:6px;">'+title+'</div>';
+  html += '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
+  rows.forEach(r => {
+    const isGap = r.value === '—' && r.gap;
+    html += '<tr style="border-top:1px solid var(--bg2);">'
+         +    '<td style="padding:6px 8px;color:var(--text2);width:65%;">'+r.label+(r.note?' <span style="font-size:10px;color:var(--text3);">'+r.note+'</span>':'')+'</td>'
+         +    '<td style="padding:6px 8px;font-family:var(--mono);font-weight:600;color:'+(isGap?'var(--text3)':'var(--text)')+';text-align:right;">'+r.value+(isGap?' <span style="font-size:9px;color:var(--amber);font-weight:400;text-transform:uppercase;">gap</span>':'')+'</td>'
+         + '</tr>';
+  });
+  html += '</table></div>';
+  return html;
+}
+
+// Main entry — called by the Generate Report button. Reads the month picker, computes all
+// 5 sections, renders into #ctls-report-output. Also lists every gap at the bottom so the
+// user can see what tracking still needs adding.
+function ctlsGenerateReport(){
+  const ymEl = document.getElementById('ctls-month');
+  const ym = ymEl ? ymEl.value : '';
+  const out = document.getElementById('ctls-report-output');
+  if(!out) return;
+  const range = ctlsMonthRange(ym);
+  if(!range){
+    out.innerHTML = '<div style="padding:14px;background:var(--amber-pale);color:var(--amber);border-radius:8px;font-size:13px;">Pick a reporting month first.</div>';
+    return;
+  }
+  const { from, to } = range;
+  const seeds  = ctlsSeedsMetrics(from, to);
+  const veg    = ctlsVegMetrics(from, to);
+  const flower = ctlsFlowerMetrics(from, to);
+  const fresh  = ctlsFreshMetrics(from, to);
+  const dry    = ctlsDryMetrics(from, to);
+  const gaps = []; // collected as we render; shown at the bottom
+  function v(val, suffix, isGap, gapLabel){
+    if(val == null || val === ''){
+      if(isGap && gapLabel) gaps.push(gapLabel);
+      return '—';
+    }
+    if(typeof val === 'number') return (suffix === 'kg') ? fmtKg3(val) : fmt(val) + (suffix?(' '+suffix):'');
+    return val;
+  }
+  let html = '';
+  // Header
+  const monthLabel = new Date(range.from+'T00:00:00').toLocaleString(undefined, {month:'long', year:'numeric'});
+  html += '<div style="background:var(--green);color:#fff;padding:12px 16px;border-radius:8px;margin-bottom:14px;">'
+       +    '<div style="font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;">Golden Peak Cannabis Inc. — CTLS Monthly Report</div>'
+       +    '<div style="font-size:18px;font-weight:700;margin-top:2px;">'+monthLabel+'</div>'
+       +    '<div style="font-size:11px;opacity:0.85;margin-top:4px;font-family:var(--mono);">Period: '+range.from+' to '+range.to+' (exclusive). Generated '+localDate()+'.</div>'
+       + '</div>';
+
+  // Section 1 — Seeds
+  html += _ctlsBlock('1. Seeds', [
+    {label:'Bought seeds', note:'count', value: v(seeds.bought, 'seeds')},
+    {label:'Quantity germinated', value: v(seeds.germinated, 'seeds', true, 'Seeds — germinated count (no germination event in app)'), gap:true},
+    {label:'Quantity not germinated', value: v(seeds.notGerminated, 'seeds', true, 'Seeds — not germinated count'), gap:true},
+    {label:'Seeds sold', value: v(seeds.sold, 'seeds', true, 'Seeds — sold (no seed-sales tx type)'), gap:true},
+    {label:'Seeds destroyed', value: v(seeds.destroyed, 'seeds')}
+  ]);
+
+  // Section 2 — Veg & Clones
+  html += _ctlsBlock('2. Veg Plants &amp; Clones', [
+    {label:'Quantity produced (in-house cuttings + new Veg/Clone batches)', value: v(veg.produced, 'plants')},
+    {label:'Brought in from other producer (Clones-External)', value: v(veg.broughtInExternal, 'plants')},
+    {label:'Moved to Moms', value: v(veg.movedToMoms, 'plants')},
+    {label:'Moved from Moms (= count above, taken from mom source)', value: v(veg.movedFromMoms, 'plants')},
+    {label:'Destroyed in Veg/Clone phase', value: v(veg.destroyedVeg, 'plants')},
+    {label:'Destroyed (all phases — cross-check vs Section 3)', value: v(veg.destroyedAll, 'plants')},
+    {label:'Vegetative Waste records in the month', value: v(veg.vegWasteCount, 'records')},
+    {label:'Sold (clones/Veg)', value: v(veg.sold, 'plants', true, 'Veg/Clone — sold (Sold tx is dry-flower-only today)'), gap:true},
+    {label:'Sent to lab / testing (R&amp;D)', value: v(veg.sentToLab, 'plants', true, 'Veg/Clone — sent to lab (no Sent-to-Lab tx type)'), gap:true},
+    {label:'Weight of leaf material sent to labs', value: v(veg.leafTestingWeight, 'kg', true, 'Veg/Clone — leaf-testing weight'), gap:true}
+  ]);
+
+  // Section 3 — Whole Plant (Flower)
+  html += _ctlsBlock('3. Whole Cannabis Plants (Flowering)', [
+    {label:'Flipped to Flower during the month', note:'across all batches', value: v(flower.flippedToFlowerThisMonth, 'plants')},
+    {label:'Already in Flower from previous month', note:'snapshot as of '+range.from, value: v(flower.alreadyInFlower, 'plants')},
+    {label:'Destroyed/died during flowering', value: v(flower.destroyedFlower, 'plants')},
+    {label:'Harvested / processed', note:'consolidated Harvested tx', value: v(flower.harvested, 'plants')}
+  ]);
+
+  // Section 4 — Fresh Cannabis (wet)
+  html += _ctlsBlock('4. Fresh Cannabis (wet)', [
+    {label:'Total harvested weight (wet)', note:'sum of Harvest Log net weights', value: v(fresh.wetTotal, 'kg')},
+    {label:'Post-drying weight (includes retention + COA samples)', value: v(fresh.postDryTotal, 'kg')},
+    {label:'Sample weights inside post-drying', value: v(fresh.postDryIncludesSamples, 'kg', true, 'Fresh — sample weight separation in post-dry'), gap:true},
+    {label:'Loss on drying (wet − post-dry)', value: v(fresh.lossOnDrying, 'kg')},
+    {label:'Fresh cannabis sold to processor', value: v(fresh.soldFreshToProcessor, 'kg', true, 'Fresh — sold-to-processor (no Fresh vs Dry sale distinction)'), gap:true}
+  ]);
+
+  // Section 5 — Dry Cannabis (weights)
+  html += _ctlsBlock('5. Dry Cannabis (weights)', [
+    {label:'Retention sample weight', value: v(dry.retentionSampleWeight, 'kg', true, 'Dry — retention sample weight'), gap:true},
+    {label:'Weight sent for testing samples', value: v(dry.testingSampleWeight, 'kg', true, 'Dry — testing sample weight'), gap:true},
+    {label:'Weight of dried flower sent to processor for samples', value: v(dry.processorSampleWeight, 'kg', true, 'Dry — processor sample weight'), gap:true},
+    {label:'Bill of lading / Quantity Sold', note:'sum of Sold tx weight in month', value: v(dry.soldWeight, 'kg')},
+    {label:'Weight of cannabis destroyed (Dry Waste)', value: v(dry.dryWasteWeight, 'kg')},
+    {label:'Loss on drying (cross-ref)', value: v(dry.lossOnDrying, 'kg')}
+  ]);
+
+  // Gaps footer
+  if(gaps.length){
+    html += '<div style="border:1px solid var(--amber);background:var(--amber-pale);border-radius:8px;padding:12px 16px;margin-bottom:14px;">'
+         +    '<div style="font-size:12px;font-weight:700;color:#3B2A00;font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">Tracking gaps — '+gaps.length+' metric'+(gaps.length===1?'':'s')+' need new data sources</div>'
+         +    '<ul style="margin:6px 0 0 18px;padding:0;font-size:12px;color:#3B2A00;line-height:1.6;">'
+         +      gaps.map(g => '<li>'+g+'</li>').join('')
+         +    '</ul>'
+         + '</div>';
+  }
+
+  // Print button
+  html += '<div class="report-no-print" style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px;">'
+       +    '<button class="btn-secondary" onclick="window.print()">Print / Save as PDF</button>'
+       + '</div>';
+
+  out.innerHTML = html;
+}</script>
 </body>
 </html>
