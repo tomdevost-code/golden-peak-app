@@ -541,6 +541,64 @@ tr:last-child td { border-bottom: none; }
       </div>
     </div>
 
+    <!-- SEEDS INVENTORY -->
+    <div class="page" id="page-seeds" data-section="cultivation">
+      <div class="section">
+        <div class="section-label" id="seed-form-label">Add Seed Strain</div>
+        <div class="card">
+          <div class="g2" style="margin-bottom:10px;">
+            <div class="field"><label>Strain Name <span style="color:var(--red);font-weight:700;">*</span></label>
+              <input type="text" id="seed-strain" placeholder="e.g. Sour Patch" />
+            </div>
+            <div class="field"><label>Source / Breeder</label>
+              <input type="text" id="seed-source" placeholder="e.g. Humboldt Seed Co" />
+            </div>
+          </div>
+          <div class="g2" style="margin-bottom:10px;">
+            <div class="field"><label>Quantity On Hand <span style="color:var(--red);font-weight:700;">*</span></label>
+              <input type="number" id="seed-qty" min="0" step="1" placeholder="0" />
+            </div>
+            <div class="field"><label>Date Received</label>
+              <input type="date" id="seed-date" />
+            </div>
+          </div>
+          <div class="g2" style="margin-bottom:10px;">
+            <div class="field"><label>Strain Type</label>
+              <select id="seed-type">
+                <option value="">— select —</option>
+                <option>Indica</option>
+                <option>Sativa</option>
+                <option>Hybrid</option>
+                <option>Auto-flower</option>
+                <option>Ruderalis</option>
+              </select>
+            </div>
+            <div class="field"><label>Lot / Batch Number</label>
+              <input type="text" id="seed-lot" placeholder="optional" />
+            </div>
+          </div>
+          <div class="field" style="margin-bottom:12px;"><label>Notes</label>
+            <textarea id="seed-notes" rows="2" placeholder="Optional notes about this strain..." style="width:100%;font-size:14px;font-family:var(--sans);border-radius:var(--radius-sm);border:1px solid var(--border);padding:8px 10px;background:var(--bg);color:var(--text);outline:none;resize:vertical;"></textarea>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn-save" id="seed-save-btn" onclick="seedInvSave()" style="flex:1;">Save to Inventory</button>
+            <button class="btn-secondary" id="seed-cancel-btn" onclick="seedInvCancelEdit()" style="display:none;">Cancel Edit</button>
+          </div>
+          <input type="hidden" id="seed-edit-id" value="" />
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-label" style="display:flex;justify-content:space-between;align-items:center;">
+          <span>Current Inventory</span>
+          <span id="seed-inv-total" style="font-family:var(--mono);font-size:11px;color:var(--text2);"></span>
+        </div>
+        <div class="card" style="padding:0;overflow:hidden;">
+          <div id="seed-inv-list" style="padding:14px;font-size:13px;color:var(--text3);text-align:center;">No seed strains in inventory yet.</div>
+        </div>
+      </div>
+    </div>
+
     <!-- BATCH LOG -->
     <div class="page" id="page-batch">
       <!-- Active Batches List (top) -->
@@ -615,6 +673,22 @@ tr:last-child td { border-bottom: none; }
         <div class="field" id="batch-external-wrap" style="display:none;margin-bottom:10px;">
           <label>External Clone Company</label>
           <input type="text" id="batch-external-company" placeholder="Company name" disabled style="background:var(--bg2);color:var(--text3);cursor:not-allowed;" />
+        </div>
+
+        <!-- Seed strain picker (shows only when Genetics Source = Seeds). Picks from Seed
+             Inventory with qty > 0. Saving the batch decrements that strain's qty by the
+             Quantity to Plant value. -->
+        <div class="field" id="batch-seedinv-wrap" style="display:none;margin-bottom:10px;">
+          <label>Seed Strain <span style="color:var(--red);font-weight:700;">*</span> <span style="font-size:10px;color:var(--text3);font-weight:400;">— pulled from Seeds Inventory</span></label>
+          <select id="batch-seedinv" onchange="batchSeedInvChanged()">
+            <option value="">-- select strain --</option>
+          </select>
+          <div id="batch-seedinv-msg" style="font-size:11px;color:var(--text3);margin-top:4px;"></div>
+        </div>
+        <div class="field" id="batch-seedqty-wrap" style="display:none;margin-bottom:10px;">
+          <label>Quantity to Plant <span style="color:var(--red);font-weight:700;">*</span></label>
+          <input type="number" id="batch-seedqty" min="1" step="1" placeholder="0" oninput="batchSeedInvChanged()" />
+          <div id="batch-seedqty-msg" style="font-size:11px;color:var(--text3);margin-top:4px;"></div>
         </div>
 
         <!-- Notes -->
@@ -1360,6 +1434,7 @@ tr:last-child td { border-bottom: none; }
         <div class="sfield"><label>Batch Cleaning Log Table ID <span style="font-size:10px;color:var(--text3);font-weight:400;">(Sanitation)</span></label><input type="text" id="s-sanclean" placeholder="tblXXXXXXXXXXXXXX" /></div>
         <div class="sfield"><label>Tool Cleaning Log Table ID <span style="font-size:10px;color:var(--text3);font-weight:400;">(Sanitation)</span></label><input type="text" id="s-santool" placeholder="tblXXXXXXXXXXXXXX" /></div>
         <div class="sfield"><label>Sanitation Task Edits Table ID <span style="font-size:10px;color:var(--text3);font-weight:400;">(Sanitation — task list edits)</span></label><input type="text" id="s-sanedits" placeholder="tblXXXXXXXXXXXXXX" /></div>
+        <div class="sfield"><label>Seed Inventory Table ID <span style="font-size:10px;color:var(--text3);font-weight:400;">(Cultivation — seed strains)</span></label><input type="text" id="s-seedinv" placeholder="tblXXXXXXXXXXXXXX" /></div>
         <button class="btn-save" onclick="saveSettings()">Save and Test Connection</button>
         <div class="conn-status" id="conn-status"></div>
         <div style="margin-top:14px;padding-top:12px;border-top:1px dashed var(--border);">
@@ -1535,6 +1610,10 @@ tr:last-child td { border-bottom: none; }
   </div>
 
   <nav class="bottom-nav" id="nav-cultivation">
+    <button class="bnav-btn" id="bn-seeds" onclick="switchPage('seeds',this)">
+      <svg viewBox="0 0 24 24"><path d="M12 22V12M12 12c0-5.5 4-8 8-8 0 5.5-4 8-8 8zM12 12c0-5.5-4-8-8-8 0 5.5 4 8 8 8z"/></svg>
+      Seeds
+    </button>
     <button class="bnav-btn" id="bn-batch" onclick="switchPage('batch',this)">
       <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
       Batches
@@ -1600,7 +1679,7 @@ tr:last-child td { border-bottom: none; }
 <script>
 const EC_LO=2.2,EC_HI=2.3,PH_EC_LO=6.2,PH_EC_HI=6.3;
 const RO_PH_LO=6.0,RO_PH_HI=6.5,RO_VAR_LO=0.3,RO_VAR_HI=0.5,RO_VAR_ALERT=1.0;
-let ecRecs=[],roRecs=[],wasteRecs=[],batchRecs=[],batchTxRecs=[],harvestRecs=[],postDryRecs=[],bioRecs=[],pestRecs=[],sanCleanRecs=[],sanToolRecs=[],sanEditsRecs=[],cfg={token:'',base:'',ecTbl:'',roTbl:'',wasteTbl:'',batchTbl:'',batchtxTbl:'',harvestTbl:'',postDryTbl:'',bioTbl:'',pestTbl:'',sanCleanTbl:'',sanToolTbl:'',sanEditsTbl:''};
+let ecRecs=[],roRecs=[],wasteRecs=[],batchRecs=[],batchTxRecs=[],harvestRecs=[],postDryRecs=[],bioRecs=[],pestRecs=[],sanCleanRecs=[],sanToolRecs=[],sanEditsRecs=[],seedInvRecs=[],cfg={token:'',base:'',ecTbl:'',roTbl:'',wasteTbl:'',batchTbl:'',batchtxTbl:'',harvestTbl:'',postDryTbl:'',bioTbl:'',pestTbl:'',sanCleanTbl:'',sanToolTbl:'',sanEditsTbl:'',seedInvTbl:''};
 
 // ── SANITATION ──────────────────────────────────────────────────────────────
 // Section toggle: 'cultivation' or 'sanitation'. Drives which pages are visible and which
@@ -1709,7 +1788,7 @@ function sanGetTasks(template, phase){
 
 function lsGet(k){try{return JSON.parse(localStorage.getItem(k)||'null');}catch(e){return null;}}
 function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
-function loadAll(){ecRecs=lsGet('gp-ec')||[];roRecs=lsGet('gp-ro')||[];wasteRecs=lsGet('gp-waste')||[];batchRecs=lsGet('gp-batch')||[];batchTxRecs=lsGet('gp-batchtx')||[];harvestRecs=lsGet('gp-harvest')||[];postDryRecs=lsGet('gp-postdry')||[];bioRecs=lsGet('gp-bio')||[];pestRecs=lsGet('gp-pest')||[];sanCleanRecs=lsGet('gp-sanclean')||[];sanToolRecs=lsGet('gp-santool')||[];sanEditsRecs=lsGet('gp-sanedits')||[];migrateSanTaskEditsToRecs();wasteRecs.forEach(r=>{if(r.type==='Vegetative waste')r.type='Vegetative Waste';});lsSet('gp-waste',wasteRecs);const s=lsGet('gp-cfg');if(s){cfg=s;applySettings();}dedupeBatchRecs();backfillHarvestedTxs();reconcileAllPackagedBatches();}
+function loadAll(){ecRecs=lsGet('gp-ec')||[];roRecs=lsGet('gp-ro')||[];wasteRecs=lsGet('gp-waste')||[];batchRecs=lsGet('gp-batch')||[];batchTxRecs=lsGet('gp-batchtx')||[];harvestRecs=lsGet('gp-harvest')||[];postDryRecs=lsGet('gp-postdry')||[];bioRecs=lsGet('gp-bio')||[];pestRecs=lsGet('gp-pest')||[];sanCleanRecs=lsGet('gp-sanclean')||[];sanToolRecs=lsGet('gp-santool')||[];sanEditsRecs=lsGet('gp-sanedits')||[];seedInvRecs=lsGet('gp-seedinv')||[];migrateSanTaskEditsToRecs();wasteRecs.forEach(r=>{if(r.type==='Vegetative waste')r.type='Vegetative Waste';});lsSet('gp-waste',wasteRecs);const s=lsGet('gp-cfg');if(s){cfg=s;applySettings();}dedupeBatchRecs();backfillHarvestedTxs();reconcileAllPackagedBatches();}
 
 // One-time migration of the previous gp-san-task-edits localStorage shape into the new
 // synced sanEditsRecs array. Runs on every boot but only does work the first time.
@@ -2153,6 +2232,23 @@ const REMOTE_MAPPERS = {
       removed, renamed, added,
       synced: true
     };
+  },
+  seedinv(rec){
+    const f = rec.fields || {};
+    const strain = (f['Strain']||'').toString().trim();
+    if(!strain) return null;
+    return {
+      id: 'si_'+rec.id,
+      airtableId: rec.id,
+      strain,
+      source: f['Source']||'',
+      qtyOnHand: parseInt(f['Quantity On Hand'])||0,
+      dateReceived: f['Date Received']||'',
+      strainType: f['Strain Type']||'',
+      lotNumber: f['Lot Number']||'',
+      notes: f['Notes']||'',
+      synced: true
+    };
   }
 };
 
@@ -2306,6 +2402,11 @@ const NAT_KEY_FN = {
     if(!r) return '';
     // One row per template — Template alone is the natural key.
     return (r.template||'').toString();
+  },
+  seedinv(r){
+    if(!r) return '';
+    // One row per strain — Strain alone is the natural key (case-insensitive).
+    return (r.strain||'').toString().toLowerCase();
   }
 };
 function mergeRemote(localArr, remoteRecs, mapper, ctx, table, lsKey){
@@ -2421,6 +2522,37 @@ function mergeRemote(localArr, remoteRecs, mapper, ctx, table, lsKey){
   return {added, updated, conflicts, skippedDupes};
 }
 
+// Custom merge for Seed Inventory — one row per strain (case-insensitive). Synced locals
+// are overlaid with remote; dirty locals keep their changes for the next push.
+function mergeRemoteSeedInv(remoteRecs){
+  let added = 0, updated = 0, conflicts = 0;
+  const byStrain = {};
+  seedInvRecs.forEach((r, i) => { if(r && r.strain) byStrain[r.strain.toLowerCase()] = i; });
+  remoteRecs.forEach(rr => {
+    const mapped = REMOTE_MAPPERS.seedinv(rr);
+    if(!mapped) return;
+    const idx = byStrain[mapped.strain.toLowerCase()];
+    if(idx === undefined){
+      mapped.id = Date.now() + Math.floor(Math.random()*10000);
+      seedInvRecs.push(mapped);
+      byStrain[mapped.strain.toLowerCase()] = seedInvRecs.length - 1;
+      added++;
+    } else {
+      const local = seedInvRecs[idx];
+      if(local.synced === false){
+        if(!local.airtableId) local.airtableId = mapped.airtableId;
+        conflicts++;
+      } else {
+        seedInvRecs[idx] = Object.assign({}, mapped, { id: local.id });
+        updated++;
+      }
+    }
+  });
+  lsSet('gp-seedinv', seedInvRecs);
+  try { if(typeof seedInvRenderList === 'function') seedInvRenderList(); } catch(_) {}
+  return { added, updated, conflicts };
+}
+
 // Custom merge for the Sanitation Task Edits table. One row per template — when remote
 // matches a synced local row by template name we overlay; if local is dirty (synced:false)
 // we keep local (it will be pushed on the next sync). New remote templates are appended.
@@ -2471,7 +2603,7 @@ async function pullFromAirtable(opts){
   isPulling = true;
   if(opts.manual) setSyncPill('ing','Syncing…');
   try {
-    const [batches, ecs, ros, ws, txs, hs, pds, bs, ps, scs, sts, sed] = await Promise.all([
+    const [batches, ecs, ros, ws, txs, hs, pds, bs, ps, scs, sts, sed, siv] = await Promise.all([
       atFetchAll(cfg.batchTbl),
       atFetchAll(cfg.ecTbl),
       atFetchAll(cfg.roTbl),
@@ -2483,7 +2615,8 @@ async function pullFromAirtable(opts){
       atFetchAll(cfg.pestTbl),
       atFetchAll(cfg.sanCleanTbl),
       atFetchAll(cfg.sanToolTbl),
-      atFetchAll(cfg.sanEditsTbl)
+      atFetchAll(cfg.sanEditsTbl),
+      atFetchAll(cfg.seedInvTbl)
     ]);
     // Resolve linked-record refs by building recordId→Batch-ID-string lookup
     const batchIdByRecId = {};
@@ -2511,6 +2644,8 @@ async function pullFromAirtable(opts){
     // Sanitation Task Edits — one row per template. Custom merge (upsert by template) since
     // the row is config, not a logged event. Remote always wins for synced local rows.
     summary.sanedits = mergeRemoteSanEdits(sed);
+    // Seed Inventory — custom merge similar to sanedits since it's keyed on Strain.
+    summary.seedinv = mergeRemoteSeedInv(siv);
     // Sweep the conflict queue — drop any entries whose local row no longer
     // matches the remote (could happen if mergeRemote just repaired a stale
     // airtableId link, or if the local was deleted out from under us).
@@ -3405,7 +3540,7 @@ function setAvg(id,val,lo,hi){const el=document.getElementById(id);if(val===null
 function stageLabel(r){if(!r.stage||!r.day)return'<span style="color:var(--text3)">-</span>';return r.stage==='flower'?'<span class="flower-txt">F'+r.day+'</span>':'<span class="veg-txt">V'+r.day+'</span>';}
 function toast(msg,dur){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),dur||2500);}
 
-function switchPage(page,btn){document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.bnav-btn').forEach(b=>b.classList.remove('active'));document.getElementById('page-'+page).classList.add('active');btn.classList.add('active');if(page==='report'){renderEC();renderRO();ctlsDefaultMonth();}if(page==='waste'){renderWaste();}if(page==='batch'){renderBatchLog();}if(page==='summary'){summaryPopulateBatches();}if(page==='harvest'){harvestPopulateBatches();harvestRefreshDate();harvestPopulateBinNumbers();}if(page==='postdry'){postDryPopulateBatches();postDrySetupChanged();}if(page==='bio'){bioRefreshDate();bioSeqUnlock();}if(page==='pest'){pestRefreshDate();pestPopulateBatches();pestSeqUnlock();}if(page==='sancleaning'){sanclEnter();}if(page==='santool'){santoolEnter();}
+function switchPage(page,btn){document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.bnav-btn').forEach(b=>b.classList.remove('active'));document.getElementById('page-'+page).classList.add('active');btn.classList.add('active');if(page==='report'){renderEC();renderRO();ctlsDefaultMonth();}if(page==='waste'){renderWaste();}if(page==='batch'){renderBatchLog();}if(page==='summary'){summaryPopulateBatches();}if(page==='harvest'){harvestPopulateBatches();harvestRefreshDate();harvestPopulateBinNumbers();}if(page==='postdry'){postDryPopulateBatches();postDrySetupChanged();}if(page==='bio'){bioRefreshDate();bioSeqUnlock();}if(page==='pest'){pestRefreshDate();pestPopulateBatches();pestSeqUnlock();}if(page==='sancleaning'){sanclEnter();}if(page==='santool'){santoolEnter();}if(page==='seeds'){seedInvEnter();}
   // Remember the last-page-visited per section so toggling sections returns the user to where they left off.
   if(page === 'settings') {
     // Settings is shared between sections — don't update per-section memory.
@@ -5738,7 +5873,7 @@ function roClear(){for(let i=1;i<=8;i++){document.getElementById('ro-ec-'+i).val
 
 // Pending badge
 function updatePendingBadge(){
-  const n=(ecRecs.filter(r=>!r.synced).length)+(roRecs.filter(r=>!r.synced).length)+(wasteRecs.filter(r=>!r.synced).length)+(batchRecs.filter(r=>!r.synced).length)+(batchTxRecs.filter(r=>!r.synced).length)+(harvestRecs.filter(r=>!r.synced).length)+(postDryRecs.filter(r=>!r.synced).length)+(bioRecs.filter(r=>!r.synced).length)+(pestRecs.filter(r=>!r.synced).length)+(sanCleanRecs.filter(r=>!r.synced).length)+(sanToolRecs.filter(r=>!r.synced).length)+(sanEditsRecs.filter(r=>!r.synced).length);
+  const n=(ecRecs.filter(r=>!r.synced).length)+(roRecs.filter(r=>!r.synced).length)+(wasteRecs.filter(r=>!r.synced).length)+(batchRecs.filter(r=>!r.synced).length)+(batchTxRecs.filter(r=>!r.synced).length)+(harvestRecs.filter(r=>!r.synced).length)+(postDryRecs.filter(r=>!r.synced).length)+(bioRecs.filter(r=>!r.synced).length)+(pestRecs.filter(r=>!r.synced).length)+(sanCleanRecs.filter(r=>!r.synced).length)+(sanToolRecs.filter(r=>!r.synced).length)+(sanEditsRecs.filter(r=>!r.synced).length)+(seedInvRecs.filter(r=>!r.synced).length);
   // Update the Settings badge — Settings only appears in the Cultivation bottom nav now.
   const b=document.getElementById('pending-badge');
   if(b){ if(n>0){b.textContent=n;b.style.display='block';}else{b.style.display='none';} }
@@ -5816,8 +5951,8 @@ function migrateRoomNames(){
 }
 function clearAllLocalData(){
   if(!confirm('This will permanently delete ALL local records including synced data, batch IDs, transactions, and dropdowns. This cannot be undone. Continue?'))return;
-  ecRecs=[];roRecs=[];wasteRecs=[];batchRecs=[];batchTxRecs=[];harvestRecs=[];postDryRecs=[];bioRecs=[];pestRecs=[];sanCleanRecs=[];sanToolRecs=[];sanEditsRecs=[];
-  lsSet('gp-ec',[]);lsSet('gp-ro',[]);lsSet('gp-waste',[]);lsSet('gp-batch',[]);lsSet('gp-batchtx',[]);lsSet('gp-harvest',[]);lsSet('gp-postdry',[]);lsSet('gp-bio',[]);lsSet('gp-pest',[]);lsSet('gp-sanclean',[]);lsSet('gp-santool',[]);lsSet('gp-sanedits',[]);
+  ecRecs=[];roRecs=[];wasteRecs=[];batchRecs=[];batchTxRecs=[];harvestRecs=[];postDryRecs=[];bioRecs=[];pestRecs=[];sanCleanRecs=[];sanToolRecs=[];sanEditsRecs=[];seedInvRecs=[];
+  lsSet('gp-ec',[]);lsSet('gp-ro',[]);lsSet('gp-waste',[]);lsSet('gp-batch',[]);lsSet('gp-batchtx',[]);lsSet('gp-harvest',[]);lsSet('gp-postdry',[]);lsSet('gp-bio',[]);lsSet('gp-pest',[]);lsSet('gp-sanclean',[]);lsSet('gp-santool',[]);lsSet('gp-sanedits',[]);lsSet('gp-seedinv',[]);
   populateBatchDropdowns();renderEC();renderRO();
   ecClear();roClear();
   summaryPopulateBatches();
@@ -5993,6 +6128,10 @@ const NAT_KEY_FN_REMOTE = {
   sanedits(rrec){
     const f = rrec.fields || {};
     return (f['Template']||'').toString();
+  },
+  seedinv(rrec){
+    const f = rrec.fields || {};
+    return (f['Strain']||'').toString().toLowerCase();
   }
 };
 
@@ -6057,7 +6196,8 @@ async function cleanAirtableDuplicateTx(){
     { label:'Pest ID',            tblId:cfg.pestTbl,    localArr:pestRecs,     remoteKeyFn:NAT_KEY_FN_REMOTE.pest },
     { label:'Batch Cleaning',     tblId:cfg.sanCleanTbl,localArr:sanCleanRecs, remoteKeyFn:NAT_KEY_FN_REMOTE.sanclean },
     { label:'Tool Cleaning',      tblId:cfg.sanToolTbl, localArr:sanToolRecs,  remoteKeyFn:NAT_KEY_FN_REMOTE.santool },
-    { label:'Task Edits',         tblId:cfg.sanEditsTbl,localArr:sanEditsRecs, remoteKeyFn:NAT_KEY_FN_REMOTE.sanedits }
+    { label:'Task Edits',         tblId:cfg.sanEditsTbl,localArr:sanEditsRecs, remoteKeyFn:NAT_KEY_FN_REMOTE.sanedits },
+    { label:'Seed Inventory',     tblId:cfg.seedInvTbl, localArr:seedInvRecs,  remoteKeyFn:NAT_KEY_FN_REMOTE.seedinv }
   ];
   setStatus('Scanning Airtable for duplicates across '+tables.length+' tables...', 'var(--text2)');
   // First pass: scan everything to find the total count.
@@ -6156,7 +6296,8 @@ function clearPendingRecords(){
   sanCleanRecs=sanCleanRecs.filter(r=>r.synced);
   sanToolRecs=sanToolRecs.filter(r=>r.synced);
   sanEditsRecs=sanEditsRecs.filter(r=>r.synced);
-  lsSet('gp-ec',ecRecs);lsSet('gp-ro',roRecs);lsSet('gp-waste',wasteRecs);lsSet('gp-batch',batchRecs);lsSet('gp-batchtx',batchTxRecs);lsSet('gp-harvest',harvestRecs);lsSet('gp-postdry',postDryRecs);lsSet('gp-bio',bioRecs);lsSet('gp-pest',pestRecs);lsSet('gp-sanclean',sanCleanRecs);lsSet('gp-santool',sanToolRecs);lsSet('gp-sanedits',sanEditsRecs);
+  seedInvRecs=seedInvRecs.filter(r=>r.synced);
+  lsSet('gp-ec',ecRecs);lsSet('gp-ro',roRecs);lsSet('gp-waste',wasteRecs);lsSet('gp-batch',batchRecs);lsSet('gp-batchtx',batchTxRecs);lsSet('gp-harvest',harvestRecs);lsSet('gp-postdry',postDryRecs);lsSet('gp-bio',bioRecs);lsSet('gp-pest',pestRecs);lsSet('gp-sanclean',sanCleanRecs);lsSet('gp-santool',sanToolRecs);lsSet('gp-sanedits',sanEditsRecs);lsSet('gp-seedinv',seedInvRecs);
   populateBatchDropdowns();renderEC();renderRO();
   summaryPopulateBatches();
   updatePendingBadge();
@@ -6180,7 +6321,8 @@ async function syncPending(){
   const pendingSanClean=sanCleanRecs.filter(r=>!r.synced);
   const pendingSanTool=sanToolRecs.filter(r=>!r.synced);
   const pendingSanEdits=sanEditsRecs.filter(r=>!r.synced);
-  const total=pendingEC.length+pendingRO.length+pendingWaste.length+pendingBatch.length+pendingBatchTx.length+pendingHarvest.length+pendingPostDry.length+pendingBio.length+pendingPest.length+pendingSanClean.length+pendingSanTool.length+pendingSanEdits.length;
+  const pendingSeedInv=seedInvRecs.filter(r=>!r.synced);
+  const total=pendingEC.length+pendingRO.length+pendingWaste.length+pendingBatch.length+pendingBatchTx.length+pendingHarvest.length+pendingPostDry.length+pendingBio.length+pendingPest.length+pendingSanClean.length+pendingSanTool.length+pendingSanEdits.length+pendingSeedInv.length;
   if(!total){st.style.display='block';st.style.background='var(--green-pale)';st.style.color='var(--green)';st.textContent='No pending records - everything is synced.';updatePendingBadge();return;}
   st.style.display='block';st.style.background='var(--bg2)';st.style.color='var(--text2)';st.textContent='Syncing '+total+' record(s)...';
   btn.disabled=true;setSyncPill('ing','Syncing...');
@@ -6336,14 +6478,26 @@ async function syncPending(){
     }
     lsSet('gp-sanedits',sanEditsRecs);
   }
+  if(cfg.seedInvTbl){
+    for(const r of pendingSeedInv){
+      try{
+        const f = buildSeedInvFields(r);
+        const siRes = await atUpsert(cfg.seedInvTbl, f, ['Strain']);
+        const _id = siRes && siRes.records && siRes.records[0] && siRes.records[0].id;
+        if(_id) r.airtableId = _id;
+        r.synced=true;ok++;
+      }catch(e){fail++;lastErr=e.message;}
+    }
+    lsSet('gp-seedinv',seedInvRecs);
+  }
   updatePendingBadge();
   btn.disabled=false;
   if(fail===0){setSyncPill('ok','Synced');st.style.background='var(--green-pale)';st.style.color='var(--green)';st.textContent='Done! '+ok+' record(s) synced to Airtable.';}
   else if(ok>0){setSyncPill('err','Partial sync');st.style.background='var(--amber-pale)';st.style.color='var(--amber)';st.textContent=ok+' synced, '+fail+' failed. Check connection and retry.';}
   else{setSyncPill('err','Sync failed');st.style.background='var(--red-pale)';st.style.color='var(--red)';st.textContent='Sync failed: '+(lastErr||'Check your Airtable connection.');}
 }
-function applySettings(){document.getElementById('s-token').value=cfg.token||'';document.getElementById('s-base').value=cfg.base||'';document.getElementById('s-ec').value=cfg.ecTbl||'';document.getElementById('s-ro').value=cfg.roTbl||'';document.getElementById('s-waste').value=cfg.wasteTbl||'';document.getElementById('s-batch').value=cfg.batchTbl||'';document.getElementById('s-batchtx').value=cfg.batchtxTbl||'';const sh=document.getElementById('s-harvest'); if(sh) sh.value=cfg.harvestTbl||'';const spd=document.getElementById('s-postdry'); if(spd) spd.value=cfg.postDryTbl||'';const sbio=document.getElementById('s-bio'); if(sbio) sbio.value=cfg.bioTbl||'';const spest=document.getElementById('s-pest'); if(spest) spest.value=cfg.pestTbl||'';const ssc=document.getElementById('s-sanclean'); if(ssc) ssc.value=cfg.sanCleanTbl||'';const sst=document.getElementById('s-santool'); if(sst) sst.value=cfg.sanToolTbl||'';const sse=document.getElementById('s-sanedits'); if(sse) sse.value=cfg.sanEditsTbl||'';setSyncPill(atReady()?'ok':'off',atReady()?'Airtable connected':'Not configured');}
-async function saveSettings(){cfg={token:document.getElementById('s-token').value.trim(),base:document.getElementById('s-base').value.trim(),ecTbl:document.getElementById('s-ec').value.trim(),roTbl:document.getElementById('s-ro').value.trim(),wasteTbl:document.getElementById('s-waste').value.trim(),batchTbl:document.getElementById('s-batch').value.trim(),batchtxTbl:document.getElementById('s-batchtx').value.trim(),harvestTbl:(document.getElementById('s-harvest')?.value||'').trim(),postDryTbl:(document.getElementById('s-postdry')?.value||'').trim(),bioTbl:(document.getElementById('s-bio')?.value||'').trim(),pestTbl:(document.getElementById('s-pest')?.value||'').trim(),sanCleanTbl:(document.getElementById('s-sanclean')?.value||'').trim(),sanToolTbl:(document.getElementById('s-santool')?.value||'').trim(),sanEditsTbl:(document.getElementById('s-sanedits')?.value||'').trim()};const st=document.getElementById('conn-status');st.style.display='block';st.style.background='var(--bg2)';st.style.color='var(--text2)';st.textContent='Testing connection...';if(!atReady()){st.textContent='Please fill in all fields.';st.style.background='var(--amber-pale)';st.style.color='var(--amber)';return;}try{const r=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+cfg.ecTbl+'?maxRecords=1',{headers:{'Authorization':'Bearer '+cfg.token}});if(r.ok){lsSet('gp-cfg',cfg);applySettings();st.textContent='Connected! Credentials saved.';st.style.background='var(--green-pale)';st.style.color='var(--green)';startAutoSync();}else{st.textContent='Failed ('+r.status+'). Check your credentials.';st.style.background='var(--red-pale)';st.style.color='var(--red)';}}catch(e){st.textContent='Could not reach Airtable. Check internet connection.';st.style.background='var(--red-pale)';st.style.color='var(--red)';}}
+function applySettings(){document.getElementById('s-token').value=cfg.token||'';document.getElementById('s-base').value=cfg.base||'';document.getElementById('s-ec').value=cfg.ecTbl||'';document.getElementById('s-ro').value=cfg.roTbl||'';document.getElementById('s-waste').value=cfg.wasteTbl||'';document.getElementById('s-batch').value=cfg.batchTbl||'';document.getElementById('s-batchtx').value=cfg.batchtxTbl||'';const sh=document.getElementById('s-harvest'); if(sh) sh.value=cfg.harvestTbl||'';const spd=document.getElementById('s-postdry'); if(spd) spd.value=cfg.postDryTbl||'';const sbio=document.getElementById('s-bio'); if(sbio) sbio.value=cfg.bioTbl||'';const spest=document.getElementById('s-pest'); if(spest) spest.value=cfg.pestTbl||'';const ssc=document.getElementById('s-sanclean'); if(ssc) ssc.value=cfg.sanCleanTbl||'';const sst=document.getElementById('s-santool'); if(sst) sst.value=cfg.sanToolTbl||'';const sse=document.getElementById('s-sanedits'); if(sse) sse.value=cfg.sanEditsTbl||'';const ssi=document.getElementById('s-seedinv'); if(ssi) ssi.value=cfg.seedInvTbl||'';setSyncPill(atReady()?'ok':'off',atReady()?'Airtable connected':'Not configured');}
+async function saveSettings(){cfg={token:document.getElementById('s-token').value.trim(),base:document.getElementById('s-base').value.trim(),ecTbl:document.getElementById('s-ec').value.trim(),roTbl:document.getElementById('s-ro').value.trim(),wasteTbl:document.getElementById('s-waste').value.trim(),batchTbl:document.getElementById('s-batch').value.trim(),batchtxTbl:document.getElementById('s-batchtx').value.trim(),harvestTbl:(document.getElementById('s-harvest')?.value||'').trim(),postDryTbl:(document.getElementById('s-postdry')?.value||'').trim(),bioTbl:(document.getElementById('s-bio')?.value||'').trim(),pestTbl:(document.getElementById('s-pest')?.value||'').trim(),sanCleanTbl:(document.getElementById('s-sanclean')?.value||'').trim(),sanToolTbl:(document.getElementById('s-santool')?.value||'').trim(),sanEditsTbl:(document.getElementById('s-sanedits')?.value||'').trim(),seedInvTbl:(document.getElementById('s-seedinv')?.value||'').trim()};const st=document.getElementById('conn-status');st.style.display='block';st.style.background='var(--bg2)';st.style.color='var(--text2)';st.textContent='Testing connection...';if(!atReady()){st.textContent='Please fill in all fields.';st.style.background='var(--amber-pale)';st.style.color='var(--amber)';return;}try{const r=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+cfg.ecTbl+'?maxRecords=1',{headers:{'Authorization':'Bearer '+cfg.token}});if(r.ok){lsSet('gp-cfg',cfg);applySettings();st.textContent='Connected! Credentials saved.';st.style.background='var(--green-pale)';st.style.color='var(--green)';startAutoSync();}else{st.textContent='Failed ('+r.status+'). Check your credentials.';st.style.background='var(--red-pale)';st.style.color='var(--red)';}}catch(e){st.textContent='Could not reach Airtable. Check internet connection.';st.style.background='var(--red-pale)';st.style.color='var(--red)';}}
 
 function localDate(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 const today=localDate();
@@ -6807,6 +6961,36 @@ function batchGeneticsChange(){
   const momMsg  = document.getElementById('batch-mother-msg');
   const momLbl  = document.getElementById('batch-mother-label');
   const momHint = document.getElementById('batch-mother-hint');
+  // Seed strain picker + Quantity to plant — only relevant when Genetics Source = Seeds.
+  const seedWrap = document.getElementById('batch-seedinv-wrap');
+  const seedSel  = document.getElementById('batch-seedinv');
+  const seedMsg  = document.getElementById('batch-seedinv-msg');
+  const seedQtyWrap = document.getElementById('batch-seedqty-wrap');
+  const seedQtyInp  = document.getElementById('batch-seedqty');
+  const seedQtyMsg  = document.getElementById('batch-seedqty-msg');
+  if(seedWrap && seedSel){
+    if(sel === 'Seeds'){
+      // Populate the dropdown with inventory entries that have qty > 0.
+      const eligible = seedInvRecs
+        .filter(r => (parseInt(r.qtyOnHand)||0) > 0)
+        .sort((a,b) => (a.strain||'').localeCompare(b.strain||''));
+      const cur = seedSel.value;
+      seedSel.innerHTML = '<option value="">-- select strain --</option>' +
+        eligible.map(r => '<option value="'+r.id+'"'+(String(r.id)===cur?' selected':'')+'>'+r.strain+' ('+r.qtyOnHand+' seeds available'+(r.source?' · '+r.source:'')+')</option>').join('');
+      seedWrap.style.display='';
+      if(seedMsg){
+        if(!eligible.length) { seedMsg.style.color = 'var(--red)'; seedMsg.textContent = 'No seed strains with stock on hand. Add to inventory on the Seeds page first.'; }
+        else { seedMsg.style.color = 'var(--text3)'; seedMsg.textContent = ''; }
+      }
+      if(seedQtyWrap) seedQtyWrap.style.display='';
+    } else {
+      seedWrap.style.display='none';
+      seedSel.value = '';
+      if(seedQtyWrap) seedQtyWrap.style.display='none';
+      if(seedQtyInp) seedQtyInp.value = '';
+      if(seedQtyMsg) seedQtyMsg.textContent = '';
+    }
+  }
   // Is the batch being CREATED itself a mother batch? If so, the donor field
   // points to a non-mother source batch and is labeled "Plant ID" rather than
   // "Mother ID".
@@ -6874,6 +7058,32 @@ function batchCultivarChanged(){
   const sel = document.getElementById('batch-genetics-source');
   if(sel && sel.value === 'Clones-Internal'){
     batchGeneticsChange();
+  }
+}
+
+// Fired when the user picks a seed strain. Pre-fills Quantity to Plant with the strain's
+// available qty (capped at 30 since pheno-hunts are small), and shows a helper note about
+// the remaining stock after this batch is created.
+function batchSeedInvChanged(){
+  const sel = document.getElementById('batch-seedinv');
+  const qtyInp = document.getElementById('batch-seedqty');
+  const msg = document.getElementById('batch-seedqty-msg');
+  if(!sel) return;
+  const id = parseInt(sel.value)||0;
+  if(!id){ if(qtyInp) qtyInp.value = ''; if(msg) msg.textContent = ''; return; }
+  const rec = seedInvRecs.find(r => r.id === id);
+  if(!rec) return;
+  const onHand = parseInt(rec.qtyOnHand)||0;
+  if(qtyInp){
+    qtyInp.max = String(onHand);
+    if(!qtyInp.value) qtyInp.value = Math.min(onHand, 25);
+  }
+  if(msg){
+    const planQty = parseInt(qtyInp ? qtyInp.value : '0') || 0;
+    msg.style.color = (planQty > onHand) ? 'var(--red)' : 'var(--text3)';
+    msg.textContent = (planQty > onHand)
+      ? 'Only '+onHand+' seeds available — pick a smaller quantity.'
+      : onHand+' available · '+(onHand - planQty)+' will remain after this batch.';
   }
 }
 
@@ -6961,15 +7171,56 @@ async function batchCreate(){
       return;
     }
   }
+  // Seeds genetics — must pick a strain from inventory AND enter a Quantity to Plant > 0 and ≤ on-hand.
+  let _seedInvId = 0, _seedQtyPlanted = 0, _seedStrainName = '';
+  if(geneticsSource === 'Seeds'){
+    _seedInvId = parseInt((document.getElementById('batch-seedinv')||{}).value || '0') || 0;
+    _seedQtyPlanted = parseInt((document.getElementById('batch-seedqty')||{}).value || '0') || 0;
+    if(!_seedInvId){ toast('Pick a seed strain from inventory.'); return; }
+    const _siRec = seedInvRecs.find(r => r.id === _seedInvId);
+    if(!_siRec){ toast('Selected seed strain not found in inventory.'); return; }
+    if(_seedQtyPlanted <= 0){ toast('Enter how many seeds to plant.'); return; }
+    if(_seedQtyPlanted > (parseInt(_siRec.qtyOnHand)||0)){
+      toast('Only '+_siRec.qtyOnHand+' seeds available for '+_siRec.strain+'.', 5000);
+      return;
+    }
+    _seedStrainName = _siRec.strain;
+  }
   // All new batches start with qty=0, so the zero-qty rule applies: phase='Clones', rooms=['Veg'].
   const _created = localDate();
   // cloneDate is left empty at batch creation for both Clones-Internal and Clones-External.
   // It's captured when the first Produced/Received transaction is saved:
   //   - Clones-Internal: cloneDate = the transaction's date (today), set silently with no UI input.
   //   - Clones-External: cloneDate = the value the user enters into the conditional Clone Date input.
-  const rec = { id: Date.now(), batchId, cultivar, mother, geneticsSource, externalCompany, notes, createdDate: _created, cloneDate: '', rooms: ['Veg'], plantPhase: 'Clones', status: 'Open', closedDate: '', synced: false };
+  // For Seeds: cloneDate is set to today since seeds are planted on creation.
+  const rec = { id: Date.now(), batchId, cultivar: cultivar || _seedStrainName, mother, geneticsSource, externalCompany, notes, createdDate: _created, cloneDate: (geneticsSource === 'Seeds' ? _created : ''), rooms: ['Veg'], plantPhase: 'Clones', status: 'Open', closedDate: '', synced: false };
+  if(geneticsSource === 'Seeds' && _seedStrainName) rec.seedStrain = _seedStrainName;
   batchRecs.unshift(rec);
   lsSet('gp-batch', batchRecs);
+  // Auto-record a Produced/Received tx for the seeds planted, then decrement inventory.
+  if(geneticsSource === 'Seeds' && _seedQtyPlanted > 0){
+    const _seedTx = {
+      id: Date.now() + Math.floor(Math.random()*1000),
+      batchId, date: _created, txType: 'Produced/Received',
+      qty: _seedQtyPlanted, weight: 0,
+      notes: 'Seeds planted — strain: '+_seedStrainName, currentQtyBefore: 0,
+      plantPhase: 'Clones', synced: false
+    };
+    batchTxRecs.unshift(_seedTx);
+    lsSet('gp-batchtx', batchTxRecs);
+    // Decrement the inventory record (also syncs to Airtable).
+    seedInvDecrement(_seedInvId, _seedQtyPlanted);
+    // Sync the new tx to Airtable.
+    if(cfg.batchtxTbl && cfg.token && cfg.base){
+      try {
+        const f = {'Batch ID':[batchId], 'Date':_created, 'Transaction Type':'Produced/Received', 'Plant Phase':'Clones', 'Quantity':_seedQtyPlanted, 'Current Quantity After':_seedQtyPlanted, 'Notes':_seedTx.notes};
+        const r = await atPost(cfg.batchtxTbl, f);
+        _seedTx.synced = true;
+        if(r && r.id) _seedTx.airtableId = r.id;
+        lsSet('gp-batchtx', batchTxRecs);
+      } catch(e){ /* Sync Pending retries */ }
+    }
+  }
   populateBatchDropdowns();
   populateBatchFilterDropdown();
   // Reset create form
@@ -10400,6 +10651,211 @@ function ctlsGenerateReport(){
        + '</div>';
 
   out.innerHTML = html;
-}</script>
+}
+
+// ════════════════════════════════════════════════════════════════════════════════
+// SEEDS INVENTORY
+// One record per seed strain. Each entry tracks quantity-on-hand which is decremented when
+// a new Seeds-genetics batch is created from that strain. Synced to a new "Seed Inventory"
+// Airtable table, upserted by Strain (the primary field).
+// ════════════════════════════════════════════════════════════════════════════════
+
+function seedInvEnter(){
+  const dEl = document.getElementById('seed-date');
+  if(dEl && !dEl.value) dEl.value = localDate();
+  seedInvRenderList();
+}
+
+// Render the current inventory list. Each row shows strain, source, on-hand, date, plus
+// Edit + Delete buttons. Sorted by Strain alphabetically.
+function seedInvRenderList(){
+  const wrap = document.getElementById('seed-inv-list');
+  const tot  = document.getElementById('seed-inv-total');
+  if(!wrap) return;
+  const recs = seedInvRecs.slice().sort((a,b) => (a.strain||'').localeCompare(b.strain||''));
+  const totalSeeds = recs.reduce((s,r) => s + (parseInt(r.qtyOnHand)||0), 0);
+  const totalStrains = recs.filter(r => (parseInt(r.qtyOnHand)||0) > 0).length;
+  if(tot) tot.textContent = recs.length ? (totalSeeds+' seeds · '+totalStrains+' strain'+(totalStrains===1?'':'s')+' available') : '';
+  if(!recs.length){
+    wrap.innerHTML = '<div style="padding:14px;color:var(--text3);font-style:italic;text-align:center;">No seed strains in inventory yet. Add one above to get started.</div>';
+    return;
+  }
+  let html = '<table style="width:100%;border-collapse:collapse;font-size:12px;">'+
+    '<thead><tr style="background:var(--bg2);">'+
+      '<th style="padding:8px 10px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);">Strain</th>'+
+      '<th style="padding:8px 10px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Source</th>'+
+      '<th style="padding:8px 10px;text-align:right;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">On Hand</th>'+
+      '<th style="padding:8px 10px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Received</th>'+
+      '<th style="padding:8px 10px;text-align:center;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Actions</th>'+
+    '</tr></thead><tbody>';
+  recs.forEach(r => {
+    const qty = parseInt(r.qtyOnHand)||0;
+    const isLow = qty === 0;
+    html += '<tr style="border-top:1px solid var(--border);'+(isLow?'color:var(--text3);':'')+'">';
+    html += '<td style="padding:8px 10px;font-weight:600;color:'+(isLow?'var(--text3)':'var(--text)')+';">'+(r.strain||'—')+(r.strainType?' <span style="font-size:10px;color:var(--text3);font-weight:400;">('+r.strainType+')</span>':'')+'</td>';
+    html += '<td style="padding:8px 10px;border-left:1px solid var(--border);">'+(r.source||'—')+'</td>';
+    html += '<td style="padding:8px 10px;border-left:1px solid var(--border);text-align:right;font-family:var(--mono);font-weight:'+(isLow?'400':'700')+';color:'+(isLow?'var(--text3)':'var(--green)')+';">'+qty+'</td>';
+    html += '<td style="padding:8px 10px;border-left:1px solid var(--border);font-family:var(--mono);font-size:11px;color:var(--text2);">'+(r.dateReceived||'—')+'</td>';
+    html += '<td style="padding:8px 10px;border-left:1px solid var(--border);text-align:center;white-space:nowrap;">';
+    html += '<button class="btn-secondary" style="font-size:11px;padding:4px 8px;margin-right:4px;" onclick="seedInvEditStart('+r.id+')">Edit</button>';
+    html += '<button class="btn-secondary" style="font-size:11px;padding:4px 8px;color:var(--red);" onclick="seedInvDelete('+r.id+')">Delete</button>';
+    html += '</td></tr>';
+    if(r.lotNumber || r.notes){
+      html += '<tr style="background:var(--bg2);"><td colspan="5" style="padding:4px 10px;font-size:10px;color:var(--text3);font-family:var(--mono);">'+
+        (r.lotNumber?'Lot: '+r.lotNumber+(r.notes?' · ':''):'')+
+        (r.notes||'')+
+      '</td></tr>';
+    }
+  });
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+}
+
+// Validate + save a new strain or update an existing one. Form fields are reused for editing.
+async function seedInvSave(){
+  const editId = parseInt((document.getElementById('seed-edit-id')||{}).value || '0');
+  const strain = ((document.getElementById('seed-strain')||{}).value || '').trim();
+  const source = ((document.getElementById('seed-source')||{}).value || '').trim();
+  const qtyOnHand = parseInt((document.getElementById('seed-qty')||{}).value || '0') || 0;
+  const dateReceived = (document.getElementById('seed-date')||{}).value || localDate();
+  const strainType = (document.getElementById('seed-type')||{}).value || '';
+  const lotNumber = ((document.getElementById('seed-lot')||{}).value || '').trim();
+  const notes = ((document.getElementById('seed-notes')||{}).value || '').trim();
+  if(!strain){ toast('Enter a strain name.'); return; }
+  if(qtyOnHand < 0){ toast('Quantity cannot be negative.'); return; }
+  // Duplicate strain guard (case-insensitive). When editing, the existing entry is fine.
+  const existing = seedInvRecs.find(r => (r.strain||'').toLowerCase() === strain.toLowerCase() && r.id !== editId);
+  if(existing){ toast('A strain named "'+strain+'" already exists in inventory.', 4500); return; }
+  let rec;
+  if(editId){
+    rec = seedInvRecs.find(r => r.id === editId);
+    if(!rec){ toast('Strain not found.'); return; }
+    rec.strain = strain;
+    rec.source = source;
+    rec.qtyOnHand = qtyOnHand;
+    rec.dateReceived = dateReceived;
+    rec.strainType = strainType;
+    rec.lotNumber = lotNumber;
+    rec.notes = notes;
+    rec.synced = false;
+  } else {
+    rec = {
+      id: Date.now() + Math.floor(Math.random()*10000),
+      strain, source, qtyOnHand, dateReceived, strainType, lotNumber, notes,
+      synced: false
+    };
+    seedInvRecs.unshift(rec);
+  }
+  lsSet('gp-seedinv', seedInvRecs);
+  toast(editId ? 'Updated: '+strain : 'Added: '+strain, 2500);
+  seedInvResetForm();
+  seedInvRenderList();
+  updatePendingBadge();
+  // Sync to Airtable (upsert by Strain).
+  if(cfg.seedInvTbl && cfg.token && cfg.base){
+    try {
+      const f = buildSeedInvFields(rec);
+      const r = await atUpsert(cfg.seedInvTbl, f, ['Strain']);
+      const _id = r && r.records && r.records[0] && r.records[0].id;
+      if(_id) rec.airtableId = _id;
+      rec.synced = true;
+      lsSet('gp-seedinv', seedInvRecs);
+      updatePendingBadge();
+    } catch(e){ /* Sync Pending will retry */ }
+  }
+}
+
+// Reset the form to its empty state (after a save or cancel-edit).
+function seedInvResetForm(){
+  ['seed-strain','seed-source','seed-qty','seed-lot','seed-notes'].forEach(id => {
+    const el = document.getElementById(id); if(el) el.value = '';
+  });
+  const dEl = document.getElementById('seed-date'); if(dEl) dEl.value = localDate();
+  const tEl = document.getElementById('seed-type'); if(tEl) tEl.value = '';
+  const eid = document.getElementById('seed-edit-id'); if(eid) eid.value = '';
+  const lbl = document.getElementById('seed-form-label'); if(lbl) lbl.textContent = 'Add Seed Strain';
+  const sBtn = document.getElementById('seed-save-btn'); if(sBtn) sBtn.textContent = 'Save to Inventory';
+  const cBtn = document.getElementById('seed-cancel-btn'); if(cBtn) cBtn.style.display = 'none';
+}
+
+// Load an existing entry into the form for editing.
+function seedInvEditStart(id){
+  const rec = seedInvRecs.find(r => r.id === id);
+  if(!rec) return;
+  document.getElementById('seed-strain').value = rec.strain || '';
+  document.getElementById('seed-source').value = rec.source || '';
+  document.getElementById('seed-qty').value = rec.qtyOnHand != null ? rec.qtyOnHand : '';
+  document.getElementById('seed-date').value = rec.dateReceived || '';
+  document.getElementById('seed-type').value = rec.strainType || '';
+  document.getElementById('seed-lot').value = rec.lotNumber || '';
+  document.getElementById('seed-notes').value = rec.notes || '';
+  document.getElementById('seed-edit-id').value = String(rec.id);
+  const lbl = document.getElementById('seed-form-label'); if(lbl) lbl.textContent = 'Editing — '+(rec.strain||'(unnamed)');
+  const sBtn = document.getElementById('seed-save-btn'); if(sBtn) sBtn.textContent = 'Save Changes';
+  const cBtn = document.getElementById('seed-cancel-btn'); if(cBtn) cBtn.style.display = '';
+  // Scroll the form into view.
+  const card = document.getElementById('seed-form-label');
+  if(card && card.scrollIntoView) card.scrollIntoView({behavior:'smooth', block:'start'});
+}
+function seedInvCancelEdit(){ seedInvResetForm(); }
+
+// Delete a strain from inventory. Confirms first. Removes the Airtable record too if synced.
+async function seedInvDelete(id){
+  const rec = seedInvRecs.find(r => r.id === id);
+  if(!rec) return;
+  if(!confirm('Delete "'+rec.strain+'" from seed inventory? Existing batches that referenced this strain stay intact.')) return;
+  // Try to delete from Airtable first; even if it fails, remove locally.
+  if(rec.airtableId && cfg.seedInvTbl && cfg.token && cfg.base){
+    try { await atDelete(cfg.seedInvTbl, rec.airtableId); } catch(_) {}
+  }
+  seedInvRecs = seedInvRecs.filter(r => r.id !== id);
+  lsSet('gp-seedinv', seedInvRecs);
+  toast('Deleted '+rec.strain, 2500);
+  seedInvRenderList();
+  updatePendingBadge();
+}
+
+// Decrement an inventory entry by qty (used when creating a Seeds batch). Returns true on success.
+async function seedInvDecrement(strainOrId, qty){
+  const n = parseInt(qty)||0;
+  if(n <= 0) return true;
+  const rec = (typeof strainOrId === 'number')
+    ? seedInvRecs.find(r => r.id === strainOrId)
+    : seedInvRecs.find(r => (r.strain||'').toLowerCase() === String(strainOrId).toLowerCase());
+  if(!rec){ return false; }
+  if((parseInt(rec.qtyOnHand)||0) < n){ return false; }
+  rec.qtyOnHand = Math.max(0, (parseInt(rec.qtyOnHand)||0) - n);
+  rec.synced = false;
+  lsSet('gp-seedinv', seedInvRecs);
+  updatePendingBadge();
+  if(cfg.seedInvTbl && cfg.token && cfg.base){
+    try {
+      const f = buildSeedInvFields(rec);
+      const r = await atUpsert(cfg.seedInvTbl, f, ['Strain']);
+      const _id = r && r.records && r.records[0] && r.records[0].id;
+      if(_id) rec.airtableId = _id;
+      rec.synced = true;
+      lsSet('gp-seedinv', seedInvRecs);
+      updatePendingBadge();
+    } catch(e){ /* Sync Pending retries */ }
+  }
+  return true;
+}
+
+// Build the Airtable field payload for a seed inventory record.
+function buildSeedInvFields(rec){
+  const f = {
+    'Strain':          rec.strain || undefined,
+    'Source':          rec.source || undefined,
+    'Quantity On Hand': (rec.qtyOnHand != null) ? rec.qtyOnHand : undefined,
+    'Date Received':   rec.dateReceived || undefined,
+    'Strain Type':     rec.strainType || undefined,
+    'Lot Number':      rec.lotNumber || undefined,
+    'Notes':           rec.notes || undefined
+  };
+  Object.keys(f).forEach(k => { if(f[k] === undefined || f[k] === null || f[k] === '') delete f[k]; });
+  return f;
+}
+</script>
 </body>
 </html>
