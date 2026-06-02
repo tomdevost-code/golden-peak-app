@@ -544,8 +544,14 @@ tr:last-child td { border-bottom: none; }
     <!-- SEEDS INVENTORY -->
     <div class="page" id="page-seeds" data-section="cultivation">
       <div class="section">
-        <div class="section-label" id="seed-form-label">Add Seed Strain</div>
+        <div class="section-label" id="seed-form-label">Add Seed Lot</div>
         <div class="card">
+          <!-- Lot / Batch Number — primary key. Each row in inventory represents ONE specific lot.
+               Same strain can have multiple lots from different acquisitions. -->
+          <div class="field" style="margin-bottom:10px;">
+            <label>Lot / Batch Number <span style="color:var(--red);font-weight:700;">*</span> <span style="font-size:10px;color:var(--text3);font-weight:400;">— primary identifier, must be unique</span></label>
+            <input type="text" id="seed-lot" placeholder="e.g. SP-2025-001" style="font-family:var(--mono);" />
+          </div>
           <div class="g2" style="margin-bottom:10px;">
             <div class="field"><label>Strain Name <span style="color:var(--red);font-weight:700;">*</span></label>
               <input type="text" id="seed-strain" placeholder="e.g. Sour Patch" />
@@ -570,20 +576,15 @@ tr:last-child td { border-bottom: none; }
               <input type="number" id="seed-germinated" min="0" step="1" placeholder="0" />
             </div>
           </div>
-          <div class="g2" style="margin-bottom:10px;">
-            <div class="field"><label>Strain Type <span style="font-size:10px;color:var(--text3);font-weight:400;">— optional</span></label>
-              <select id="seed-type">
-                <option value="">— select —</option>
-                <option>Indica</option>
-                <option>Sativa</option>
-                <option>Hybrid</option>
-                <option>Auto-flower</option>
-                <option>Ruderalis</option>
-              </select>
-            </div>
-            <div class="field"><label>Lot / Batch Number</label>
-              <input type="text" id="seed-lot" placeholder="optional" />
-            </div>
+          <div class="field" style="margin-bottom:10px;"><label>Strain Type <span style="font-size:10px;color:var(--text3);font-weight:400;">— optional</span></label>
+            <select id="seed-type">
+              <option value="">— select —</option>
+              <option>Indica</option>
+              <option>Sativa</option>
+              <option>Hybrid</option>
+              <option>Auto-flower</option>
+              <option>Ruderalis</option>
+            </select>
           </div>
           <div class="field" style="margin-bottom:12px;"><label>Notes</label>
             <textarea id="seed-notes" rows="2" placeholder="Optional notes about this strain..." style="width:100%;font-size:14px;font-family:var(--sans);border-radius:var(--radius-sm);border:1px solid var(--border);padding:8px 10px;background:var(--bg);color:var(--text);outline:none;resize:vertical;"></textarea>
@@ -687,9 +688,9 @@ tr:last-child td { border-bottom: none; }
              Inventory with qty > 0. Saving the batch decrements that strain's qty by the
              Quantity to Plant value. -->
         <div class="field" id="batch-seedinv-wrap" style="display:none;margin-bottom:10px;">
-          <label>Seed Strain <span style="color:var(--red);font-weight:700;">*</span> <span style="font-size:10px;color:var(--text3);font-weight:400;">— pulled from Seeds Inventory</span></label>
+          <label>Seed Lot <span style="color:var(--red);font-weight:700;">*</span> <span style="font-size:10px;color:var(--text3);font-weight:400;">— pulled from Seeds Inventory (Lot · Strain · qty available)</span></label>
           <select id="batch-seedinv" onchange="batchSeedInvChanged()">
-            <option value="">-- select strain --</option>
+            <option value="">-- select lot --</option>
           </select>
           <div id="batch-seedinv-msg" style="font-size:11px;color:var(--text3);margin-top:4px;"></div>
         </div>
@@ -2243,9 +2244,9 @@ const REMOTE_MAPPERS = {
   },
   seedinv(rec){
     const f = rec.fields || {};
-    const strain = (f['Strain']||'').toString().trim();
-    if(!strain) return null;
-    // Acquired falls back to On Hand for legacy rows that didn't have the column. That preserves
+    const lotNumber = (f['Lot Number']||'').toString().trim();
+    if(!lotNumber) return null; // Lot is the primary key — rows without it are skipped
+    // Acquired falls back to On Hand for legacy rows that didn't have the column. Preserves
     // the assumption that "if you have N on hand and never tracked Acquired, you acquired N".
     const onHand = parseInt(f['Quantity On Hand'])||0;
     const acquiredRaw = f['Quantity Acquired'];
@@ -2253,14 +2254,14 @@ const REMOTE_MAPPERS = {
     return {
       id: 'si_'+rec.id,
       airtableId: rec.id,
-      strain,
+      lotNumber,
+      strain: (f['Strain']||'').toString(),
       source: f['Source']||'',
       qtyOnHand: onHand,
       qtyAcquired: acquired,
       qtyGerminated: parseInt(f['Quantity Germinated'])||0,
       dateReceived: f['Date Received']||'',
       strainType: f['Strain Type']||'',
-      lotNumber: f['Lot Number']||'',
       notes: f['Notes']||'',
       synced: true
     };
@@ -2420,8 +2421,8 @@ const NAT_KEY_FN = {
   },
   seedinv(r){
     if(!r) return '';
-    // One row per strain — Strain alone is the natural key (case-insensitive).
-    return (r.strain||'').toString().toLowerCase();
+    // One row per lot — Lot Number is the primary key (case-insensitive).
+    return (r.lotNumber||'').toString().toLowerCase();
   }
 };
 function mergeRemote(localArr, remoteRecs, mapper, ctx, table, lsKey){
@@ -2537,20 +2538,22 @@ function mergeRemote(localArr, remoteRecs, mapper, ctx, table, lsKey){
   return {added, updated, conflicts, skippedDupes};
 }
 
-// Custom merge for Seed Inventory — one row per strain (case-insensitive). Synced locals
-// are overlaid with remote; dirty locals keep their changes for the next push.
+// Custom merge for Seed Inventory — one row per lot (case-insensitive). Synced locals are
+// overlaid with remote; dirty locals keep their changes for the next push. Lot Number is the
+// primary key in Airtable too — upserts target the same row from any laptop.
 function mergeRemoteSeedInv(remoteRecs){
   let added = 0, updated = 0, conflicts = 0;
-  const byStrain = {};
-  seedInvRecs.forEach((r, i) => { if(r && r.strain) byStrain[r.strain.toLowerCase()] = i; });
+  const byLot = {};
+  seedInvRecs.forEach((r, i) => { if(r && r.lotNumber) byLot[r.lotNumber.toLowerCase()] = i; });
   remoteRecs.forEach(rr => {
     const mapped = REMOTE_MAPPERS.seedinv(rr);
-    if(!mapped) return;
-    const idx = byStrain[mapped.strain.toLowerCase()];
+    if(!mapped || !mapped.lotNumber) return;
+    const key = mapped.lotNumber.toLowerCase();
+    const idx = byLot[key];
     if(idx === undefined){
       mapped.id = Date.now() + Math.floor(Math.random()*10000);
       seedInvRecs.push(mapped);
-      byStrain[mapped.strain.toLowerCase()] = seedInvRecs.length - 1;
+      byLot[key] = seedInvRecs.length - 1;
       added++;
     } else {
       const local = seedInvRecs[idx];
@@ -6146,7 +6149,7 @@ const NAT_KEY_FN_REMOTE = {
   },
   seedinv(rrec){
     const f = rrec.fields || {};
-    return (f['Strain']||'').toString().toLowerCase();
+    return (f['Lot Number']||'').toString().toLowerCase();
   }
 };
 
@@ -6497,7 +6500,7 @@ async function syncPending(){
     for(const r of pendingSeedInv){
       try{
         const f = buildSeedInvFields(r);
-        const siRes = await atUpsert(cfg.seedInvTbl, f, ['Strain']);
+        const siRes = await atUpsert(cfg.seedInvTbl, f, ['Lot Number']);
         const _id = siRes && siRes.records && siRes.records[0] && siRes.records[0].id;
         if(_id) r.airtableId = _id;
         r.synced=true;ok++;
@@ -6985,16 +6988,17 @@ function batchGeneticsChange(){
   const seedQtyMsg  = document.getElementById('batch-seedqty-msg');
   if(seedWrap && seedSel){
     if(sel === 'Seeds'){
-      // Populate the dropdown with inventory entries that have qty > 0.
+      // Populate the dropdown with inventory lots that have qty > 0. Each option shows
+      // Lot Number prominently (primary key) followed by Strain · qty available.
       const eligible = seedInvRecs
         .filter(r => (parseInt(r.qtyOnHand)||0) > 0)
-        .sort((a,b) => (a.strain||'').localeCompare(b.strain||''));
+        .sort((a,b) => (a.lotNumber||'').localeCompare(b.lotNumber||''));
       const cur = seedSel.value;
-      seedSel.innerHTML = '<option value="">-- select strain --</option>' +
-        eligible.map(r => '<option value="'+r.id+'"'+(String(r.id)===cur?' selected':'')+'>'+r.strain+' ('+r.qtyOnHand+' seeds available'+(r.source?' · '+r.source:'')+')</option>').join('');
+      seedSel.innerHTML = '<option value="">-- select lot --</option>' +
+        eligible.map(r => '<option value="'+r.id+'"'+(String(r.id)===cur?' selected':'')+'>'+(r.lotNumber||'(no lot)')+' · '+(r.strain||'?')+' · '+r.qtyOnHand+' seeds available'+(r.source?' · '+r.source:'')+'</option>').join('');
       seedWrap.style.display='';
       if(seedMsg){
-        if(!eligible.length) { seedMsg.style.color = 'var(--red)'; seedMsg.textContent = 'No seed strains with stock on hand. Add to inventory on the Seeds page first.'; }
+        if(!eligible.length) { seedMsg.style.color = 'var(--red)'; seedMsg.textContent = 'No seed lots with stock on hand. Add to inventory on the Seeds page first.'; }
         else { seedMsg.style.color = 'var(--text3)'; seedMsg.textContent = ''; }
       }
       if(seedQtyWrap) seedQtyWrap.style.display='';
@@ -10697,10 +10701,11 @@ function seedInvRenderList(){
   }
   let html = '<table style="width:100%;border-collapse:collapse;font-size:12px;">'+
     '<thead><tr style="background:var(--bg2);">'+
-      '<th style="padding:8px 10px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);">Strain</th>'+
+      '<th style="padding:8px 10px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);">Lot Number</th>'+
+      '<th style="padding:8px 10px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Strain</th>'+
       '<th style="padding:8px 10px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Source</th>'+
       '<th style="padding:8px 10px;text-align:right;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);" title="Current stock available to plant">On Hand</th>'+
-      '<th style="padding:8px 10px;text-align:right;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);" title="Cumulative seeds received for this strain">Acquired</th>'+
+      '<th style="padding:8px 10px;text-align:right;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);" title="Cumulative seeds received for this lot">Acquired</th>'+
       '<th style="padding:8px 10px;text-align:right;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);" title="Cumulative seeds that germinated">Germinated</th>'+
       '<th style="padding:8px 10px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Received</th>'+
       '<th style="padding:8px 10px;text-align:center;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Actions</th>'+
@@ -10711,7 +10716,8 @@ function seedInvRenderList(){
     const germinated = parseInt(r.qtyGerminated)||0;
     const isLow = qty === 0;
     html += '<tr style="border-top:1px solid var(--border);'+(isLow?'color:var(--text3);':'')+'">';
-    html += '<td style="padding:8px 10px;font-weight:600;color:'+(isLow?'var(--text3)':'var(--text)')+';">'+(r.strain||'—')+(r.strainType?' <span style="font-size:10px;color:var(--text3);font-weight:400;">('+r.strainType+')</span>':'')+'</td>';
+    html += '<td style="padding:8px 10px;font-weight:700;font-family:var(--mono);color:'+(isLow?'var(--text3)':'var(--green)')+';">'+(r.lotNumber||'—')+'</td>';
+    html += '<td style="padding:8px 10px;border-left:1px solid var(--border);font-weight:600;color:'+(isLow?'var(--text3)':'var(--text)')+';">'+(r.strain||'—')+(r.strainType?' <span style="font-size:10px;color:var(--text3);font-weight:400;">('+r.strainType+')</span>':'')+'</td>';
     html += '<td style="padding:8px 10px;border-left:1px solid var(--border);">'+(r.source||'—')+'</td>';
     html += '<td style="padding:8px 10px;border-left:1px solid var(--border);text-align:right;font-family:var(--mono);font-weight:'+(isLow?'400':'700')+';color:'+(isLow?'var(--text3)':'var(--green)')+';">'+qty+'</td>';
     html += '<td style="padding:8px 10px;border-left:1px solid var(--border);text-align:right;font-family:var(--mono);color:var(--text2);">'+acquired+'</td>';
@@ -10721,11 +10727,8 @@ function seedInvRenderList(){
     html += '<button class="btn-secondary" style="font-size:11px;padding:4px 8px;margin-right:4px;" onclick="seedInvEditStart('+r.id+')">Edit</button>';
     html += '<button class="btn-secondary" style="font-size:11px;padding:4px 8px;color:var(--red);" onclick="seedInvDelete('+r.id+')">Delete</button>';
     html += '</td></tr>';
-    if(r.lotNumber || r.notes){
-      html += '<tr style="background:var(--bg2);"><td colspan="7" style="padding:4px 10px;font-size:10px;color:var(--text3);font-family:var(--mono);">'+
-        (r.lotNumber?'Lot: '+r.lotNumber+(r.notes?' · ':''):'')+
-        (r.notes||'')+
-      '</td></tr>';
+    if(r.notes){
+      html += '<tr style="background:var(--bg2);"><td colspan="8" style="padding:4px 10px;font-size:10px;color:var(--text3);font-family:var(--mono);">'+r.notes+'</td></tr>';
     }
   });
   html += '</tbody></table>';
@@ -10761,14 +10764,15 @@ async function seedInvSave(){
   const strainType = (document.getElementById('seed-type')||{}).value || '';
   const lotNumber = ((document.getElementById('seed-lot')||{}).value || '').trim();
   const notes = ((document.getElementById('seed-notes')||{}).value || '').trim();
+  if(!lotNumber){ toast('Enter a Lot / Batch Number. This is the primary identifier.'); return; }
   if(!strain){ toast('Enter a strain name.'); return; }
   if(qtyOnHand < 0){ toast('Quantity cannot be negative.'); return; }
   if(qtyAcquired < 0 || qtyGerminated < 0){ toast('Cumulative counts cannot be negative.'); return; }
   // Sanity: Germinated can't exceed Acquired (you can't germinate more than you ever had).
   if(qtyGerminated > qtyAcquired){ toast('Quantity Germinated ('+qtyGerminated+') cannot exceed Quantity Acquired ('+qtyAcquired+').', 5000); return; }
-  // Duplicate strain guard (case-insensitive). When editing, the existing entry is fine.
-  const existing = seedInvRecs.find(r => (r.strain||'').toLowerCase() === strain.toLowerCase() && r.id !== editId);
-  if(existing){ toast('A strain named "'+strain+'" already exists in inventory.', 4500); return; }
+  // Duplicate lot guard (case-insensitive). When editing, the existing entry is fine.
+  const existing = seedInvRecs.find(r => (r.lotNumber||'').toLowerCase() === lotNumber.toLowerCase() && r.id !== editId);
+  if(existing){ toast('Lot "'+lotNumber+'" already exists in inventory.', 4500); return; }
   let rec;
   if(editId){
     rec = seedInvRecs.find(r => r.id === editId);
@@ -10800,7 +10804,7 @@ async function seedInvSave(){
   if(cfg.seedInvTbl && cfg.token && cfg.base){
     try {
       const f = buildSeedInvFields(rec);
-      const r = await atUpsert(cfg.seedInvTbl, f, ['Strain']);
+      const r = await atUpsert(cfg.seedInvTbl, f, ['Lot Number']);
       const _id = r && r.records && r.records[0] && r.records[0].id;
       if(_id) rec.airtableId = _id;
       rec.synced = true;
@@ -10864,12 +10868,22 @@ async function seedInvDelete(id){
 }
 
 // Decrement an inventory entry by qty (used when creating a Seeds batch). Returns true on success.
-async function seedInvDecrement(strainOrId, qty){
+// First arg can be the local id (number), the Lot Number (string — primary key), or — for
+// backward compat with older callers — the strain name (matched only if exactly one lot for it).
+async function seedInvDecrement(idLotOrStrain, qty){
   const n = parseInt(qty)||0;
   if(n <= 0) return true;
-  const rec = (typeof strainOrId === 'number')
-    ? seedInvRecs.find(r => r.id === strainOrId)
-    : seedInvRecs.find(r => (r.strain||'').toLowerCase() === String(strainOrId).toLowerCase());
+  let rec;
+  if(typeof idLotOrStrain === 'number'){
+    rec = seedInvRecs.find(r => r.id === idLotOrStrain);
+  } else {
+    const key = String(idLotOrStrain).toLowerCase();
+    rec = seedInvRecs.find(r => (r.lotNumber||'').toLowerCase() === key);
+    if(!rec){
+      const candidates = seedInvRecs.filter(r => (r.strain||'').toLowerCase() === key);
+      if(candidates.length === 1) rec = candidates[0];
+    }
+  }
   if(!rec){ return false; }
   if((parseInt(rec.qtyOnHand)||0) < n){ return false; }
   rec.qtyOnHand = Math.max(0, (parseInt(rec.qtyOnHand)||0) - n);
@@ -10879,7 +10893,7 @@ async function seedInvDecrement(strainOrId, qty){
   if(cfg.seedInvTbl && cfg.token && cfg.base){
     try {
       const f = buildSeedInvFields(rec);
-      const r = await atUpsert(cfg.seedInvTbl, f, ['Strain']);
+      const r = await atUpsert(cfg.seedInvTbl, f, ['Lot Number']);
       const _id = r && r.records && r.records[0] && r.records[0].id;
       if(_id) rec.airtableId = _id;
       rec.synced = true;
