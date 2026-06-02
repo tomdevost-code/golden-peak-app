@@ -555,15 +555,23 @@ tr:last-child td { border-bottom: none; }
             </div>
           </div>
           <div class="g2" style="margin-bottom:10px;">
-            <div class="field"><label>Quantity On Hand <span style="color:var(--red);font-weight:700;">*</span></label>
-              <input type="number" id="seed-qty" min="0" step="1" placeholder="0" />
+            <div class="field"><label>Quantity On Hand <span style="color:var(--red);font-weight:700;">*</span> <span style="font-size:10px;color:var(--text3);font-weight:400;">— current stock available to plant</span></label>
+              <input type="number" id="seed-qty" min="0" step="1" placeholder="0" oninput="seedInvAutoFillAcquired()" />
             </div>
             <div class="field"><label>Date Received</label>
               <input type="date" id="seed-date" />
             </div>
           </div>
           <div class="g2" style="margin-bottom:10px;">
-            <div class="field"><label>Strain Type</label>
+            <div class="field"><label>Quantity Acquired <span style="font-size:10px;color:var(--text3);font-weight:400;">— cumulative lifetime (defaults to On Hand on first save)</span></label>
+              <input type="number" id="seed-acquired" min="0" step="1" placeholder="auto" />
+            </div>
+            <div class="field"><label>Quantity Germinated <span style="font-size:10px;color:var(--text3);font-weight:400;">— cumulative across batches</span></label>
+              <input type="number" id="seed-germinated" min="0" step="1" placeholder="0" />
+            </div>
+          </div>
+          <div class="g2" style="margin-bottom:10px;">
+            <div class="field"><label>Strain Type <span style="font-size:10px;color:var(--text3);font-weight:400;">— optional</span></label>
               <select id="seed-type">
                 <option value="">— select —</option>
                 <option>Indica</option>
@@ -2237,12 +2245,19 @@ const REMOTE_MAPPERS = {
     const f = rec.fields || {};
     const strain = (f['Strain']||'').toString().trim();
     if(!strain) return null;
+    // Acquired falls back to On Hand for legacy rows that didn't have the column. That preserves
+    // the assumption that "if you have N on hand and never tracked Acquired, you acquired N".
+    const onHand = parseInt(f['Quantity On Hand'])||0;
+    const acquiredRaw = f['Quantity Acquired'];
+    const acquired = (acquiredRaw == null || acquiredRaw === '') ? onHand : (parseInt(acquiredRaw)||0);
     return {
       id: 'si_'+rec.id,
       airtableId: rec.id,
       strain,
       source: f['Source']||'',
-      qtyOnHand: parseInt(f['Quantity On Hand'])||0,
+      qtyOnHand: onHand,
+      qtyAcquired: acquired,
+      qtyGerminated: parseInt(f['Quantity Germinated'])||0,
       dateReceived: f['Date Received']||'',
       strainType: f['Strain Type']||'',
       lotNumber: f['Lot Number']||'',
@@ -10684,24 +10699,30 @@ function seedInvRenderList(){
     '<thead><tr style="background:var(--bg2);">'+
       '<th style="padding:8px 10px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);">Strain</th>'+
       '<th style="padding:8px 10px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Source</th>'+
-      '<th style="padding:8px 10px;text-align:right;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">On Hand</th>'+
+      '<th style="padding:8px 10px;text-align:right;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);" title="Current stock available to plant">On Hand</th>'+
+      '<th style="padding:8px 10px;text-align:right;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);" title="Cumulative seeds received for this strain">Acquired</th>'+
+      '<th style="padding:8px 10px;text-align:right;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);" title="Cumulative seeds that germinated">Germinated</th>'+
       '<th style="padding:8px 10px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Received</th>'+
       '<th style="padding:8px 10px;text-align:center;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Actions</th>'+
     '</tr></thead><tbody>';
   recs.forEach(r => {
     const qty = parseInt(r.qtyOnHand)||0;
+    const acquired = parseInt(r.qtyAcquired)||0;
+    const germinated = parseInt(r.qtyGerminated)||0;
     const isLow = qty === 0;
     html += '<tr style="border-top:1px solid var(--border);'+(isLow?'color:var(--text3);':'')+'">';
     html += '<td style="padding:8px 10px;font-weight:600;color:'+(isLow?'var(--text3)':'var(--text)')+';">'+(r.strain||'—')+(r.strainType?' <span style="font-size:10px;color:var(--text3);font-weight:400;">('+r.strainType+')</span>':'')+'</td>';
     html += '<td style="padding:8px 10px;border-left:1px solid var(--border);">'+(r.source||'—')+'</td>';
     html += '<td style="padding:8px 10px;border-left:1px solid var(--border);text-align:right;font-family:var(--mono);font-weight:'+(isLow?'400':'700')+';color:'+(isLow?'var(--text3)':'var(--green)')+';">'+qty+'</td>';
+    html += '<td style="padding:8px 10px;border-left:1px solid var(--border);text-align:right;font-family:var(--mono);color:var(--text2);">'+acquired+'</td>';
+    html += '<td style="padding:8px 10px;border-left:1px solid var(--border);text-align:right;font-family:var(--mono);color:var(--text2);">'+germinated+'</td>';
     html += '<td style="padding:8px 10px;border-left:1px solid var(--border);font-family:var(--mono);font-size:11px;color:var(--text2);">'+(r.dateReceived||'—')+'</td>';
     html += '<td style="padding:8px 10px;border-left:1px solid var(--border);text-align:center;white-space:nowrap;">';
     html += '<button class="btn-secondary" style="font-size:11px;padding:4px 8px;margin-right:4px;" onclick="seedInvEditStart('+r.id+')">Edit</button>';
     html += '<button class="btn-secondary" style="font-size:11px;padding:4px 8px;color:var(--red);" onclick="seedInvDelete('+r.id+')">Delete</button>';
     html += '</td></tr>';
     if(r.lotNumber || r.notes){
-      html += '<tr style="background:var(--bg2);"><td colspan="5" style="padding:4px 10px;font-size:10px;color:var(--text3);font-family:var(--mono);">'+
+      html += '<tr style="background:var(--bg2);"><td colspan="7" style="padding:4px 10px;font-size:10px;color:var(--text3);font-family:var(--mono);">'+
         (r.lotNumber?'Lot: '+r.lotNumber+(r.notes?' · ':''):'')+
         (r.notes||'')+
       '</td></tr>';
@@ -10711,18 +10732,40 @@ function seedInvRenderList(){
   wrap.innerHTML = html;
 }
 
+// While creating a NEW strain, auto-mirror Quantity On Hand into Quantity Acquired (which is
+// usually the same on first entry — you got 30 seeds, you have 30 seeds). If the user already
+// typed an Acquired value, leave it alone. Skipped during edits.
+function seedInvAutoFillAcquired(){
+  const editId = parseInt((document.getElementById('seed-edit-id')||{}).value || '0');
+  if(editId) return;
+  const onHandEl   = document.getElementById('seed-qty');
+  const acquiredEl = document.getElementById('seed-acquired');
+  if(!onHandEl || !acquiredEl) return;
+  // Only auto-fill if the user hasn't already entered an Acquired value.
+  if(acquiredEl.value && acquiredEl.value !== '') return;
+  acquiredEl.placeholder = onHandEl.value || 'auto';
+}
+
 // Validate + save a new strain or update an existing one. Form fields are reused for editing.
 async function seedInvSave(){
   const editId = parseInt((document.getElementById('seed-edit-id')||{}).value || '0');
   const strain = ((document.getElementById('seed-strain')||{}).value || '').trim();
   const source = ((document.getElementById('seed-source')||{}).value || '').trim();
   const qtyOnHand = parseInt((document.getElementById('seed-qty')||{}).value || '0') || 0;
+  // Acquired defaults to On Hand on initial entry (you just got these seeds, so Acquired = On Hand).
+  // On edits, user manages it directly.
+  const acquiredVal = (document.getElementById('seed-acquired')||{}).value;
+  const qtyAcquired = (acquiredVal === '' || acquiredVal == null) ? qtyOnHand : (parseInt(acquiredVal)||0);
+  const qtyGerminated = parseInt((document.getElementById('seed-germinated')||{}).value || '0') || 0;
   const dateReceived = (document.getElementById('seed-date')||{}).value || localDate();
   const strainType = (document.getElementById('seed-type')||{}).value || '';
   const lotNumber = ((document.getElementById('seed-lot')||{}).value || '').trim();
   const notes = ((document.getElementById('seed-notes')||{}).value || '').trim();
   if(!strain){ toast('Enter a strain name.'); return; }
   if(qtyOnHand < 0){ toast('Quantity cannot be negative.'); return; }
+  if(qtyAcquired < 0 || qtyGerminated < 0){ toast('Cumulative counts cannot be negative.'); return; }
+  // Sanity: Germinated can't exceed Acquired (you can't germinate more than you ever had).
+  if(qtyGerminated > qtyAcquired){ toast('Quantity Germinated ('+qtyGerminated+') cannot exceed Quantity Acquired ('+qtyAcquired+').', 5000); return; }
   // Duplicate strain guard (case-insensitive). When editing, the existing entry is fine.
   const existing = seedInvRecs.find(r => (r.strain||'').toLowerCase() === strain.toLowerCase() && r.id !== editId);
   if(existing){ toast('A strain named "'+strain+'" already exists in inventory.', 4500); return; }
@@ -10733,6 +10776,8 @@ async function seedInvSave(){
     rec.strain = strain;
     rec.source = source;
     rec.qtyOnHand = qtyOnHand;
+    rec.qtyAcquired = qtyAcquired;
+    rec.qtyGerminated = qtyGerminated;
     rec.dateReceived = dateReceived;
     rec.strainType = strainType;
     rec.lotNumber = lotNumber;
@@ -10741,7 +10786,7 @@ async function seedInvSave(){
   } else {
     rec = {
       id: Date.now() + Math.floor(Math.random()*10000),
-      strain, source, qtyOnHand, dateReceived, strainType, lotNumber, notes,
+      strain, source, qtyOnHand, qtyAcquired, qtyGerminated, dateReceived, strainType, lotNumber, notes,
       synced: false
     };
     seedInvRecs.unshift(rec);
@@ -10767,9 +10812,10 @@ async function seedInvSave(){
 
 // Reset the form to its empty state (after a save or cancel-edit).
 function seedInvResetForm(){
-  ['seed-strain','seed-source','seed-qty','seed-lot','seed-notes'].forEach(id => {
+  ['seed-strain','seed-source','seed-qty','seed-acquired','seed-germinated','seed-lot','seed-notes'].forEach(id => {
     const el = document.getElementById(id); if(el) el.value = '';
   });
+  const acqEl = document.getElementById('seed-acquired'); if(acqEl) acqEl.placeholder = 'auto';
   const dEl = document.getElementById('seed-date'); if(dEl) dEl.value = localDate();
   const tEl = document.getElementById('seed-type'); if(tEl) tEl.value = '';
   const eid = document.getElementById('seed-edit-id'); if(eid) eid.value = '';
@@ -10785,6 +10831,8 @@ function seedInvEditStart(id){
   document.getElementById('seed-strain').value = rec.strain || '';
   document.getElementById('seed-source').value = rec.source || '';
   document.getElementById('seed-qty').value = rec.qtyOnHand != null ? rec.qtyOnHand : '';
+  document.getElementById('seed-acquired').value = rec.qtyAcquired != null ? rec.qtyAcquired : '';
+  document.getElementById('seed-germinated').value = rec.qtyGerminated != null ? rec.qtyGerminated : 0;
   document.getElementById('seed-date').value = rec.dateReceived || '';
   document.getElementById('seed-type').value = rec.strainType || '';
   document.getElementById('seed-lot').value = rec.lotNumber || '';
@@ -10842,17 +10890,22 @@ async function seedInvDecrement(strainOrId, qty){
   return true;
 }
 
-// Build the Airtable field payload for a seed inventory record.
+// Build the Airtable field payload for a seed inventory record. Cumulative counts (Acquired,
+// Germinated) are always sent so Airtable's columns stay current — including when they're 0.
+// Strain Type is omitted when empty (it's not required, and an empty single-select would error).
 function buildSeedInvFields(rec){
   const f = {
-    'Strain':          rec.strain || undefined,
-    'Source':          rec.source || undefined,
-    'Quantity On Hand': (rec.qtyOnHand != null) ? rec.qtyOnHand : undefined,
-    'Date Received':   rec.dateReceived || undefined,
-    'Strain Type':     rec.strainType || undefined,
-    'Lot Number':      rec.lotNumber || undefined,
-    'Notes':           rec.notes || undefined
+    'Strain':              rec.strain || undefined,
+    'Source':              rec.source || undefined,
+    'Quantity On Hand':    (rec.qtyOnHand != null)    ? rec.qtyOnHand    : undefined,
+    'Quantity Acquired':   (rec.qtyAcquired != null)  ? rec.qtyAcquired  : undefined,
+    'Quantity Germinated': (rec.qtyGerminated != null) ? rec.qtyGerminated : undefined,
+    'Date Received':       rec.dateReceived || undefined,
+    'Strain Type':         rec.strainType || undefined,
+    'Lot Number':          rec.lotNumber || undefined,
+    'Notes':               rec.notes || undefined
   };
+  // Strip empty strings and undefined; KEEP numeric 0 (it's a valid Acquired/Germinated value).
   Object.keys(f).forEach(k => { if(f[k] === undefined || f[k] === null || f[k] === '') delete f[k]; });
   return f;
 }
