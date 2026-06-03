@@ -10387,9 +10387,17 @@ function ctlsSeedsMetrics(from, to){
   const notGerminated = wastes
     .filter(w => _isSeedsBatch(w.batch) && (w.subtype||'') === 'Not Germinated')
     .reduce((s,w) => s + (parseInt(w.plants)||0), 0);
-  // Destroyed-seed tx (auto-created from any Vegetative Waste on Seeds-genetics batches with plants > 0).
+  // Destroyed-seed tx — only seed-stage destroys count toward the Section 1 "Seeds destroyed"
+  // metric. Once a Seeds-genetics batch advances to Veg/Flower/Drying, any plants destroyed
+  // there are veg-stage losses, not seeds, and belong in the Veg-stage CTLS sections instead.
+  // Seed-stage = the auto-Destroyed tx was tagged with the batch's plantPhase at the time of save,
+  // which is 'Germination' for current records (or legacy 'Seeds'/'Clones' tags for older Seeds
+  // batches created before the Germination phase existed). Empty plantPhase also counts —
+  // batches that haven't progressed past intake are still in seed handling.
+  const SEED_STAGE_PHASES = ['Germination','Seeds','Clones',''];
   const destroyed = txs
-    .filter(t => t.txType === 'Destroyed' && _isSeedsBatch(t.batchId))
+    .filter(t => t.txType === 'Destroyed' && _isSeedsBatch(t.batchId)
+      && SEED_STAGE_PHASES.includes(t.plantPhase||''))
     .reduce((s,t) => s + (parseInt(t.qty)||0), 0);
   // Seeds sold — Sold tx on Seeds batches.
   const sold = txs
