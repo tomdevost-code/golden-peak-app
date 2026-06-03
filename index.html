@@ -568,13 +568,8 @@ tr:last-child td { border-bottom: none; }
               <input type="date" id="seed-date" />
             </div>
           </div>
-          <div class="g2" style="margin-bottom:10px;">
-            <div class="field"><label>Quantity Acquired <span style="font-size:10px;color:var(--text3);font-weight:400;">— cumulative lifetime (defaults to On Hand on first save)</span></label>
-              <input type="number" id="seed-acquired" min="0" step="1" placeholder="auto" />
-            </div>
-            <div class="field"><label>Quantity Germinated <span style="font-size:10px;color:var(--text3);font-weight:400;">— cumulative across batches</span></label>
-              <input type="number" id="seed-germinated" min="0" step="1" placeholder="0" />
-            </div>
+          <div class="field" style="margin-bottom:10px;"><label>Quantity Acquired <span style="font-size:10px;color:var(--text3);font-weight:400;">— cumulative lifetime (defaults to On Hand on first save)</span></label>
+            <input type="number" id="seed-acquired" min="0" step="1" placeholder="auto" />
           </div>
           <div class="field" style="margin-bottom:12px;"><label>Notes</label>
             <textarea id="seed-notes" rows="2" placeholder="Optional notes about this strain..." style="width:100%;font-size:14px;font-family:var(--sans);border-radius:var(--radius-sm);border:1px solid var(--border);padding:8px 10px;background:var(--bg);color:var(--text);outline:none;resize:vertical;"></textarea>
@@ -683,11 +678,6 @@ tr:last-child td { border-bottom: none; }
             <option value="">-- select lot --</option>
           </select>
           <div id="batch-seedinv-msg" style="font-size:11px;color:var(--text3);margin-top:4px;"></div>
-        </div>
-        <div class="field" id="batch-seedqty-wrap" style="display:none;margin-bottom:10px;">
-          <label>Quantity to Plant <span style="color:var(--red);font-weight:700;">*</span></label>
-          <input type="number" id="batch-seedqty" min="1" step="1" placeholder="0" oninput="batchSeedInvChanged()" />
-          <div id="batch-seedqty-msg" style="font-size:11px;color:var(--text3);margin-top:4px;"></div>
         </div>
 
         <!-- Notes -->
@@ -996,6 +986,7 @@ tr:last-child td { border-bottom: none; }
             <select id="tx-type" onchange="txTypeChanged()" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;">
               <option value="">-- select type --</option>
               <option>Produced/Received</option>
+              <option>Seeds Germinated</option>
               <option>Moved to Moms</option>
               <option>Sold</option>
               <option>Sent to Lab</option>
@@ -2995,7 +2986,8 @@ function calcBatchQty(batchId){
     if(t.txType==='Sold') return; // weight tracked separately
     if(t.txType==='Phase Advance') return; // internal cohort move — no net change
     const q=parseInt(t.qty)||0;
-    if(t.txType==='Produced/Received') qty+=q; else qty-=q;
+    // Produced/Received and Seeds Germinated both ADD plants to the batch's running total.
+    if(t.txType==='Produced/Received' || t.txType==='Seeds Germinated') qty+=q; else qty-=q;
   });
   const b = batchRecs.find(r=>r.batchId===batchId && !r.type);
   if(b && b.harvestedPlants){
@@ -6968,17 +6960,13 @@ function batchGeneticsChange(){
   const momMsg  = document.getElementById('batch-mother-msg');
   const momLbl  = document.getElementById('batch-mother-label');
   const momHint = document.getElementById('batch-mother-hint');
-  // Seed strain picker + Quantity to plant — only relevant when Genetics Source = Seeds.
+  // Seed lot picker — only relevant when Genetics Source = Seeds. No quantity input at creation:
+  // the actual plant count is recorded later via a Seeds Germinated transaction on Batch Mgmt.
   const seedWrap = document.getElementById('batch-seedinv-wrap');
   const seedSel  = document.getElementById('batch-seedinv');
   const seedMsg  = document.getElementById('batch-seedinv-msg');
-  const seedQtyWrap = document.getElementById('batch-seedqty-wrap');
-  const seedQtyInp  = document.getElementById('batch-seedqty');
-  const seedQtyMsg  = document.getElementById('batch-seedqty-msg');
   if(seedWrap && seedSel){
     if(sel === 'Seeds'){
-      // Populate the dropdown with inventory lots that have qty > 0. Each option shows
-      // Lot Number prominently (primary key) followed by Strain · qty available.
       const eligible = seedInvRecs
         .filter(r => (parseInt(r.qtyOnHand)||0) > 0)
         .sort((a,b) => (a.lotNumber||'').localeCompare(b.lotNumber||''));
@@ -6988,15 +6976,11 @@ function batchGeneticsChange(){
       seedWrap.style.display='';
       if(seedMsg){
         if(!eligible.length) { seedMsg.style.color = 'var(--red)'; seedMsg.textContent = 'No seed lots with stock on hand. Add to inventory on the Seeds page first.'; }
-        else { seedMsg.style.color = 'var(--text3)'; seedMsg.textContent = ''; }
+        else { seedMsg.style.color = 'var(--text3)'; seedMsg.textContent = 'After creating the batch, log a "Seeds Germinated" transaction on Batch Mgmt when seeds sprout.'; }
       }
-      if(seedQtyWrap) seedQtyWrap.style.display='';
     } else {
       seedWrap.style.display='none';
       seedSel.value = '';
-      if(seedQtyWrap) seedQtyWrap.style.display='none';
-      if(seedQtyInp) seedQtyInp.value = '';
-      if(seedQtyMsg) seedQtyMsg.textContent = '';
     }
   }
   // Is the batch being CREATED itself a mother batch? If so, the donor field
@@ -7069,31 +7053,10 @@ function batchCultivarChanged(){
   }
 }
 
-// Fired when the user picks a seed strain. Pre-fills Quantity to Plant with the strain's
-// available qty (capped at 30 since pheno-hunts are small), and shows a helper note about
-// the remaining stock after this batch is created.
-function batchSeedInvChanged(){
-  const sel = document.getElementById('batch-seedinv');
-  const qtyInp = document.getElementById('batch-seedqty');
-  const msg = document.getElementById('batch-seedqty-msg');
-  if(!sel) return;
-  const id = parseInt(sel.value)||0;
-  if(!id){ if(qtyInp) qtyInp.value = ''; if(msg) msg.textContent = ''; return; }
-  const rec = seedInvRecs.find(r => r.id === id);
-  if(!rec) return;
-  const onHand = parseInt(rec.qtyOnHand)||0;
-  if(qtyInp){
-    qtyInp.max = String(onHand);
-    if(!qtyInp.value) qtyInp.value = Math.min(onHand, 25);
-  }
-  if(msg){
-    const planQty = parseInt(qtyInp ? qtyInp.value : '0') || 0;
-    msg.style.color = (planQty > onHand) ? 'var(--red)' : 'var(--text3)';
-    msg.textContent = (planQty > onHand)
-      ? 'Only '+onHand+' seeds available — pick a smaller quantity.'
-      : onHand+' available · '+(onHand - planQty)+' will remain after this batch.';
-  }
-}
+// batchSeedInvChanged removed — Quantity to Plant is gone. The seed-lot dropdown is now a
+// simple picker that just records WHICH lot the batch came from. The "Seeds Germinated"
+// transaction on Batch Mgmt is what actually decrements inventory + adds plants to the batch.
+function batchSeedInvChanged(){ /* no-op stub kept in case of legacy onchange references */ }
 
 function batchMotherChanged(){
   // Visually highlight the dropdown when Clones-Internal is selected and Mother
@@ -7179,20 +7142,16 @@ async function batchCreate(){
       return;
     }
   }
-  // Seeds genetics — must pick a strain from inventory AND enter a Quantity to Plant > 0 and ≤ on-hand.
-  let _seedInvId = 0, _seedQtyPlanted = 0, _seedStrainName = '';
+  // Seeds genetics — must pick a lot from inventory. NO quantity entry here: the actual
+  // plant count comes later via a "Seeds Germinated" transaction (see summaryAddTransaction).
+  let _seedInvId = 0, _seedStrainName = '', _seedLotNumber = '';
   if(geneticsSource === 'Seeds'){
     _seedInvId = parseInt((document.getElementById('batch-seedinv')||{}).value || '0') || 0;
-    _seedQtyPlanted = parseInt((document.getElementById('batch-seedqty')||{}).value || '0') || 0;
-    if(!_seedInvId){ toast('Pick a seed strain from inventory.'); return; }
+    if(!_seedInvId){ toast('Pick a seed lot from inventory.'); return; }
     const _siRec = seedInvRecs.find(r => r.id === _seedInvId);
-    if(!_siRec){ toast('Selected seed strain not found in inventory.'); return; }
-    if(_seedQtyPlanted <= 0){ toast('Enter how many seeds to plant.'); return; }
-    if(_seedQtyPlanted > (parseInt(_siRec.qtyOnHand)||0)){
-      toast('Only '+_siRec.qtyOnHand+' seeds available for '+_siRec.strain+'.', 5000);
-      return;
-    }
+    if(!_siRec){ toast('Selected seed lot not found in inventory.'); return; }
     _seedStrainName = _siRec.strain;
+    _seedLotNumber = _siRec.lotNumber;
   }
   // All new batches start with qty=0, so the zero-qty rule applies: phase='Clones', rooms=['Veg'].
   const _created = localDate();
@@ -7200,35 +7159,14 @@ async function batchCreate(){
   // It's captured when the first Produced/Received transaction is saved:
   //   - Clones-Internal: cloneDate = the transaction's date (today), set silently with no UI input.
   //   - Clones-External: cloneDate = the value the user enters into the conditional Clone Date input.
-  // For Seeds: cloneDate is set to today since seeds are planted on creation.
+  // For Seeds: cloneDate is set to today (the day the seeds were planted/started).
   const rec = { id: Date.now(), batchId, cultivar: cultivar || _seedStrainName, mother, geneticsSource, externalCompany, notes, createdDate: _created, cloneDate: (geneticsSource === 'Seeds' ? _created : ''), rooms: ['Veg'], plantPhase: 'Clones', status: 'Open', closedDate: '', synced: false };
-  if(geneticsSource === 'Seeds' && _seedStrainName) rec.seedStrain = _seedStrainName;
+  if(geneticsSource === 'Seeds'){
+    if(_seedStrainName) rec.seedStrain = _seedStrainName;
+    if(_seedLotNumber) rec.seedLotNumber = _seedLotNumber;
+  }
   batchRecs.unshift(rec);
   lsSet('gp-batch', batchRecs);
-  // Auto-record a Produced/Received tx for the seeds planted, then decrement inventory.
-  if(geneticsSource === 'Seeds' && _seedQtyPlanted > 0){
-    const _seedTx = {
-      id: Date.now() + Math.floor(Math.random()*1000),
-      batchId, date: _created, txType: 'Produced/Received',
-      qty: _seedQtyPlanted, weight: 0,
-      notes: 'Seeds planted — strain: '+_seedStrainName, currentQtyBefore: 0,
-      plantPhase: 'Clones', synced: false
-    };
-    batchTxRecs.unshift(_seedTx);
-    lsSet('gp-batchtx', batchTxRecs);
-    // Decrement the inventory record (also syncs to Airtable).
-    seedInvDecrement(_seedInvId, _seedQtyPlanted);
-    // Sync the new tx to Airtable.
-    if(cfg.batchtxTbl && cfg.token && cfg.base){
-      try {
-        const f = {'Batch ID':[batchId], 'Date':_created, 'Transaction Type':'Produced/Received', 'Plant Phase':'Clones', 'Quantity':_seedQtyPlanted, 'Current Quantity After':_seedQtyPlanted, 'Notes':_seedTx.notes};
-        const r = await atPost(cfg.batchtxTbl, f);
-        _seedTx.synced = true;
-        if(r && r.id) _seedTx.airtableId = r.id;
-        lsSet('gp-batchtx', batchTxRecs);
-      } catch(e){ /* Sync Pending retries */ }
-    }
-  }
   populateBatchDropdowns();
   populateBatchFilterDropdown();
   // Reset create form
@@ -8295,7 +8233,7 @@ function txTypeChanged(){
   // Default: hide both, clear values
   pcWrap.style.display = 'none';
   wetWrap.style.display = 'none';
-  if(t === 'Produced/Received' || t === 'Moved to Moms'){
+  if(t === 'Produced/Received' || t === 'Moved to Moms' || t === 'Seeds Germinated'){
     pcWrap.style.display = '';
     wetInp.value = '';
     // Plant Count input editable
@@ -8512,6 +8450,15 @@ function summaryUpdateTxTypeOptions(batchId){
   // regular manual tx is allowed (not in the auto-only Flower/Drying/Packaged phases).
   if(opts.length > 0 || phase === 'Delivered'){
     if(!opts.includes('Sent to Lab')) opts.push('Sent to Lab');
+  }
+  // Seeds Germinated is for Seeds-genetics batches only. It records how many seeds sprouted
+  // and decrements the seed lot's On Hand count. Hide Produced/Received for Seeds batches —
+  // their plant intake is exclusively via Seeds Germinated.
+  if(b && (b.geneticsSource||'').toLowerCase() === 'seeds'){
+    opts = opts.filter(o => o !== 'Produced/Received');
+    if(!opts.includes('Seeds Germinated')) opts.unshift('Seeds Germinated');
+  } else {
+    opts = opts.filter(o => o !== 'Seeds Germinated');
   }
   // Mother batches (M-XX-NNN): special rules — these stay productive across the whole
   // lifecycle. New clones can be taken at any time, so Produced/Received is ALWAYS
@@ -8758,6 +8705,14 @@ async function summaryAddTransaction(){
     toast(txType+' transactions are created automatically — not manually selectable.', 5000);
     return;
   }
+  // Seeds Germinated is only valid on Seeds-genetics batches. Block if the batch isn't Seeds-genetics.
+  if(txType === 'Seeds Germinated'){
+    const _bRecCheck = batchRecs.find(r => r.batchId === batchId && !r.type);
+    if(!_bRecCheck || (_bRecCheck.geneticsSource||'').toLowerCase() !== 'seeds'){
+      toast('Seeds Germinated is only valid for batches with Genetics Source = Seeds.', 5500);
+      return;
+    }
+  }
   // Sold → weight only. Harvested → plant count AND wet weight. Others → plant count only.
   const isSold = (txType === 'Sold');
   const isHarvested = (txType === 'Harvested');
@@ -8979,6 +8934,37 @@ async function summaryAddTransaction(){
   }
   batchTxRecs.unshift(tx);
   lsSet('gp-batchtx', batchTxRecs);
+  // Seeds Germinated side-effects: decrement the seed lot's On Hand by qty, increment its
+  // cumulative Germinated count. Lot lookup via batchRec.seedLotNumber (set at batch creation).
+  if(txType === 'Seeds Germinated' && qty > 0){
+    const _bRec = batchRecs.find(r => r.batchId === batchId && !r.type);
+    const _lot = _bRec && _bRec.seedLotNumber;
+    if(_lot){
+      const _siRec = seedInvRecs.find(r => (r.lotNumber||'').toLowerCase() === _lot.toLowerCase());
+      if(_siRec){
+        // Decrement On Hand (floor 0).
+        _siRec.qtyOnHand = Math.max(0, (parseInt(_siRec.qtyOnHand)||0) - qty);
+        // Increment cumulative Germinated.
+        _siRec.qtyGerminated = (parseInt(_siRec.qtyGerminated)||0) + qty;
+        _siRec.synced = false;
+        lsSet('gp-seedinv', seedInvRecs);
+        // Sync inventory record upsert. Fire-and-forget — Sync Pending retries on failure.
+        if(cfg.seedInvTbl && cfg.token && cfg.base){
+          (async () => {
+            try {
+              const f = buildSeedInvFields(_siRec);
+              const r = await atUpsert(cfg.seedInvTbl, f, ['Lot Number']);
+              const _id = r && r.records && r.records[0] && r.records[0].id;
+              if(_id) _siRec.airtableId = _id;
+              _siRec.synced = true;
+              lsSet('gp-seedinv', seedInvRecs);
+              if(typeof seedInvRenderList === 'function') seedInvRenderList();
+            } catch(_) {}
+          })();
+        }
+      }
+    }
+  }
   // Mother batch phase-count maintenance:
   //   • Produced/Received on a mom    → new cuttings always land in the Clones bucket.
   //   • Moved to Moms (source is mom) → subtract from junior buckets first.
@@ -10334,15 +10320,22 @@ function fmtKg3(n){ if(n == null || isNaN(n)) return '—'; return (Math.round(n
 function fmtKgOrDash(n){ return (!n || n === 0) ? '—' : fmtKg3(n); }
 
 // SECTION 1 — Seeds
-// "Bought seeds" = total Produced/Received quantity on batches with geneticsSource='Seeds' in the month.
+// "Bought seeds" = sum of Quantity Acquired across Seed Inventory lots where Date Received falls
+//   in the month. (Inventory-driven, not tx-driven — matches the new lot-tracking model.)
+// "Germinated" = sum of Seeds Germinated tx qty on Seeds-genetics batches in the month.
 // "Not germinated" = Vegetative Waste records on Seeds-batches with Sub-Category=Not Germinated.
-// "Germinated" = bought − notGerminated − other destroyed (best inference).
-// "Sold" = Sold tx weight/qty on Seeds-batches with Sale Stage=Clone (rarely used).
+// "Destroyed" = Destroyed tx on Seeds-batches in the month.
+// "Sold" = Sold tx on Seeds-batches in the month.
 function ctlsSeedsMetrics(from, to){
   const txs = _txsInRange(from, to);
   const wastes = _wastesInRange(from, to);
-  const bought = txs
-    .filter(t => t.txType === 'Produced/Received' && _isSeedsBatch(t.batchId))
+  // Bought = inventory lots received in the reporting month, summed by Quantity Acquired.
+  const bought = seedInvRecs
+    .filter(r => _inRange(r.dateReceived, from, to))
+    .reduce((s,r) => s + (parseInt(r.qtyAcquired)||0), 0);
+  // Germinated = Seeds Germinated transactions on Seeds-genetics batches in the month.
+  const germinated = txs
+    .filter(t => t.txType === 'Seeds Germinated' && _isSeedsBatch(t.batchId))
     .reduce((s,t) => s + (parseInt(t.qty)||0), 0);
   // Not germinated — explicit waste records with Sub-Category = 'Not Germinated' on Seeds batches.
   const notGerminated = wastes
@@ -10352,16 +10345,13 @@ function ctlsSeedsMetrics(from, to){
   const destroyed = txs
     .filter(t => t.txType === 'Destroyed' && _isSeedsBatch(t.batchId))
     .reduce((s,t) => s + (parseInt(t.qty)||0), 0);
-  // Germinated count — inferred: bought - notGerminated (everything that wasn't tagged as not-germinated germinated).
-  // If bought is zero, leave as null so the report shows "—".
-  const germinated = bought > 0 ? Math.max(0, bought - notGerminated) : null;
   // Seeds sold — Sold tx on Seeds batches.
   const sold = txs
     .filter(t => t.txType === 'Sold' && _isSeedsBatch(t.batchId))
     .reduce((s,t) => s + (parseInt(t.qty)||0) + (parseFloat(t.weight)||0), 0);
   return {
-    bought,
-    germinated,
+    bought: bought || null,
+    germinated: germinated || null,
     notGerminated,
     sold: sold || null,
     destroyed
@@ -10592,9 +10582,9 @@ function ctlsGenerateReport(){
 
   // Section 1 — Seeds
   html += _ctlsBlock('1. Seeds', [
-    {label:'Bought seeds', note:'Produced/Received on Seeds-genetics batches', value: v(seeds.bought, 'seeds')},
-    {label:'Quantity germinated', note:'bought − not-germinated', value: v(seeds.germinated, 'seeds')},
-    {label:'Quantity not germinated', note:'Veg Waste with Sub-Category = Not Germinated', value: v(seeds.notGerminated, 'seeds')},
+    {label:'Bought seeds', note:'Seed Inventory lots received this month · sum of Quantity Acquired', value: v(seeds.bought, 'seeds')},
+    {label:'Quantity germinated', note:'sum of Seeds Germinated transactions', value: v(seeds.germinated, 'seeds')},
+    {label:'Quantity not germinated', note:'Veg Waste · Sub-Category = Not Germinated', value: v(seeds.notGerminated, 'seeds')},
     {label:'Seeds sold', value: v(seeds.sold, 'seeds')},
     {label:'Seeds destroyed (all reasons)', value: v(seeds.destroyed, 'seeds')}
   ]);
@@ -10748,16 +10738,16 @@ async function seedInvSave(){
   // On edits, user manages it directly.
   const acquiredVal = (document.getElementById('seed-acquired')||{}).value;
   const qtyAcquired = (acquiredVal === '' || acquiredVal == null) ? qtyOnHand : (parseInt(acquiredVal)||0);
-  const qtyGerminated = parseInt((document.getElementById('seed-germinated')||{}).value || '0') || 0;
+  // Quantity Germinated is no longer entered manually — it's accumulated automatically when a
+  // Seeds Germinated transaction is logged on the Batch Mgmt page. Preserve any existing value
+  // when editing; new records start at 0.
   const dateReceived = (document.getElementById('seed-date')||{}).value || localDate();
   const lotNumber = ((document.getElementById('seed-lot')||{}).value || '').trim();
   const notes = ((document.getElementById('seed-notes')||{}).value || '').trim();
   if(!lotNumber){ toast('Enter a Lot / Batch Number. This is the primary identifier.'); return; }
   if(!strain){ toast('Enter a strain name.'); return; }
   if(qtyOnHand < 0){ toast('Quantity cannot be negative.'); return; }
-  if(qtyAcquired < 0 || qtyGerminated < 0){ toast('Cumulative counts cannot be negative.'); return; }
-  // Sanity: Germinated can't exceed Acquired (you can't germinate more than you ever had).
-  if(qtyGerminated > qtyAcquired){ toast('Quantity Germinated ('+qtyGerminated+') cannot exceed Quantity Acquired ('+qtyAcquired+').', 5000); return; }
+  if(qtyAcquired < 0){ toast('Quantity Acquired cannot be negative.'); return; }
   // Duplicate lot guard (case-insensitive). When editing, the existing entry is fine.
   const existing = seedInvRecs.find(r => (r.lotNumber||'').toLowerCase() === lotNumber.toLowerCase() && r.id !== editId);
   if(existing){ toast('Lot "'+lotNumber+'" already exists in inventory.', 4500); return; }
@@ -10769,7 +10759,7 @@ async function seedInvSave(){
     rec.source = source;
     rec.qtyOnHand = qtyOnHand;
     rec.qtyAcquired = qtyAcquired;
-    rec.qtyGerminated = qtyGerminated;
+    // qtyGerminated preserved as-is (updated only by Seeds Germinated transactions).
     rec.dateReceived = dateReceived;
     rec.lotNumber = lotNumber;
     rec.notes = notes;
@@ -10777,7 +10767,8 @@ async function seedInvSave(){
   } else {
     rec = {
       id: Date.now() + Math.floor(Math.random()*10000),
-      strain, source, qtyOnHand, qtyAcquired, qtyGerminated, dateReceived, lotNumber, notes,
+      strain, source, qtyOnHand, qtyAcquired, qtyGerminated: 0,
+      dateReceived, lotNumber, notes,
       synced: false
     };
     seedInvRecs.unshift(rec);
@@ -10803,7 +10794,7 @@ async function seedInvSave(){
 
 // Reset the form to its empty state (after a save or cancel-edit).
 function seedInvResetForm(){
-  ['seed-strain','seed-source','seed-qty','seed-acquired','seed-germinated','seed-lot','seed-notes'].forEach(id => {
+  ['seed-strain','seed-source','seed-qty','seed-acquired','seed-lot','seed-notes'].forEach(id => {
     const el = document.getElementById(id); if(el) el.value = '';
   });
   const acqEl = document.getElementById('seed-acquired'); if(acqEl) acqEl.placeholder = 'auto';
@@ -10822,7 +10813,6 @@ function seedInvEditStart(id){
   document.getElementById('seed-source').value = rec.source || '';
   document.getElementById('seed-qty').value = rec.qtyOnHand != null ? rec.qtyOnHand : '';
   document.getElementById('seed-acquired').value = rec.qtyAcquired != null ? rec.qtyAcquired : '';
-  document.getElementById('seed-germinated').value = rec.qtyGerminated != null ? rec.qtyGerminated : 0;
   document.getElementById('seed-date').value = rec.dateReceived || '';
   document.getElementById('seed-lot').value = rec.lotNumber || '';
   document.getElementById('seed-notes').value = rec.notes || '';
