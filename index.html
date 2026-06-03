@@ -10416,10 +10416,34 @@ function ctlsSeedsMetrics(from, to){
 // Produced, Brought-in-external, Moved-to-Moms, Destroyed, Sold, Sent-to-lab metrics.
 function ctlsVegMetrics(from, to){
   const txs = _txsInRange(from, to);
-  // "How many produced" = Produced/Received qty on non-Seeds batches in the month
-  const produced = txs
-    .filter(t => t.txType === 'Produced/Received' && !_isSeedsBatch(t.batchId))
+  // "Quantity produced" — plants that became part of the Veg/Clone cohort during the month.
+  // Two source streams:
+  //   1) Clones-Internal cuttings — Produced/Received qty on Clones-Internal batches.
+  //      Clones-External is excluded because those are counted in the "Brought in from other
+  //      producer" line below; mom-batch parent moves are tracked separately as "Moved from Moms".
+  //   2) Seeds-genetics batches whose Germination → Veg crossing happened this month — the
+  //      seedlings that made it to Veg become part of the Veg cohort at that moment. Counted
+  //      as the sum of Seeds Germinated qty on that batch (the surviving seedlings).
+  const producedInternalCuttings = txs
+    .filter(t => t.txType === 'Produced/Received'
+      && (() => {
+        const b = batchRecs.find(r => r.batchId === t.batchId && !r.type);
+        return b && (b.geneticsSource||'').toLowerCase() === 'clones-internal';
+      })())
     .reduce((s,t) => s + (parseInt(t.qty)||0), 0);
+  let producedSeedsToVeg = 0;
+  batchRecs.forEach(b => {
+    if(!b || b.type) return;
+    if((b.geneticsSource||'').toLowerCase() !== 'seeds') return;
+    if(!b.vegStart) return;
+    if(!_inRange(b.vegStart, from, to)) return;
+    // Sum the Seeds Germinated qty on this batch — those are the seedlings that crossed to Veg.
+    const germinatedQty = batchTxRecs
+      .filter(t => t.batchId === b.batchId && t.txType === 'Seeds Germinated')
+      .reduce((s,t) => s + (parseInt(t.qty)||0), 0);
+    producedSeedsToVeg += germinatedQty;
+  });
+  const produced = producedInternalCuttings + producedSeedsToVeg;
   // "Brought in from other producer" — Produced/Received qty where the destination batch's
   // geneticsSource is 'Clones-External' AND this is the FIRST Produced/Received for that batch
   // (subsequent P/R on the same batch would be cuttings from this batch, not new external imports).
@@ -10645,7 +10669,7 @@ function ctlsGenerateReport(){
 
   // Section 2 — Veg & Clones
   html += _ctlsBlock('2. Veg Plants &amp; Clones', [
-    {label:'Quantity produced (in-house cuttings + new Veg/Clone batches)', value: v(veg.produced, 'plants')},
+    {label:'Quantity produced (Clones-Internal cuttings + Seeds advanced to Veg)', value: v(veg.produced, 'plants')},
     {label:'Brought in from other producer (Clones-External)', value: v(veg.broughtInExternal, 'plants')},
     {label:'Moved to Moms', value: v(veg.movedToMoms, 'plants')},
     {label:'Moved from Moms (= count above, taken from mom source)', value: v(veg.movedFromMoms, 'plants')},
