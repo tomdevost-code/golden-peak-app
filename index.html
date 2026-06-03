@@ -576,16 +576,6 @@ tr:last-child td { border-bottom: none; }
               <input type="number" id="seed-germinated" min="0" step="1" placeholder="0" />
             </div>
           </div>
-          <div class="field" style="margin-bottom:10px;"><label>Strain Type <span style="font-size:10px;color:var(--text3);font-weight:400;">— optional</span></label>
-            <select id="seed-type">
-              <option value="">— select —</option>
-              <option>Indica</option>
-              <option>Sativa</option>
-              <option>Hybrid</option>
-              <option>Auto-flower</option>
-              <option>Ruderalis</option>
-            </select>
-          </div>
           <div class="field" style="margin-bottom:12px;"><label>Notes</label>
             <textarea id="seed-notes" rows="2" placeholder="Optional notes about this strain..." style="width:100%;font-size:14px;font-family:var(--sans);border-radius:var(--radius-sm);border:1px solid var(--border);padding:8px 10px;background:var(--bg);color:var(--text);outline:none;resize:vertical;"></textarea>
           </div>
@@ -2261,7 +2251,6 @@ const REMOTE_MAPPERS = {
       qtyAcquired: acquired,
       qtyGerminated: parseInt(f['Quantity Germinated'])||0,
       dateReceived: f['Date Received']||'',
-      strainType: f['Strain Type']||'',
       notes: f['Notes']||'',
       synced: true
     };
@@ -10717,7 +10706,7 @@ function seedInvRenderList(){
     const isLow = qty === 0;
     html += '<tr style="border-top:1px solid var(--border);'+(isLow?'color:var(--text3);':'')+'">';
     html += '<td style="padding:8px 10px;font-weight:700;font-family:var(--mono);color:'+(isLow?'var(--text3)':'var(--green)')+';">'+(r.lotNumber||'—')+'</td>';
-    html += '<td style="padding:8px 10px;border-left:1px solid var(--border);font-weight:600;color:'+(isLow?'var(--text3)':'var(--text)')+';">'+(r.strain||'—')+(r.strainType?' <span style="font-size:10px;color:var(--text3);font-weight:400;">('+r.strainType+')</span>':'')+'</td>';
+    html += '<td style="padding:8px 10px;border-left:1px solid var(--border);font-weight:600;color:'+(isLow?'var(--text3)':'var(--text)')+';">'+(r.strain||'—')+'</td>';
     html += '<td style="padding:8px 10px;border-left:1px solid var(--border);">'+(r.source||'—')+'</td>';
     html += '<td style="padding:8px 10px;border-left:1px solid var(--border);text-align:right;font-family:var(--mono);font-weight:'+(isLow?'400':'700')+';color:'+(isLow?'var(--text3)':'var(--green)')+';">'+qty+'</td>';
     html += '<td style="padding:8px 10px;border-left:1px solid var(--border);text-align:right;font-family:var(--mono);color:var(--text2);">'+acquired+'</td>';
@@ -10761,7 +10750,6 @@ async function seedInvSave(){
   const qtyAcquired = (acquiredVal === '' || acquiredVal == null) ? qtyOnHand : (parseInt(acquiredVal)||0);
   const qtyGerminated = parseInt((document.getElementById('seed-germinated')||{}).value || '0') || 0;
   const dateReceived = (document.getElementById('seed-date')||{}).value || localDate();
-  const strainType = (document.getElementById('seed-type')||{}).value || '';
   const lotNumber = ((document.getElementById('seed-lot')||{}).value || '').trim();
   const notes = ((document.getElementById('seed-notes')||{}).value || '').trim();
   if(!lotNumber){ toast('Enter a Lot / Batch Number. This is the primary identifier.'); return; }
@@ -10783,14 +10771,13 @@ async function seedInvSave(){
     rec.qtyAcquired = qtyAcquired;
     rec.qtyGerminated = qtyGerminated;
     rec.dateReceived = dateReceived;
-    rec.strainType = strainType;
     rec.lotNumber = lotNumber;
     rec.notes = notes;
     rec.synced = false;
   } else {
     rec = {
       id: Date.now() + Math.floor(Math.random()*10000),
-      strain, source, qtyOnHand, qtyAcquired, qtyGerminated, dateReceived, strainType, lotNumber, notes,
+      strain, source, qtyOnHand, qtyAcquired, qtyGerminated, dateReceived, lotNumber, notes,
       synced: false
     };
     seedInvRecs.unshift(rec);
@@ -10821,7 +10808,6 @@ function seedInvResetForm(){
   });
   const acqEl = document.getElementById('seed-acquired'); if(acqEl) acqEl.placeholder = 'auto';
   const dEl = document.getElementById('seed-date'); if(dEl) dEl.value = localDate();
-  const tEl = document.getElementById('seed-type'); if(tEl) tEl.value = '';
   const eid = document.getElementById('seed-edit-id'); if(eid) eid.value = '';
   const lbl = document.getElementById('seed-form-label'); if(lbl) lbl.textContent = 'Add Seed Strain';
   const sBtn = document.getElementById('seed-save-btn'); if(sBtn) sBtn.textContent = 'Save to Inventory';
@@ -10838,7 +10824,6 @@ function seedInvEditStart(id){
   document.getElementById('seed-acquired').value = rec.qtyAcquired != null ? rec.qtyAcquired : '';
   document.getElementById('seed-germinated').value = rec.qtyGerminated != null ? rec.qtyGerminated : 0;
   document.getElementById('seed-date').value = rec.dateReceived || '';
-  document.getElementById('seed-type').value = rec.strainType || '';
   document.getElementById('seed-lot').value = rec.lotNumber || '';
   document.getElementById('seed-notes').value = rec.notes || '';
   document.getElementById('seed-edit-id').value = String(rec.id);
@@ -10906,17 +10891,15 @@ async function seedInvDecrement(idLotOrStrain, qty){
 
 // Build the Airtable field payload for a seed inventory record. Cumulative counts (Acquired,
 // Germinated) are always sent so Airtable's columns stay current — including when they're 0.
-// Strain Type is omitted when empty (it's not required, and an empty single-select would error).
 function buildSeedInvFields(rec){
   const f = {
+    'Lot Number':          rec.lotNumber || undefined,
     'Strain':              rec.strain || undefined,
     'Source':              rec.source || undefined,
     'Quantity On Hand':    (rec.qtyOnHand != null)    ? rec.qtyOnHand    : undefined,
     'Quantity Acquired':   (rec.qtyAcquired != null)  ? rec.qtyAcquired  : undefined,
     'Quantity Germinated': (rec.qtyGerminated != null) ? rec.qtyGerminated : undefined,
     'Date Received':       rec.dateReceived || undefined,
-    'Strain Type':         rec.strainType || undefined,
-    'Lot Number':          rec.lotNumber || undefined,
     'Notes':               rec.notes || undefined
   };
   // Strip empty strings and undefined; KEEP numeric 0 (it's a valid Acquired/Germinated value).
