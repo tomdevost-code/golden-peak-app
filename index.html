@@ -8733,11 +8733,22 @@ async function summaryAddTransaction(){
     return;
   }
   // Seeds Germinated is only valid on Seeds-genetics batches. Block if the batch isn't Seeds-genetics.
+  // Also cap the requested qty at the seed lot's current On Hand so we never overdraw the lot.
   if(txType === 'Seeds Germinated'){
     const _bRecCheck = batchRecs.find(r => r.batchId === batchId && !r.type);
     if(!_bRecCheck || (_bRecCheck.geneticsSource||'').toLowerCase() !== 'seeds'){
       toast('Seeds Germinated is only valid for batches with Genetics Source = Seeds.', 5500);
       return;
+    }
+    const _reqQty = parseInt((document.getElementById('tx-plant-count')||{}).value || '0') || 0;
+    const _lotForCheck = _bRecCheck.seedLotNumber || '';
+    if(_lotForCheck){
+      const _siRecCheck = seedInvRecs.find(r => (r.lotNumber||'').toLowerCase() === _lotForCheck.toLowerCase());
+      const _onHand = _siRecCheck ? (parseInt(_siRecCheck.qtyOnHand)||0) : 0;
+      if(_reqQty > _onHand){
+        toast('Only '+_onHand+' seed'+(_onHand===1?'':'s')+' available in lot '+_lotForCheck+'. Reduce the quantity or add inventory on the Seeds page.', 6000);
+        return;
+      }
     }
   }
   // Sold → weight only. Harvested → plant count AND wet weight. Others → plant count only.
@@ -8855,9 +8866,11 @@ async function summaryAddTransaction(){
   const notes = document.getElementById('tx-notes').value.trim();
   const date = localDate();
   const currentQtyBefore = summaryCalcQty(batchId);
-  // Guard: non-Produced/Received transactions cannot push balance below 0. Skip the guard when
-  // qty is 0 (weight-only Harvested rows in Drying phase) and for Sold (weight, not plant count).
-  if(!isSold && txType !== 'Produced/Received' && qty > 0 && currentQtyBefore - qty < 0){
+  // Guard: non-credit transactions cannot push balance below 0. Credit tx types (additive — they
+  // INCREASE the plant count) are exempt: Produced/Received and Seeds Germinated. Sold is exempt
+  // because it tracks weight, not plant count. Skip when qty is 0 (weight-only Harvested rows).
+  const _isCreditTx = (txType === 'Produced/Received' || txType === 'Seeds Germinated');
+  if(!isSold && !_isCreditTx && qty > 0 && currentQtyBefore - qty < 0){
     toast('Cannot save: balance would go below 0. Current: '+currentQtyBefore+', requested: '+qty+'.',5000);
     return;
   }
