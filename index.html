@@ -8322,19 +8322,39 @@ function txTypeChanged(){
   if(destWrap && destSel){
     if(t === 'Moved to Moms'){
       const _srcBatch = document.getElementById('summary-batch-select').value;
-      const _expectedMom = _srcBatch ? ('M-' + _srcBatch) : '';
-      const _momExists = _expectedMom && batchRecs.some(r => r && !r.type && r.batchId === _expectedMom);
-      destSel.innerHTML = _momExists
-        ? '<option value="'+_expectedMom+'" selected>'+_expectedMom+'</option>'
-        : '<option value="">-- no matching mother batch --</option>';
+      // Eligible mothers are matched by LETTER-PREFIX only — any mom batch whose ID is
+      // M-<letterPrefix>-NNN can receive plants from a source batch <letterPrefix>-NNN.
+      // The trailing 3-digit segment doesn't have to match. e.g. source 'ST-010' can
+      // be moved into M-ST-001, M-ST-042, etc.
+      const _prefixMatch = _srcBatch ? _srcBatch.match(/^([A-Za-z]+)-\d+$/i) : null;
+      const _letterPrefix = _prefixMatch ? _prefixMatch[1].toUpperCase() : '';
+      const _expectedMomPattern = _letterPrefix ? ('M-' + _letterPrefix + '-XXX') : 'M-XX-XXX';
+      const _eligibleMoms = _letterPrefix
+        ? batchRecs
+            .filter(r => r && !r.type && r.batchId
+              && new RegExp('^M-' + _letterPrefix + '-\\d+$', 'i').test(r.batchId))
+            .map(r => r.batchId)
+            .sort()
+        : [];
+      if(_eligibleMoms.length === 0){
+        destSel.innerHTML = '<option value="">-- no matching mother batch --</option>';
+      } else if(_eligibleMoms.length === 1){
+        destSel.innerHTML = '<option value="'+_eligibleMoms[0]+'" selected>'+_eligibleMoms[0]+'</option>';
+      } else {
+        destSel.innerHTML = '<option value="">-- pick mother batch --</option>'
+          + _eligibleMoms.map(m => '<option value="'+m+'">'+m+'</option>').join('');
+      }
       destWrap.style.display = '';
       if(destMsg){
-        if(!_momExists){
+        if(_eligibleMoms.length === 0){
           destMsg.style.color = 'var(--red)';
-          destMsg.textContent = 'Associated mother batch needs to be created first. Create ' + (_expectedMom || 'M-<batchId>') + ' on the Batches page before recording this transaction.';
+          destMsg.textContent = 'Associated mother batch needs to be created first. Create a mother batch like ' + _expectedMomPattern + ' on the Batches page before recording this transaction.';
+        } else if(_eligibleMoms.length === 1){
+          destMsg.style.color = 'var(--amber)';
+          destMsg.textContent = 'Destination is ' + _eligibleMoms[0] + ' (auto-selected). A matching Produced/Received tx will be added there.';
         } else {
           destMsg.style.color = 'var(--amber)';
-          destMsg.textContent = 'Destination is ' + _expectedMom + ' (auto-selected). A matching Produced/Received tx will be added there.';
+          destMsg.textContent = 'Pick the destination from the ' + _eligibleMoms.length + ' matching mother batch(es). A matching Produced/Received tx will be added there.';
         }
       }
     } else {
@@ -8832,20 +8852,30 @@ async function summaryAddTransaction(){
     }
   }
   // Moved to Moms requires a destination mother batch. Look it up and validate.
+  // The destination is matched by LETTER-PREFIX only: source 'ST-010' can be moved into any
+  // M-ST-NNN mother batch (the trailing 3 digits can be anything).
   let _destMomBatchId = '';
   if(txType === 'Moved to Moms'){
     _destMomBatchId = (document.getElementById('tx-dest-mom')?.value || '').trim();
-    const _expectedMom = 'M-' + batchId;
-    if(!batchRecs.some(r => r && !r.type && r.batchId === _expectedMom)){
-      toast('Associated mother batch needs to be created first — create ' + _expectedMom + ' on the Batches page before recording this transaction.', 6500);
+    const _prefixMatch = batchId ? batchId.match(/^([A-Za-z]+)-\d+$/i) : null;
+    const _letterPrefix = _prefixMatch ? _prefixMatch[1].toUpperCase() : '';
+    const _expectedMomPattern = _letterPrefix ? ('M-' + _letterPrefix + '-XXX') : 'M-XX-XXX';
+    const _eligibleMoms = _letterPrefix
+      ? batchRecs
+          .filter(r => r && !r.type && r.batchId
+            && new RegExp('^M-' + _letterPrefix + '-\\d+$', 'i').test(r.batchId))
+          .map(r => r.batchId)
+      : [];
+    if(_eligibleMoms.length === 0){
+      toast('Associated mother batch needs to be created first — create a mother like ' + _expectedMomPattern + ' on the Batches page before recording this transaction.', 6500);
       return;
     }
     if(!_destMomBatchId){
       toast('Pick which mother batch the plants are being moved INTO.', 4500);
       return;
     }
-    if(_destMomBatchId !== _expectedMom){
-      toast('Destination mother batch must be ' + _expectedMom + ' (paired with this source batch).', 5500);
+    if(!_eligibleMoms.includes(_destMomBatchId)){
+      toast('Destination mother batch must match the prefix ' + _expectedMomPattern + ' (eligible: ' + _eligibleMoms.join(', ') + ').', 6000);
       return;
     }
     if(!isMotherBatch(_destMomBatchId)){
