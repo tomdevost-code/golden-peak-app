@@ -884,7 +884,7 @@ tr:last-child td { border-bottom: none; }
             <label>Plant Phase</label>
             <select id="summary-phase" onchange="applyPhaseRoomLock()" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;">
               <option value="">-- select phase --</option>
-              <option>Seeds</option>
+              <option>Germination</option>
               <option>Clones</option>
               <option>Veg</option>
               <option>Flower</option>
@@ -3185,14 +3185,16 @@ function getDisplayPhase(batchRec){
 }
 function enforceZeroQtyState(batchId){
   // Hard rule: when a batch's current quantity is <= 0 AND it hasn't entered the post-harvest lifecycle,
-  // its plantPhase MUST be 'Clones' and rooms MUST be ['Veg']. Auto-corrects + marks unsynced.
+  // its plantPhase MUST be its starting phase ('Germination' for Seeds-genetics, 'Clones' otherwise)
+  // and rooms MUST be ['Veg']. Auto-corrects + marks unsynced.
   // Skipped for Drying/Packaged/Delivered so a fully-harvested OR delivered batch isn't rolled back.
   if(calcBatchQty(batchId)>0) return false;
   const b = batchRecs.find(r=>r.batchId===batchId && !r.type);
   if(!b) return false;
   if(['Drying','Packaged','Delivered'].includes(b.plantPhase)) return false;
+  const _startPhase = (String(b.geneticsSource||'').toLowerCase() === 'seeds') ? 'Germination' : 'Clones';
   let changed=false;
-  if(b.plantPhase!=='Clones'){ b.plantPhase='Clones'; changed=true; }
+  if(b.plantPhase!==_startPhase){ b.plantPhase=_startPhase; changed=true; }
   if(!Array.isArray(b.rooms) || b.rooms.length!==1 || b.rooms[0]!=='Veg'){ b.rooms=['Veg']; changed=true; }
   if(changed){
     b.synced=false;
@@ -5733,15 +5735,17 @@ async function ecSave(){
     _hydrationCaptured = true;
     updatePendingBadge();
   }
-  // Auto-advance Clones → Veg when Water In is logged (Veg-sequence completes Hydration → Pre-Charge → Water In)
+  // Auto-advance Clones/Germination → Veg when Water In is logged (Veg-sequence completes Hydration → Pre-Charge → Water In)
+  // Seeds-genetics batches start in 'Germination' and advance to Veg on Water In just like Clones batches do.
   let _vegAdvanced = false;
-  if(wtype === 'Water In' && _ecBatchRec && _ecBatchRec.plantPhase === 'Clones'){
+  if(wtype === 'Water In' && _ecBatchRec && (_ecBatchRec.plantPhase === 'Clones' || _ecBatchRec.plantPhase === 'Germination')){
+    const _fromPhase = _ecBatchRec.plantPhase;
     _ecBatchRec.plantPhase = 'Veg';
     if(!_ecBatchRec.vegStart) _ecBatchRec.vegStart = date;
     _ecBatchRec.synced = false;
     lsSet('gp-batch', batchRecs);
     _vegAdvanced = true;
-    recordPhaseChangeTx(batchVal2, 'Clones', 'Veg');
+    recordPhaseChangeTx(batchVal2, _fromPhase, 'Veg');
     updatePendingBadge();
   }
   // Veg → Flower stays manual — plants can be physically in a flower room while the batch is
@@ -6641,7 +6645,7 @@ function wasteRefreshSubtype(){
   // trim and de-leaf work on drying plants), so Drying-phase records get the
   // same Veg/Flower sub-category list as live Flower rooms.
   let opts = [];
-  if(phase === 'Clones')                                opts = VEG_WASTE_SUBTYPES_CLONES;
+  if(phase === 'Clones' || phase === 'Germination')     opts = VEG_WASTE_SUBTYPES_CLONES;
   else if(['Veg','Flower','Drying'].includes(phase))    opts = VEG_WASTE_SUBTYPES_VEGFLOWER;
   else opts = [];
   const prev = sel.value;
@@ -7150,14 +7154,17 @@ async function batchCreate(){
     _seedStrainName = _siRec.strain;
     _seedLotNumber = _siRec.lotNumber;
   }
-  // All new batches start with qty=0, so the zero-qty rule applies: phase='Clones', rooms=['Veg'].
+  // All new batches start with qty=0, so the zero-qty rule applies:
+  //   phase='Clones' (or 'Germination' for Seeds-genetics), rooms=['Veg'].
   const _created = localDate();
   // cloneDate is left empty at batch creation for both Clones-Internal and Clones-External.
   // It's captured when the first Produced/Received transaction is saved:
   //   - Clones-Internal: cloneDate = the transaction's date (today), set silently with no UI input.
   //   - Clones-External: cloneDate = the value the user enters into the conditional Clone Date input.
   // For Seeds: cloneDate is set to today (the day the seeds were planted/started).
-  const rec = { id: Date.now(), batchId, cultivar: cultivar || _seedStrainName, mother, geneticsSource, externalCompany, notes, createdDate: _created, cloneDate: (geneticsSource === 'Seeds' ? _created : ''), rooms: ['Veg'], plantPhase: 'Clones', status: 'Open', closedDate: '', synced: false };
+  // Initial phase: Seeds-genetics batches start in Germination; all others start in Clones.
+  const _initialPhase = (geneticsSource === 'Seeds') ? 'Germination' : 'Clones';
+  const rec = { id: Date.now(), batchId, cultivar: cultivar || _seedStrainName, mother, geneticsSource, externalCompany, notes, createdDate: _created, cloneDate: (geneticsSource === 'Seeds' ? _created : ''), rooms: ['Veg'], plantPhase: _initialPhase, status: 'Open', closedDate: '', synced: false };
   if(geneticsSource === 'Seeds'){
     if(_seedStrainName) rec.seedStrain = _seedStrainName;
     if(_seedLotNumber) rec.seedLotNumber = _seedLotNumber;
@@ -7787,7 +7794,12 @@ function computeBatchDayParts(b, today){
     return parts;
   }
   // Non-mother branches
-  if(b.plantPhase === 'Clones'){
+  if(b.plantPhase === 'Germination'){
+    // Seeds-only starting phase. Day count uses cloneDate (which for Seeds batches is the
+    // germination date — captured at batch creation when geneticsSource === 'Seeds').
+    const gd = calcCloneDay(b.batchId, today);
+    if(gd && gd > 0) parts.push({label:'G'+gd, desc:'germination'});
+  } else if(b.plantPhase === 'Clones'){
     const cd = calcCloneDay(b.batchId, today);
     if(cd && cd > 0) parts.push({label:'C'+cd, desc:'clones'});
   } else if(b.plantPhase === 'Veg' && b.vegStart){
@@ -7837,7 +7849,7 @@ function summaryRefreshCurrentDay(batchId){
   const parts = computeBatchDayParts(b, _today);
   if(parts.length === 0){
     _dayEl.style.fontSize = '32px';
-    if(b.plantPhase === 'Clones'){
+    if(b.plantPhase === 'Clones' || b.plantPhase === 'Germination'){
       _dayEl.textContent = '—'; _dayLbl.textContent = 'add plants to start';
     } else {
       _dayEl.textContent = '—'; _dayLbl.textContent = b.plantPhase ? b.plantPhase.toLowerCase() : '—';
@@ -8174,13 +8186,14 @@ function getAllowedPhases(currentPhase, batchId){
   if(!currentPhase) return ['Clones'];
   const isMother = batchId ? isMotherBatch(batchId) : false;
   switch(currentPhase){
+    case 'Germination': return ['Germination','Veg']; // Seeds-only starting phase, advances to Veg
     case 'Clones':   return isMother ? ['Clones','Veg','Flower'] : ['Clones']; // moms can jump straight to Flower if needed
     case 'Veg':      return ['Veg','Flower']; // manual transition
     case 'Flower':   return ['Flower'];
     case 'Drying':   return ['Drying']; // mothers terminate here too
     case 'Packaged': return isMother ? ['Packaged'] : ['Packaged','Delivered']; // mothers shouldn't reach Packaged anyway
     case 'Delivered':return ['Delivered']; // terminal — only Close (via Status) remains
-    case 'Seeds':    return ['Seeds','Clones']; // legacy migration path
+    case 'Seeds':    return ['Seeds','Germination']; // legacy migration path
     default:         return [currentPhase];
   }
 }
@@ -8196,25 +8209,28 @@ function batchHasWaterInForAllRooms(batchId){
 }
 function summaryUpdatePhaseOptions(currentPhase, qty){
   // Rebuild the Plant Phase dropdown:
-  //   - If batch has 0 plants → lock to 'Clones' (the starting phase) until plants are added.
-  //   - If batch hasn't had 'Water In' logged in every active room yet → lock to 'Clones' too.
-  //     (Clones don't graduate to Veg until they've been watered in.)
+  //   - If batch has 0 plants → lock to starting phase (Germination for Seeds, Clones otherwise) until plants are added.
+  //   - If batch hasn't had 'Water In' logged in every active room yet → lock to starting phase too.
+  //     (Plants don't graduate to Veg until they've been watered in.)
   //   - Otherwise → only allow current phase + forward phases.
   const sel = document.getElementById('summary-phase');
   if(!sel) return;
   const batchId = document.getElementById('summary-batch-select').value;
-  // Zero-qty rule only forces Clones for active growing phases. Post-harvest phases
+  const _bRec = batchId ? batchRecs.find(r => r.batchId === batchId && !r.type) : null;
+  const _isSeeds = _bRec && (String(_bRec.geneticsSource||'').toLowerCase() === 'seeds');
+  const _startPhase = _isSeeds ? 'Germination' : 'Clones';
+  // Zero-qty rule only forces start phase for active growing phases. Post-harvest phases
   // (Harvested, Drying, Packaged, Sold) keep their value even when qty hits 0.
   const postHarvest = ['Drying','Packaged','Delivered'].includes(currentPhase);
   const noPlants = (!qty || qty<=0) && !postHarvest;
-  // Water-In gate: only relevant while the batch is still in Clones phase (the gate that prevents
-  // manually skipping to Veg/Flower/etc. without first watering them in). Mother batches bypass
-  // this gate — they need full manual control of phase transitions across their multi-cohort lifecycle.
+  // Water-In gate: only relevant while the batch is still in its starting phase (Clones or Germination).
+  // Mother batches bypass this gate — they need full manual control of phase transitions.
   const _gateIsMother = batchId ? isMotherBatch(batchId) : false;
-  const waterInGate = (currentPhase === 'Clones') && batchId && !_gateIsMother && !batchHasWaterInForAllRooms(batchId);
-  const lockToClones = noPlants || waterInGate;
-  const allowed = lockToClones ? ['Clones'] : getAllowedPhases(currentPhase, batchId);
-  const valueToSelect = lockToClones ? 'Clones' : currentPhase;
+  const _atStart = (currentPhase === 'Clones' || currentPhase === 'Germination');
+  const waterInGate = _atStart && batchId && !_gateIsMother && !batchHasWaterInForAllRooms(batchId);
+  const lockToStart = noPlants || waterInGate;
+  const allowed = lockToStart ? [_startPhase] : getAllowedPhases(currentPhase, batchId);
+  const valueToSelect = lockToStart ? _startPhase : currentPhase;
   sel.innerHTML = '<option value="">-- select phase --</option>' + allowed.map(p=>'<option'+(p===valueToSelect?' selected':'')+'>'+p+'</option>').join('');
 }
 function txTypeChanged(){
@@ -8446,6 +8462,7 @@ function summaryUpdateTxTypeOptions(batchId){
   else if(phase==='Drying')   opts = []; // Drying → continue harvesting / auto Post-Dry
   else if(phase==='Packaged') opts = []; // user advances to Delivered first
   else if(phase==='Delivered')opts = ['Sold']; // post-delivery: record the sale, then Close
+  else if(phase==='Germination') opts = []; // Seeds Germinated added below via Seeds-genetics branch
   else if(phase==='Clones')   opts = hasTxs ? ['Produced/Received','Moved to Moms'] : ['Produced/Received'];
   else if(phase==='Veg')      opts = ['Moved to Moms']; // Harvested is auto via Harvest Log
   else if(!hasTxs)            opts = ['Produced/Received'];
@@ -8454,7 +8471,8 @@ function summaryUpdateTxTypeOptions(batchId){
   if(hasSold) opts = opts.filter(o=>o!=='Sold');
   // Sent to Lab is allowed any time there are plants/material to send — meaning anywhere a
   // regular manual tx is allowed (not in the auto-only Flower/Drying/Packaged phases).
-  if(opts.length > 0 || phase === 'Delivered'){
+  // Germination phase also gets Sent to Lab so seed-stage lab testing can be recorded.
+  if(opts.length > 0 || phase === 'Delivered' || phase === 'Germination'){
     if(!opts.includes('Sent to Lab')) opts.push('Sent to Lab');
   }
   // Seeds Germinated is for Seeds-genetics batches only. It records how many seeds sprouted
@@ -8560,11 +8578,14 @@ async function summaryUpdateBatch(){
     toast('Cannot move plant phase backward (from '+(existingPhase||'unset')+' to '+plantPhase+').',5000);
     return;
   }
-  // Guard: when batch has 0 plants AND is in an active growing phase (not post-harvest), only 'Clones' is allowed.
+  // Guard: when batch has 0 plants AND is in an active growing phase (not post-harvest), only the
+  // starting phase ('Germination' for Seeds-genetics, 'Clones' otherwise) is allowed.
   // Post-harvest batches (Harvested, Drying, Packaged, Sold) can still progress forward when qty=0.
   const _existPostHarvest = ['Drying','Packaged','Delivered'].includes(existingPhase);
-  if(calcBatchQty(batchId) <= 0 && !_existPostHarvest && plantPhase && plantPhase !== 'Clones'){
-    toast('Cannot advance phase: batch has 0 plants. Add a Produced/Received transaction first.',5000);
+  const _gZeroBatch = batchRecs[idx];
+  const _gZeroStart = (String(_gZeroBatch.geneticsSource||'').toLowerCase() === 'seeds') ? 'Germination' : 'Clones';
+  if(calcBatchQty(batchId) <= 0 && !_existPostHarvest && plantPhase && plantPhase !== _gZeroStart){
+    toast('Cannot advance phase: batch has 0 plants. Add a '+(_gZeroStart==='Germination'?'Seeds Germinated':'Produced/Received')+' transaction first.',5000);
     return;
   }
   // Guard: a batch cannot be set to 'Packaged' unless it has been harvested (has a stamped
@@ -8607,7 +8628,7 @@ async function summaryUpdateBatch(){
   let _autoPackaged = batchRecs[idx].packagedDate || '';
   let _autoDelivered = batchRecs[idx].deliveredDate || '';
   const _t = localDate();
-  if(plantPhase === 'Veg' && existingPhase === 'Clones' && !_autoVeg) _autoVeg = _t;
+  if(plantPhase === 'Veg' && (existingPhase === 'Clones' || existingPhase === 'Germination') && !_autoVeg) _autoVeg = _t;
   if(plantPhase === 'Flower' && existingPhase === 'Veg' && !_autoFlower) _autoFlower = _t;
   // Mom batches can jump Clones → Flower directly; stamp both vegStart and flowerStart so the
   // day counters (V-day, F-day) and downstream rules still have valid anchor dates.
@@ -8849,9 +8870,9 @@ async function summaryAddTransaction(){
     toast('In Flower phase, only Harvested transactions are allowed.',5000);
     return;
   }
-  // Guard: in Clones phase, Harvested is not allowed (clones aren't harvestable)
-  if(_bGuard && _bGuard.plantPhase==='Clones' && txType==='Harvested'){
-    toast('Cannot harvest plants while in Clones phase.',5000);
+  // Guard: in Clones/Germination phase, Harvested is not allowed (these plants aren't harvestable)
+  if(_bGuard && (_bGuard.plantPhase==='Clones' || _bGuard.plantPhase==='Germination') && txType==='Harvested'){
+    toast('Cannot harvest plants while in '+_bGuard.plantPhase+' phase.',5000);
     return;
   }
   // Guard: in Veg phase, no more Produced/Received transactions (additions stop once
@@ -10393,9 +10414,9 @@ function ctlsVegMetrics(from, to){
   const destroyedAll = txs
     .filter(t => t.txType === 'Destroyed')
     .reduce((s,t) => s + (parseInt(t.qty)||0), 0);
-  // Destroyed specifically in Veg/Clone phase — read from the destroy tx's plantPhase.
+  // Destroyed specifically in Veg/Clone/Germination phase — read from the destroy tx's plantPhase.
   const destroyedVeg = txs
-    .filter(t => t.txType === 'Destroyed' && ['Clones','Veg','Seeds'].includes(t.plantPhase||''))
+    .filter(t => t.txType === 'Destroyed' && ['Clones','Veg','Seeds','Germination'].includes(t.plantPhase||''))
     .reduce((s,t) => s + (parseInt(t.qty)||0), 0);
   // Waste records for cross-reference (the destroy txs are auto-created from these).
   const vegWastes = _wastesInRange(from, to).filter(w => (w.type||'') === 'Vegetative Waste');
