@@ -3935,8 +3935,9 @@ function bioPopulateBatches(){
       if(['Drying','Packaged','Delivered'].includes(b.plantPhase)) return false;
       // Moms toggle is exclusive: hide moms when OFF, show only moms when ON.
       if(_bioMomsOnly !== isMotherBatch(b.batchId)) return false;
-      // Must have plants (at least one Produced/Received tx)
-      return batchTxRecs.some(t => t.batchId === b.batchId && t.txType === 'Produced/Received');
+      // Must have plants (at least one intake tx — Produced/Received or Seeds Germinated).
+      return batchTxRecs.some(t => t.batchId === b.batchId
+        && (t.txType === 'Produced/Received' || t.txType === 'Seeds Germinated'));
     })
     .map(b => b.batchId)
     .sort();
@@ -4866,7 +4867,10 @@ function getFormBatchList(){
   batchRecs.forEach(b=>{
     if(b.type||!b.batchId) return; // skip legacy movement entries
     if(isBatchClosedRec(b)) return; // closed batches never show in operational dropdowns
-    const hasPlants = batchTxRecs.some(t => t.batchId === b.batchId && t.txType === 'Produced/Received');
+    // A batch "has plants" once it has its initial intake tx — Produced/Received for
+    // clones/external batches, or Seeds Germinated for Seeds-genetics batches.
+    const hasPlants = batchTxRecs.some(t => t.batchId === b.batchId
+      && (t.txType === 'Produced/Received' || t.txType === 'Seeds Germinated'));
     if(!hasPlants) return;
     // 'closed' here is the legacy "harvested" indicator (any EC/RO with harvestDate),
     // used to mark drying batches as (harvested). Not the same as actual closed status.
@@ -6378,7 +6382,7 @@ async function syncPending(){
         // Compute Current Quantity After: running balance up to and including this transaction
         const sorted=batchTxRecs.filter(t=>t.batchId===tx.batchId).sort((a,b)=>(a.id||0)-(b.id||0));
         let running=0;
-        for(const t of sorted){const q=parseInt(t.qty)||0;if(t.txType==='Produced/Received')running+=q;else running-=q;if(t.id===tx.id)break;}
+        for(const t of sorted){const q=parseInt(t.qty)||0;if(t.txType==='Produced/Received'||t.txType==='Seeds Germinated')running+=q;else running-=q;if(t.id===tx.id)break;}
         if(running<0)running=0;
         const f={'Batch ID':tx.batchId?[tx.batchId]:undefined,'Date':tx.date,'Transaction Type':tx.txType,'Plant Phase':tx.plantPhase||undefined,'Quantity':tx.qty,'Weight (kg)':tx.weight||undefined,'Current Quantity After':running,'Sale Stage':tx.saleStage||undefined,'Lab Destination Type':tx.labDestType||undefined,'Lab Material Type':tx.labMaterialType||undefined,'Lab Destination Name':tx.labDestName||undefined,'Notes':tx.notes||undefined};
         Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
@@ -6725,7 +6729,7 @@ async function wasteSave(){
   let _distChanged=false;
   if(rec.type==='Vegetative Waste' && rec.plants>0){
     let qtyBefore=0;
-    batchTxRecs.filter(t=>t.batchId===rec.batch).forEach(t=>{const q=parseInt(t.qty)||0;if(t.txType==='Produced/Received')qtyBefore+=q;else qtyBefore-=q;});
+    batchTxRecs.filter(t=>t.batchId===rec.batch).forEach(t=>{const q=parseInt(t.qty)||0;if(t.txType==='Produced/Received'||t.txType==='Seeds Germinated')qtyBefore+=q;else qtyBefore-=q;});
     if(qtyBefore<0)qtyBefore=0;
     const _dtPhase = _wsBatchRec ? (_wsBatchRec.plantPhase||'') : '';
     destroyedTx={id:Date.now()+1,batchId:rec.batch,date:rec.date,txType:'Destroyed',qty:rec.plants,notes:'Auto-created from Vegetative Waste record',currentQtyBefore:qtyBefore,plantPhase:_dtPhase,synced:false};
@@ -9216,7 +9220,7 @@ function summaryRenderHistory(batchId){
   const withQty = sorted.map(t=>{
     if(t.txType==='Sold' || t.txType==='Phase Advance'){ return {...t, runningQty: running}; }
     const q = parseInt(t.qty)||0;
-    if(t.txType==='Produced/Received') running += q;
+    if(t.txType==='Produced/Received' || t.txType==='Seeds Germinated') running += q;
     else running -= q;
     if(running < 0) running = 0;
     return {...t, runningQty: running};
@@ -9379,14 +9383,15 @@ function renderBatchReport(batchId){
       if(t.txType === 'Sold') {/* sold tracks weight, not plant qty */}
       else {
         const q = parseInt(t.qty)||0;
-        if(t.txType === 'Produced/Received') running += q;
+        if(t.txType === 'Produced/Received' || t.txType === 'Seeds Germinated') running += q;
         else running -= q;
         if(running < 0) running = 0;
       }
+      const _isCredit = (t.txType === 'Produced/Received' || t.txType === 'Seeds Germinated');
       const qtyStr = t.txType === 'Sold' ? fmtKg(parseFloat(t.weight)||0)
                    : t.txType === 'Harvested' ? ((parseInt(t.qty)||0)+' / '+fmtKg(parseFloat(t.weight)||0))
                    : t.txType === 'Phase Change' ? (t.weight > 0 ? fmtKg(t.weight) : '—')
-                   : (t.txType === 'Produced/Received' ? '+' : '-') + (parseInt(t.qty)||0);
+                   : (_isCredit ? '+' : '-') + (parseInt(t.qty)||0);
       return [t.date||'—', t.txType||'—', t.plantPhase||'—', qtyStr, String(running), t.notes||''];
     });
     s += sectionTable('Transaction History', ['Date','Type','Phase','Qty / Weight','Balance','Notes'], rows);
@@ -10493,7 +10498,7 @@ function ctlsFlowerMetrics(from, to){
     sortedTxs.forEach(t => {
       const q = parseInt(t.qty)||0;
       if(t.txType === 'Sold' || t.txType === 'Phase Advance' || t.txType === 'Phase Change') return;
-      if(t.txType === 'Produced/Received') qty += q; else qty -= q;
+      if(t.txType === 'Produced/Received' || t.txType === 'Seeds Germinated') qty += q; else qty -= q;
     });
     return sum + Math.max(0, qty);
   }, 0);
