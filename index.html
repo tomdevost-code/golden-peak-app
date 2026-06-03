@@ -790,7 +790,7 @@ tr:last-child td { border-bottom: none; }
           <div style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--border);">
             <div style="font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">Lifecycle Dates (auto-set)</div>
             <div class="g2" style="margin-bottom:6px;">
-              <div class="field"><label>Clone Date</label><div id="si-clone-date" style="font-size:13px;font-family:var(--mono);padding:4px 0;color:var(--text2);">—</div></div>
+              <div class="field"><label id="si-clone-date-label">Clone Date</label><div id="si-clone-date" style="font-size:13px;font-family:var(--mono);padding:4px 0;color:var(--text2);">—</div></div>
               <div class="field"><label>Hydration</label><div id="si-hydration-date" style="font-size:13px;font-family:var(--mono);padding:4px 0;color:var(--text2);">—</div></div>
             </div>
             <div class="g2" style="margin-bottom:6px;">
@@ -995,7 +995,7 @@ tr:last-child td { border-bottom: none; }
                actually count plants moving in/out of the batch). Harvested has its qty derived from
                the Harvest Log room data, and Sold uses Weight (kg) instead. -->
           <div class="field" style="margin-bottom:10px;display:none;" id="tx-plant-count-wrap">
-            <label>Plant Count</label>
+            <label id="tx-plant-count-label">Plant Count</label>
             <input type="number" id="tx-plant-count" placeholder="0" min="0" step="1" onwheel="this.blur()" onkeydown="if(event.key==='ArrowUp'||event.key==='ArrowDown')event.preventDefault();" style="font-size:14px;font-family:var(--mono);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;" />
           </div>
           <!-- Destination Mother Batch: shown only for Moved to Moms. Picks which M-* batch
@@ -7439,7 +7439,11 @@ function summaryBatchChanged(){
   summaryUpdateVegLock();
   summaryStatusChanged();
   document.getElementById('summary-closed-date').value = b.closedDate||'';
-  // Lifecycle dates (read-only in Batch Info)
+  // Lifecycle dates (read-only in Batch Info). For Seeds-genetics batches the "Clone Date"
+  // concept is really "Germination Date" — relabel the field so the grower sees the right
+  // term for the lineage of this batch.
+  const _siCloneLbl = document.getElementById('si-clone-date-label');
+  if(_siCloneLbl) _siCloneLbl.textContent = ((b.geneticsSource||'').toLowerCase() === 'seeds') ? 'Germination Date' : 'Clone Date';
   document.getElementById('si-clone-date').textContent = b.cloneDate || '—';
   document.getElementById('si-hydration-date').textContent = b.hydrationDate || '—';
   document.getElementById('si-veg-start').textContent = b.vegStart || '—';
@@ -8230,6 +8234,9 @@ function txTypeChanged(){
   // Default: hide both, clear values
   pcWrap.style.display = 'none';
   wetWrap.style.display = 'none';
+  // Default the Plant Count label back to "Plant Count" — overridden below for Seeds Germinated.
+  const pcLbl = document.getElementById('tx-plant-count-label');
+  if(pcLbl) pcLbl.textContent = 'Plant Count';
   if(t === 'Produced/Received' || t === 'Moved to Moms' || t === 'Seeds Germinated'){
     pcWrap.style.display = '';
     wetInp.value = '';
@@ -8238,6 +8245,8 @@ function txTypeChanged(){
     pcInp.style.background = 'var(--bg)';
     pcInp.style.color = 'var(--text)';
     pcInp.style.cursor = '';
+    // For Seeds Germinated, rename the label to match the user's mental model.
+    if(t === 'Seeds Germinated' && pcLbl) pcLbl.textContent = 'Quantity of seeds to germinate';
   } else if(t === 'Sold'){
     wetWrap.style.display = '';
     wetLbl.textContent = 'Weight (kg)';
@@ -9299,11 +9308,12 @@ function renderBatchReport(batchId){
     ])
   );
 
-  // Lifecycle dates
+  // Lifecycle dates — "Clone Date" reads as "Germination Date" for Seeds-genetics batches.
+  const _cdLabel = ((b.geneticsSource||'').toLowerCase() === 'seeds') ? 'Germination Date' : 'Clone Date';
   s += sectionCard('Lifecycle Dates',
     twoCol([
       ['Created Date',    fmtD(b.createdDate)],
-      ['Clone Date',      fmtD(b.cloneDate)],
+      [_cdLabel,          fmtD(b.cloneDate)],
       ['Hydration Date',  fmtD(b.hydrationDate)],
       ['Veg Start',       fmtD(b.vegStart)],
       ['Flower Start',    fmtD(b.flowerStart)],
