@@ -6725,16 +6725,13 @@ function wasteSeqUnlock(){
   // Phase-driven room list:
   //   Pre-harvest (Clones/Veg/Flower) → rooms with plants > 0 (+ Veg if it has unallocated plants).
   //     Once a room is harvested its plant count drops to 0, so it's naturally excluded here.
-  //   Drying                         → ONLY the rooms that have been harvested (in completedHarvests).
-  //     These are the "drying rooms" — flower rooms still holding plants in Drying-phase batches
-  //     (multi-day harvest scenario) are still alive and aren't drying yet, so they're filtered out.
-  //   Packaged                       → only 'Trim Room' (the dedicated post-packaging trim space).
+  //   Drying / Packaged               → only 'Trim Room'. Dry waste (and the dried-flower
+  //     waste record that happens between drying and packaging) is always recorded from the
+  //     Trim Room — flower rooms are never valid for Dry Waste, since packaging / trimming
+  //     happens exclusively in the Trim Room.
   const _phase = batchRec ? batchRec.plantPhase : '';
-  if(_phase === 'Packaged'){
+  if(_phase === 'Drying' || _phase === 'Packaged'){
     batchRooms = ['Trim Room'];
-  } else if(_phase === 'Drying'){
-    const _completed = (batchRec && Array.isArray(batchRec.completedHarvests)) ? batchRec.completedHarvests : [];
-    batchRooms = batchRooms.filter(r => _completed.includes(r));
   } else {
     // Pre-harvest filtering — include only rooms with plants, plus Veg if it has the remainder.
     batchRooms = batchRooms.filter(r=>calcRoomPlantCount(batch, r) > 0);
@@ -6875,9 +6872,11 @@ async function wasteSave(){
     }
     return;
   }
-  // Guard: Dry Waste after packaging only comes from 'Trim Room'
-  if(_wsPhase === 'Packaged' && type === 'Dry Waste' && room !== 'Trim Room'){
-    toast('Dry Waste can only be recorded from the Trim Room after packaging.',5000);
+  // Guard: Dry Waste during Drying or after Packaging only comes from the Trim Room. All
+  // trimming and packaging for dried flower happens in the Trim Room — flower rooms are not
+  // valid Dry Waste sources (their material has already been removed to drying / packaging).
+  if((_wsPhase === 'Drying' || _wsPhase === 'Packaged') && type === 'Dry Waste' && room !== 'Trim Room'){
+    toast('Dry Waste can only be recorded from the Trim Room.',5000);
     return;
   }
   // Guard: destroying plants via Vegetative Waste cannot exceed the count IN THAT SPECIFIC ROOM.
