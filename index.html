@@ -1143,6 +1143,17 @@ tr:last-child td { border-bottom: none; }
           </div>
           <div id="harvest-bin-list" style="padding:10px 14px;font-size:13px;color:var(--text3);text-align:center;">Select grower, batch, and room to start a harvest session.</div>
         </div>
+        <div class="field" style="margin-top:12px;">
+          <label>Disposition <span style="font-size:10px;color:var(--text3);font-weight:400;">— what happens to this room's harvested material</span></label>
+          <select id="harvest-disposition" onchange="harvestDispositionChanged()" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;">
+            <option value="Drying" selected>Move to Drying (normal flow)</option>
+            <option value="Fresh">Sell as Fresh (to processor — skips drying)</option>
+          </select>
+          <div id="harvest-fresh-buyer-wrap" style="display:none;margin-top:8px;">
+            <label style="font-size:11px;color:var(--text3);">Processor / buyer (optional)</label>
+            <input type="text" id="harvest-fresh-buyer" placeholder="e.g. ABC Processing Co." style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;" />
+          </div>
+        </div>
         <button class="btn-primary" id="harvest-complete-btn" onclick="harvestComplete()" style="margin-top:12px;background:var(--amber);">Complete Harvest for this Batch / Room</button>
         <div id="harvest-complete-msg" style="display:none;margin-top:8px;font-size:13px;"></div>
       </div>
@@ -3825,6 +3836,13 @@ function harvestIsRoomComplete(batchId, room){
   const b = batchRecs.find(r=>r.batchId===batchId && !r.type);
   return !!(b && Array.isArray(b.completedHarvests) && b.completedHarvests.includes(room));
 }
+function harvestDispositionChanged(){
+  const sel = document.getElementById('harvest-disposition');
+  const wrap = document.getElementById('harvest-fresh-buyer-wrap');
+  if(!sel || !wrap) return;
+  wrap.style.display = (sel.value === 'Fresh') ? '' : 'none';
+}
+
 async function harvestComplete(){
   const grower = document.getElementById('harvest-grower').value;
   const batch = document.getElementById('harvest-batch-select').value;
@@ -3838,12 +3856,24 @@ async function harvestComplete(){
   }
   const bins = harvestRecs.filter(r=>r.batch===batch && r.room===room);
   if(!bins.length){ toast('Save at least one bin before completing the harvest.',4500); return; }
+  // Disposition choice: 'Drying' (normal flow, default) or 'Fresh' (sold to processor, skips drying).
+  const _disposition = (document.getElementById('harvest-disposition') || {}).value || 'Drying';
+  const _isFreshSale = (_disposition === 'Fresh');
+  const _freshBuyer = ((document.getElementById('harvest-fresh-buyer') || {}).value || '').trim();
   const totalNet = Math.round(bins.reduce((s,b)=>s+(b.netWeight||0),0)*1000)/1000;
   const idx = batchRecs.findIndex(r=>r.batchId===batch && !r.type);
   if(idx < 0){ toast('Batch record not found.',4000); return; }
   const batchRec = batchRecs[idx];
   const plantsInRoom = (batchRec.roomDistribution && batchRec.roomDistribution[room]) || 0;
-  if(!confirm('Complete harvest for '+batch+' / '+room+'?\nTotal: '+totalNet.toFixed(3)+' kg from '+bins.length+' bin(s), '+plantsInRoom+' plants.\nNo more bins can be added for this batch/room after this.')) return;
+  // Mother batches cannot record a Sold transaction — block the Fresh path there.
+  if(_isFreshSale && isMotherBatch(batch)){
+    toast('Mother batches cannot be sold. Pick "Move to Drying" instead.', 5500);
+    return;
+  }
+  const _confirmDispLine = _isFreshSale
+    ? 'Disposition: SOLD AS FRESH to processor' + (_freshBuyer ? ' ('+_freshBuyer+')' : '') + ' — no drying, no post-dry.'
+    : 'Disposition: Move to Drying (normal flow).';
+  if(!confirm('Complete harvest for '+batch+' / '+room+'?\nTotal: '+totalNet.toFixed(3)+' kg from '+bins.length+' bin(s), '+plantsInRoom+' plants.\n'+_confirmDispLine+'\nNo more bins can be added for this batch/room after this.')) return;
   // Track per-room harvest data (weights AND plant counts) before zeroing the live distribution.
   if(!batchRec.harvestedWeights) batchRec.harvestedWeights = {};
   batchRec.harvestedWeights[room] = totalNet;
@@ -3856,8 +3886,10 @@ async function harvestComplete(){
   if(!batchRec.roomDistribution) batchRec.roomDistribution = {};
   batchRec.roomDistribution[room] = 0;
   batchRec.synced = false;
-  // First Harvest Complete advances the batch from Flower → Drying. Additional rooms can still
-  // be harvested over later days while the batch is in Drying.
+  // First Harvest Complete advances the batch from Flower → Drying — UNLESS this room is being
+  // sold as fresh AND no other rooms in this batch are going through drying. For simplicity we
+  // always advance the batch to Drying on first harvest event; if all rooms end up sold as fresh,
+  // the batch can be advanced to Delivered manually since no post-dry will occur.
   let _phaseChanged = false;
   if(batchRec.plantPhase === 'Flower'){
     const prevPhase = batchRec.plantPhase;
@@ -3878,6 +3910,10 @@ async function harvestComplete(){
   const isFinalRoom = remainingRooms.length === 0;
   // Create a per-room Harvested transaction now (one per Complete Harvest event) so the running
   // balance decreases and the wet weight per room is visible in the Summary transaction history.
+  // Note in the tx text whether this room's material is heading to drying or being sold fresh.
+  const _harvNoteSuffix = _isFreshSale
+    ? ' — sold as fresh to processor' + (_freshBuyer ? ' ('+_freshBuyer+')' : '')
+    : '';
   const tx = {
     id: Date.now(),
     batchId: batch,
@@ -3885,15 +3921,40 @@ async function harvestComplete(){
     txType: 'Harvested',
     qty: plantsInRoom,
     weight: totalNet,
-    notes: 'Harvested from '+room+' ('+bins.length+' bin'+(bins.length===1?'':'s')+')',
+    notes: 'Harvested from '+room+' ('+bins.length+' bin'+(bins.length===1?'':'s')+')'+_harvNoteSuffix,
     currentQtyBefore: calcBatchQty(batch),
     plantPhase: batchRec.plantPhase || '',
     synced: false
   };
   batchTxRecs.unshift(tx);
+  // If the user picked "Sell as Fresh", also create a Sold tx tagged with Sale Stage = Fresh,
+  // mirroring the totalNet weight. This routes the weight into the CTLS Section 4 "Fresh sold
+  // to processor" line and avoids the user having to add a second transaction manually on the
+  // Batch Management page. (Mother-batch guard above prevents this path for moms.)
+  let freshSoldTx = null;
+  if(_isFreshSale){
+    freshSoldTx = {
+      id: Date.now() + 1,
+      batchId: batch,
+      date: localDate(),
+      txType: 'Sold',
+      qty: 0,
+      weight: totalNet,
+      saleStage: 'Fresh',
+      notes: 'Fresh harvest sold from '+room + (_freshBuyer ? ' to '+_freshBuyer : ''),
+      currentQtyBefore: calcBatchQty(batch),
+      plantPhase: batchRec.plantPhase || '',
+      synced: false
+    };
+    batchTxRecs.unshift(freshSoldTx);
+    // Stamp Sold Date on the batch if it isn't set — a fresh sale IS the sale event for this room.
+    if(!batchRec.soldDate) batchRec.soldDate = localDate();
+  }
   lsSet('gp-batchtx', batchTxRecs);
   updatePendingBadge();
-  if(isFinalRoom){
+  if(_isFreshSale){
+    toast('Harvest + Fresh sale complete: '+totalNet.toFixed(3)+' kg from '+room+(_freshBuyer?(' → '+_freshBuyer):'')+'.', 5500);
+  } else if(isFinalRoom){
     const totalAll = Math.round(Object.values(batchRec.harvestedWeights).reduce((s,w)=>s+(parseFloat(w)||0),0)*1000)/1000;
     toast('Final room harvested! Batch total: '+totalAll.toFixed(3)+' kg.',5000);
   } else {
@@ -3913,6 +3974,17 @@ async function harvestComplete(){
       const _txRes = await atPost(cfg.batchtxTbl, f);
       tx.synced = true;
       if(_txRes && _txRes.id) tx.airtableId = _txRes.id;
+      lsSet('gp-batchtx', batchTxRecs);
+    }catch(e){ /* Sync Pending will retry */ }
+  }
+  // Sync the Fresh Sold tx too if one was created via the disposition picker.
+  if(freshSoldTx && cfg.batchtxTbl && cfg.token && cfg.base){
+    try{
+      const ff = {'Batch ID':[freshSoldTx.batchId],'Date':freshSoldTx.date,'Transaction Type':freshSoldTx.txType,'Plant Phase':freshSoldTx.plantPhase||undefined,'Quantity':freshSoldTx.qty,'Weight (kg)':freshSoldTx.weight||undefined,'Sale Stage':freshSoldTx.saleStage||undefined,'Current Quantity After':calcBatchQty(batch),'Notes':freshSoldTx.notes};
+      Object.keys(ff).forEach(k=>{if(ff[k]===undefined||ff[k]===null||ff[k]==='')delete ff[k];});
+      const _fsRes = await atPost(cfg.batchtxTbl, ff);
+      freshSoldTx.synced = true;
+      if(_fsRes && _fsRes.id) freshSoldTx.airtableId = _fsRes.id;
       lsSet('gp-batchtx', batchTxRecs);
     }catch(e){ /* Sync Pending will retry */ }
   }
