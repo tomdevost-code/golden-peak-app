@@ -6829,9 +6829,15 @@ function wasteRefreshSubtype(){
   // trim and de-leaf work on drying plants), so Drying-phase records get the
   // same Veg/Flower sub-category list as live Flower rooms.
   let opts = [];
-  if(phase === 'Clones' || phase === 'Germination')     opts = VEG_WASTE_SUBTYPES_CLONES;
-  else if(['Veg','Flower','Drying'].includes(phase))    opts = VEG_WASTE_SUBTYPES_VEGFLOWER;
+  if(phase === 'Clones' || phase === 'Germination')     opts = VEG_WASTE_SUBTYPES_CLONES.slice();
+  else if(['Veg','Flower','Drying'].includes(phase))    opts = VEG_WASTE_SUBTYPES_VEGFLOWER.slice();
   else opts = [];
+  // "Not Germinated" is only meaningful for Seeds-genetics batches. Filter it out for
+  // non-Seeds batches so growers don't accidentally pick it on a Clones-Internal/External batch.
+  const _isSeedsGen = batchRec && ((batchRec.geneticsSource||'').toLowerCase() === 'seeds');
+  if(!_isSeedsGen){
+    opts = opts.filter(o => o !== 'Not Germinated');
+  }
   const prev = sel.value;
   sel.innerHTML = '<option value="">select sub-category</option>' +
     opts.map(o => '<option'+(o===prev?' selected':'')+'>'+o+'</option>').join('');
