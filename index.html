@@ -10098,7 +10098,28 @@ function sanclPopulateRoomOptions(){
     if(hint) hint.textContent = '';
     return;
   }
-  const options = cfg.roomOptions ? cfg.roomOptions.slice() : [];
+  let options = cfg.roomOptions ? cfg.roomOptions.slice() : [];
+  // Grow Room template: filter flower-room options to only those that have actually held
+  // plants for the selected batch. A room qualifies if:
+  //   • its current roomDistribution count > 0, OR
+  //   • it's in batchRec.completedHarvests (it held plants that have since been harvested), OR
+  //   • batchRec.harvestedPlants[room] > 0 (post-harvest cleaning of a room we grew in).
+  // Rooms a batch never used (e.g. Flower 4/5 if you only used Flower 1/2/3) are hidden.
+  if(template === 'Grow Room'){
+    const _bId = (document.getElementById('sancl-batch')||{}).value || '';
+    const _bRec = _bId ? batchRecs.find(r => r && !r.type && r.batchId === _bId) : null;
+    if(_bRec){
+      const _dist = _bRec.roomDistribution || {};
+      const _completed = Array.isArray(_bRec.completedHarvests) ? _bRec.completedHarvests : [];
+      const _harvPlants = _bRec.harvestedPlants || {};
+      options = options.filter(room => {
+        const live = parseInt(_dist[room])||0;
+        const wasHarvested = _completed.includes(room);
+        const heldPlantsAtHarvest = (parseInt(_harvPlants[room])||0) > 0;
+        return live > 0 || wasHarvested || heldPlantsAtHarvest;
+      });
+    }
+  }
   // If there's only one possible room, auto-select it so the grower doesn't have to. Otherwise
   // preserve the current selection (if still valid) or fall back to the unselected prompt.
   let preselect = '';
