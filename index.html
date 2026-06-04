@@ -6651,14 +6651,20 @@ function wasteSeqUnlock(){
     batchRooms = [...new Set(ecRecs.filter(r=>r.batch&&r.batch.trim().toLowerCase()===batch.trim().toLowerCase()&&r.room).map(r=>r.room))];
   }
   // Phase-driven room list:
-  //   Pre-harvest (Clones/Veg/Flower) → rooms with plants > 0 (+ Veg if it has unallocated plants)
-  //   Drying                         → batch's flower rooms (Dry Waste recorded from the room)
-  //   Packaged                       → only 'Trim Room' (the dedicated post-packaging trim space)
+  //   Pre-harvest (Clones/Veg/Flower) → rooms with plants > 0 (+ Veg if it has unallocated plants).
+  //     Once a room is harvested its plant count drops to 0, so it's naturally excluded here.
+  //   Drying                         → ONLY the rooms that have been harvested (in completedHarvests).
+  //     These are the "drying rooms" — flower rooms still holding plants in Drying-phase batches
+  //     (multi-day harvest scenario) are still alive and aren't drying yet, so they're filtered out.
+  //   Packaged                       → only 'Trim Room' (the dedicated post-packaging trim space).
   const _phase = batchRec ? batchRec.plantPhase : '';
   if(_phase === 'Packaged'){
     batchRooms = ['Trim Room'];
-  } else if(_phase !== 'Drying'){
-    // Pre-harvest filtering — include only rooms with plants, plus Veg if it has the remainder
+  } else if(_phase === 'Drying'){
+    const _completed = (batchRec && Array.isArray(batchRec.completedHarvests)) ? batchRec.completedHarvests : [];
+    batchRooms = batchRooms.filter(r => _completed.includes(r));
+  } else {
+    // Pre-harvest filtering — include only rooms with plants, plus Veg if it has the remainder.
     batchRooms = batchRooms.filter(r=>calcRoomPlantCount(batch, r) > 0);
     if(calcRoomPlantCount(batch, 'Veg') > 0 && !batchRooms.includes('Veg')){
       batchRooms.push('Veg');
@@ -6670,12 +6676,12 @@ function wasteSeqUnlock(){
   const room=roomEl.value||prevRoom;
   if(!room){disableFields();return;}
   // Phase-driven waste-type filter:
-  //   • Packaged batches  → 'Trim Room' only, Dry Waste only
-  //   • Everything else (Clones / Veg / Flower / Drying) → Vegetative Waste
-  //     (Drying still allows Veg Waste for trim & de-leaf work done as the
-  //      plants dry, all the way up until packaging.)
+  //   • Packaged batches → 'Trim Room' only, Dry Waste only
+  //   • Drying batches  → harvested drying-room only, Dry Waste only (the plants are no longer
+  //     alive — anything trimmed off them post-harvest is dry-flower material).
+  //   • Clones / Veg / Flower → Vegetative Waste (live plants, trim & de-leaf work).
   const _phaseNow = batchRec ? batchRec.plantPhase : '';
-  const _wasteTypeForRoom = (_phaseNow === 'Packaged') ? 'Dry Waste' : 'Vegetative Waste';
+  const _wasteTypeForRoom = (_phaseNow === 'Packaged' || _phaseNow === 'Drying') ? 'Dry Waste' : 'Vegetative Waste';
   // Filter waste-type dropdown — single option determined by phase.
   const _wtEl = document.getElementById('waste-type');
   const _wtPrev = _wtEl.value;
@@ -6784,11 +6790,14 @@ async function wasteSave(){
   const _wsBatchRec = batchRecs.find(r=>r.batchId===batch && !r.type);
   const _wsPhase = _wsBatchRec ? _wsBatchRec.plantPhase : '';
   const _wsRoomLive = calcRoomPlantCount(batch, room);
-  const _wsExpectedType = (_wsPhase === 'Packaged') ? 'Dry Waste' : 'Vegetative Waste';
+  // Drying and Packaged batches record Dry Waste; everything earlier is Vegetative Waste.
+  const _wsExpectedType = (_wsPhase === 'Packaged' || _wsPhase === 'Drying') ? 'Dry Waste' : 'Vegetative Waste';
   // Guard: waste type must match what this phase allows
   if(type !== _wsExpectedType){
     if(_wsExpectedType === 'Vegetative Waste'){
-      toast('This batch is still pre-packaging — record Vegetative Waste, not Dry Waste.',5500);
+      toast('This batch is still pre-harvest — record Vegetative Waste, not Dry Waste.',5500);
+    } else if(_wsPhase === 'Drying'){
+      toast('This batch is drying — record Dry Waste from a harvested drying room.',5500);
     } else {
       toast('This batch has been packaged — record Dry Waste from the Trim Room.',5500);
     }
