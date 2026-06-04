@@ -2508,6 +2508,35 @@ function mergeRemote(localArr, remoteRecs, mapper, ctx, table, lsKey){
           // Don't push conflict; don't overwrite local. Continue without counting.
           return;
         }
+        // Empty-local field pre-merge: if a local field is empty/empty-object and the
+        // remote has data for the same field, take the remote value into the local record.
+        // This handles the common scenario where one device's roomDistribution (or other
+        // JSON-map field) hasn't been populated yet, while another device wrote real data.
+        // Doing this BEFORE the conflict-diff check suppresses false conflicts on those
+        // fields. Other unsynced local changes (status, plantPhase, etc.) are preserved.
+        if(_isBatchTable){
+          const _emptyMergeFields = ['roomDistribution','harvestedWeights','harvestedPlants','momPhaseCounts'];
+          let _mergedAny = false;
+          _emptyMergeFields.forEach(fld => {
+            const lv = localArr[idx][fld];
+            const rv = mapped[fld];
+            const lvEmpty = !lv || (typeof lv === 'object' && Object.keys(lv).length === 0);
+            const rvHasData = rv && typeof rv === 'object' && Object.keys(rv).length > 0;
+            if(lvEmpty && rvHasData){
+              localArr[idx][fld] = rv;
+              _mergedAny = true;
+            }
+          });
+          if(_mergedAny){
+            // Persist the merged-in data and re-check whether anything still differs.
+            lsSet(lsKey, localArr);
+            // Re-evaluate diffs after the merge — if no fields differ anymore, skip the conflict.
+            const _stillDiff = _conflictDiffFields(localArr[idx], mapped);
+            if(_stillDiff.length === 0){
+              return; // resolved by field-level merge
+            }
+          }
+        }
         // Conflict — drop into the resolution queue (dedup by airtableId)
         const aid = localArr[idx].airtableId;
         const existing = _pendingConflicts.find(c => c.airtableId === aid);
