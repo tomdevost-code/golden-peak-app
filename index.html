@@ -1928,11 +1928,19 @@ const REMOTE_MAPPERS = {
     if(!bid) return null;
     // Parse the JSON-encoded per-flower-room distribution back into a plain object.
     // Sent up by buildBatchFields as JSON.stringify(rec.roomDistribution).
+    // Normalize: strip zero-count entries — a room with 0 plants is semantically the
+    // same as not having that room in the distribution at all. Junk-zero entries from
+    // older app versions or partial saves were causing false-positive sync conflicts.
     let _roomDist = {};
     try {
       if(f['Room Distribution'] && typeof f['Room Distribution'] === 'string'){
         const _parsed = JSON.parse(f['Room Distribution']);
-        if(_parsed && typeof _parsed === 'object' && !Array.isArray(_parsed)) _roomDist = _parsed;
+        if(_parsed && typeof _parsed === 'object' && !Array.isArray(_parsed)){
+          Object.keys(_parsed).forEach(k => {
+            const _n = parseInt(_parsed[k]) || 0;
+            if(_n > 0) _roomDist[k] = _n;
+          });
+        }
       }
     } catch(e){ _roomDist = {}; }
     // Same JSON shape for per-room wet harvest weights (multi-day harvest).
@@ -2776,11 +2784,29 @@ function _conflictDiffFields(local, remote){
   // bookkeeping fields (id, airtableId, synced, etc).
   const skip = new Set(['id','airtableId','synced','samples','events','dripEcPens','dripPhPens']);
   const keys = new Set([...Object.keys(local||{}), ...Object.keys(remote||{})]);
+  // Normalize zero-count object maps (roomDistribution, harvestedWeights, harvestedPlants,
+  // momPhaseCounts) — strip entries whose value is 0, since "key not present" and "key = 0"
+  // are semantically equivalent and were causing false-positive conflicts.
+  function _normMap(v){
+    if(!v || typeof v !== 'object' || Array.isArray(v)) return v;
+    const out = {};
+    Object.keys(v).forEach(k => {
+      const n = parseFloat(v[k]);
+      if(!isNaN(n) && n !== 0) out[k] = v[k];
+      else if(isNaN(n) && v[k]) out[k] = v[k]; // preserve non-numeric values as-is
+    });
+    return out;
+  }
+  const _normalizedFields = new Set(['roomDistribution','harvestedWeights','harvestedPlants','momPhaseCounts']);
   const diffs = [];
   keys.forEach(k => {
     if(skip.has(k)) return;
-    const lv = local ? local[k] : undefined;
-    const rv = remote ? remote[k] : undefined;
+    let lv = local ? local[k] : undefined;
+    let rv = remote ? remote[k] : undefined;
+    if(_normalizedFields.has(k)){
+      lv = _normMap(lv);
+      rv = _normMap(rv);
+    }
     const ls = (lv==null||lv==='') ? '' : (typeof lv==='object' ? JSON.stringify(lv) : String(lv));
     const rs = (rv==null||rv==='') ? '' : (typeof rv==='object' ? JSON.stringify(rv) : String(rv));
     if(ls !== rs) diffs.push({key:k, local:ls||'—', remote:rs||'—'});
