@@ -9105,9 +9105,11 @@ async function summaryAddTransaction(){
     toast('Sold transactions are allowed in Clones/Veg (live-plant sale) or Delivered (dry-flower sale) phases only.',6000);
     return;
   }
-  // In Delivered phase, the only allowed tx type is Sold.
-  if(_bGuard && _bGuard.plantPhase==='Delivered' && txType!=='Sold'){
-    toast('In Delivered phase, only Sold transactions are allowed.',5000);
+  // In Delivered phase, allowed tx types are: Sold (the final sale) and Sent to Lab
+  // (post-delivery lab/COA samples that may still be sent from the delivered inventory).
+  if(_bGuard && _bGuard.plantPhase==='Delivered'
+     && txType!=='Sold' && txType!=='Sent to Lab'){
+    toast('In Delivered phase, only Sold or Sent to Lab transactions are allowed.',5500);
     return;
   }
   const _txBatchRec = batchRecs.find(r=>r.batchId===batchId && !r.type);
