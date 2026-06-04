@@ -2535,6 +2535,15 @@ function mergeRemote(localArr, remoteRecs, mapper, ctx, table, lsKey){
             }
           }
         }
+        // Phantom-conflict suppression: if local has synced:false but the actual field-level
+        // diff against the remote is empty, both sides are already in agreement — the local
+        // unsynced flag is just leftover bookkeeping. Mark synced:true and skip the conflict.
+        const _diffNow = _conflictDiffFields(localArr[idx], mapped);
+        if(_diffNow.length === 0){
+          localArr[idx].synced = true;
+          lsSet(lsKey, localArr);
+          return;
+        }
         // Conflict — drop into the resolution queue (dedup by airtableId)
         const aid = localArr[idx].airtableId;
         const existing = _pendingConflicts.find(c => c.airtableId === aid);
