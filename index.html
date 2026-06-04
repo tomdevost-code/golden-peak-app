@@ -1027,13 +1027,15 @@ tr:last-child td { border-bottom: none; }
           </div>
           <!-- Sale Stage: shown only for Sold. Routes the weight into the right CTLS section:
                Dry → Section 5 sold weight; Fresh → Section 4 fresh-sold-to-processor;
-               Clone → Section 2 clones-sold (plant count). -->
+               Clone (rendered as "Live Plants") → Section 2 clones-sold (plant count).
+               Dropdown options are rebuilt by txTypeChanged based on the batch's plant phase:
+               Clones/Veg phase → "Live Plants" only; Delivered phase → Dry/Fresh. -->
           <div class="field" style="margin-bottom:10px;display:none;" id="tx-sale-stage-wrap">
-            <label>Sale Stage <span style="font-size:10px;color:var(--text3);font-weight:400;">— Dry is the default; Fresh is wet-to-processor; Clone is live-plant sale</span></label>
+            <label id="tx-sale-stage-label">Sale Stage</label>
             <select id="tx-sale-stage" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;">
               <option value="Dry" selected>Dry (cured flower)</option>
               <option value="Fresh">Fresh (wet to processor)</option>
-              <option value="Clone">Clone (live plants)</option>
+              <option value="Clone">Live Plants</option>
             </select>
           </div>
           <!-- Sent to Lab fields: shown only for the Sent to Lab tx type. Captures Destination
@@ -8274,12 +8276,27 @@ function txTypeChanged(){
     if(t === 'Seeds Germinated' && pcLbl) pcLbl.textContent = 'Quantity of seeds to germinate';
   } else if(t === 'Sold'){
     // Sold is two distinct flows depending on batch phase:
-    //   • Clones / Veg → live-plant sale (Sale Stage = Clone). Use Plant Count input.
-    //   • Drying / Packaged / Delivered → dry-flower sale. Use Weight (kg) input.
+    //   • Clones / Veg → live-plant sale (Sale Stage = "Live Plants", stored as 'Clone'
+    //     for backward compatibility / CTLS routing). Use Plant Count input.
+    //   • Drying / Packaged / Delivered → dry-flower sale (Sale Stage = Dry or Fresh).
+    //     Use Weight (kg) input.
     const _soldBid = document.getElementById('summary-batch-select').value;
     const _soldB = _soldBid ? batchRecs.find(r => r.batchId === _soldBid && !r.type) : null;
     const _soldPhase = _soldB ? (_soldB.plantPhase||'') : '';
     const _isLivePlantSale = (_soldPhase === 'Clones' || _soldPhase === 'Veg');
+    // Rebuild the Sale Stage dropdown based on phase. Locked to "Live Plants" for live-plant
+    // sales; offers Dry / Fresh for dry-flower sales.
+    const _ss = document.getElementById('tx-sale-stage');
+    if(_ss){
+      if(_isLivePlantSale){
+        _ss.innerHTML = '<option value="Clone" selected>Live Plants</option>';
+        _ss.value = 'Clone';
+      } else {
+        _ss.innerHTML = '<option value="Dry" selected>Dry (cured flower)</option>'
+          + '<option value="Fresh">Fresh (wet to processor)</option>';
+        if(_ss.value !== 'Fresh') _ss.value = 'Dry';
+      }
+    }
     if(_isLivePlantSale){
       // Live-plant sale: show Plant Count, hide Weight.
       pcWrap.style.display = '';
@@ -8290,9 +8307,6 @@ function txTypeChanged(){
       pcInp.style.cursor = '';
       pcInp.value = '';
       wetInp.value = '';
-      // Default Sale Stage to 'Clone' for live-plant sales.
-      const _ss = document.getElementById('tx-sale-stage');
-      if(_ss) _ss.value = 'Clone';
     } else {
       // Dry-flower sale: show Weight, hide Plant Count.
       wetWrap.style.display = '';
@@ -8303,9 +8317,6 @@ function txTypeChanged(){
       wetInp.style.color = 'var(--text)';
       wetInp.style.cursor = '';
       pcInp.value = '';
-      // Default Sale Stage to 'Dry' for post-harvest sales (unchanged behavior).
-      const _ss = document.getElementById('tx-sale-stage');
-      if(_ss && (_ss.value !== 'Fresh' && _ss.value !== 'Dry')) _ss.value = 'Dry';
     }
   } else if(t === 'Sent to Lab'){
     // Sent to Lab: optional plant count + optional weight. Both are user-entered.
@@ -8870,10 +8881,13 @@ async function summaryAddTransaction(){
   } else {
     if(!qty || qty <= 0){ toast('Enter a valid plant count.'); return; }
   }
-  // Sale Stage on Sold tx (Fresh / Dry / Clone). Routes weight into the right CTLS section.
+  // Sale Stage on Sold tx — Live Plants (stored as 'Clone'), Dry, or Fresh.
+  // Routes the tx into the right CTLS section. Fallback is phase-aware: live-plant sales
+  // default to 'Clone'; dry-flower sales default to 'Dry'.
   let _saleStage = '';
   if(isSold){
-    _saleStage = (document.getElementById('tx-sale-stage')||{}).value || 'Dry';
+    const _ssRaw = (document.getElementById('tx-sale-stage')||{}).value || '';
+    _saleStage = _ssRaw || (_isLivePlantSale ? 'Clone' : 'Dry');
   }
   // Mother batches receiving Produced/Received clones need a Cutting Source Batch
   // (another mother, or a non-mom batch in Veg). Source is NOT decremented — these
