@@ -6838,6 +6838,12 @@ function wasteRefreshSubtype(){
   if(!_isSeedsGen){
     opts = opts.filter(o => o !== 'Not Germinated');
   }
+  // "Pre-Harvest De-Leaf" and "Harvest" are flower-stage activities — only valid once the
+  // batch has actually advanced into the Flower phase (or post-flower phases Drying/Packaged).
+  // In Veg phase the plants haven't been flipped yet, so these sub-categories don't apply.
+  if(!['Flower','Drying','Packaged','Delivered'].includes(phase)){
+    opts = opts.filter(o => o !== 'Pre-Harvest De-Leaf' && o !== 'Harvest');
+  }
   const prev = sel.value;
   sel.innerHTML = '<option value="">select sub-category</option>' +
     opts.map(o => '<option'+(o===prev?' selected':'')+'>'+o+'</option>').join('');
