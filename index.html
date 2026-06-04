@@ -3149,30 +3149,37 @@ const MOM_CLONE_COHORT_DAYS = 21;
 function getDisplayPhase(batchRec){
   // What to render in the Batch Info "Plant Phase" cell. Mirrors batchRec.plantPhase
   // with a few overrides:
-  //   • Once a Sold transaction is recorded → 'Sold' (final business state).
+  //   • Once a DRY-FLOWER Sold tx is recorded (Sale Stage = Dry or Fresh) → 'Sold'
+  //     (final business state). LIVE-PLANT Sold (Sale Stage = Clone / "Live Plants")
+  //     is a partial-sale on a still-growing batch and does NOT collapse the display.
+  //     If live-plant sales happened from a Clones/Veg batch with plants still alive,
+  //     we show a split label like "Veg (70) · 30 sold" so the partial state is visible.
   //   • During multi-day harvest (batch in Drying but flower rooms still hold plants) →
   //     'Drying/Flower' to reflect that some rooms are drying while others are flowering.
   //   • For MOTHER batches in Veg/Flower phase with a recent Produced/Received tx,
   //     prepend 'Clones/' — the new cuttings haven't matured yet, so the batch
   //     genuinely has plants in two phases at once.
   if(!batchRec) return '—';
-  const hasSold = batchTxRecs.some(t => t.batchId === batchRec.batchId && t.txType === 'Sold');
-  if(hasSold) return 'Sold';
+  const _bSoldTxs = batchTxRecs.filter(t => t.batchId === batchRec.batchId && t.txType === 'Sold');
+  const _hasDryFlowerSold = _bSoldTxs.some(t => (t.saleStage||'') === 'Dry' || (t.saleStage||'') === 'Fresh' || t.plantPhase === 'Delivered');
+  if(_hasDryFlowerSold) return 'Sold';
+  // Tally live-plant (Clone-stage) sales for the partial-sale indicator below.
+  const _livePlantsSold = _bSoldTxs
+    .filter(t => (t.saleStage||'') === 'Clone')
+    .reduce((s,t) => s + (parseInt(t.qty)||0), 0);
   const phase = batchRec.plantPhase || '—';
   if(phase === 'Drying' && Array.isArray(batchRec.rooms)){
     const stillFlowering = batchRec.rooms.some(r => r !== 'Veg' && calcRoomPlantCount(batchRec.batchId, r) > 0);
     if(stillFlowering) return 'Drying / Flower';
   }
-  // Mother multi-phase indicator — now driven by the real per-phase counts in
-  // batchRec.momPhaseCounts (e.g. {Clones:4, Veg:6}). If two or more phases
-  // currently hold plants, render the breakdown like "Clones / Veg" (or with
-  // counts, "C:4 / V:6"). Otherwise fall through to the single primary phase.
+  // Mother multi-phase indicator — driven by per-phase counts in batchRec.momPhaseCounts
+  // (e.g. {Clones:4, Veg:6}). If two or more phases currently hold plants, render the
+  // breakdown like "Clones (4) / Veg (6)".
   if(isMotherBatch(batchRec.batchId)){
     const c = ensureMomPhaseCounts(batchRec);
     if(c){
       const active = MOM_PHASES.filter(p => (c[p] || 0) > 0);
       if(active.length > 1){
-        // Compact label: "Clones (4) / Veg (6)"
         return active.map(p => p + ' ('+(c[p]||0)+')').join(' / ');
       }
     }
@@ -3185,8 +3192,17 @@ function getDisplayPhase(batchRec){
     if(_veg > 0){
       const _total = calcBatchQty(batchRec.batchId);
       const _flower = Math.max(0, _total - _veg);
-      return 'Veg ('+_veg+') / Flower ('+_flower+')';
+      let _flLabel = 'Veg ('+_veg+') / Flower ('+_flower+')';
+      if(_livePlantsSold > 0) _flLabel += ' · ' + _livePlantsSold + ' sold';
+      return _flLabel;
     }
+  }
+  // Partial-sale indicator for Clones/Veg phases: show the current bucket alongside the
+  // live-plant sold count so a 100→70 sale shows as "Veg (70) · 30 sold" rather than
+  // hiding the sale activity behind a plain "Veg" label.
+  if((phase === 'Clones' || phase === 'Veg' || phase === 'Germination') && _livePlantsSold > 0){
+    const _remaining = calcBatchQty(batchRec.batchId);
+    return phase + ' ('+_remaining+') · ' + _livePlantsSold + ' sold';
   }
   return phase;
 }
