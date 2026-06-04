@@ -9636,8 +9636,11 @@ function renderBatchReport(batchId){
   const postDrys  = postDryRecs.filter(r => r.batch === batchId).sort((a,c) => (a.binNumber||0) - (c.binNumber||0));
   const bios      = bioRecs.filter(r => r.batch === batchId).sort((a,c) => (a.date||'').localeCompare(c.date||''));
   const pests     = pestRecs.filter(r => r.batch === batchId).sort((a,c) => (a.date||'').localeCompare(c.date||''));
-  const cleans    = sanCleanRecs.filter(r => (r.batch||'') === batchId).sort((a,c) => (a.date||'').localeCompare(c.date||'') || (a.id||0)-(c.id||0));
-  const toolCleans= sanToolRecs.filter(r => (r.batch||'') === batchId).sort((a,c) => (a.date||'').localeCompare(c.date||''));
+  // Case-insensitive match so older records that may have a lowercased or mixed-case batch ID
+  // (from legacy entry paths) still show up in the report alongside current UPPERCASE records.
+  const _bidLc = (batchId||'').toString().toLowerCase();
+  const cleans    = sanCleanRecs.filter(r => ((r.batch||'').toString().toLowerCase()) === _bidLc).sort((a,c) => (a.date||'').localeCompare(c.date||'') || (a.id||0)-(c.id||0));
+  const toolCleans= sanToolRecs.filter(r => ((r.batch||'').toString().toLowerCase()) === _bidLc).sort((a,c) => (a.date||'').localeCompare(c.date||''));
 
   // Totals
   const currentQty = calcBatchQty(batchId);
@@ -9831,8 +9834,10 @@ function renderBatchReport(batchId){
     s += sectionTable('Pest ID Log ('+pests.length+')', ['Date','Room','Grower','Location','Card','Pests','Qty','Notes'], rows);
   }
 
-  // Batch Cleaning Log — every sanitation task logged against this batch.
-  if(cleans.length){
+  // Batch Cleaning Log — every sanitation task logged against this batch. Always rendered
+  // (with a placeholder when empty) so the section is visible and growers can confirm at a
+  // glance which sanitation work has — or hasn't yet — been recorded.
+  {
     const rows = cleans.map(r => [
       r.date||'—',
       r.template||'—',
@@ -9841,11 +9846,16 @@ function renderBatchReport(batchId){
       r.grower||'—',
       r.notes||''
     ]);
-    s += sectionTable('Batch Cleaning Log ('+cleans.length+')', ['Date','Template','Room','Task','Grower','Notes'], rows);
+    if(rows.length){
+      s += sectionTable('Batch Cleaning Log ('+cleans.length+')', ['Date','Template','Room','Task','Grower','Notes'], rows);
+    } else {
+      s += sectionCard('Batch Cleaning Log (0)',
+        '<div style="padding:6px 2px;color:var(--text3);font-size:12px;">No cleaning records logged against this batch yet.</div>');
+    }
   }
 
-  // Tool Cleaning Log — tool cleanings tied to this batch.
-  if(toolCleans.length){
+  // Tool Cleaning Log — tool cleanings tied to this batch. Same always-render treatment.
+  {
     const rows = toolCleans.map(r => [
       r.date||'—',
       r.tool||'—',
@@ -9854,7 +9864,12 @@ function renderBatchReport(batchId){
       r.grower||'—',
       r.notes||''
     ]);
-    s += sectionTable('Tool Cleaning Log ('+toolCleans.length+')', ['Date','Tool','Cleaned','Sanitized','Grower','Notes'], rows);
+    if(rows.length){
+      s += sectionTable('Tool Cleaning Log ('+toolCleans.length+')', ['Date','Tool','Cleaned','Sanitized','Grower','Notes'], rows);
+    } else {
+      s += sectionCard('Tool Cleaning Log (0)',
+        '<div style="padding:6px 2px;color:var(--text3);font-size:12px;">No tool cleaning records logged against this batch yet.</div>');
+    }
   }
 
   // Empty sections note
