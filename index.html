@@ -2517,31 +2517,55 @@ function mergeRemote(localArr, remoteRecs, mapper, ctx, table, lsKey){
           // Don't push conflict; don't overwrite local. Continue without counting.
           return;
         }
-        // Empty-local field pre-merge: if a local field is empty/empty-object and the
-        // remote has data for the same field, take the remote value into the local record.
-        // This handles the common scenario where one device's roomDistribution (or other
-        // JSON-map field) hasn't been populated yet, while another device wrote real data.
-        // Doing this BEFORE the conflict-diff check suppresses false conflicts on those
-        // fields. Other unsynced local changes (status, plantPhase, etc.) are preserved.
+        // Empty-vs-non-empty field pre-merge for JSON-map and array fields. Whichever side
+        // has data wins; if both are empty, treat as equivalent (no conflict). Specifically:
+        //   • Local empty + Remote has data → copy remote into local (catches the stale-laptop case).
+        //   • Local has data + Remote empty → keep local (no diff surfaced, since remote's empty
+        //     is the same as "not yet populated" — discarding the local data would be wrong).
+        //   • Both empty (any combination of undefined / null / [] / {}) → no diff.
+        // Doing this BEFORE the conflict-diff check suppresses the false-positive sync prompts
+        // on these specific structural fields. Other unsynced local changes (status, plantPhase,
+        // cultivar, etc.) are NOT touched here and still surface real conflicts when they differ.
         if(_isBatchTable){
-          const _emptyMergeFields = ['roomDistribution','harvestedWeights','harvestedPlants','momPhaseCounts'];
+          const _emptyMergeFields = ['roomDistribution','harvestedWeights','harvestedPlants','momPhaseCounts','rooms','completedHarvests'];
+          // "Empty" for objects = no keys; for arrays = length 0; null/undefined = empty.
+          const _isEmpty = (v) => {
+            if(v == null) return true;
+            if(Array.isArray(v)) return v.length === 0;
+            if(typeof v === 'object') return Object.keys(v).length === 0;
+            return false;
+          };
           let _mergedAny = false;
           _emptyMergeFields.forEach(fld => {
             const lv = localArr[idx][fld];
             const rv = mapped[fld];
-            const lvEmpty = !lv || (typeof lv === 'object' && Object.keys(lv).length === 0);
-            const rvHasData = rv && typeof rv === 'object' && Object.keys(rv).length > 0;
-            if(lvEmpty && rvHasData){
+            if(_isEmpty(lv) && !_isEmpty(rv)){
+              // Stale local, real remote → pull remote into local.
               localArr[idx][fld] = rv;
               _mergedAny = true;
+            } else if(!_isEmpty(lv) && _isEmpty(rv)){
+              // Real local, stale remote → align the remote-snapshot used for diffing.
+              mapped[fld] = lv;
+              _mergedAny = true;
+            } else if(_isEmpty(lv) && _isEmpty(rv)){
+              // Both empty — normalize to the same representation so JSON.stringify matches
+              // ('[]' vs undefined vs null shouldn't read as a difference).
+              if(lv !== rv){
+                if(Array.isArray(lv) || Array.isArray(rv)){ localArr[idx][fld] = []; mapped[fld] = []; }
+                else { localArr[idx][fld] = {}; mapped[fld] = {}; }
+                _mergedAny = true;
+              }
             }
           });
           if(_mergedAny){
             // Persist the merged-in data and re-check whether anything still differs.
             lsSet(lsKey, localArr);
-            // Re-evaluate diffs after the merge — if no fields differ anymore, skip the conflict.
             const _stillDiff = _conflictDiffFields(localArr[idx], mapped);
             if(_stillDiff.length === 0){
+              // Mark as synced so the unsynced flag clears (the local record's data is what
+              // we want to keep, and either remote already agrees or the next save will push it up).
+              localArr[idx].synced = true;
+              lsSet(lsKey, localArr);
               return; // resolved by field-level merge
             }
           }
