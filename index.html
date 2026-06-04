@@ -2980,8 +2980,13 @@ function calcBatchQty(batchId){
   // here so plants that are physically in drying don't still show as "unallocated" in Veg.
   let qty=0;
   batchTxRecs.filter(t=>t.batchId===batchId).forEach(t=>{
-    if(t.txType==='Sold') return; // weight tracked separately
     if(t.txType==='Phase Advance') return; // internal cohort move — no net change
+    if(t.txType==='Sold'){
+      // Only LIVE-PLANT Sold (Sale Stage = Clone) decrements the plant count. Dry/Fresh
+      // Sold tracks weight only.
+      if((t.saleStage||'')==='Clone') qty -= (parseInt(t.qty)||0);
+      return;
+    }
     const q=parseInt(t.qty)||0;
     // Produced/Received and Seeds Germinated both ADD plants to the batch's running total.
     if(t.txType==='Produced/Received' || t.txType==='Seeds Germinated') qty+=q; else qty-=q;
@@ -8268,14 +8273,40 @@ function txTypeChanged(){
     // For Seeds Germinated, rename the label to match the user's mental model.
     if(t === 'Seeds Germinated' && pcLbl) pcLbl.textContent = 'Quantity of seeds to germinate';
   } else if(t === 'Sold'){
-    wetWrap.style.display = '';
-    wetLbl.textContent = 'Weight (kg)';
-    wetInp.value = '';
-    wetInp.readOnly = false;
-    wetInp.style.background = 'var(--bg)';
-    wetInp.style.color = 'var(--text)';
-    wetInp.style.cursor = '';
-    pcInp.value = '';
+    // Sold is two distinct flows depending on batch phase:
+    //   • Clones / Veg → live-plant sale (Sale Stage = Clone). Use Plant Count input.
+    //   • Drying / Packaged / Delivered → dry-flower sale. Use Weight (kg) input.
+    const _soldBid = document.getElementById('summary-batch-select').value;
+    const _soldB = _soldBid ? batchRecs.find(r => r.batchId === _soldBid && !r.type) : null;
+    const _soldPhase = _soldB ? (_soldB.plantPhase||'') : '';
+    const _isLivePlantSale = (_soldPhase === 'Clones' || _soldPhase === 'Veg');
+    if(_isLivePlantSale){
+      // Live-plant sale: show Plant Count, hide Weight.
+      pcWrap.style.display = '';
+      if(pcLbl) pcLbl.textContent = 'Plant Count';
+      pcInp.readOnly = false;
+      pcInp.style.background = 'var(--bg)';
+      pcInp.style.color = 'var(--text)';
+      pcInp.style.cursor = '';
+      pcInp.value = '';
+      wetInp.value = '';
+      // Default Sale Stage to 'Clone' for live-plant sales.
+      const _ss = document.getElementById('tx-sale-stage');
+      if(_ss) _ss.value = 'Clone';
+    } else {
+      // Dry-flower sale: show Weight, hide Plant Count.
+      wetWrap.style.display = '';
+      wetLbl.textContent = 'Weight (kg)';
+      wetInp.value = '';
+      wetInp.readOnly = false;
+      wetInp.style.background = 'var(--bg)';
+      wetInp.style.color = 'var(--text)';
+      wetInp.style.cursor = '';
+      pcInp.value = '';
+      // Default Sale Stage to 'Dry' for post-harvest sales (unchanged behavior).
+      const _ss = document.getElementById('tx-sale-stage');
+      if(_ss && (_ss.value !== 'Fresh' && _ss.value !== 'Dry')) _ss.value = 'Dry';
+    }
   } else if(t === 'Sent to Lab'){
     // Sent to Lab: optional plant count + optional weight. Both are user-entered.
     pcWrap.style.display = '';
@@ -8485,14 +8516,19 @@ function summaryUpdateTxTypeOptions(batchId){
   if(phase==='Flower')        opts = []; // Flower → wait for harvest, all txs are auto
   else if(phase==='Drying')   opts = []; // Drying → continue harvesting / auto Post-Dry
   else if(phase==='Packaged') opts = []; // user advances to Delivered first
-  else if(phase==='Delivered')opts = ['Sold']; // post-delivery: record the sale, then Close
+  else if(phase==='Delivered')opts = ['Sold']; // post-delivery: record the dry-flower sale, then Close
   else if(phase==='Germination') opts = []; // Seeds Germinated added below via Seeds-genetics branch
-  else if(phase==='Clones')   opts = hasTxs ? ['Produced/Received','Moved to Moms'] : ['Produced/Received'];
-  else if(phase==='Veg')      opts = ['Moved to Moms']; // Harvested is auto via Harvest Log
+  // Clones/Veg phases support live-plant sales (Sale Stage = Clone). Multiple Sold txs are
+  // allowed in these phases — growers may sell clones to different customers across the cohort's life.
+  else if(phase==='Clones')   opts = hasTxs ? ['Produced/Received','Moved to Moms','Sold'] : ['Produced/Received'];
+  else if(phase==='Veg')      opts = ['Moved to Moms','Sold']; // Harvested is auto via Harvest Log
   else if(!hasTxs)            opts = ['Produced/Received'];
   else                        opts = ['Produced/Received','Moved to Moms'];
-  // Drop Sold from the list if this batch already has a Sold tx (only one allowed)
-  if(hasSold) opts = opts.filter(o=>o!=='Sold');
+  // "Only one Sold per batch" rule applies ONLY to the final dry-flower sale (Delivered phase).
+  // In Clones/Veg, multiple live-plant Sold txs are allowed.
+  const _hasDeliveredSold = batchTxRecs.some(t=>t.batchId===batchId && t.txType==='Sold'
+    && (t.plantPhase==='Delivered' || (t.saleStage||'')==='Dry' || (t.saleStage||'')==='Fresh'));
+  if(_hasDeliveredSold && phase==='Delivered') opts = opts.filter(o=>o!=='Sold');
   // Sent to Lab is allowed any time there are plants/material to send — meaning anywhere a
   // regular manual tx is allowed (not in the auto-only Flower/Drying/Packaged phases).
   // Germination phase also gets Sent to Lab so seed-stage lab testing can be recorded.
@@ -8775,19 +8811,29 @@ async function summaryAddTransaction(){
       }
     }
   }
-  // Sold → weight only. Harvested → plant count AND wet weight. Others → plant count only.
+  // Sold has two flavors based on batch phase:
+  //   • Clones / Veg → live-plant sale (Sale Stage = Clone). Plant-count input. Multiple allowed.
+  //   • Drying / Packaged / Delivered → dry-flower sale. Weight input. One per batch.
+  // Harvested → plant count AND wet weight. Others → plant count only.
   const isSold = (txType === 'Sold');
   const isHarvested = (txType === 'Harvested');
-  // Guard: only one Sold transaction per batch
+  const _bSoldRec = batchRecs.find(r => r.batchId === batchId && !r.type);
+  const _bSoldPhase = _bSoldRec ? (_bSoldRec.plantPhase||'') : '';
+  const _isLivePlantSale = isSold && (_bSoldPhase === 'Clones' || _bSoldPhase === 'Veg');
   if(isSold){
     if(isMotherBatch(batchId)){
       toast('Mother batches cannot be sold.',4000);
       return;
     }
-    const _hasSold = batchTxRecs.some(t=>t.batchId===batchId && t.txType==='Sold');
-    if(_hasSold){
-      toast('This batch already has a Sold transaction — only one is allowed per batch.',5000);
-      return;
+    // Once-per-batch rule only applies to the final dry-flower sale. Multiple live-plant
+    // (clone) sales are allowed in Clones/Veg phases — growers sell to different customers.
+    if(!_isLivePlantSale){
+      const _hasDryFlowerSold = batchTxRecs.some(t=>t.batchId===batchId && t.txType==='Sold'
+        && (t.plantPhase==='Delivered' || (t.saleStage||'')==='Dry' || (t.saleStage||'')==='Fresh'));
+      if(_hasDryFlowerSold){
+        toast('This batch already has a dry-flower Sold transaction — only one is allowed per batch.',5000);
+        return;
+      }
     }
   }
   // Guard: Mother batches cannot move plants to another mother batch.
@@ -8803,8 +8849,9 @@ async function summaryAddTransaction(){
   const isSentToLab = (txType === 'Sent to Lab');
   const _pcVal = document.getElementById('tx-plant-count').value;
   const _wwVal = document.getElementById('tx-wet-weight').value;
-  const qty = (isSold || isHarvested) ? 0 : (parseInt(_pcVal) || 0);
-  let weight = (isSold || isHarvested || isSentToLab) ? (parseFloat(_wwVal) || 0) : 0;
+  // Live-plant Sold uses Plant Count (a debit on the running balance); dry-flower Sold uses Weight only.
+  const qty = (isHarvested || (isSold && !_isLivePlantSale)) ? 0 : (parseInt(_pcVal) || 0);
+  let weight = ((isSold && !_isLivePlantSale) || isHarvested || isSentToLab) ? (parseFloat(_wwVal) || 0) : 0;
   // Sent to Lab fields: Destination Type, Material Type, Destination Name (optional).
   let _labDest = '', _labMaterial = '', _labName = '';
   if(isSentToLab){
@@ -8816,8 +8863,10 @@ async function summaryAddTransaction(){
     if(qty <= 0 && weight <= 0){ toast('Enter a plant count, a weight, or both for the Sent to Lab record.'); return; }
   } else if(isHarvested){
     if(weight <= 0){ toast('Enter a valid wet weight (kg).'); return; }
-  } else if(isSold){
+  } else if(isSold && !_isLivePlantSale){
     if(weight <= 0){ toast('Enter a valid weight (kg).'); return; }
+  } else if(isSold && _isLivePlantSale){
+    if(!qty || qty <= 0){ toast('Enter a valid plant count for the live-plant sale.'); return; }
   } else {
     if(!qty || qty <= 0){ toast('Enter a valid plant count.'); return; }
   }
@@ -8901,10 +8950,12 @@ async function summaryAddTransaction(){
   const date = localDate();
   const currentQtyBefore = summaryCalcQty(batchId);
   // Guard: non-credit transactions cannot push balance below 0. Credit tx types (additive — they
-  // INCREASE the plant count) are exempt: Produced/Received and Seeds Germinated. Sold is exempt
-  // because it tracks weight, not plant count. Skip when qty is 0 (weight-only Harvested rows).
+  // INCREASE the plant count) are exempt: Produced/Received and Seeds Germinated. Dry-flower Sold
+  // is exempt because it tracks weight, not plant count — but LIVE-PLANT Sold (Clones/Veg) DOES
+  // decrement the plant count and must be checked. Skip when qty is 0 (weight-only Harvested rows).
   const _isCreditTx = (txType === 'Produced/Received' || txType === 'Seeds Germinated');
-  if(!isSold && !_isCreditTx && qty > 0 && currentQtyBefore - qty < 0){
+  const _skipBalanceCheck = (isSold && !_isLivePlantSale) || _isCreditTx;
+  if(!_skipBalanceCheck && qty > 0 && currentQtyBefore - qty < 0){
     toast('Cannot save: balance would go below 0. Current: '+currentQtyBefore+', requested: '+qty+'.',5000);
     return;
   }
@@ -8940,9 +8991,13 @@ async function summaryAddTransaction(){
     toast('Advance Plant Phase to "Delivered" before recording a Sold transaction.',5500);
     return;
   }
-  // Sold is only allowed in Delivered phase (batch has been physically delivered to the customer).
-  if(_bGuard && txType==='Sold' && _bGuard.plantPhase!=='Delivered'){
-    toast('Sold transactions are only allowed after the batch is set to Delivered phase.',5500);
+  // Sold has two modes:
+  //   • Live-plant sale (Clones/Veg) — Sale Stage = Clone. Allowed in Clones/Veg phases.
+  //   • Dry-flower sale — Allowed ONLY in Delivered phase (batch physically delivered).
+  // Anything in between (Flower/Drying/Packaged) is blocked — those phases reject Sold elsewhere.
+  if(_bGuard && txType==='Sold' && _bGuard.plantPhase!=='Delivered'
+     && _bGuard.plantPhase!=='Clones' && _bGuard.plantPhase!=='Veg'){
+    toast('Sold transactions are allowed in Clones/Veg (live-plant sale) or Delivered (dry-flower sale) phases only.',6000);
     return;
   }
   // In Delivered phase, the only allowed tx type is Sold.
@@ -9268,13 +9323,22 @@ function summaryRenderHistory(batchId){
     return;
   }
   // Compute running qty. Notes:
-  //   • Sold txs track weight, not plant count — running qty unchanged.
+  //   • Dry-flower Sold txs (Sale Stage = Dry or Fresh) track weight, not plant count — running qty unchanged.
+  //   • Live-plant Sold txs (Sale Stage = Clone) DEBIT plant count — running qty drops by the qty.
   //   • Phase Advance txs (mother cohorts) move plants between phase buckets,
   //     but the total batch plant count is unchanged — running qty unchanged.
   const sorted = [...txs].reverse(); // oldest first
   let running = 0;
   const withQty = sorted.map(t=>{
-    if(t.txType==='Sold' || t.txType==='Phase Advance'){ return {...t, runningQty: running}; }
+    if(t.txType==='Phase Advance'){ return {...t, runningQty: running}; }
+    if(t.txType==='Sold'){
+      // Only the live-plant flavor (Sale Stage = Clone) debits the plant count.
+      if((t.saleStage||'') === 'Clone'){
+        running -= (parseInt(t.qty)||0);
+        if(running < 0) running = 0;
+      }
+      return {...t, runningQty: running};
+    }
     const q = parseInt(t.qty)||0;
     if(t.txType==='Produced/Received' || t.txType==='Seeds Germinated') running += q;
     else running -= q;
@@ -9297,7 +9361,13 @@ function summaryRenderHistory(batchId){
       const _q = parseInt(t.qty)||0;
       qtyDisplay = (t.fromPhase||'?')+' → '+(t.toPhase||'?')+' (' + _q + ')';
     }
-    else if(isSold) qtyDisplay = (t.weight||0).toFixed(3) + ' kg';
+    else if(isSold){
+      // Live-plant Sold (Sale Stage = Clone) uses Plant Count. Dry/Fresh Sold uses Weight (kg).
+      const _ssTag = (t.saleStage||'');
+      const _q = parseInt(t.qty)||0;
+      const _w = parseFloat(t.weight)||0;
+      qtyDisplay = (_ssTag === 'Clone' && _q > 0) ? ('-' + _q + ' plants') : (_w.toFixed(3) + ' kg');
+    }
     else if(isHarvested){
       // Plant count from the room(s) during flower + wet weight, side by side
       const _q = parseInt(t.qty)||0;
@@ -9436,15 +9506,22 @@ function renderBatchReport(batchId){
   if(txs.length){
     let running = 0;
     const rows = txs.map(t => {
-      if(t.txType === 'Sold') {/* sold tracks weight, not plant qty */}
-      else {
+      if(t.txType === 'Sold'){
+        // Live-plant Sold (Sale Stage = Clone) debits plant count; dry/fresh Sold tracks weight only.
+        if((t.saleStage||'') === 'Clone'){
+          running -= (parseInt(t.qty)||0);
+          if(running < 0) running = 0;
+        }
+      } else {
         const q = parseInt(t.qty)||0;
         if(t.txType === 'Produced/Received' || t.txType === 'Seeds Germinated') running += q;
         else running -= q;
         if(running < 0) running = 0;
       }
       const _isCredit = (t.txType === 'Produced/Received' || t.txType === 'Seeds Germinated');
-      const qtyStr = t.txType === 'Sold' ? fmtKg(parseFloat(t.weight)||0)
+      const _isLivePlantSoldRow = (t.txType === 'Sold' && (t.saleStage||'') === 'Clone');
+      const qtyStr = _isLivePlantSoldRow ? ('-' + (parseInt(t.qty)||0) + ' plants')
+                   : t.txType === 'Sold' ? fmtKg(parseFloat(t.weight)||0)
                    : t.txType === 'Harvested' ? ((parseInt(t.qty)||0)+' / '+fmtKg(parseFloat(t.weight)||0))
                    : t.txType === 'Phase Change' ? (t.weight > 0 ? fmtKg(t.weight) : '—')
                    : (_isCredit ? '+' : '-') + (parseInt(t.qty)||0);
