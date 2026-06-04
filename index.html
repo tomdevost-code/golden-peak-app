@@ -8632,9 +8632,9 @@ function summaryUpdateTxTypeOptions(batchId){
     && (t.plantPhase==='Delivered' || (t.saleStage||'')==='Dry' || (t.saleStage||'')==='Fresh'));
   if(_hasDeliveredSold && phase==='Delivered') opts = opts.filter(o=>o!=='Sold');
   // Sent to Lab is allowed any time there are plants/material to send — meaning anywhere a
-  // regular manual tx is allowed (not in the auto-only Flower/Drying/Packaged phases).
-  // Germination phase also gets Sent to Lab so seed-stage lab testing can be recorded.
-  if(opts.length > 0 || phase === 'Delivered' || phase === 'Germination'){
+  // regular manual tx is allowed, plus the otherwise auto-only Packaged/Delivered phases
+  // (post-packaging COA / R&D samples) and Germination (seed-stage lab testing).
+  if(opts.length > 0 || phase === 'Delivered' || phase === 'Packaged' || phase === 'Germination'){
     if(!opts.includes('Sent to Lab')) opts.push('Sent to Lab');
   }
   // Seeds Germinated is for Seeds-genetics batches only. It records how many seeds sprouted
@@ -9091,9 +9091,11 @@ async function summaryAddTransaction(){
     toast('In Drying phase, only Harvested transactions are allowed. Complete Post-Drying first.',5500);
     return;
   }
-  // Guard: in Packaged phase, no transactions yet — user must advance to Delivered first.
-  if(_bGuard && _bGuard.plantPhase==='Packaged'){
-    toast('Advance Plant Phase to "Delivered" before recording a Sold transaction.',5500);
+  // Guard: in Packaged phase, the only allowed manual tx is Sent to Lab (e.g. COA / R&D
+  // samples pulled from the packaged inventory). For a Sold tx, the user must advance the
+  // batch to Delivered first.
+  if(_bGuard && _bGuard.plantPhase==='Packaged' && txType !== 'Sent to Lab'){
+    toast('Advance Plant Phase to "Delivered" before recording a Sold transaction. (Only "Sent to Lab" is allowed in Packaged.)',6000);
     return;
   }
   // Sold has two modes:
