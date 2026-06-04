@@ -10701,8 +10701,12 @@ function ctlsVegMetrics(from, to){
 function ctlsFlowerMetrics(from, to){
   const txs = _txsInRange(from, to);
   // Flipped to Flower during the month = batches whose flowerStart date is in range.
-  // The count is the number of plants that actually moved into Flower rooms (any plants
-  // left behind in the Veg room aren't "flipped" yet — they're in Veg phase per regulation).
+  // The count is the number of plants that actually moved into Flower rooms at the time
+  // of the flip (any plants left behind in the Veg room aren't "flipped" — they're still
+  // in Veg phase per regulation). Plants destroyed in Flower phase DURING the same month
+  // are added BACK to the count because the room-distribution counter decremented them
+  // when the destroy tx fired — without this addback, "destroyed-after-flip" plants would
+  // vanish from the Flipped total even though they were genuinely flipped this month.
   //   • Preferred source: batchRec.roomDistribution — sum of plant counts in non-Veg rooms.
   //   • Fallback (no distribution set): total batch qty at flowerStart, summed over BOTH
   //     intake tx types (Produced/Received for clones-genetics and Seeds Germinated for
@@ -10711,7 +10715,7 @@ function ctlsFlowerMetrics(from, to){
     if(!b || b.type) return sum;
     if(!b.flowerStart || !_inRange(b.flowerStart, from, to)) return sum;
     // Prefer per-room distribution when available — that's the user's explicit allocation
-    // of plants to Flower rooms, which is exactly the "flipped" count.
+    // of plants to Flower rooms.
     let qtyAtFlip = 0;
     if(b.roomDistribution && typeof b.roomDistribution === 'object'){
       const entries = Object.entries(b.roomDistribution);
@@ -10732,6 +10736,15 @@ function ctlsFlowerMetrics(from, to){
         .reduce((s,t) => s + (parseInt(t.qty)||0), 0);
       qtyAtFlip = Math.max(0, credits - debits);
     }
+    // Add back: any plants destroyed IN FLOWER PHASE for this batch during the same month.
+    // They came from the flip but the auto-destroy decremented the room counter — so adding
+    // them back keeps the flip total honest.
+    const _destroyedInFlowerThisMonth = batchTxRecs
+      .filter(t => t.batchId === b.batchId && t.txType === 'Destroyed'
+        && _inRange(t.date, from, to)
+        && ((t.plantPhase||'') === 'Flower' || /Flower/i.test(t.room||'')))
+      .reduce((s,t) => s + (parseInt(t.qty)||0), 0);
+    qtyAtFlip += _destroyedInFlowerThisMonth;
     return sum + qtyAtFlip;
   }, 0);
   // Already in flower from previous month = sum across batches whose flowerStart < from
