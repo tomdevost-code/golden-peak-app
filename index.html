@@ -9886,7 +9886,7 @@ function renderBatchReport(batchId){
     +     '<div style="font-size:12px;color:var(--text3);font-family:var(--mono);">Generated '+today+'</div>'
     +   '</div>'
     +   '<div style="display:flex;gap:8px;">'
-    +     '<button onclick="window.print()" style="background:var(--green);color:#fff;border:none;padding:8px 14px;border-radius:6px;font-weight:600;cursor:pointer;font-size:12px;">Print</button>'
+    +     '<button onclick="printBatchReport()" style="background:var(--green);color:#fff;border:none;padding:8px 14px;border-radius:6px;font-weight:600;cursor:pointer;font-size:12px;">Save as PDF / Print</button>'
     +     '<button onclick="closeBatchReport()" style="background:transparent;border:1px solid var(--border);padding:8px 14px;border-radius:6px;cursor:pointer;font-size:12px;">Close</button>'
     +   '</div>'
     + '</div>'
@@ -9933,18 +9933,41 @@ function sectionTable(title, headers, rows){
   return html;
 }
 
-// Print styles — when printing, hide everything except the report modal contents.
+// Print styles — when printing, hide everything except whichever report is being printed.
+// Two modes activated by body classes (set by printBatchReport / printCtlsReport):
+//   • body.print-batch-report → only the batch report modal is visible.
+//   • body.print-ctls         → only the CTLS report output is visible.
+// Without a class set, nothing is printable — guards against blank cmd-P prints.
 (function installReportPrintStyles(){
   const style = document.createElement('style');
   style.textContent = '@media print {'
-    + '  body * { visibility: hidden !important; }'
-    + '  #batch-report-modal, #batch-report-modal * { visibility: visible !important; }'
-    + '  #batch-report-modal { position: absolute !important; inset: 0 !important; background: #fff !important; padding: 0 !important; }'
-    + '  #batch-report-content { box-shadow: none !important; max-width: 100% !important; max-height: none !important; overflow: visible !important; }'
+    + '  body.print-batch-report * { visibility: hidden !important; }'
+    + '  body.print-batch-report #batch-report-modal,'
+    + '  body.print-batch-report #batch-report-modal * { visibility: visible !important; }'
+    + '  body.print-batch-report #batch-report-modal { position: absolute !important; inset: 0 !important; background: #fff !important; padding: 0 !important; }'
+    + '  body.print-batch-report #batch-report-content { box-shadow: none !important; max-width: 100% !important; max-height: none !important; overflow: visible !important; }'
+    + '  body.print-ctls * { visibility: hidden !important; }'
+    + '  body.print-ctls #ctls-report-output,'
+    + '  body.print-ctls #ctls-report-output * { visibility: visible !important; }'
+    + '  body.print-ctls #ctls-report-output { position: absolute !important; inset: 0 !important; background: #fff !important; padding: 14px !important; max-width: 100% !important; max-height: none !important; overflow: visible !important; }'
     + '  .report-no-print { display: none !important; }'
     + '}';
   document.head.appendChild(style);
 })();
+
+// Print the Batch Report (called from the modal's Print/Save PDF button). Sets a body class
+// so the print stylesheet knows to render only the batch-report-modal, then clears it after.
+function printBatchReport(){
+  document.body.classList.add('print-batch-report');
+  try { window.print(); } finally { setTimeout(() => document.body.classList.remove('print-batch-report'), 100); }
+}
+
+// Print the CTLS Report. Same pattern — body class scopes which element survives the @media print
+// visibility-hidden cascade.
+function printCtlsReport(){
+  document.body.classList.add('print-ctls');
+  try { window.print(); } finally { setTimeout(() => document.body.classList.remove('print-ctls'), 100); }
+}
 
 // ════════════════════════════════════════════════════════════════════════════════
 // SANITATION PAGE HANDLERS
@@ -11138,7 +11161,7 @@ function ctlsGenerateReport(){
 
   // Print button
   html += '<div class="report-no-print" style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px;">'
-       +    '<button class="btn-secondary" onclick="window.print()">Print / Save as PDF</button>'
+       +    '<button class="btn-secondary" onclick="printCtlsReport()">Save as PDF / Print</button>'
        + '</div>';
 
   out.innerHTML = html;
