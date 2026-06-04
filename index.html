@@ -8631,10 +8631,12 @@ function summaryUpdateTxTypeOptions(batchId){
   const _hasDeliveredSold = batchTxRecs.some(t=>t.batchId===batchId && t.txType==='Sold'
     && (t.plantPhase==='Delivered' || (t.saleStage||'')==='Dry' || (t.saleStage||'')==='Fresh'));
   if(_hasDeliveredSold && phase==='Delivered') opts = opts.filter(o=>o!=='Sold');
-  // Sent to Lab is allowed any time there are plants/material to send — meaning anywhere a
-  // regular manual tx is allowed, plus the otherwise auto-only Packaged/Delivered phases
-  // (post-packaging COA / R&D samples) and Germination (seed-stage lab testing).
-  if(opts.length > 0 || phase === 'Delivered' || phase === 'Packaged' || phase === 'Germination'){
+  // Sent to Lab is allowed any time there are LIVE plants / leaf material to send — meaning
+  // anywhere a regular manual tx is allowed (Clones / Veg / Flower-via-other-paths) plus
+  // Germination (seed-stage lab testing). It is NOT offered in Packaged or Delivered phases:
+  // post-drying retention + COA samples are tracked instead through the Post-Drying page's
+  // Sample Type tagging (Retention / COA), which is the canonical record for those samples.
+  if(opts.length > 0 || phase === 'Germination'){
     if(!opts.includes('Sent to Lab')) opts.push('Sent to Lab');
   }
   // Seeds Germinated is for Seeds-genetics batches only. It records how many seeds sprouted
@@ -9091,11 +9093,11 @@ async function summaryAddTransaction(){
     toast('In Drying phase, only Harvested transactions are allowed. Complete Post-Drying first.',5500);
     return;
   }
-  // Guard: in Packaged phase, the only allowed manual tx is Sent to Lab (e.g. COA / R&D
-  // samples pulled from the packaged inventory). For a Sold tx, the user must advance the
-  // batch to Delivered first.
-  if(_bGuard && _bGuard.plantPhase==='Packaged' && txType !== 'Sent to Lab'){
-    toast('Advance Plant Phase to "Delivered" before recording a Sold transaction. (Only "Sent to Lab" is allowed in Packaged.)',6000);
+  // Guard: in Packaged phase, no manual transactions are allowed — user must advance to
+  // Delivered first. Retention / COA samples are tagged on the Post-Drying page (Sample Type),
+  // not recorded here as transactions.
+  if(_bGuard && _bGuard.plantPhase==='Packaged'){
+    toast('Advance Plant Phase to "Delivered" before recording a Sold transaction.',5500);
     return;
   }
   // Sold has two modes:
@@ -9107,11 +9109,11 @@ async function summaryAddTransaction(){
     toast('Sold transactions are allowed in Clones/Veg (live-plant sale) or Delivered (dry-flower sale) phases only.',6000);
     return;
   }
-  // In Delivered phase, allowed tx types are: Sold (the final sale) and Sent to Lab
-  // (post-delivery lab/COA samples that may still be sent from the delivered inventory).
-  if(_bGuard && _bGuard.plantPhase==='Delivered'
-     && txType!=='Sold' && txType!=='Sent to Lab'){
-    toast('In Delivered phase, only Sold or Sent to Lab transactions are allowed.',5500);
+  // In Delivered phase, the only allowed tx type is Sold (the final dry-flower sale).
+  // Retention / COA samples are tracked on the Post-Drying page via Sample Type tagging,
+  // not as Sent to Lab transactions here.
+  if(_bGuard && _bGuard.plantPhase==='Delivered' && txType!=='Sold'){
+    toast('In Delivered phase, only Sold transactions are allowed.',5000);
     return;
   }
   const _txBatchRec = batchRecs.find(r=>r.batchId===batchId && !r.type);
