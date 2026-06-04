@@ -10700,20 +10700,39 @@ function ctlsVegMetrics(from, to){
 // SECTION 3 — Whole Cannabis Plants (Flowering)
 function ctlsFlowerMetrics(from, to){
   const txs = _txsInRange(from, to);
-  // Flipped to Flower during the month = Phase Change tx where toPhase=Flower (Veg→Flower).
-  // For non-mom batches we also detect this from batchRec.flowerStart falling in range.
+  // Flipped to Flower during the month = batches whose flowerStart date is in range.
+  // The count is the number of plants that actually moved into Flower rooms (any plants
+  // left behind in the Veg room aren't "flipped" yet — they're in Veg phase per regulation).
+  //   • Preferred source: batchRec.roomDistribution — sum of plant counts in non-Veg rooms.
+  //   • Fallback (no distribution set): total batch qty at flowerStart, summed over BOTH
+  //     intake tx types (Produced/Received for clones-genetics and Seeds Germinated for
+  //     seeds-genetics) minus seed-stage destroys / moves up to that date.
   const flippedToFlowerThisMonth = batchRecs.reduce((sum, b) => {
     if(!b || b.type) return sum;
     if(!b.flowerStart || !_inRange(b.flowerStart, from, to)) return sum;
-    // Count plants in the batch at the time of flowering — best proxy is the total qty over
-    // its lifetime, but for now use plants flipped today (calcBatchQty as of flowerStart).
-    const qtyAtFlip = batchTxRecs
-      .filter(t => t.batchId === b.batchId && t.date <= b.flowerStart && t.txType === 'Produced/Received')
-      .reduce((s,t) => s + (parseInt(t.qty)||0), 0)
-      - batchTxRecs
-        .filter(t => t.batchId === b.batchId && t.date <= b.flowerStart && !['Produced/Received','Sold','Phase Advance','Phase Change'].includes(t.txType||''))
+    // Prefer per-room distribution when available — that's the user's explicit allocation
+    // of plants to Flower rooms, which is exactly the "flipped" count.
+    let qtyAtFlip = 0;
+    if(b.roomDistribution && typeof b.roomDistribution === 'object'){
+      const entries = Object.entries(b.roomDistribution);
+      const _flowerOnly = entries.filter(([room, _]) => room !== 'Veg');
+      if(_flowerOnly.length > 0){
+        qtyAtFlip = _flowerOnly.reduce((s, [_, cnt]) => s + (parseInt(cnt)||0), 0);
+      }
+    }
+    // Fallback: derive total batch plants at flowerStart from tx history.
+    if(qtyAtFlip <= 0){
+      const credits = batchTxRecs
+        .filter(t => t.batchId === b.batchId && (t.date||'') <= b.flowerStart
+          && (t.txType === 'Produced/Received' || t.txType === 'Seeds Germinated'))
         .reduce((s,t) => s + (parseInt(t.qty)||0), 0);
-    return sum + Math.max(0, qtyAtFlip);
+      const debits = batchTxRecs
+        .filter(t => t.batchId === b.batchId && (t.date||'') <= b.flowerStart
+          && !['Produced/Received','Seeds Germinated','Sold','Phase Advance','Phase Change'].includes(t.txType||''))
+        .reduce((s,t) => s + (parseInt(t.qty)||0), 0);
+      qtyAtFlip = Math.max(0, credits - debits);
+    }
+    return sum + qtyAtFlip;
   }, 0);
   // Already in flower from previous month = sum across batches whose flowerStart < from
   // and harvestDate >= from (still flowering at start of month).
