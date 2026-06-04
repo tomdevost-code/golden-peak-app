@@ -2487,6 +2487,20 @@ function mergeRemote(localArr, remoteRecs, mapper, ctx, table, lsKey){
         return;
       }
       if(localArr[idx].synced === false){
+        // Known-migration auto-resolve: a Seeds-genetics batch's plantPhase being upgraded
+        // locally from 'Clones' (legacy default) to 'Germination' (the new starting phase
+        // introduced in the Germination-phase rollout) is NOT a real conflict — it's a
+        // one-time migration from an older app version. Suppress the conflict prompt for
+        // this exact mismatch, keep the local 'Germination' value, and let the next write
+        // sync it to Airtable.
+        const _isBatchTable = (table === 'batch') || (lsKey === 'gp-batch');
+        if(_isBatchTable
+           && localArr[idx].plantPhase === 'Germination'
+           && mapped.plantPhase === 'Clones'
+           && ((localArr[idx].geneticsSource||'').toLowerCase() === 'seeds')){
+          // Don't push conflict; don't overwrite local. Continue without counting.
+          return;
+        }
         // Conflict — drop into the resolution queue (dedup by airtableId)
         const aid = localArr[idx].airtableId;
         const existing = _pendingConflicts.find(c => c.airtableId === aid);
