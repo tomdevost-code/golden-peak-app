@@ -628,7 +628,7 @@ tr:last-child td { border-bottom: none; }
         <!-- Step 1: Batch ID -->
         <div class="field" style="margin-bottom:10px;">
           <label>Batch ID <span style="font-size:10px;color:var(--text3);font-weight:400;">(XXX-NNN, e.g. SPK-001 — or M-XXX-NNN for a mother batch, e.g. M-SPK-001)</span></label>
-          <input type="text" id="batch-id-input" placeholder="e.g. SPK-001 or M-SPK-001" style="font-family:var(--mono);text-transform:uppercase;" oninput="this.value=this.value.toUpperCase();batchIdCheck()" />
+          <input type="text" id="batch-id-input" placeholder="e.g. SPK-001 (regular), M-SPK-001 (mom), or S-LK-001 (seeds)" style="font-family:var(--mono);text-transform:uppercase;" oninput="this.value=this.value.toUpperCase();batchIdCheck()" />
           <div id="batch-id-msg" style="display:none;font-size:11px;margin-top:4px;"></div>
         </div>
 
@@ -3495,14 +3495,21 @@ function calcStage(vs,fs,d){if(fs&&d>=fs){const fd=daysBetween(fs,d);return{stag
 // Mother batches share the regular lifecycle (Clones → Veg → Flower → Drying)
 // for their use as clone donors and optional flower-out at end-of-life, but
 // they CANNOT advance to Packaged / Delivered and CANNOT have Sold txs.
-// Format: M-XXX-NNN (e.g. M-SPK-001). Regular batches are XXX-NNN (e.g. SPK-001).
-// {2,3} keeps existing 2-letter records (SP-001, M-SP-001) valid — new batches
-// going forward use 3 letters per the updated naming convention.
-const BATCH_ID_RE       = /^[A-Za-z]{2,3}-\d{3}$/;
+// Format families:
+//   Regular batches: XXX-NNN          (e.g. SPK-001)
+//   Mother batches:  M-XXX-NNN        (e.g. M-SPK-001) — clone donor stock
+//   Seeds batches:   S-XXX-NNN        (e.g. S-LK-001)  — Seeds-genetics only
+// {2,3} keeps existing 2-letter records (SP-001, M-SP-001) valid — new batches going
+// forward use 3 letters per the updated naming convention.
+const BATCH_ID_RE        = /^[A-Za-z]{2,3}-\d{3}$/;
 const MOTHER_BATCH_ID_RE = /^M-[A-Za-z]{2,3}-\d{3}$/i;
-const BATCH_ID_RE_ANY   = /^(M-)?[A-Za-z]{2,3}-\d{3}$/i;
+const SEEDS_BATCH_ID_RE  = /^S-[A-Za-z]{2,3}-\d{3}$/i;
+const BATCH_ID_RE_ANY    = /^(M-|S-)?[A-Za-z]{2,3}-\d{3}$/i;
 function isMotherBatch(batchId){
   return MOTHER_BATCH_ID_RE.test((batchId||'').toString().trim());
+}
+function isSeedsBatchId(batchId){
+  return SEEDS_BATCH_ID_RE.test((batchId||'').toString().trim());
 }
 function getMotherBatchIds(){
   // List of OPEN mother stock batches (M-XXX-NNN). Used to populate the Mother ID
@@ -7092,6 +7099,8 @@ function batchIdCheck(){
     // Mother batches: auto-set Clones-Internal and lock the source select. The
     // donor linkage is NOT captured at creation time — it's established later
     // when a regular batch records a "Moved to Moms" tx targeting this mother.
+    // Seeds batches (S- prefix): auto-set Seeds and lock the source select — S- is
+    // reserved exclusively for Seeds-genetics batches.
     const gs = document.getElementById('batch-genetics-source');
     if(isMotherBatch(val)){
       gs.value = 'Clones-Internal';
@@ -7101,9 +7110,17 @@ function batchIdCheck(){
       gs.style.cursor = 'not-allowed';
       batchGeneticsChange();
       msg.style.display='block'; msg.style.color='var(--green)'; msg.textContent='Mother stock batch — Clones-Internal locked. Link a donor batch later via a "Moved to Moms" transaction.';
+    } else if(isSeedsBatchId(val)){
+      gs.value = 'Seeds';
+      gs.disabled = true;
+      gs.style.background = 'var(--bg2)';
+      gs.style.color = 'var(--text2)';
+      gs.style.cursor = 'not-allowed';
+      batchGeneticsChange();
+      msg.style.display='block'; msg.style.color='var(--green)'; msg.textContent='Seeds batch — Source of Genetics locked to Seeds. Pick a seed lot from inventory below.';
     } else {
       // Regular batch — let the user choose the source. If we previously auto-locked
-      // it (because they had typed an M- ID and then backspaced), unlock it now.
+      // it (because they had typed an M- or S- ID and then backspaced), unlock it now.
       if(gs.disabled){
         gs.disabled = false;
         gs.style.background = '';
@@ -7126,7 +7143,7 @@ function batchIdCheck(){
     document.getElementById('batch-mother-wrap').style.display='none';
     document.getElementById('batch-external-wrap').style.display='none';
     if(val.length > 0 && !formatOk){
-      msg.style.display='block'; msg.style.color='var(--amber)'; msg.textContent='Format must be XXX-NNN (regular) or M-XXX-NNN (mother batch).';
+      msg.style.display='block'; msg.style.color='var(--amber)'; msg.textContent='Format must be XXX-NNN (regular), M-XXX-NNN (mother), or S-XXX-NNN (seeds).';
     } else if(exists){
       msg.style.display='block'; msg.style.color='var(--red)'; msg.textContent='Batch ID already exists.';
     } else { msg.style.display='none'; }
@@ -7292,13 +7309,25 @@ function batchUpdateCreateBtn(){
 async function batchCreate(){
   const batchId = document.getElementById('batch-id-input').value.trim().toUpperCase();
   if(!batchId){ toast('Enter a Batch ID.'); return; }
-  if(!BATCH_ID_RE_ANY.test(batchId)){ toast('Invalid Batch ID format. Use XXX-NNN or M-XXX-NNN.'); return; }
+  if(!BATCH_ID_RE_ANY.test(batchId)){ toast('Invalid Batch ID format. Use XXX-NNN, M-XXX-NNN (mother), or S-XXX-NNN (seeds).', 5500); return; }
   if(batchRecs.some(r=>r.batchId===batchId)){ toast('Batch ID already exists.'); return; }
   const cultivar = document.getElementById('batch-cultivar').value.trim();
   const mother = document.getElementById('batch-mother').value.trim();
   const geneticsSource = document.getElementById('batch-genetics-source').value;
   const externalCompany = document.getElementById('batch-external-company').value.trim();
   const notes = document.getElementById('batch-notes').value.trim();
+  // S-XXX-NNN ↔ Seeds-genetics is a two-way invariant: an S-prefixed batch ID must use the
+  // 'Seeds' genetics source, and a Seeds-genetics batch must use an S-prefixed batch ID.
+  // Legacy Seeds batches (created before the S- prefix existed) keep working — this only
+  // applies to NEW batches being created here.
+  if(isSeedsBatchId(batchId) && geneticsSource !== 'Seeds'){
+    toast('S- prefix is reserved for Seeds-genetics batches. Pick "Seeds" as the Source of Genetics, or change the Batch ID prefix.', 6500);
+    return;
+  }
+  if(geneticsSource === 'Seeds' && !isSeedsBatchId(batchId)){
+    toast('Seeds-genetics batches must use an S-XXX-NNN Batch ID (e.g. S-LK-001).', 5500);
+    return;
+  }
   // Mother ID required for REGULAR Clones-Internal batches (mother batches no
   // longer require a donor at creation — that link gets established later
   // through a "Moved to Moms" tx targeting the mother).
