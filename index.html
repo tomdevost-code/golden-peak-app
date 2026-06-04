@@ -1199,7 +1199,6 @@ tr:last-child td { border-bottom: none; }
               <option value="Sold" selected>Sold (sale inventory)</option>
               <option value="Retention">Retention sample</option>
               <option value="COA">COA sample</option>
-              <option value="Testing">Testing sample</option>
             </select>
           </div>
           <div class="field" style="margin-bottom:10px;"><label>Notes</label>
@@ -10937,7 +10936,7 @@ function ctlsGenerateReport(){
   // Section 5 — Dry Cannabis (weights)
   html += _ctlsBlock('5. Dry Cannabis (weights)', [
     {label:'Retention sample weight', note:'from Post-Drying Sample Type = Retention', value: v(dry.retentionSampleWeight, 'kg')},
-    {label:'Weight sent for testing samples', note:'Post-Drying Sample Type = COA + Testing', value: v(dry.testingSampleWeight, 'kg')},
+    {label:'Weight sent for testing samples', note:'Post-Drying Sample Type = COA', value: v(dry.testingSampleWeight, 'kg')},
     {label:'Weight of dried flower sent to processor for samples', note:'Sent to Lab · Processor · Dry Flower', value: v(dry.processorSampleWeight, 'kg')},
     {label:'Bill of lading / Quantity Sold', note:'Sold tx · Sale Stage = Dry', value: v(dry.soldWeight, 'kg')},
     {label:'Weight of cannabis destroyed (Dry Waste)', value: v(dry.dryWasteWeight, 'kg')},
