@@ -10623,6 +10623,12 @@ function ctlsVegMetrics(from, to){
   // Waste records for cross-reference (the destroy txs are auto-created from these).
   const vegWastes = _wastesInRange(from, to).filter(w => (w.type||'') === 'Vegetative Waste');
   const vegWasteCount = vegWastes.length;
+  // Vegetative Waste weight — sum of the kg weight field across all Veg Waste records in the
+  // month. Health Canada Section 2 requires both the plant-count side (Destroyed) and the
+  // biomass-weight side, since growers may record waste records without any plants destroyed
+  // (trim and de-leaf from living plants, where weight > 0 but plants = 0).
+  const vegWasteWeight = vegWastes
+    .reduce((s,w) => s + (parseFloat(w.weight)||0), 0);
   // Sold live plants — any Sold tx with Sale Stage = Clone (stored value for "Live Plants").
   // Counts BOTH Clones-phase and Veg-phase live-plant sales, regardless of batch origin —
   // a Seeds-genetics batch that advanced to Veg and then sold live plants belongs here
@@ -10647,6 +10653,7 @@ function ctlsVegMetrics(from, to){
     destroyedVeg,
     destroyedAll,
     vegWasteCount,
+    vegWasteWeight: vegWasteWeight || null,
     sold: soldClones || null,
     sentToLab: sentToLabPlants || null,
     leafTestingWeight: leafTestingWeight || null
@@ -10832,6 +10839,7 @@ function ctlsGenerateReport(){
     {label:'Destroyed in Veg/Clone phase', value: v(veg.destroyedVeg, 'plants')},
     {label:'Destroyed (all phases — cross-check vs Section 3)', value: v(veg.destroyedAll, 'plants')},
     {label:'Vegetative Waste records in the month', value: v(veg.vegWasteCount, 'records')},
+    {label:'Vegetative Waste weight', note:'sum of Weight (kg) across all Veg Waste records in the month', value: v(veg.vegWasteWeight, 'kg')},
     {label:'Sold (clones/Veg)', note:'Sold tx · Sale Stage = Live Plants — includes both Clones-phase and Veg-phase live-plant sales', value: v(veg.sold, 'plants')},
     {label:'Sent to lab / testing (R&amp;D)', note:'Sent to Lab tx · plant count', value: v(veg.sentToLab, 'plants')},
     {label:'Weight of leaf material sent to labs', note:'Sent to Lab tx · Material = Leaf', value: v(veg.leafTestingWeight, 'kg')}
