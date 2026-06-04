@@ -10546,9 +10546,14 @@ function ctlsSeedsMetrics(from, to){
     .filter(t => t.txType === 'Destroyed' && _isSeedsBatch(t.batchId)
       && SEED_STAGE_PHASES.includes(t.plantPhase||''))
     .reduce((s,t) => s + (parseInt(t.qty)||0), 0);
-  // Seeds sold — Sold tx on Seeds batches.
+  // Seeds sold — Sold tx on Seeds-genetics batches, EXCLUDING live-plant (Clone) sales.
+  // Once a Seeds batch crossed to Veg, its plants are no longer seeds — those Sold txs
+  // are tracked in Section 2 (Veg/Clones) instead. This keeps the seed metric scoped to
+  // actual seed inventory disposals (dry-seed sales on a Seeds batch — uncommon in
+  // practice, but covered for completeness).
   const sold = txs
-    .filter(t => t.txType === 'Sold' && _isSeedsBatch(t.batchId))
+    .filter(t => t.txType === 'Sold' && _isSeedsBatch(t.batchId)
+      && (t.saleStage||'') !== 'Clone')
     .reduce((s,t) => s + (parseInt(t.qty)||0) + (parseFloat(t.weight)||0), 0);
   return {
     bought: bought || null,
@@ -10618,9 +10623,13 @@ function ctlsVegMetrics(from, to){
   // Waste records for cross-reference (the destroy txs are auto-created from these).
   const vegWastes = _wastesInRange(from, to).filter(w => (w.type||'') === 'Vegetative Waste');
   const vegWasteCount = vegWastes.length;
-  // Sold clones — Sold tx with Sale Stage = Clone.
+  // Sold live plants — any Sold tx with Sale Stage = Clone (stored value for "Live Plants").
+  // Counts BOTH Clones-phase and Veg-phase live-plant sales, regardless of batch origin —
+  // a Seeds-genetics batch that advanced to Veg and then sold live plants belongs here
+  // (those plants are no longer seeds, they're Veg/Clone living plants). The Seeds-batch
+  // exclusion that used to live here has been removed so cross-origin sales aren't lost.
   const soldClones = txs
-    .filter(t => t.txType === 'Sold' && (t.saleStage||'') === 'Clone' && !_isSeedsBatch(t.batchId))
+    .filter(t => t.txType === 'Sold' && (t.saleStage||'') === 'Clone')
     .reduce((s,t) => s + (parseInt(t.qty)||0), 0);
   // Sent to lab — total plant count across Sent to Lab tx in the month.
   const sentToLabPlants = txs
@@ -10823,7 +10832,7 @@ function ctlsGenerateReport(){
     {label:'Destroyed in Veg/Clone phase', value: v(veg.destroyedVeg, 'plants')},
     {label:'Destroyed (all phases — cross-check vs Section 3)', value: v(veg.destroyedAll, 'plants')},
     {label:'Vegetative Waste records in the month', value: v(veg.vegWasteCount, 'records')},
-    {label:'Sold (clones/Veg)', note:'Sold tx · Sale Stage = Clone', value: v(veg.sold, 'plants')},
+    {label:'Sold (clones/Veg)', note:'Sold tx · Sale Stage = Live Plants — includes both Clones-phase and Veg-phase live-plant sales', value: v(veg.sold, 'plants')},
     {label:'Sent to lab / testing (R&amp;D)', note:'Sent to Lab tx · plant count', value: v(veg.sentToLab, 'plants')},
     {label:'Weight of leaf material sent to labs', note:'Sent to Lab tx · Material = Leaf', value: v(veg.leafTestingWeight, 'kg')}
   ]);
