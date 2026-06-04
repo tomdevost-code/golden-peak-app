@@ -9052,11 +9052,18 @@ async function summaryAddTransaction(){
   }
   // For Moved to Moms: create the paired Produced/Received tx on the destination
   // mother batch so its plant count increases by the same amount. Linked via notes.
+  // The incoming plants PRESERVE THE SOURCE BATCH'S PHASE — a Veg-phase source delivers
+  // Veg-phase plants to the destination mom (they don't revert to Clones just because
+  // mom batches are typically composed of clone cuttings).
   let _destTx = null;
   if(txType === 'Moved to Moms' && _destMomBatchId && qty > 0){
-    const _destRec = batchRecs.find(r => r.batchId === _destMomBatchId && !r.type);
-    const _destPhase = _destRec ? (_destRec.plantPhase || '') : '';
     const _destQtyBefore = calcBatchQty(_destMomBatchId);
+    // Source phase — for a non-mother source this is just the batch's plantPhase. Falls
+    // back to 'Clones' if the source phase isn't a valid mom-bucket phase, so the
+    // momPhaseCounts split stays consistent with MOM_PHASES.
+    const _srcPhaseForTransfer = (_txBatchRec && _txBatchRec.plantPhase) ? _txBatchRec.plantPhase : '';
+    const _validMomPhases = ['Clones','Veg','Flower','Drying'];
+    const _phaseForDest = _validMomPhases.includes(_srcPhaseForTransfer) ? _srcPhaseForTransfer : 'Clones';
     _destTx = {
       id: Date.now() + 1 + Math.floor(Math.random()*1000),
       batchId: _destMomBatchId,
@@ -9064,9 +9071,9 @@ async function summaryAddTransaction(){
       txType: 'Produced/Received',
       qty,
       weight: 0,
-      notes: 'Received from ' + batchId,
+      notes: 'Received from ' + batchId + ' (transferred as ' + _phaseForDest + ')',
       currentQtyBefore: _destQtyBefore,
-      plantPhase: _destPhase,
+      plantPhase: _phaseForDest,
       sourceBatchId: batchId,
       synced: false
     };
@@ -9080,9 +9087,28 @@ async function summaryAddTransaction(){
       batchRecs[_destIdx].synced = false;
       lsSet('gp-batch', batchRecs);
     }
-    // Destination mom: incoming plants land in the Clones bucket.
+    // Destination mom: incoming plants land in the SOURCE'S phase bucket (Clones / Veg /
+    // Flower / Drying) — not always Clones. Veg-phase plants from a Veg-phase source stay
+    // Veg in the mom batch.
     if(_destIdx >= 0){
-      momPhaseAdjust(batchRecs[_destIdx], 'Clones', +qty);
+      momPhaseAdjust(batchRecs[_destIdx], _phaseForDest, +qty);
+      // If the destination mom's overall plantPhase is still 'Clones' (the default starting
+      // phase) and we just added plants that are further along, advance the mom's headline
+      // phase to match so the day-counter and Summary card reflect reality.
+      const _destPhaseCurrent = batchRecs[_destIdx].plantPhase || 'Clones';
+      const _phaseRank = { 'Clones':0, 'Veg':1, 'Flower':2, 'Drying':3 };
+      if((_phaseRank[_phaseForDest]||0) > (_phaseRank[_destPhaseCurrent]||0)){
+        batchRecs[_destIdx].plantPhase = _phaseForDest;
+        // Stamp vegStart / flowerStart on the destination if they're still unset and we're
+        // crossing into those phases for the first time.
+        if(_phaseForDest === 'Veg' && !batchRecs[_destIdx].vegStart) batchRecs[_destIdx].vegStart = date;
+        if(_phaseForDest === 'Flower'){
+          if(!batchRecs[_destIdx].vegStart) batchRecs[_destIdx].vegStart = date;
+          if(!batchRecs[_destIdx].flowerStart) batchRecs[_destIdx].flowerStart = date;
+        }
+        batchRecs[_destIdx].synced = false;
+        lsSet('gp-batch', batchRecs);
+      }
     }
   }
   // Stamp Sold Date on the batch record when the first Sold tx lands. Independent of the
