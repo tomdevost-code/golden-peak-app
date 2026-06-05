@@ -3343,14 +3343,17 @@ function getDisplayPhase(batchRec){
   return phase;
 }
 function enforceZeroQtyState(batchId){
-  // Hard rule: when a batch's current quantity is <= 0 AND it hasn't entered the post-harvest lifecycle,
-  // its plantPhase MUST be its starting phase ('Germination' for Seeds-genetics, 'Clones' otherwise)
-  // and rooms MUST be ['Veg']. Auto-corrects + marks unsynced.
-  // Skipped for Drying/Packaged/Delivered so a fully-harvested OR delivered batch isn't rolled back.
+  // Hard rule: when a batch's current quantity is <= 0 AND it hasn't progressed past the
+  // starting phase yet, its plantPhase MUST stay at its starting phase ('Germination' for
+  // Seeds-genetics, 'Clones' otherwise) and rooms MUST be ['Veg']. Auto-corrects + marks
+  // unsynced. PHASE PROGRESSION IS ONE-WAY: a batch that has advanced to Veg/Flower/Drying/
+  // Packaged/Delivered NEVER reverts to its starting phase, even if all plants are gone —
+  // a Veg batch with qty=0 (e.g. sold/destroyed) stays in Veg.
   if(calcBatchQty(batchId)>0) return false;
   const b = batchRecs.find(r=>r.batchId===batchId && !r.type);
   if(!b) return false;
-  if(['Drying','Packaged','Delivered'].includes(b.plantPhase)) return false;
+  // Never revert from an advanced phase. Once past start, the lifecycle moves forward only.
+  if(['Veg','Flower','Drying','Packaged','Delivered'].includes(b.plantPhase)) return false;
   const _startPhase = (String(b.geneticsSource||'').toLowerCase() === 'seeds') ? 'Germination' : 'Clones';
   let changed=false;
   if(b.plantPhase!==_startPhase){ b.plantPhase=_startPhase; changed=true; }
@@ -9182,6 +9185,16 @@ async function summaryAddTransaction(){
   if(txType === 'Moved to Moms' && isMotherBatch(batchId)){
     toast('Mother batches cannot move plants to other mother batches.',5000);
     return;
+  }
+  // Guard: Germination-phase batches cannot move plants to mothers — seedlings need to
+  // grow into Veg phase first. Advance the batch to Veg via a Water-In EC entry before
+  // recording a Moved to Moms transaction.
+  if(txType === 'Moved to Moms'){
+    const _srcRec = batchRecs.find(r => r.batchId === batchId && !r.type);
+    if(_srcRec && _srcRec.plantPhase === 'Germination'){
+      toast('Plants in Germination phase cannot be moved to mothers. Advance the batch to Veg first (log a Water-In EC entry).', 6500);
+      return;
+    }
   }
   // Read inputs based on tx type:
   //   Produced/Received, Moved to Moms → plant-count input
