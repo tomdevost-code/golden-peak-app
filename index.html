@@ -11339,6 +11339,7 @@ function seedInvRenderList(){
       '<th style="padding:8px 10px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);">Lot Number</th>'+
       '<th style="padding:8px 10px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Strain</th>'+
       '<th style="padding:8px 10px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Source</th>'+
+      '<th style="padding:8px 10px;text-align:right;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);" title="Original lot size — total seeds acquired when this lot was first added">Acquired</th>'+
       '<th style="padding:8px 10px;text-align:right;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);" title="Current stock available to plant">On Hand</th>'+
       '<th style="padding:8px 10px;text-align:right;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);" title="Cumulative seeds that germinated from this lot">Germinated</th>'+
       '<th style="padding:8px 10px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Received</th>'+
@@ -11346,12 +11347,16 @@ function seedInvRenderList(){
     '</tr></thead><tbody>';
   recs.forEach(r => {
     const qty = parseInt(r.qtyOnHand)||0;
+    const acquired = parseInt(r.qtyAcquired)||0;
     const germinated = parseInt(r.qtyGerminated)||0;
     const isLow = qty === 0;
     html += '<tr style="border-top:1px solid var(--border);'+(isLow?'color:var(--text3);':'')+'">';
     html += '<td style="padding:8px 10px;font-weight:700;font-family:var(--mono);color:'+(isLow?'var(--text3)':'var(--green)')+';">'+(r.lotNumber||'—')+'</td>';
     html += '<td style="padding:8px 10px;border-left:1px solid var(--border);font-weight:600;color:'+(isLow?'var(--text3)':'var(--text)')+';">'+(r.strain||'—')+((r.acquisitionType==='Produced')?' <span style="font-size:9px;font-family:var(--mono);background:var(--green-pale);color:var(--green);border-radius:4px;padding:1px 5px;vertical-align:middle;">PRODUCED</span>':'')+'</td>';
     html += '<td style="padding:8px 10px;border-left:1px solid var(--border);">'+(r.source||'—')+'</td>';
+    // Acquired — the original lot size (qtyAcquired). Locked at first-save value; never decremented.
+    // Provides a stable reference point so growers can see how much of the lot has been used.
+    html += '<td style="padding:8px 10px;border-left:1px solid var(--border);text-align:right;font-family:var(--mono);color:var(--text2);">'+(acquired || '—')+'</td>';
     html += '<td style="padding:8px 10px;border-left:1px solid var(--border);text-align:right;font-family:var(--mono);font-weight:'+(isLow?'400':'700')+';color:'+(isLow?'var(--text3)':'var(--green)')+';">'+qty+'</td>';
     html += '<td style="padding:8px 10px;border-left:1px solid var(--border);text-align:right;font-family:var(--mono);color:var(--text2);">'+germinated+'</td>';
     html += '<td style="padding:8px 10px;border-left:1px solid var(--border);font-family:var(--mono);font-size:11px;color:var(--text2);">'+(r.dateReceived||'—')+'</td>';
@@ -11360,7 +11365,7 @@ function seedInvRenderList(){
     html += '<button class="btn-secondary" style="font-size:11px;padding:4px 8px;color:var(--red);" onclick="seedInvDelete('+r.id+')">Delete</button>';
     html += '</td></tr>';
     if(r.notes){
-      html += '<tr style="background:var(--bg2);"><td colspan="7" style="padding:4px 10px;font-size:10px;color:var(--text3);font-family:var(--mono);">'+r.notes+'</td></tr>';
+      html += '<tr style="background:var(--bg2);"><td colspan="8" style="padding:4px 10px;font-size:10px;color:var(--text3);font-family:var(--mono);">'+r.notes+'</td></tr>';
     }
   });
   html += '</tbody></table>';
