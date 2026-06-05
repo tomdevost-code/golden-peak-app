@@ -884,6 +884,8 @@ tr:last-child td { border-bottom: none; }
               <input type="number" class="summary-room-count" data-room="Flower 4" min="0" step="1" oninput="summaryUpdateVegLock()">
               <input type="checkbox" class="summary-room-cb" value="Flower 5" onchange="summaryRoomCheckChanged(this)">
               <input type="number" class="summary-room-count" data-room="Flower 5" min="0" step="1" oninput="summaryUpdateVegLock()">
+              <input type="checkbox" class="summary-room-cb" value="Tent" onchange="summaryRoomCheckChanged(this)">
+              <input type="number" class="summary-room-count" data-room="Tent" min="0" step="1" oninput="summaryUpdateVegLock()">
               <input type="checkbox" class="summary-room-cb" value="Veg" onchange="summaryRoomCheckChanged(this)">
             </div>
             <div id="summary-dist-summary" style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px 0;font-size:10px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;">
@@ -1023,6 +1025,7 @@ tr:last-child td { border-bottom: none; }
                 <option>Flower 3</option>
                 <option>Flower 4</option>
                 <option>Flower 5</option>
+                <option>Tent</option>
               </select>
             </div>
             <div class="field" style="margin-bottom:8px;">
@@ -1824,7 +1827,7 @@ const SAN_TASK_TEMPLATES = [
 const SAN_TEMPLATE_BATCH_FILTER = {
   'Mother-Veg':    { anyBatch:true,                    batchOptional:false, roomOptions:['Mother/Veg'] },
   'Drying':        { motherOnly:false,                 batchOptional:false, roomOptions:['Dry 1','Dry 2'] },
-  'Grow Room':     { motherOnly:false,                 batchOptional:false, roomOptions:['Flower 1','Flower 2','Flower 3','Flower 4','Flower 5'] },
+  'Grow Room':     { motherOnly:false,                 batchOptional:false, roomOptions:['Flower 1','Flower 2','Flower 3','Flower 4','Flower 5','Tent'] },
   'Trimming':      { anyBatch:true,                    batchOptional:false, roomOptions:['Trim'] },
   'Utility Areas': { motherOnly:false,                 batchOptional:true,
                      roomOptions:['Shipping/Receiving','Destruction','Office','Watering Room','Hallways','Storage','Secure Storage','Bathroom','Lunch Room','Vestibule','Change/Equipment Cleaning'] }
@@ -3145,7 +3148,7 @@ function getRoomsOccupiedByOtherBatches(currentBatchId){
     if(b.batchId === currentBatchId) return;
     if(isBatchClosedRec(b)) return;
     // Only Flower rooms are exclusive — Veg is a shared bay.
-    ['Flower 1','Flower 2','Flower 3','Flower 4','Flower 5'].forEach(r => {
+    ['Flower 1','Flower 2','Flower 3','Flower 4','Flower 5','Tent'].forEach(r => {
       if(calcRoomPlantCount(b.batchId, r) > 0) occupied.add(r);
     });
   });
@@ -3160,7 +3163,7 @@ function getRoomOccupancyOwners(currentBatchId){
     if(!b || b.type) return;
     if(b.batchId === currentBatchId) return;
     if(isBatchClosedRec(b)) return;
-    ['Flower 1','Flower 2','Flower 3','Flower 4','Flower 5'].forEach(r => {
+    ['Flower 1','Flower 2','Flower 3','Flower 4','Flower 5','Tent'].forEach(r => {
       if(!owners[r] && calcRoomPlantCount(b.batchId, r) > 0) owners[r] = b.batchId;
     });
   });
@@ -4336,7 +4339,7 @@ function bioBatchSelect(){
   const batchRec = batchRecs.find(r=>r.batchId===val && !r.type);
   const declaredRooms = (batchRec && Array.isArray(batchRec.rooms)) ? batchRec.rooms : [];
   let availableRooms = declaredRooms.length ? [...declaredRooms]
-    : ['Flower 1','Flower 2','Flower 3','Flower 4','Flower 5','Veg'];
+    : ['Flower 1','Flower 2','Flower 3','Flower 4','Flower 5','Tent','Veg'];
   // Add Veg if it has unallocated plants
   if(batchRec && batchRec.roomDistribution && Object.keys(batchRec.roomDistribution).length){
     if(calcRoomPlantCount(val, 'Veg') === 0){
@@ -5604,7 +5607,7 @@ function ecBatchLookup(){
     hint.textContent = availableRooms.length>1 ? 'This batch is in multiple rooms — pick the one for this entry' : 'Room assigned to this batch';
   } else {
     // No declared/historical rooms — fall back to the full list
-    const fullRooms = ['Flower 1','Flower 2','Flower 3','Flower 4','Flower 5','Veg'];
+    const fullRooms = ['Flower 1','Flower 2','Flower 3','Flower 4','Flower 5','Tent','Veg'];
     roomEl.innerHTML = '<option value="">select room</option>' + fullRooms.map(r => '<option'+(r===prevRoom?' selected':'')+'>'+r+'</option>').join('');
     const hint = roomEl.closest('.field').querySelector('.room-lock-hint');
     if(hint) hint.remove();
@@ -5668,7 +5671,7 @@ function setVegMin(){
     vegEl.min='';
   }
 }
-const FLOWER_ROOMS=['Flower 1','Flower 2','Flower 3','Flower 4','Flower 5'];
+const FLOWER_ROOMS=['Flower 1','Flower 2','Flower 3','Flower 4','Flower 5','Tent'];
 const ROOM_COLORS={
   'Flower 1':{bg:'var(--room1-pale)',border:'var(--room1)',text:'var(--room1)',dot:'#C0392B'},
   'Flower 2':{bg:'var(--room2-pale)',border:'var(--room2)',text:'var(--room2)',dot:'#E67E22'},
@@ -8336,7 +8339,8 @@ async function momPhaseAdvance(){
   if(from === 'Flower' && to === 'Drying' && b.roomDistribution){
     // Find any flower room that still has plants in distribution and drain qty from there.
     // Prefer the room with the most plants (typical case: one cohort per room).
-    const _fRooms = Object.keys(b.roomDistribution).filter(r => /^Flower /.test(r) && (parseInt(b.roomDistribution[r])||0) > 0);
+    // Flower-bucket rooms = anything that's a flower room (Flower 1-5 or Tent) with plants.
+    const _fRooms = Object.keys(b.roomDistribution).filter(r => (FLOWER_ROOMS.indexOf(r) >= 0) && (parseInt(b.roomDistribution[r])||0) > 0);
     _fRooms.sort((a,c) => (parseInt(b.roomDistribution[c])||0) - (parseInt(b.roomDistribution[a])||0));
     let _rem = qty;
     for(const r of _fRooms){
@@ -8571,9 +8575,10 @@ const ROOM_CHIP_COLORS = {
   'Flower 3':{dot:'#27AE60',bg:'#E0F2E5',border:'#27AE60'},
   'Flower 4':{dot:'#8E44AD',bg:'#EFE3F4',border:'#8E44AD'},
   'Flower 5':{dot:'#6D4C41',bg:'#E8DDD8',border:'#6D4C41'},
+  'Tent':{dot:'#0E7C9D',bg:'#DCEDF4',border:'#0E7C9D'},
   'Veg':{dot:'#27AE60',bg:'#E8F5E9',border:'#27AE60'}
 };
-const ROOM_LIST = ['Flower 1','Flower 2','Flower 3','Flower 4','Flower 5','Veg'];
+const ROOM_LIST = ['Flower 1','Flower 2','Flower 3','Flower 4','Flower 5','Tent','Veg'];
 
 function summaryRenderRoomChips(){
   // Renders the active-chip + add-pill UI from the hidden checkbox/count input state.
@@ -11506,7 +11511,7 @@ function ctlsFlowerMetrics(from, to){
     const _destroyedInFlowerThisMonth = batchTxRecs
       .filter(t => t.batchId === b.batchId && t.txType === 'Destroyed'
         && _inRange(t.date, from, to)
-        && ((t.plantPhase||'') === 'Flower' || /Flower/i.test(t.room||'')))
+        && ((t.plantPhase||'') === 'Flower' || /Flower/i.test(t.room||'') || (t.room||'') === 'Tent'))
       .reduce((s,t) => s + (parseInt(t.qty)||0), 0);
     qtyAtFlip += _destroyedInFlowerThisMonth;
     return sum + qtyAtFlip;
@@ -11532,7 +11537,7 @@ function ctlsFlowerMetrics(from, to){
   }, 0);
   // Destroyed during flower = Destroyed tx where plantPhase=Flower OR room is a flower room.
   const destroyedFlower = txs
-    .filter(t => t.txType === 'Destroyed' && ((t.plantPhase||'') === 'Flower' || /Flower/i.test(t.room||'')))
+    .filter(t => t.txType === 'Destroyed' && ((t.plantPhase||'') === 'Flower' || /Flower/i.test(t.room||'') || (t.room||'') === 'Tent'))
     .reduce((s,t) => s + (parseInt(t.qty)||0), 0);
   // Harvested = sum of Harvested tx qty in the month.
   const harvested = txs
