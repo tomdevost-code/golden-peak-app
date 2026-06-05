@@ -11442,18 +11442,28 @@ async function seedInvDecrement(idLotOrStrain, qty){
 // (create) if the linked row was deleted on the Airtable side. Returns the airtableId.
 async function seedInvPushRemote(rec){
   const f = buildSeedInvFields(rec);
+  let res = null;
   if(rec.airtableId){
     try {
-      const r = await atUpdateById(cfg.seedInvTbl, rec.airtableId, f);
-      const _id = r && r.records && r.records[0] && r.records[0].id;
-      return _id || rec.airtableId;
+      res = await atUpdateById(cfg.seedInvTbl, rec.airtableId, f);
     } catch(e){
       // Row may have been deleted remotely (404 / model-not-found) — fall through to upsert.
       if(!/404|NOT_FOUND|MODEL_ID_NOT_FOUND/i.test(e.message||'')) throw e;
     }
   }
-  const r = await atUpsert(cfg.seedInvTbl, f, ['Lot Number']);
-  return r && r.records && r.records[0] && r.records[0].id;
+  if(!res) res = await atUpsert(cfg.seedInvTbl, f, ['Lot Number']);
+  const rem = res && res.records && res.records[0];
+  // Schema guard: if Airtable echoes back a DIFFERENT Lot Number than we sent (e.g. "S23-100"
+  // saved as "23"), the Lot Number column is a Number (or computed) field and typecast mangled
+  // the value. That mangled remote row comes back on the next pull as a phantom duplicate.
+  // Warn loudly so the field type gets fixed to "Single line text".
+  try {
+    const remLot = rem && rem.fields && rem.fields['Lot Number'];
+    if(remLot != null && String(remLot).trim().toLowerCase() !== String(rec.lotNumber||'').trim().toLowerCase()){
+      toast('⚠ Airtable saved Lot "'+rec.lotNumber+'" as "'+remLot+'". Set the Lot Number field type to "Single line text" in Airtable, or duplicates will appear.', 9000);
+    }
+  } catch(_){}
+  return rem && rem.id;
 }
 
 function buildSeedInvFields(rec){
