@@ -2871,8 +2871,15 @@ function renderConflictBanner(){
 
 function _conflictDiffFields(local, remote){
   // Returns the keys that actually differ between local and remote, excluding
-  // bookkeeping fields (id, airtableId, synced, etc).
-  const skip = new Set(['id','airtableId','synced','samples','events','dripEcPens','dripPhPens']);
+  // bookkeeping fields (id, airtableId, synced) and LOCAL-ONLY fields that aren't part
+  // of the Airtable schema (seedStrain, seedLotNumber, momPhaseCounts). Local-only fields
+  // are populated client-side and never written to Airtable, so they'll always appear
+  // "missing" on the remote side — they should never count as conflicts.
+  const skip = new Set([
+    'id','airtableId','synced',
+    'samples','events','dripEcPens','dripPhPens',
+    'seedStrain','seedLotNumber','momPhaseCounts'
+  ]);
   const keys = new Set([...Object.keys(local||{}), ...Object.keys(remote||{})]);
   // Normalize zero-count object maps (roomDistribution, harvestedWeights, harvestedPlants,
   // momPhaseCounts) — strip entries whose value is 0, since "key not present" and "key = 0"
