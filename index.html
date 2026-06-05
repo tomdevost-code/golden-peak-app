@@ -9674,7 +9674,11 @@ function summaryRenderHistory(batchId){
   html += '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
   html += '<thead><tr style="background:#f5f5f5;"><th style="padding:6px 8px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Date</th><th style="padding:6px 8px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Type</th><th style="padding:6px 8px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Phase</th><th style="padding:6px 8px;text-align:right;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Qty</th><th style="padding:6px 8px;text-align:right;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Balance</th><th style="padding:6px 8px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Notes</th></tr></thead>';
   html += '<tbody>'+withQty.map(t=>{
-    const isIn = t.txType==='Produced/Received';
+    // "Credit" tx types — ADD plants to the batch's running balance. Both Produced/Received
+    // and Seeds Germinated increase the count for the destination batch (Seeds Germinated
+    // simultaneously decrements the seed lot's On Hand on the Seeds page, but for THIS batch
+    // it's a +qty event, so it renders green with a + sign and contributes positively to balance).
+    const isIn = (t.txType==='Produced/Received' || t.txType==='Seeds Germinated');
     const isPhase = t.txType==='Phase Change';
     const isAdvance = t.txType==='Phase Advance';
     const isSold = t.txType==='Sold';
@@ -11577,16 +11581,37 @@ async function seedInvDecrement(idLotOrStrain, qty){
 // (create) if the linked row was deleted on the Airtable side. Returns the airtableId.
 async function seedInvPushRemote(rec){
   const f = buildSeedInvFields(rec);
+  // Unknown-field resilience: Airtable returns 422 "Unknown field name: 'X'" when the column
+  // doesn't exist in the table. Strip the offending field from the payload and retry, up to a
+  // few times, so a missing Acquisition Type / Source Mother Batch column doesn't block the
+  // entire seed-inventory sync. The dropped field stays local-only until the grower adds the
+  // column to Airtable — at which point the next sync will populate it normally.
+  async function _attempt(payload, fn){
+    let attempts = 0;
+    while(attempts < 6){
+      try { return await fn(payload); }
+      catch(e){
+        const m = (e && e.message || '').match(/Unknown field name:\s*"([^"]+)"/i);
+        if(m && m[1] && payload[m[1]] !== undefined){
+          delete payload[m[1]];
+          attempts++;
+          continue;
+        }
+        throw e;
+      }
+    }
+    return null;
+  }
   let res = null;
   if(rec.airtableId){
     try {
-      res = await atUpdateById(cfg.seedInvTbl, rec.airtableId, f);
+      res = await _attempt({...f}, p => atUpdateById(cfg.seedInvTbl, rec.airtableId, p));
     } catch(e){
       // Row may have been deleted remotely (404 / model-not-found) — fall through to upsert.
       if(!/404|NOT_FOUND|MODEL_ID_NOT_FOUND/i.test(e.message||'')) throw e;
     }
   }
-  if(!res) res = await atUpsert(cfg.seedInvTbl, f, ['Lot Number']);
+  if(!res) res = await _attempt({...f}, p => atUpsert(cfg.seedInvTbl, p, ['Lot Number']));
   const rem = res && res.records && res.records[0];
   // Schema guard: if Airtable echoes back a DIFFERENT Lot Number than we sent (e.g. "S23-100"
   // saved as "23"), the Lot Number column is a Number (or computed) field and typecast mangled
