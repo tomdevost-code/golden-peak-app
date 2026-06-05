@@ -568,6 +568,13 @@ tr:last-child td { border-bottom: none; }
               <input type="date" id="seed-date" />
             </div>
           </div>
+          <div class="field" style="margin-bottom:10px;">
+            <label>Acquisition Type <span style="font-size:10px;color:var(--text3);font-weight:400;">— how this lot entered inventory; routes the CTLS Section 1 line</span></label>
+            <select id="seed-acq">
+              <option value="Bought">Brought In / Purchased</option>
+              <option value="Produced">Produced On-Site (breeding)</option>
+            </select>
+          </div>
           <div class="field" style="margin-bottom:12px;"><label>Notes</label>
             <textarea id="seed-notes" rows="2" placeholder="Optional notes about this strain..." style="width:100%;font-size:14px;font-family:var(--sans);border-radius:var(--radius-sm);border:1px solid var(--border);padding:8px 10px;background:var(--bg);color:var(--text);outline:none;resize:vertical;"></textarea>
           </div>
@@ -2257,6 +2264,7 @@ const REMOTE_MAPPERS = {
       lotNumber,
       strain: (f['Strain']||'').toString(),
       source: f['Source']||'',
+      acquisitionType: (f['Acquisition Type']||'Bought').toString(),
       qtyOnHand: onHand,
       qtyAcquired: acquired,
       qtyGerminated: parseInt(f['Quantity Germinated'])||0,
@@ -10822,7 +10830,8 @@ function fmtKgOrDash(n){ return (!n || n === 0) ? '—' : fmtKg3(n); }
 
 // SECTION 1 — Seeds
 // "Bought seeds" = sum of Quantity Acquired across Seed Inventory lots where Date Received falls
-//   in the month. (Inventory-driven, not tx-driven — matches the new lot-tracking model.)
+//   in the month and Acquisition Type = Bought. (Inventory-driven, not tx-driven.)
+// "Seeds produced" = same, but Acquisition Type = Produced (on-site breeding projects).
 // "Germinated" = sum of Seeds Germinated tx qty on Seeds-genetics batches in the month.
 // "Not germinated" = Vegetative Waste records on Seeds-batches with Sub-Category=Not Germinated.
 // "Destroyed" = Destroyed tx on Seeds-batches in the month.
@@ -10830,9 +10839,15 @@ function fmtKgOrDash(n){ return (!n || n === 0) ? '—' : fmtKg3(n); }
 function ctlsSeedsMetrics(from, to){
   const txs = _txsInRange(from, to);
   const wastes = _wastesInRange(from, to);
-  // Bought = inventory lots received in the reporting month, summed by Quantity Acquired.
-  const bought = seedInvRecs
-    .filter(r => _inRange(r.dateReceived, from, to))
+  // Lots received in the reporting month, split by Acquisition Type. Legacy lots without
+  // the field default to Bought (brought in / purchased).
+  const lotsInMonth = seedInvRecs.filter(r => _inRange(r.dateReceived, from, to));
+  const bought = lotsInMonth
+    .filter(r => (r.acquisitionType||'Bought') !== 'Produced')
+    .reduce((s,r) => s + (parseInt(r.qtyAcquired)||0), 0);
+  // Produced = breeding-project lots produced on-site (Acquisition Type = Produced).
+  const produced = lotsInMonth
+    .filter(r => (r.acquisitionType||'Bought') === 'Produced')
     .reduce((s,r) => s + (parseInt(r.qtyAcquired)||0), 0);
   // Germinated = Seeds Germinated transactions on Seeds-genetics batches in the month.
   const germinated = txs
@@ -10865,6 +10880,7 @@ function ctlsSeedsMetrics(from, to){
     .reduce((s,t) => s + (parseInt(t.qty)||0) + (parseFloat(t.weight)||0), 0);
   return {
     bought: bought || null,
+    produced: produced || null,
     germinated: germinated || null,
     notGerminated,
     sold: sold || null,
@@ -11163,7 +11179,8 @@ function ctlsGenerateReport(){
 
   // Section 1 — Seeds
   html += _ctlsBlock('1. Seeds', [
-    {label:'Bought seeds', note:'Seed Inventory lots received this month · sum of Quantity Acquired', value: v(seeds.bought, 'seeds')},
+    {label:'Bought seeds', note:'lots received this month · Acquisition Type = Brought In / Purchased · sum of Quantity Acquired', value: v(seeds.bought, 'seeds')},
+    {label:'Seeds produced', note:'lots received this month · Acquisition Type = Produced On-Site (breeding) · sum of Quantity Acquired', value: v(seeds.produced, 'seeds')},
     {label:'Quantity germinated', note:'sum of Seeds Germinated transactions', value: v(seeds.germinated, 'seeds')},
     {label:'Quantity not germinated', note:'Veg Waste · Sub-Category = Not Germinated', value: v(seeds.notGerminated, 'seeds')},
     {label:'Seeds sold', value: v(seeds.sold, 'seeds')},
@@ -11275,7 +11292,7 @@ function seedInvRenderList(){
     const isLow = qty === 0;
     html += '<tr style="border-top:1px solid var(--border);'+(isLow?'color:var(--text3);':'')+'">';
     html += '<td style="padding:8px 10px;font-weight:700;font-family:var(--mono);color:'+(isLow?'var(--text3)':'var(--green)')+';">'+(r.lotNumber||'—')+'</td>';
-    html += '<td style="padding:8px 10px;border-left:1px solid var(--border);font-weight:600;color:'+(isLow?'var(--text3)':'var(--text)')+';">'+(r.strain||'—')+'</td>';
+    html += '<td style="padding:8px 10px;border-left:1px solid var(--border);font-weight:600;color:'+(isLow?'var(--text3)':'var(--text)')+';">'+(r.strain||'—')+((r.acquisitionType==='Produced')?' <span style="font-size:9px;font-family:var(--mono);background:var(--green-pale);color:var(--green);border-radius:4px;padding:1px 5px;vertical-align:middle;">PRODUCED</span>':'')+'</td>';
     html += '<td style="padding:8px 10px;border-left:1px solid var(--border);">'+(r.source||'—')+'</td>';
     html += '<td style="padding:8px 10px;border-left:1px solid var(--border);text-align:right;font-family:var(--mono);font-weight:'+(isLow?'400':'700')+';color:'+(isLow?'var(--text3)':'var(--green)')+';">'+qty+'</td>';
     html += '<td style="padding:8px 10px;border-left:1px solid var(--border);text-align:right;font-family:var(--mono);color:var(--text2);">'+germinated+'</td>';
@@ -11305,6 +11322,7 @@ async function seedInvSave(){
   const dateReceived = (document.getElementById('seed-date')||{}).value || localDate();
   const lotNumber = ((document.getElementById('seed-lot')||{}).value || '').trim();
   const notes = ((document.getElementById('seed-notes')||{}).value || '').trim();
+  const acquisitionType = ((document.getElementById('seed-acq')||{}).value || 'Bought');
   if(!lotNumber){ toast('Enter a Lot / Batch Number. This is the primary identifier.'); return; }
   if(!strain){ toast('Enter a strain name.'); return; }
   if(qtyOnHand < 0){ toast('Quantity cannot be negative.'); return; }
@@ -11323,13 +11341,14 @@ async function seedInvSave(){
     rec.dateReceived = dateReceived;
     rec.lotNumber = lotNumber;
     rec.notes = notes;
+    rec.acquisitionType = acquisitionType;
     rec.synced = false;
   } else {
     // First save — Acquired snapshots the initial On Hand value. Lifetime total for this lot.
     rec = {
       id: Date.now() + Math.floor(Math.random()*10000),
       strain, source, qtyOnHand, qtyAcquired: qtyOnHand, qtyGerminated: 0,
-      dateReceived, lotNumber, notes,
+      dateReceived, lotNumber, notes, acquisitionType,
       synced: false
     };
     seedInvRecs.unshift(rec);
@@ -11357,6 +11376,7 @@ function seedInvResetForm(){
     const el = document.getElementById(id); if(el) el.value = '';
   });
   const dEl = document.getElementById('seed-date'); if(dEl) dEl.value = localDate();
+  const acqEl = document.getElementById('seed-acq'); if(acqEl) acqEl.value = 'Bought';
   const eid = document.getElementById('seed-edit-id'); if(eid) eid.value = '';
   const lbl = document.getElementById('seed-form-label'); if(lbl) lbl.textContent = 'Add Seed Strain';
   const sBtn = document.getElementById('seed-save-btn'); if(sBtn) sBtn.textContent = 'Save to Inventory';
@@ -11373,6 +11393,7 @@ function seedInvEditStart(id){
   document.getElementById('seed-date').value = rec.dateReceived || '';
   document.getElementById('seed-lot').value = rec.lotNumber || '';
   document.getElementById('seed-notes').value = rec.notes || '';
+  const _acqEl = document.getElementById('seed-acq'); if(_acqEl) _acqEl.value = rec.acquisitionType || 'Bought';
   document.getElementById('seed-edit-id').value = String(rec.id);
   const lbl = document.getElementById('seed-form-label'); if(lbl) lbl.textContent = 'Editing — '+(rec.strain||'(unnamed)');
   const sBtn = document.getElementById('seed-save-btn'); if(sBtn) sBtn.textContent = 'Save Changes';
@@ -11471,6 +11492,7 @@ function buildSeedInvFields(rec){
     'Lot Number':          rec.lotNumber || undefined,
     'Strain':              rec.strain || undefined,
     'Source':              rec.source || undefined,
+    'Acquisition Type':    rec.acquisitionType || 'Bought',
     'Quantity On Hand':    (rec.qtyOnHand != null)    ? rec.qtyOnHand    : undefined,
     'Quantity Acquired':   (rec.qtyAcquired != null)  ? rec.qtyAcquired  : undefined,
     'Quantity Germinated': (rec.qtyGerminated != null) ? rec.qtyGerminated : undefined,
