@@ -985,10 +985,23 @@ tr:last-child td { border-bottom: none; }
               </div>
               <div class="field">
                 <label style="font-size:11px;">To Phase</label>
-                <select id="mom-advance-to" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;">
+                <select id="mom-advance-to" onchange="momAdvanceToChanged()" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;">
                   <option value="">-- to --</option>
                 </select>
               </div>
+            </div>
+            <!-- Flower-room picker: only visible when advancing TO Flower. Mom cohorts that flower
+                 must be physically assigned to a Flower room (never the Veg room). -->
+            <div class="field" id="mom-advance-room-wrap" style="margin-bottom:8px;display:none;">
+              <label style="font-size:11px;">Flower Room <span style="color:var(--red);font-weight:700;">*</span> <span style="font-size:10px;color:var(--text3);font-weight:400;">— where the flowering cohort will physically live</span></label>
+              <select id="mom-advance-room" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;">
+                <option value="">-- pick a flower room --</option>
+                <option>Flower 1</option>
+                <option>Flower 2</option>
+                <option>Flower 3</option>
+                <option>Flower 4</option>
+                <option>Flower 5</option>
+              </select>
             </div>
             <div class="field" style="margin-bottom:8px;">
               <label style="font-size:11px;">Plant Count <span id="mom-advance-max" style="font-size:10px;color:var(--text3);font-weight:400;"></span></label>
@@ -8103,6 +8116,22 @@ function momAdvanceFromChanged(){
     + targets.map(p => '<option value="'+p+'">'+p+'</option>').join('');
   // Auto-select if there's only one target.
   if(targets.length === 1) toSel.value = targets[0];
+  // Now that To may have been auto-selected, sync the Flower-room picker visibility.
+  if(typeof momAdvanceToChanged === 'function') momAdvanceToChanged();
+}
+
+// Show / hide the Flower-room picker based on the To-phase. A cohort advancing into
+// Flower must be assigned a physical Flower room — moms can't be flowering in the Veg room.
+function momAdvanceToChanged(){
+  const toSel = document.getElementById('mom-advance-to');
+  const wrap  = document.getElementById('mom-advance-room-wrap');
+  if(!toSel || !wrap) return;
+  const showRoom = (toSel.value === 'Flower');
+  wrap.style.display = showRoom ? '' : 'none';
+  if(!showRoom){
+    const _r = document.getElementById('mom-advance-room');
+    if(_r) _r.value = '';
+  }
 }
 
 async function momPhaseAdvance(){
@@ -8122,9 +8151,18 @@ async function momPhaseAdvance(){
   const from = document.getElementById('mom-advance-from').value;
   const to   = document.getElementById('mom-advance-to').value;
   const qty  = parseInt(document.getElementById('mom-advance-qty').value) || 0;
+  // Flower-room assignment: required when advancing INTO Flower. Mom batches must place
+  // their flowering cohort in a physical Flower room — never in the Veg room.
+  const _flowerRoom = (to === 'Flower')
+    ? ((document.getElementById('mom-advance-room')||{}).value || '').trim()
+    : '';
   if(!from || !to){ toast('Pick both a From and a To phase.'); return; }
   if(from === to){ toast('From and To phase must be different.'); return; }
   if(qty <= 0){ toast('Enter a plant count greater than 0.'); return; }
+  if(to === 'Flower' && !_flowerRoom){
+    toast('Pick a Flower room — mom cohorts must be physically assigned to a Flower room when they start flowering.', 6500);
+    return;
+  }
   const c = ensureMomPhaseCounts(b);
   if(!c || (c[from] || 0) < qty){
     toast('Not enough plants in '+from+'. Available: '+(c?c[from]||0:0)+', requested: '+qty+'.', 5500);
@@ -8138,6 +8176,32 @@ async function momPhaseAdvance(){
   if(to === 'Veg'    && !b.vegStart)     b.vegStart    = today;
   if(to === 'Flower' && !b.flowerStart)  b.flowerStart = today;
   if(to === 'Drying' && !b.harvestDate)  b.harvestDate = today;
+  // Flower-room physical placement: add the room to batchRec.rooms (if not already there)
+  // and bump roomDistribution for that room by the qty being moved. This lets downstream
+  // features (Harvest Log room dropdown, "active rooms" chips, the per-room plant counts)
+  // see that this mom now has flowering plants in a specific room.
+  if(to === 'Flower' && _flowerRoom){
+    if(!Array.isArray(b.rooms)) b.rooms = ['Veg'];
+    if(!b.rooms.includes(_flowerRoom)) b.rooms.push(_flowerRoom);
+    if(!b.roomDistribution || typeof b.roomDistribution !== 'object') b.roomDistribution = {};
+    b.roomDistribution[_flowerRoom] = (parseInt(b.roomDistribution[_flowerRoom])||0) + qty;
+  }
+  // Drying: when a cohort moves From Flower TO Drying, decrement the source Flower-room count
+  // so the room doesn't keep showing plants that have moved on to drying.
+  if(from === 'Flower' && to === 'Drying' && b.roomDistribution){
+    // Find any flower room that still has plants in distribution and drain qty from there.
+    // Prefer the room with the most plants (typical case: one cohort per room).
+    const _fRooms = Object.keys(b.roomDistribution).filter(r => /^Flower /.test(r) && (parseInt(b.roomDistribution[r])||0) > 0);
+    _fRooms.sort((a,c) => (parseInt(b.roomDistribution[c])||0) - (parseInt(b.roomDistribution[a])||0));
+    let _rem = qty;
+    for(const r of _fRooms){
+      if(_rem <= 0) break;
+      const _have = parseInt(b.roomDistribution[r])||0;
+      const _take = Math.min(_have, _rem);
+      b.roomDistribution[r] = _have - _take;
+      _rem -= _take;
+    }
+  }
   // Bump the batch's primary phase to the highest non-zero bucket.
   b.plantPhase = momPrimaryPhase(b);
   b.synced = false;
@@ -8161,6 +8225,8 @@ async function momPhaseAdvance(){
   lsSet('gp-batchtx', batchTxRecs);
   // UI refresh
   document.getElementById('mom-advance-qty').value = '';
+  const _rRoom = document.getElementById('mom-advance-room'); if(_rRoom) _rRoom.value = '';
+  const _rWrap = document.getElementById('mom-advance-room-wrap'); if(_rWrap) _rWrap.style.display = 'none';
   const msg = document.getElementById('mom-advance-msg');
   if(msg){ msg.style.display='block'; msg.style.color='var(--green)'; msg.textContent='Advanced '+qty+' plant'+(qty===1?'':'s')+' from '+from+' to '+to+'.'; setTimeout(()=>{ msg.style.display='none'; }, 3500); }
   summaryRefreshMomPhase(batchId);
