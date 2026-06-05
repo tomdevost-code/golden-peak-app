@@ -3573,6 +3573,21 @@ function isMotherBatch(batchId){
 function isSeedsBatchId(batchId){
   return SEEDS_BATCH_ID_RE.test((batchId||'').toString().trim());
 }
+// Extract the core letter prefix from any Batch ID format. Strips an optional M- or S-
+// prefix first so the comparison key is the inner letter segment.
+//   "SPK-001"    → "SPK"
+//   "M-SPK-001"  → "SPK"
+//   "S-SP-001"   → "SP"
+//   "SP-001"     → "SP"
+// Returns '' for malformed IDs.
+function batchIdLetterPrefix(batchId){
+  const id = (batchId||'').toString().trim().toUpperCase();
+  if(!id) return '';
+  // Strip optional M- or S- format prefix.
+  const stripped = id.replace(/^(M|S)-/i, '');
+  const m = stripped.match(/^([A-Za-z]+)-\d+$/i);
+  return m ? m[1].toUpperCase() : '';
+}
 function getMotherBatchIds(){
   // List of OPEN mother stock batches (M-XXX-NNN). Used to populate the Mother ID
   // dropdown on the Batch creation page and the destination dropdown on a
@@ -8658,11 +8673,11 @@ function txTypeChanged(){
     if(t === 'Moved to Moms'){
       const _srcBatch = document.getElementById('summary-batch-select').value;
       // Eligible mothers are matched by LETTER-PREFIX only — any mom batch whose ID is
-      // M-<letterPrefix>-NNN can receive plants from a source batch <letterPrefix>-NNN.
-      // The trailing 3-digit segment doesn't have to match. e.g. source 'ST-010' can
-      // be moved into M-ST-001, M-ST-042, etc.
-      const _prefixMatch = _srcBatch ? _srcBatch.match(/^([A-Za-z]+)-\d+$/i) : null;
-      const _letterPrefix = _prefixMatch ? _prefixMatch[1].toUpperCase() : '';
+      // M-<letterPrefix>-NNN can receive plants from a source batch with the same letter
+      // prefix. The trailing 3-digit segment doesn't have to match. Examples:
+      //   'ST-010'   → eligible M-ST-NNN
+      //   'S-SP-001' → eligible M-SP-NNN (S- prefix stripped)
+      const _letterPrefix = batchIdLetterPrefix(_srcBatch);
       const _expectedMomPattern = _letterPrefix ? ('M-' + _letterPrefix + '-XXX') : 'M-XX-XXX';
       const _eligibleMoms = _letterPrefix
         ? batchRecs
@@ -9229,8 +9244,7 @@ async function summaryAddTransaction(){
   let _destMomBatchId = '';
   if(txType === 'Moved to Moms'){
     _destMomBatchId = (document.getElementById('tx-dest-mom')?.value || '').trim();
-    const _prefixMatch = batchId ? batchId.match(/^([A-Za-z]+)-\d+$/i) : null;
-    const _letterPrefix = _prefixMatch ? _prefixMatch[1].toUpperCase() : '';
+    const _letterPrefix = batchIdLetterPrefix(batchId);
     const _expectedMomPattern = _letterPrefix ? ('M-' + _letterPrefix + '-XXX') : 'M-XX-XXX';
     const _eligibleMoms = _letterPrefix
       ? batchRecs
