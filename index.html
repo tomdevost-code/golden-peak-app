@@ -1865,6 +1865,10 @@ function backfillHarvestedTxs(){
 function atReady(){return cfg.token&&cfg.base&&cfg.ecTbl&&cfg.roTbl;}
 async function atPost(tbl,fields){const body={fields,typecast:true};console.log('Airtable POST →',tbl,body);const r=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+tbl,{method:'POST',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok){let detail='';try{const j=await r.json();detail=j.error&&(j.error.message||j.error.type)||JSON.stringify(j);}catch(_){}console.error('Airtable POST failed',r.status,detail,'body=',body);throw new Error(r.status+(detail?': '+detail:''));}return r.json();}
 async function atUpsert(tbl,fields,mergeOn){const body={performUpsert:{fieldsToMergeOn:mergeOn},records:[{fields}],typecast:true};console.log('Airtable UPSERT →',tbl,body);const r=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+tbl,{method:'PATCH',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok){let detail='';try{const j=await r.json();detail=j.error&&(j.error.message||j.error.type)||JSON.stringify(j);}catch(_){}console.error('Airtable UPSERT failed',r.status,detail,'body=',body);throw new Error(r.status+(detail?': '+detail:''));}return r.json();}
+// Update a single record by its Airtable record id. Used instead of upsert-by-field when we
+// already know the record — critical when the merge-on field itself (e.g. Lot Number) changed,
+// because an upsert on the NEW value would create a second row and orphan the old one.
+async function atUpdateById(tbl,recordId,fields){const body={records:[{id:recordId,fields}],typecast:true};console.log('Airtable UPDATE →',tbl,recordId,body);const r=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+tbl,{method:'PATCH',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok){let detail='';try{const j=await r.json();detail=j.error&&(j.error.message||j.error.type)||JSON.stringify(j);}catch(_){}console.error('Airtable UPDATE failed',r.status,detail,'body=',body);throw new Error(r.status+(detail?': '+detail:''));}return r.json();}
 
 // ============================================================
 // MULTI-LAPTOP SYNC — PHASE 1: PULL FROM AIRTABLE
@@ -6686,9 +6690,7 @@ async function syncPending(){
   if(cfg.seedInvTbl){
     for(const r of pendingSeedInv){
       try{
-        const f = buildSeedInvFields(r);
-        const siRes = await atUpsert(cfg.seedInvTbl, f, ['Lot Number']);
-        const _id = siRes && siRes.records && siRes.records[0] && siRes.records[0].id;
+        const _id = await seedInvPushRemote(r);
         if(_id) r.airtableId = _id;
         r.synced=true;ok++;
       }catch(e){fail++;lastErr=e.message;}
@@ -9344,9 +9346,7 @@ async function summaryAddTransaction(){
         if(cfg.seedInvTbl && cfg.token && cfg.base){
           (async () => {
             try {
-              const f = buildSeedInvFields(_siRec);
-              const r = await atUpsert(cfg.seedInvTbl, f, ['Lot Number']);
-              const _id = r && r.records && r.records[0] && r.records[0].id;
+              const _id = await seedInvPushRemote(_siRec);
               if(_id) _siRec.airtableId = _id;
               _siRec.synced = true;
               lsSet('gp-seedinv', seedInvRecs);
@@ -11339,12 +11339,10 @@ async function seedInvSave(){
   seedInvResetForm();
   seedInvRenderList();
   updatePendingBadge();
-  // Sync to Airtable (upsert by Strain).
+  // Sync to Airtable — update by record id when linked, upsert by Lot Number when new.
   if(cfg.seedInvTbl && cfg.token && cfg.base){
     try {
-      const f = buildSeedInvFields(rec);
-      const r = await atUpsert(cfg.seedInvTbl, f, ['Lot Number']);
-      const _id = r && r.records && r.records[0] && r.records[0].id;
+      const _id = await seedInvPushRemote(rec);
       if(_id) rec.airtableId = _id;
       rec.synced = true;
       lsSet('gp-seedinv', seedInvRecs);
@@ -11426,9 +11424,7 @@ async function seedInvDecrement(idLotOrStrain, qty){
   updatePendingBadge();
   if(cfg.seedInvTbl && cfg.token && cfg.base){
     try {
-      const f = buildSeedInvFields(rec);
-      const r = await atUpsert(cfg.seedInvTbl, f, ['Lot Number']);
-      const _id = r && r.records && r.records[0] && r.records[0].id;
+      const _id = await seedInvPushRemote(rec);
       if(_id) rec.airtableId = _id;
       rec.synced = true;
       lsSet('gp-seedinv', seedInvRecs);
@@ -11440,6 +11436,26 @@ async function seedInvDecrement(idLotOrStrain, qty){
 
 // Build the Airtable field payload for a seed inventory record. Cumulative counts (Acquired,
 // Germinated) are always sent so Airtable's columns stay current — including when they're 0.
+// Push one seed inventory record to Airtable. If the record is already linked
+// (has airtableId) we update THAT row by id — never upsert by Lot Number, which would
+// create a duplicate row whenever the lot number was edited. Falls back to upsert
+// (create) if the linked row was deleted on the Airtable side. Returns the airtableId.
+async function seedInvPushRemote(rec){
+  const f = buildSeedInvFields(rec);
+  if(rec.airtableId){
+    try {
+      const r = await atUpdateById(cfg.seedInvTbl, rec.airtableId, f);
+      const _id = r && r.records && r.records[0] && r.records[0].id;
+      return _id || rec.airtableId;
+    } catch(e){
+      // Row may have been deleted remotely (404 / model-not-found) — fall through to upsert.
+      if(!/404|NOT_FOUND|MODEL_ID_NOT_FOUND/i.test(e.message||'')) throw e;
+    }
+  }
+  const r = await atUpsert(cfg.seedInvTbl, f, ['Lot Number']);
+  return r && r.records && r.records[0] && r.records[0].id;
+}
+
 function buildSeedInvFields(rec){
   const f = {
     'Lot Number':          rec.lotNumber || undefined,
