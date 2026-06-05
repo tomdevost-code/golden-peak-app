@@ -570,9 +570,15 @@ tr:last-child td { border-bottom: none; }
           </div>
           <div class="field" style="margin-bottom:10px;">
             <label>Acquisition Type <span style="font-size:10px;color:var(--text3);font-weight:400;">— how this lot entered inventory; routes the CTLS Section 1 line</span></label>
-            <select id="seed-acq">
+            <select id="seed-acq" onchange="seedInvAcqChanged()">
               <option value="Bought">Brought In / Purchased</option>
               <option value="Produced">Produced On-Site (breeding)</option>
+            </select>
+          </div>
+          <div class="field" style="margin-bottom:10px;display:none;" id="seed-momsrc-wrap">
+            <label>Source Mother Batch <span style="color:var(--red);font-weight:700;">*</span> <span style="font-size:10px;color:var(--text3);font-weight:400;">— the mother batch that produced these seeds</span></label>
+            <select id="seed-momsrc">
+              <option value="">-- select a mother batch --</option>
             </select>
           </div>
           <div class="field" style="margin-bottom:12px;"><label>Notes</label>
@@ -2265,6 +2271,7 @@ const REMOTE_MAPPERS = {
       strain: (f['Strain']||'').toString(),
       source: f['Source']||'',
       acquisitionType: (f['Acquisition Type']||'Bought').toString(),
+      sourceMomBatch: (f['Source Mother Batch']||'').toString(),
       qtyOnHand: onHand,
       qtyAcquired: acquired,
       qtyGerminated: parseInt(f['Quantity Germinated'])||0,
@@ -11309,6 +11316,37 @@ function seedInvRenderList(){
   wrap.innerHTML = html;
 }
 
+// Show / hide the Source Mother Batch picker based on Acquisition Type. When "Produced
+// On-Site (breeding)" is selected, the picker appears and is populated with mother batches
+// (M-XXX-NNN) — including closed ones, since a breeding project may run a mom through its
+// full flowering lifecycle and then close it. The selected mom is captured into the seed
+// inventory record as rec.sourceMomBatch for traceability.
+function seedInvAcqChanged(){
+  const acq = ((document.getElementById('seed-acq')||{}).value || 'Bought');
+  const wrap = document.getElementById('seed-momsrc-wrap');
+  const sel = document.getElementById('seed-momsrc');
+  if(!wrap || !sel) return;
+  if(acq === 'Produced'){
+    // Populate with all mother batches, sorted by ID. Include closed moms because a closed
+    // mom may well be the one that produced the seeds (the close happened post-harvest).
+    const moms = batchRecs
+      .filter(r => r && !r.type && r.batchId && isMotherBatch(r.batchId))
+      .map(r => ({ id: r.batchId, closed: !!r.closedDate || (r.status||'').toLowerCase()==='closed', cultivar: r.cultivar||'' }))
+      .sort((a,b) => a.id.localeCompare(b.id));
+    const cur = sel.value;
+    if(!moms.length){
+      sel.innerHTML = '<option value="">-- no mother batches in the system yet --</option>';
+    } else {
+      sel.innerHTML = '<option value="">-- select a mother batch --</option>'
+        + moms.map(m => '<option value="'+m.id+'"'+(m.id===cur?' selected':'')+'>'+m.id+(m.cultivar?(' · '+m.cultivar):'')+(m.closed?' (closed)':'')+'</option>').join('');
+    }
+    wrap.style.display = '';
+  } else {
+    wrap.style.display = 'none';
+    sel.value = '';
+  }
+}
+
 // Validate + save a new strain or update an existing one. Form fields are reused for editing.
 async function seedInvSave(){
   const editId = parseInt((document.getElementById('seed-edit-id')||{}).value || '0');
@@ -11323,6 +11361,13 @@ async function seedInvSave(){
   const lotNumber = ((document.getElementById('seed-lot')||{}).value || '').trim();
   const notes = ((document.getElementById('seed-notes')||{}).value || '').trim();
   const acquisitionType = ((document.getElementById('seed-acq')||{}).value || 'Bought');
+  // Source mother batch — required when Acquisition Type = Produced On-Site (breeding).
+  let sourceMomBatch = '';
+  if(acquisitionType === 'Produced'){
+    sourceMomBatch = ((document.getElementById('seed-momsrc')||{}).value || '').trim();
+    if(!sourceMomBatch){ toast('Pick the mother batch that produced these seeds.', 5000); return; }
+    if(!isMotherBatch(sourceMomBatch)){ toast('Source must be a mother batch (M-XXX-NNN).', 4500); return; }
+  }
   if(!lotNumber){ toast('Enter a Lot / Batch Number. This is the primary identifier.'); return; }
   if(!strain){ toast('Enter a strain name.'); return; }
   if(qtyOnHand < 0){ toast('Quantity cannot be negative.'); return; }
@@ -11342,6 +11387,7 @@ async function seedInvSave(){
     rec.lotNumber = lotNumber;
     rec.notes = notes;
     rec.acquisitionType = acquisitionType;
+    rec.sourceMomBatch = sourceMomBatch || '';
     rec.synced = false;
   } else {
     // First save — Acquired snapshots the initial On Hand value. Lifetime total for this lot.
@@ -11349,6 +11395,7 @@ async function seedInvSave(){
       id: Date.now() + Math.floor(Math.random()*10000),
       strain, source, qtyOnHand, qtyAcquired: qtyOnHand, qtyGerminated: 0,
       dateReceived, lotNumber, notes, acquisitionType,
+      sourceMomBatch: sourceMomBatch || '',
       synced: false
     };
     seedInvRecs.unshift(rec);
@@ -11377,6 +11424,9 @@ function seedInvResetForm(){
   });
   const dEl = document.getElementById('seed-date'); if(dEl) dEl.value = localDate();
   const acqEl = document.getElementById('seed-acq'); if(acqEl) acqEl.value = 'Bought';
+  // Hide the Source Mother dropdown again on form reset (defaults back to Bought).
+  const _momWrap = document.getElementById('seed-momsrc-wrap'); if(_momWrap) _momWrap.style.display = 'none';
+  const _momSel  = document.getElementById('seed-momsrc');     if(_momSel)  _momSel.value = '';
   const eid = document.getElementById('seed-edit-id'); if(eid) eid.value = '';
   const lbl = document.getElementById('seed-form-label'); if(lbl) lbl.textContent = 'Add Seed Strain';
   const sBtn = document.getElementById('seed-save-btn'); if(sBtn) sBtn.textContent = 'Save to Inventory';
@@ -11394,6 +11444,23 @@ function seedInvEditStart(id){
   document.getElementById('seed-lot').value = rec.lotNumber || '';
   document.getElementById('seed-notes').value = rec.notes || '';
   const _acqEl = document.getElementById('seed-acq'); if(_acqEl) _acqEl.value = rec.acquisitionType || 'Bought';
+  // Source mother batch picker visibility + selection — only relevant for Produced acquisitions.
+  if(typeof seedInvAcqChanged === 'function') seedInvAcqChanged();
+  const _momSel = document.getElementById('seed-momsrc');
+  if(_momSel && rec.sourceMomBatch){
+    // The dropdown was rebuilt by seedInvAcqChanged with the current set of mom batches; set
+    // the saved value, and if it's not in the list (e.g. mom was deleted), add it so the
+    // historical link is still visible.
+    let _found = false;
+    Array.from(_momSel.options).forEach(o => { if(o.value === rec.sourceMomBatch) _found = true; });
+    if(!_found){
+      const opt = document.createElement('option');
+      opt.value = rec.sourceMomBatch;
+      opt.textContent = rec.sourceMomBatch + ' (not in current batches)';
+      _momSel.appendChild(opt);
+    }
+    _momSel.value = rec.sourceMomBatch;
+  }
   document.getElementById('seed-edit-id').value = String(rec.id);
   const lbl = document.getElementById('seed-form-label'); if(lbl) lbl.textContent = 'Editing — '+(rec.strain||'(unnamed)');
   const sBtn = document.getElementById('seed-save-btn'); if(sBtn) sBtn.textContent = 'Save Changes';
@@ -11493,6 +11560,7 @@ function buildSeedInvFields(rec){
     'Strain':              rec.strain || undefined,
     'Source':              rec.source || undefined,
     'Acquisition Type':    rec.acquisitionType || 'Bought',
+    'Source Mother Batch': rec.sourceMomBatch || undefined,
     'Quantity On Hand':    (rec.qtyOnHand != null)    ? rec.qtyOnHand    : undefined,
     'Quantity Acquired':   (rec.qtyAcquired != null)  ? rec.qtyAcquired  : undefined,
     'Quantity Germinated': (rec.qtyGerminated != null) ? rec.qtyGerminated : undefined,
