@@ -3484,6 +3484,25 @@ function reconcileAllPackagedBatches(){
     }
   });
   if(fixed) console.log('[reconcile] fixed '+fixed+' packaged batch balance(s)');
+  // Boot-time mom cohort reconciliation: any mother batch whose headline plantPhase has
+  // advanced past Clones but whose Clones bucket still holds plants (a stale state from
+  // legacy auto-advance paths that didn't rebalance) gets its Clones plants moved into the
+  // headline phase bucket. Idempotent and local-only (no Airtable writes).
+  let momFixed = 0;
+  batchRecs.forEach(b => {
+    if(!b || b.type || !isMotherBatch(b.batchId)) return;
+    const ph = b.plantPhase || 'Clones';
+    if(ph === 'Clones' || MOM_PHASES.indexOf(ph) < 0) return;
+    const c = ensureMomPhaseCounts(b);
+    if(!c) return;
+    const stale = parseInt(c.Clones) || 0;
+    if(stale > 0){
+      momPhaseAdjust(b, 'Clones', -stale);
+      momPhaseAdjust(b, ph,       +stale);
+      momFixed++;
+    }
+  });
+  if(momFixed) console.log('[reconcile] rebalanced '+momFixed+' mom cohort bucket(s)');
 }
 function buildBatchFields(rec){
   const f={
@@ -5961,11 +5980,25 @@ async function ecSave(){
   }
   // Auto-advance Clones/Germination → Veg when Water In is logged (Veg-sequence completes Hydration → Pre-Charge → Water In)
   // Seeds-genetics batches start in 'Germination' and advance to Veg on Water In just like Clones batches do.
+  // For mother batches, also rebalance momPhaseCounts (move the Clones-bucket plants into the
+  // Veg bucket). Without this, the per-cohort tracking gets stuck on Clones even after the
+  // headline plantPhase advances, and the day badge keeps showing C-day instead of V-day.
   let _vegAdvanced = false;
   if(wtype === 'Water In' && _ecBatchRec && (_ecBatchRec.plantPhase === 'Clones' || _ecBatchRec.plantPhase === 'Germination')){
     const _fromPhase = _ecBatchRec.plantPhase;
     _ecBatchRec.plantPhase = 'Veg';
     if(!_ecBatchRec.vegStart) _ecBatchRec.vegStart = date;
+    // Mother-batch cohort rebalance: drain Clones → Veg for the auto-advance scenario.
+    if(isMotherBatch(batchVal2)){
+      const _c = ensureMomPhaseCounts(_ecBatchRec);
+      if(_c){
+        const _clonesQty = parseInt(_c.Clones) || 0;
+        if(_clonesQty > 0){
+          momPhaseAdjust(_ecBatchRec, 'Clones', -_clonesQty);
+          momPhaseAdjust(_ecBatchRec, 'Veg',    +_clonesQty);
+        }
+      }
+    }
     _ecBatchRec.synced = false;
     lsSet('gp-batch', batchRecs);
     _vegAdvanced = true;
@@ -8968,6 +9001,20 @@ async function summaryUpdateBatch(){
   if(plantPhase === 'Flower' && existingPhase === 'Clones'){
     if(!_autoVeg) _autoVeg = _t;
     if(!_autoFlower) _autoFlower = _t;
+  }
+  // Mom-batch cohort rebalance on manual phase advance via this Summary save path. When the
+  // headline plantPhase advances Clones → Veg / Clones → Flower / Veg → Flower / Flower → Drying,
+  // move the corresponding momPhaseCounts plants forward so the day badge tracks the new phase
+  // instead of getting stuck on the previous bucket.
+  if(isMotherBatch(batchId) && existingPhase && plantPhase && existingPhase !== plantPhase){
+    const _mc = ensureMomPhaseCounts(batchRecs[idx]);
+    if(_mc && MOM_PHASES.indexOf(existingPhase) >= 0 && MOM_PHASES.indexOf(plantPhase) >= 0){
+      const _fromQty = parseInt(_mc[existingPhase]) || 0;
+      if(_fromQty > 0){
+        momPhaseAdjust(batchRecs[idx], existingPhase, -_fromQty);
+        momPhaseAdjust(batchRecs[idx], plantPhase,    +_fromQty);
+      }
+    }
   }
   if(plantPhase === 'Drying' && existingPhase === 'Flower' && !_autoHarvest) _autoHarvest = _t;
   if(plantPhase === 'Packaged' && existingPhase === 'Drying' && !_autoPackaged) _autoPackaged = _t;
