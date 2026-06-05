@@ -9704,6 +9704,22 @@ function summaryRenderHistory(batchId){
     if(running < 0) running = 0;
     return {...t, runningQty: running};
   }).reverse(); // back to newest first
+  // Mom-batch multi-phase header: when the batch has plants in 2+ phase buckets, every row
+  // in the Phase column shows the full distribution (e.g. "Veg (19) / Flower (4)") so the
+  // grower can see the current cohort split at a glance. The per-row tx phase is captured
+  // in the Notes column anyway via the tx text and the per-tx phase tagging.
+  const _historyBatchRec = batchRecs.find(r => r.batchId === batchId && !r.type);
+  const _isMomHistory = _historyBatchRec && isMotherBatch(batchId);
+  let _momPhaseLabel = '';
+  if(_isMomHistory){
+    const _mc = ensureMomPhaseCounts(_historyBatchRec);
+    if(_mc){
+      const _active = MOM_PHASES.filter(p => (_mc[p] || 0) > 0);
+      if(_active.length > 1){
+        _momPhaseLabel = _active.map(p => p + ' ('+(_mc[p]||0)+')').join(' / ');
+      }
+    }
+  }
   let html = '<div style="overflow-x:auto;background:#fff;border-radius:var(--radius-sm);border:1px solid var(--border);">';
   html += '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
   html += '<thead><tr style="background:#f5f5f5;"><th style="padding:6px 8px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Date</th><th style="padding:6px 8px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Type</th><th style="padding:6px 8px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Phase</th><th style="padding:6px 8px;text-align:right;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Qty</th><th style="padding:6px 8px;text-align:right;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Balance</th><th style="padding:6px 8px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Notes</th></tr></thead>';
@@ -9741,10 +9757,14 @@ function summaryRenderHistory(batchId){
     const qtyColor = (isPhase || isAdvance) ? 'var(--text3)' : (isSold ? 'var(--text2)' : (isIn ? 'var(--green)' : 'var(--red)'));
     const typePillBg = isPhase ? 'var(--green-pale)' : (isAdvance ? 'var(--amber-pale)' : 'var(--bg2)');
     const typePillColor = isPhase ? 'var(--green)' : (isAdvance ? 'var(--amber)' : 'var(--text2)');
+    // Phase cell: for mom batches with plants in multiple phase buckets, show the full
+    // distribution ("Veg (19) / Flower (4)") on every row. Falls back to the per-tx phase
+    // stamp for non-moms and for single-phase moms.
+    const _phaseCell = _momPhaseLabel || (t.plantPhase || '—');
     return '<tr style="border-bottom:1px solid var(--bg2);">'+
       '<td style="padding:6px 8px;font-family:var(--mono);">'+t.date+'</td>'+
       '<td style="padding:6px 8px;"><span style="font-size:11px;background:'+typePillBg+';border-radius:20px;padding:2px 8px;color:'+typePillColor+';font-weight:'+(isPhase?'600':'400')+';">'+t.txType+'</span></td>'+
-      '<td style="padding:6px 8px;font-size:11px;color:var(--green);font-weight:600;">'+(t.plantPhase||'—')+'</td>'+
+      '<td style="padding:6px 8px;font-size:11px;color:var(--green);font-weight:600;">'+_phaseCell+'</td>'+
       '<td style="padding:6px 8px;text-align:right;font-family:var(--mono);font-weight:700;color:'+qtyColor+';">'+qtyDisplay+'</td>'+
       '<td style="padding:6px 8px;text-align:right;font-family:var(--mono);font-weight:600;">'+t.runningQty+'</td>'+
       '<td style="padding:6px 8px;font-size:11px;color:var(--text3);max-width:120px;white-space:normal;">'+(t.notes||'')+'</td>'+
