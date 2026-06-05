@@ -8132,6 +8132,11 @@ function summaryMomPurposeChanged(){
   // Refresh the Plant Phase dropdown so its options reflect the new purpose mix.
   const _phaseSel = document.getElementById('summary-phase');
   if(_phaseSel) summaryUpdatePhaseOptions(_bRec.plantPhase || 'Clones', total);
+  // Refresh the Advance-Cohort Purpose dropdown — its options depend on the current per-purpose
+  // counts, so editing the counts above needs to flow through to that dropdown immediately.
+  // Otherwise a stale "no Pheno/Seed plants designated" message can stick around even after the
+  // grower has just designated some plants for Pheno/Seed.
+  if(typeof momAdvanceToChanged === 'function') momAdvanceToChanged();
   // Sync to Airtable opportunistically.
   if(cfg.batchTbl && cfg.token && cfg.base && changed){
     (async () => {
