@@ -3866,6 +3866,8 @@ function harvestSetupChanged(){
     autoSelectIfSingle('harvest-room');
   }
   harvestRenderBins();
+  // Refresh the Disposition dropdown — mom batches get a different option set than regular batches.
+  if(typeof harvestSyncDispositionOptions === 'function') harvestSyncDispositionOptions();
 }
 function harvestNetCalc(){
   const k = parseInt(document.getElementById('harvest-bin-num').value);
@@ -3937,6 +3939,31 @@ function harvestDispositionChanged(){
   wrap.style.display = (sel.value === 'Fresh') ? '' : 'none';
 }
 
+// Rebuild the Disposition dropdown for the currently-selected batch. Mother batches get a
+// different option set since their harvest is for internal genetics work — never sold:
+//   • Pheno Hunt — flower harvested for genetic evaluation (kept for the library).
+//   • Seeds Harvest — seeds collected from a breeding-project mom.
+//   Both options route the material to Drying; no Sold tx is generated.
+// Non-mother batches keep the standard pair: Move to Drying (normal flow) / Sell as Fresh.
+function harvestSyncDispositionOptions(){
+  const sel = document.getElementById('harvest-disposition');
+  if(!sel) return;
+  const batchId = (document.getElementById('harvest-batch-select')||{}).value || '';
+  const isMom = batchId && isMotherBatch(batchId);
+  if(isMom){
+    sel.innerHTML = ''
+      + '<option value="Pheno" selected>Pheno Hunt (flower → genetics library)</option>'
+      + '<option value="Seeds">Seeds Harvest (breeding — flower destroyed)</option>';
+  } else {
+    sel.innerHTML = ''
+      + '<option value="Drying" selected>Move to Drying (normal flow)</option>'
+      + '<option value="Fresh">Sell as Fresh (to processor — skips drying)</option>';
+  }
+  // Hide the fresh-buyer field (it's only relevant for Sell-as-Fresh, never for mom dispositions).
+  const wrap = document.getElementById('harvest-fresh-buyer-wrap');
+  if(wrap) wrap.style.display = 'none';
+}
+
 async function harvestComplete(){
   const grower = document.getElementById('harvest-grower').value;
   const batch = document.getElementById('harvest-batch-select').value;
@@ -3950,23 +3977,34 @@ async function harvestComplete(){
   }
   const bins = harvestRecs.filter(r=>r.batch===batch && r.room===room);
   if(!bins.length){ toast('Save at least one bin before completing the harvest.',4500); return; }
-  // Disposition choice: 'Drying' (normal flow, default) or 'Fresh' (sold to processor, skips drying).
+  // Disposition choice. Values differ by batch family:
+  //   Regular batches:  'Drying' (normal flow, default) | 'Fresh' (sold to processor, skips drying)
+  //   Mother batches:   'Pheno'  (flower for genetics library) | 'Seeds' (seeds harvested, flower destroyed)
+  // Moms never go through Sold — their harvested material is internal-use only.
   const _disposition = (document.getElementById('harvest-disposition') || {}).value || 'Drying';
   const _isFreshSale = (_disposition === 'Fresh');
+  const _isMomBatch = isMotherBatch(batch);
+  const _isMomPheno = _isMomBatch && _disposition === 'Pheno';
+  const _isMomSeeds = _isMomBatch && _disposition === 'Seeds';
   const _freshBuyer = ((document.getElementById('harvest-fresh-buyer') || {}).value || '').trim();
   const totalNet = Math.round(bins.reduce((s,b)=>s+(b.netWeight||0),0)*1000)/1000;
   const idx = batchRecs.findIndex(r=>r.batchId===batch && !r.type);
   if(idx < 0){ toast('Batch record not found.',4000); return; }
   const batchRec = batchRecs[idx];
   const plantsInRoom = (batchRec.roomDistribution && batchRec.roomDistribution[room]) || 0;
-  // Mother batches cannot record a Sold transaction — block the Fresh path there.
-  if(_isFreshSale && isMotherBatch(batch)){
-    toast('Mother batches cannot be sold. Pick "Move to Drying" instead.', 5500);
+  // Mother batches cannot record a Sold transaction — block the Fresh path there (defensive;
+  // the disposition picker shouldn't offer Fresh for moms anyway).
+  if(_isFreshSale && _isMomBatch){
+    toast('Mother batches cannot be sold. Pick "Pheno Hunt" or "Seeds Harvest" instead.', 5500);
     return;
   }
   const _confirmDispLine = _isFreshSale
     ? 'Disposition: SOLD AS FRESH to processor' + (_freshBuyer ? ' ('+_freshBuyer+')' : '') + ' — no drying, no post-dry.'
-    : 'Disposition: Move to Drying (normal flow).';
+    : _isMomPheno
+      ? 'Disposition: PHENO HUNT — flower moves to drying for genetic evaluation. Not for sale.'
+      : _isMomSeeds
+        ? 'Disposition: SEEDS HARVEST — seeds collected for breeding; flower destroyed after seed extraction.'
+        : 'Disposition: Move to Drying (normal flow).';
   if(!confirm('Complete harvest for '+batch+' / '+room+'?\nTotal: '+totalNet.toFixed(3)+' kg from '+bins.length+' bin(s), '+plantsInRoom+' plants.\n'+_confirmDispLine+'\nNo more bins can be added for this batch/room after this.')) return;
   // Track per-room harvest data (weights AND plant counts) before zeroing the live distribution.
   if(!batchRec.harvestedWeights) batchRec.harvestedWeights = {};
@@ -4004,10 +4042,14 @@ async function harvestComplete(){
   const isFinalRoom = remainingRooms.length === 0;
   // Create a per-room Harvested transaction now (one per Complete Harvest event) so the running
   // balance decreases and the wet weight per room is visible in the Summary transaction history.
-  // Note in the tx text whether this room's material is heading to drying or being sold fresh.
+  // Note in the tx text the disposition of the harvested material.
   const _harvNoteSuffix = _isFreshSale
     ? ' — sold as fresh to processor' + (_freshBuyer ? ' ('+_freshBuyer+')' : '')
-    : '';
+    : _isMomPheno
+      ? ' — Pheno Hunt: flower → genetics library (not for sale)'
+      : _isMomSeeds
+        ? ' — Seeds Harvest: seeds collected; flower destroyed'
+        : '';
   const tx = {
     id: Date.now(),
     batchId: batch,
@@ -4048,6 +4090,10 @@ async function harvestComplete(){
   updatePendingBadge();
   if(_isFreshSale){
     toast('Harvest + Fresh sale complete: '+totalNet.toFixed(3)+' kg from '+room+(_freshBuyer?(' → '+_freshBuyer):'')+'.', 5500);
+  } else if(_isMomPheno){
+    toast('Pheno Hunt harvest complete: '+totalNet.toFixed(3)+' kg from '+room+' → drying for evaluation.', 5500);
+  } else if(_isMomSeeds){
+    toast('Seeds harvest complete: '+totalNet.toFixed(3)+' kg of breeding material from '+room+'. Log the new seed lot on the Seeds page (Acquisition Type = Produced).', 7000);
   } else if(isFinalRoom){
     const totalAll = Math.round(Object.values(batchRec.harvestedWeights).reduce((s,w)=>s+(parseFloat(w)||0),0)*1000)/1000;
     toast('Final room harvested! Batch total: '+totalAll.toFixed(3)+' kg.',5000);
