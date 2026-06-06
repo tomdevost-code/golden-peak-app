@@ -2183,6 +2183,13 @@ const REMOTE_MAPPERS = {
       labDestType: f['Lab Destination Type']||'',
       labMaterialType: f['Lab Material Type']||'',
       labDestName: f['Lab Destination Name']||'',
+      // Phase Advance metadata — captured for moms' multi-cohort tracking. These survive
+      // cross-device sync so downstream features (harvest disposition lookup, summary
+      // history display) work consistently across laptops.
+      fromPhase: f['From Phase']||'',
+      toPhase: f['To Phase']||'',
+      room: f['Room']||'',
+      cohortPurpose: f['Cohort Purpose']||'',
       notes: f['Notes']||'',
       synced: true
     };
@@ -6815,7 +6822,7 @@ async function syncPending(){
         let running=0;
         for(const t of sorted){const q=parseInt(t.qty)||0;if(t.txType==='Produced/Received'||t.txType==='Seeds Germinated')running+=q;else running-=q;if(t.id===tx.id)break;}
         if(running<0)running=0;
-        const f={'Batch ID':tx.batchId?[tx.batchId]:undefined,'Date':tx.date,'Transaction Type':tx.txType,'Plant Phase':tx.plantPhase||undefined,'Quantity':tx.qty,'Weight (kg)':tx.weight||undefined,'Current Quantity After':running,'Sale Stage':tx.saleStage||undefined,'Lab Destination Type':tx.labDestType||undefined,'Lab Material Type':tx.labMaterialType||undefined,'Lab Destination Name':tx.labDestName||undefined,'Notes':tx.notes||undefined};
+        const f={'Batch ID':tx.batchId?[tx.batchId]:undefined,'Date':tx.date,'Transaction Type':tx.txType,'Plant Phase':tx.plantPhase||undefined,'Quantity':tx.qty,'Weight (kg)':tx.weight||undefined,'Current Quantity After':running,'Sale Stage':tx.saleStage||undefined,'Lab Destination Type':tx.labDestType||undefined,'Lab Material Type':tx.labMaterialType||undefined,'Lab Destination Name':tx.labDestName||undefined,'From Phase':tx.fromPhase||undefined,'To Phase':tx.toPhase||undefined,'Room':tx.room||undefined,'Cohort Purpose':tx.cohortPurpose||undefined,'Notes':tx.notes||undefined};
         Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
         const txRes=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+cfg.batchtxTbl,{method:'POST',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify({fields:f,typecast:true})});
         if(!txRes.ok){const err=await txRes.json();throw new Error('Tx '+txRes.status+': '+(err.error&&err.error.message||JSON.stringify(err)));}
@@ -8454,7 +8461,13 @@ async function momPhaseAdvance(){
   document.getElementById('si-flower-start').textContent = b.flowerStart || '—';
   document.getElementById('si-harvest-date').textContent = formatHarvestDatesForDisplay(b.batchId);
   updatePendingBadge();
-  // Sync the tx to Airtable
+  // Sync the tx to Airtable. Phase Advance carries extra structured metadata that downstream
+  // features (harvest disposition lookup, history display) depend on:
+  //   • From Phase / To Phase — drive the "Veg → Flower (4)" history cell.
+  //   • Room               — drives the per-room disposition default on harvest.
+  //   • Cohort Purpose     — drives the Pheno vs Seeds default on harvest disposition.
+  // These columns must exist in the Batch Transactions Airtable table. If they don't, the POST
+  // will 422; the sync-pending retry logic will keep trying until the schema is updated.
   if(cfg.batchtxTbl && cfg.token && cfg.base){
     try{
       const f = {
@@ -8464,6 +8477,10 @@ async function momPhaseAdvance(){
         'Plant Phase':tx.plantPhase,
         'Quantity':tx.qty,
         'Current Quantity After':calcBatchQty(batchId),
+        'From Phase':tx.fromPhase||undefined,
+        'To Phase':tx.toPhase||undefined,
+        'Room':tx.room||undefined,
+        'Cohort Purpose':tx.cohortPurpose||undefined,
         'Notes':tx.notes
       };
       Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
@@ -10034,7 +10051,7 @@ async function summaryAddTransaction(){
   if(cfg.batchtxTbl && cfg.token && cfg.base){
     try{
       const currentQty = summaryCalcQty(batchId);
-      const f={'Batch ID':tx.batchId?[tx.batchId]:undefined,'Date':tx.date,'Transaction Type':tx.txType,'Plant Phase':tx.plantPhase||undefined,'Quantity':tx.qty,'Weight (kg)':tx.weight||undefined,'Current Quantity After':currentQty,'Sale Stage':tx.saleStage||undefined,'Lab Destination Type':tx.labDestType||undefined,'Lab Material Type':tx.labMaterialType||undefined,'Lab Destination Name':tx.labDestName||undefined,'Notes':tx.notes||undefined};
+      const f={'Batch ID':tx.batchId?[tx.batchId]:undefined,'Date':tx.date,'Transaction Type':tx.txType,'Plant Phase':tx.plantPhase||undefined,'Quantity':tx.qty,'Weight (kg)':tx.weight||undefined,'Current Quantity After':currentQty,'Sale Stage':tx.saleStage||undefined,'Lab Destination Type':tx.labDestType||undefined,'Lab Material Type':tx.labMaterialType||undefined,'Lab Destination Name':tx.labDestName||undefined,'From Phase':tx.fromPhase||undefined,'To Phase':tx.toPhase||undefined,'Room':tx.room||undefined,'Cohort Purpose':tx.cohortPurpose||undefined,'Notes':tx.notes||undefined};
       Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
       const _stRes = await atPost(cfg.batchtxTbl, f);
       tx.synced=true; if(_stRes && _stRes.id) tx.airtableId=_stRes.id; lsSet('gp-batchtx',batchTxRecs); setSyncPill('ok','Synced');
