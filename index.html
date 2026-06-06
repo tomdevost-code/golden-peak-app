@@ -2040,7 +2040,7 @@ const REMOTE_MAPPERS = {
     const _completedHarvests = (f['Completed Harvests'] && typeof f['Completed Harvests'] === 'string')
       ? f['Completed Harvests'].split(',').map(s => s.trim()).filter(Boolean)
       : [];
-    return {
+    const mapped = {
       id: 'b_'+rec.id,
       airtableId: rec.id,
       batchId: bid,
@@ -2067,19 +2067,27 @@ const REMOTE_MAPPERS = {
       status: f['Status']||'Open',
       closedDate: f['Closed Date']||'',
       momPurpose: f['Mom Purpose']||'',
-      momPurposeCounts: (() => {
-        // Parse the JSON-encoded per-purpose distribution back into a plain object.
-        try {
-          if(f['Mom Purpose Counts'] && typeof f['Mom Purpose Counts'] === 'string'){
-            const _p = JSON.parse(f['Mom Purpose Counts']);
-            if(_p && typeof _p === 'object' && !Array.isArray(_p)) return _p;
-          }
-        } catch(_){}
-        return undefined; // let ensureMomPurposeCounts lazy-init from legacy momPurpose
-      })(),
+      // momPurposeCounts is deliberately NOT included here. Setting it as an explicit
+      // property (even to undefined) makes it an own property — which the spread in
+      // mergeRemote (`{...localArr[idx], ...mapped}`) would use to overwrite the local's
+      // good counts with undefined, triggering a lazy re-init on next load that wipes the
+      // user's purpose distribution. The remote mapper instead attaches it OUTSIDE this
+      // literal so it's only set when the Airtable column actually has data.
       postDryingWeight: parseFloat(f['Post-Drying Weight (kg)'])||0,
       synced: true
     };
+    // Conditionally attach momPurposeCounts ONLY when the Airtable column has a parseable
+    // value. Skipping this when the column is missing/empty keeps the field absent from the
+    // mapped record so the mergeRemote spread can't accidentally overwrite a good local copy.
+    try {
+      if(f['Mom Purpose Counts'] && typeof f['Mom Purpose Counts'] === 'string'){
+        const _mpc = JSON.parse(f['Mom Purpose Counts']);
+        if(_mpc && typeof _mpc === 'object' && !Array.isArray(_mpc)){
+          mapped.momPurposeCounts = _mpc;
+        }
+      }
+    } catch(_) { /* malformed JSON — leave the field unset so local data is preserved */ }
+    return mapped;
   },
   ec(rec, ctx){
     const f = rec.fields || {};
@@ -2608,7 +2616,7 @@ function mergeRemote(localArr, remoteRecs, mapper, ctx, table, lsKey){
         // on these specific structural fields. Other unsynced local changes (status, plantPhase,
         // cultivar, etc.) are NOT touched here and still surface real conflicts when they differ.
         if(_isBatchTable){
-          const _emptyMergeFields = ['roomDistribution','harvestedWeights','harvestedPlants','momPhaseCounts','rooms','completedHarvests'];
+          const _emptyMergeFields = ['roomDistribution','harvestedWeights','harvestedPlants','momPhaseCounts','momPurposeCounts','rooms','completedHarvests'];
           // "Empty" for objects = no keys; for arrays = length 0; null/undefined = empty.
           const _isEmpty = (v) => {
             if(v == null) return true;
@@ -2940,7 +2948,7 @@ function _conflictDiffFields(local, remote){
   const skip = new Set([
     'id','airtableId','synced',
     'samples','events','dripEcPens','dripPhPens',
-    'seedStrain','seedLotNumber','momPhaseCounts'
+    'seedStrain','seedLotNumber','momPhaseCounts','momPurposeCounts'
   ]);
   const keys = new Set([...Object.keys(local||{}), ...Object.keys(remote||{})]);
   // Normalize zero-count object maps (roomDistribution, harvestedWeights, harvestedPlants,
