@@ -4038,12 +4038,26 @@ function harvestSyncDispositionOptions(){
   const batchId = (document.getElementById('harvest-batch-select')||{}).value || '';
   const isMom = batchId && isMotherBatch(batchId);
   if(isMom){
-    // Pre-select the disposition that matches the mom's declared Purpose. A 'Seed Production'
-    // mom defaults to Seeds Harvest; otherwise (incl. Clone Donor moms that somehow flowered)
-    // we default to Pheno Hunt.
-    const _mRec = batchRecs.find(r => r.batchId === batchId && !r.type);
-    const _purpose = (_mRec && _mRec.momPurpose) || 'Clone Donor';
-    const _defaultSeeds = (_purpose === 'Seed Production');
+    // Pre-select the disposition that matches THIS COHORT'S purpose — read from the most
+    // recent Phase Advance tx that moved plants into the currently-selected Flower room.
+    // A single mom can have a Pheno-Hunt cohort in Flower 1 and a Seed-Production cohort in
+    // Flower 3 at the same time, so the disposition default must follow the room, not the
+    // batch-wide legacy momPurpose field (which only captures the "primary" purpose).
+    // Falls back to the legacy momPurpose if no cohort tx exists for the room.
+    const _room = (document.getElementById('harvest-room')||{}).value || '';
+    let _cohortPurpose = '';
+    if(_room){
+      const _advances = batchTxRecs
+        .filter(t => t.batchId === batchId && t.txType === 'Phase Advance'
+                  && t.toPhase === 'Flower' && t.room === _room && t.cohortPurpose)
+        .sort((a,b) => (b.date||'').localeCompare(a.date||'') || (b.id||0) - (a.id||0));
+      if(_advances.length) _cohortPurpose = _advances[0].cohortPurpose;
+    }
+    if(!_cohortPurpose){
+      const _mRec = batchRecs.find(r => r.batchId === batchId && !r.type);
+      _cohortPurpose = (_mRec && _mRec.momPurpose) || 'Clone Donor';
+    }
+    const _defaultSeeds = (_cohortPurpose === 'Seed Production');
     sel.innerHTML = ''
       + '<option value="Pheno"' + (_defaultSeeds ? '' : ' selected') + '>Pheno Hunt (flower → genetics library)</option>'
       + '<option value="Seeds"' + (_defaultSeeds ? ' selected' : '') + '>Seeds Harvest (breeding — flower destroyed)</option>';
@@ -8122,8 +8136,22 @@ function summaryMomPurposeChanged(){
   const newSeed  = Math.max(0, parseInt(_sIn.value) || 0);
   const sum   = newClone + newPheno + newSeed;
   const total = calcBatchQty(batchId);
-  // Persist (even on over-allocation — we warn but accept; the user might be adjusting in steps).
   const oldCounts = _bRec.momPurposeCounts || {};
+  // Over-allocation guard: refuse to persist a sum > total batch qty. Restore the inputs to
+  // their previous values so the on-screen state matches what's actually saved. Without this,
+  // a user could allocate phantom plants and then advance them to Flower, breaking the batch
+  // count + CTLS Flipped-to-Flower metric.
+  if(total > 0 && sum > total){
+    _cIn.value = parseInt(oldCounts['Clone Donor'])||0;
+    _pIn.value = parseInt(oldCounts['Pheno Hunt'])||0;
+    _sIn.value = parseInt(oldCounts['Seed Production'])||0;
+    if(_hint){
+      _hint.style.color = 'var(--red)';
+      _hint.textContent = '⚠ '+sum+' assigned but batch only has '+total+' plant'+(total===1?'':'s')+'. Inputs reverted — reduce a count before saving.';
+    }
+    toast('Over-allocated: '+sum+' assigned vs '+total+' available. Reduce a count and try again.', 5000);
+    return;
+  }
   const changed = (parseInt(oldCounts['Clone Donor'])||0) !== newClone
                || (parseInt(oldCounts['Pheno Hunt'])||0)  !== newPheno
                || (parseInt(oldCounts['Seed Production'])||0) !== newSeed;
@@ -8142,12 +8170,10 @@ function summaryMomPurposeChanged(){
     lsSet('gp-batch', batchRecs);
     updatePendingBadge();
   }
-  // Hint: explain the breakdown and warn on over-allocation.
+  // Hint: explain the breakdown. (Over-allocation is rejected up-front above, so we never
+  // reach this branch with sum > total.)
   if(_hint){
-    if(total > 0 && sum > total){
-      _hint.style.color = 'var(--red)';
-      _hint.textContent = '⚠ Purposes total '+sum+' but batch only has '+total+' plant'+(total===1?'':'s')+'. Reduce one of the counts.';
-    } else if(total > 0 && sum < total){
+    if(total > 0 && sum < total){
       _hint.style.color = 'var(--amber)';
       _hint.textContent = (total - sum)+' plant'+((total-sum)===1?'':'s')+' unassigned (treated as Clone Donor by default). Total = '+total+'.';
     } else {
