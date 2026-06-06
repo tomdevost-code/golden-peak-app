@@ -3556,10 +3556,15 @@ function reconcileAllPackagedBatches(){
     }
   });
   if(fixed) console.log('[reconcile] fixed '+fixed+' packaged batch balance(s)');
-  // Boot-time mom cohort reconciliation: any mother batch whose headline plantPhase has
-  // advanced past Clones but whose Clones bucket still holds plants (a stale state from
-  // legacy auto-advance paths that didn't rebalance) gets its Clones plants moved into the
-  // headline phase bucket. Idempotent and local-only (no Airtable writes).
+  // Boot-time mom cohort reconciliation. The original legacy bug was: an EC Water-In auto-
+  // advanced batchRec.plantPhase from Clones → Veg, but the momPhaseCounts buckets weren't
+  // rebalanced, leaving c.Clones holding the entire batch while c.Veg/Flower/Drying were 0.
+  // This reconciler ONLY fixes that specific stuck state: where the headline phase has
+  // advanced but the ADVANCED bucket is still empty (the move was never applied).
+  //
+  // Critically, it does NOT touch valid mixed states like `c.Clones=2, c.Veg=8` (an
+  // explicit cohort move where the user kept some plants in Clones) — earlier versions
+  // wrongly drained those stragglers and silently clobbered the user's distribution.
   let momFixed = 0;
   batchRecs.forEach(b => {
     if(!b || b.type || !isMotherBatch(b.batchId)) return;
@@ -3567,6 +3572,16 @@ function reconcileAllPackagedBatches(){
     if(ph === 'Clones' || MOM_PHASES.indexOf(ph) < 0) return;
     const c = ensureMomPhaseCounts(b);
     if(!c) return;
+    // Headline-phase bucket count. If non-zero, the advance was properly applied — leave alone.
+    const headline = parseInt(c[ph]) || 0;
+    if(headline > 0) return;
+    // Headline bucket is empty but plantPhase says we've advanced. Sum the other non-Clones
+    // buckets: if THEY hold plants, the data is internally consistent (e.g. plantPhase=Drying
+    // with c.Drying=0 but c.Flower=8 — that's a partial-harvest state, not legacy bug). Skip.
+    const otherAdvanced = MOM_PHASES.reduce((s,p) => (p !== 'Clones' && p !== ph) ? s + (parseInt(c[p])||0) : s, 0);
+    if(otherAdvanced > 0) return;
+    // Only here do we hit the true legacy state: ph !== 'Clones', c[ph] === 0, all other
+    // advanced buckets === 0, c.Clones > 0. Pull the Clones plants into the headline bucket.
     const stale = parseInt(c.Clones) || 0;
     if(stale > 0){
       momPhaseAdjust(b, 'Clones', -stale);
