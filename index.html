@@ -7171,15 +7171,13 @@ function wasteRefreshSubtype(){
   if(phase === 'Clones' || phase === 'Germination')     opts = VEG_WASTE_SUBTYPES_CLONES.slice();
   else if(['Veg','Flower','Drying'].includes(phase))    opts = VEG_WASTE_SUBTYPES_VEGFLOWER.slice();
   else opts = [];
-  // "Not Germinated" is only meaningful for Seeds-genetics batches. Filter it out for
-  // non-Seeds batches so growers don't accidentally pick it on a Clones-Internal/External batch.
-  // For Seeds-genetics batches: ensure Not Germinated stays available in EVERY phase the
-  // batch can sit in (Germination → Veg), since seedlings sometimes fail to germinate
-  // after the batch has already advanced to Veg via Water-In on the cohort that did sprout.
+  // "Not Germinated" is only meaningful for Seeds-genetics batches AND only while they're
+  // still in the Germination phase (the only phase where individual seeds can fail to sprout).
+  // Once the cohort advances to Veg, the surviving plants are tracked as regular Veg waste
+  // sub-categories (Dead Plant, Pruning, etc.). Filter Not Germinated out for any non-Seeds
+  // batch and for any phase past Germination.
   const _isSeedsGen = batchRec && ((batchRec.geneticsSource||'').toLowerCase() === 'seeds');
-  if(_isSeedsGen){
-    if(!opts.includes('Not Germinated')) opts.push('Not Germinated');
-  } else {
+  if(!_isSeedsGen || phase !== 'Germination'){
     opts = opts.filter(o => o !== 'Not Germinated');
   }
   // "Pre-Harvest De-Leaf" and "Harvest" are flower-stage activities — only valid once the
