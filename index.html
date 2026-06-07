@@ -663,13 +663,21 @@ tr:last-child td { border-bottom: none; }
           </select>
         </div>
         <!-- Source Seeds Batch — only visible for Clones-from-Seeds. Captures the S-XXX-NNN
-             batch this T- test batch was cloned from. Plant number is derived from the T-NNN. -->
+             batch this T- test family was cloned from. Plant count is the number of plants
+             in the family (one row per surviving S- plant that was cloned). -->
         <div class="field" id="batch-srcseed-wrap" style="display:none;margin-bottom:10px;">
-          <label>Source Seeds Batch <span style="color:var(--red);font-weight:700;">*</span> <span style="font-size:10px;color:var(--text3);font-weight:400;">— the S-XXX-NNN batch this test cohort was cloned from</span></label>
-          <select id="batch-srcseed">
+          <label>Source Seeds Batch <span style="color:var(--red);font-weight:700;">*</span> <span style="font-size:10px;color:var(--text3);font-weight:400;">— the S-XXX-NNN batch this test family was cloned from</span></label>
+          <select id="batch-srcseed" onchange="batchUpdateCreateBtn()">
             <option value="">-- select source S- batch --</option>
           </select>
           <div id="batch-srcseed-msg" style="font-size:11px;color:var(--text3);margin-top:4px;"></div>
+        </div>
+        <!-- Initial Plant Count — only visible for Clones-from-Seeds. Number of plants in this
+             test family. Per-plant tracking will live on the future Test Management page. -->
+        <div class="field" id="batch-testcount-wrap" style="display:none;margin-bottom:10px;">
+          <label>Plants in this Test Family <span style="color:var(--red);font-weight:700;">*</span> <span style="font-size:10px;color:var(--text3);font-weight:400;">— how many S- plants were successfully cloned</span></label>
+          <input id="batch-testcount" type="number" min="1" step="1" placeholder="e.g. 17" oninput="batchUpdateCreateBtn()" />
+          <div id="batch-testcount-msg" style="font-size:11px;color:var(--text3);margin-top:4px;">Creates one Produced/Received transaction with this quantity. Per-plant data will be managed on the future Test Management page.</div>
         </div>
 
         <!-- Step 4: Mother / Plant ID — required (and pickable) only when Clones-Internal is the source.
@@ -2078,7 +2086,7 @@ const REMOTE_MAPPERS = {
       closedDate: f['Closed Date']||'',
       momPurpose: f['Mom Purpose']||'',
       sourceSeedsBatch: f['Source Seeds Batch']||'',
-      sourcePlantNumber: parseInt(f['Source Plant Number'])||0,
+      testFamilySize: parseInt(f['Test Family Size'])||0,
       testDisposition: f['Test Disposition']||'',
       // momPurposeCounts is deliberately NOT included here. Setting it as an explicit
       // property (even to undefined) makes it an own property — which the spread in
@@ -3641,7 +3649,7 @@ function buildBatchFields(rec){
     'Mom Purpose':rec.momPurpose||undefined,
     'Mom Purpose Counts':rec.momPurposeCounts ? JSON.stringify(rec.momPurposeCounts) : undefined,
     'Source Seeds Batch':rec.sourceSeedsBatch||undefined,
-    'Source Plant Number':rec.sourcePlantNumber||undefined,
+    'Test Family Size':rec.testFamilySize||undefined,
     'Test Disposition':rec.testDisposition||undefined,
     'Hydration Date':rec.hydrationDate||undefined,
     'Veg Start Date':rec.vegStart||undefined,
@@ -7165,8 +7173,13 @@ function wasteRefreshSubtype(){
   else opts = [];
   // "Not Germinated" is only meaningful for Seeds-genetics batches. Filter it out for
   // non-Seeds batches so growers don't accidentally pick it on a Clones-Internal/External batch.
+  // For Seeds-genetics batches: ensure Not Germinated stays available in EVERY phase the
+  // batch can sit in (Germination → Veg), since seedlings sometimes fail to germinate
+  // after the batch has already advanced to Veg via Water-In on the cohort that did sprout.
   const _isSeedsGen = batchRec && ((batchRec.geneticsSource||'').toLowerCase() === 'seeds');
-  if(!_isSeedsGen){
+  if(_isSeedsGen){
+    if(!opts.includes('Not Germinated')) opts.push('Not Germinated');
+  } else {
     opts = opts.filter(o => o !== 'Not Germinated');
   }
   // "Pre-Harvest De-Leaf" and "Harvest" are flower-stage activities — only valid once the
@@ -7498,17 +7511,18 @@ function batchIdCheck(){
       batchGeneticsChange();
       msg.style.display='block'; msg.style.color='var(--green)'; msg.textContent='Seeds batch — Source of Genetics locked to Seeds. Pick a seed lot from inventory below.';
     } else if(isTestBatchId(val)){
-      // T- prefix is reserved for pheno-hunt test batches — clones from a specific plant
-      // in a Seeds (S-XXX-NNN) batch. The NNN of T- represents the source plant number
-      // (e.g. T-LK-001 = plant #1's clones from some S-LK-NNN batch).
+      // T- prefix is reserved for pheno-hunt TEST FAMILIES — a cohort of clones taken from
+      // the surviving plants of a Seeds (S-XXX-NNN) batch. The NNN of T- is the family
+      // sequence (T-LK-001 = first test run on LK genetics, T-LK-002 = second test run).
+      // Individual plants within the family are tracked as sub-records on the future
+      // Test Management page.
       gs.value = 'Clones-from-Seeds';
       gs.disabled = true;
       gs.style.background = 'var(--bg2)';
       gs.style.color = 'var(--text2)';
       gs.style.cursor = 'not-allowed';
       batchGeneticsChange();
-      const _plantNum = testBatchPlantNumber(val);
-      msg.style.display='block'; msg.style.color='var(--green)'; msg.textContent='Test batch — Clones-from-Seeds locked. Pick the source S- batch this cohort was cloned from. Plant #'+_plantNum+' inferred from the Batch ID.';
+      msg.style.display='block'; msg.style.color='var(--green)'; msg.textContent='Test batch family — Clones-from-Seeds locked. Pick the source S- batch and enter the number of plants in this family below.';
     } else {
       // Regular batch — let the user choose the source. If we previously auto-locked
       // it (because they had typed an M- or S- ID and then backspaced), unlock it now.
@@ -7585,6 +7599,8 @@ function batchGeneticsChange(){
   const srcSeedWrap = document.getElementById('batch-srcseed-wrap');
   const srcSeedSel  = document.getElementById('batch-srcseed');
   const srcSeedMsg  = document.getElementById('batch-srcseed-msg');
+  const testCountWrap = document.getElementById('batch-testcount-wrap');
+  const testCountInput = document.getElementById('batch-testcount');
   if(srcSeedWrap && srcSeedSel){
     if(sel === 'Clones-from-Seeds'){
       const _letterPrefix = batchIdLetterPrefix(newBatchId);
@@ -7602,13 +7618,16 @@ function batchGeneticsChange(){
       } else {
         srcSeedSel.innerHTML = '<option value="">-- select source S- batch --</option>'
           + _candidates.map(c => '<option value="'+c.id+'"'+(c.id===cur?' selected':'')+'>'+c.id+(c.cultivar?(' · '+c.cultivar):'')+(c.closed?' (closed)':'')+'</option>').join('');
-        if(srcSeedMsg){ srcSeedMsg.style.color = 'var(--text3)'; srcSeedMsg.textContent = 'Plant #'+testBatchPlantNumber(newBatchId)+' (from the T- batch ID) is the specific plant these clones came from.'; }
+        if(srcSeedMsg){ srcSeedMsg.style.color = 'var(--text3)'; srcSeedMsg.textContent = 'This test family inherits cultivar from the selected source. Individual plants are tracked on the future Test Management page.'; }
         if(_candidates.length === 1) srcSeedSel.value = _candidates[0].id;
       }
       srcSeedWrap.style.display = '';
+      if(testCountWrap) testCountWrap.style.display = '';
     } else {
       srcSeedWrap.style.display = 'none';
       srcSeedSel.value = '';
+      if(testCountWrap) testCountWrap.style.display = 'none';
+      if(testCountInput) testCountInput.value = '';
     }
   }
   // External Clone Company — only visible for Clones-External
@@ -7724,6 +7743,12 @@ function batchUpdateCreateBtn(){
   const _isNewMother = isMotherBatch(val);
   let ok = formatOk && !exists;
   if(ok && genetics === 'Clones-Internal' && !mother && !_isNewMother) ok = false;
+  // Clones-from-Seeds (T-batch) requires a Source Seeds Batch pick AND a plant count.
+  if(ok && genetics === 'Clones-from-Seeds'){
+    const _src = (document.getElementById('batch-srcseed')||{}).value || '';
+    const _tc  = parseInt((document.getElementById('batch-testcount')||{}).value || '0') || 0;
+    if(!_src || _tc < 1) ok = false;
+  }
   btn.disabled = !ok;
   btn.style.opacity = ok ? '1' : '0.4';
   btn.style.cursor  = ok ? 'pointer' : 'not-allowed';
@@ -7751,8 +7776,10 @@ async function batchCreate(){
     toast('Seeds-genetics batches must use an S-XXX-NNN Batch ID (e.g. S-LK-001).', 5500);
     return;
   }
-  // T-XXX-NNN ↔ Clones-from-Seeds is a similar two-way invariant. Plant number is embedded
-  // in the NNN segment (T-LK-001 = plant #1).
+  // T-XXX-NNN ↔ Clones-from-Seeds is a similar two-way invariant. T- batches are FAMILY-level
+  // (one record per test run); the trailing NNN is the family sequence (T-LK-001 = first
+  // test run on LK genetics, T-LK-002 = second test run). Individual plants are tracked as
+  // sub-records on the future Test Management page.
   if(isTestBatchId(batchId) && geneticsSource !== 'Clones-from-Seeds'){
     toast('T- prefix is reserved for pheno-hunt test batches. Pick "Clones-from-Seeds" as the Source of Genetics, or change the Batch ID prefix.', 6500);
     return;
@@ -7761,11 +7788,12 @@ async function batchCreate(){
     toast('Clones-from-Seeds batches must use a T-XXX-NNN Batch ID (e.g. T-LK-001).', 5500);
     return;
   }
-  // Clones-from-Seeds: require a source S- batch, and its letter prefix must match the T- prefix.
-  let _sourceSeedsBatch = '', _sourcePlantNumber = 0, _sourceSeedsBatchRec = null;
+  // Clones-from-Seeds: require a source S- batch (its letter prefix must match the T- prefix)
+  // AND an initial plant count for the family.
+  let _sourceSeedsBatch = '', _sourceSeedsBatchRec = null, _testInitialCount = 0;
   if(geneticsSource === 'Clones-from-Seeds'){
     _sourceSeedsBatch = ((document.getElementById('batch-srcseed')||{}).value || '').trim();
-    if(!_sourceSeedsBatch){ toast('Pick the source S-XXX-NNN batch this test cohort was cloned from.', 5500); return; }
+    if(!_sourceSeedsBatch){ toast('Pick the source S-XXX-NNN batch this test family was cloned from.', 5500); return; }
     if(!isSeedsBatchId(_sourceSeedsBatch)){ toast('Source must be a Seeds batch (S-XXX-NNN).', 5000); return; }
     if(batchIdLetterPrefix(batchId) !== batchIdLetterPrefix(_sourceSeedsBatch)){
       toast('Letter prefix mismatch — '+batchId+' must share the same prefix as its source ('+_sourceSeedsBatch+').', 6500);
@@ -7773,7 +7801,8 @@ async function batchCreate(){
     }
     _sourceSeedsBatchRec = batchRecs.find(r => r.batchId === _sourceSeedsBatch && !r.type);
     if(!_sourceSeedsBatchRec){ toast('Source Seeds batch '+_sourceSeedsBatch+' not found.', 5000); return; }
-    _sourcePlantNumber = testBatchPlantNumber(batchId);
+    _testInitialCount = parseInt((document.getElementById('batch-testcount')||{}).value || '0') || 0;
+    if(_testInitialCount < 1){ toast('Enter the number of plants in this test family (one per S- plant that was successfully cloned).', 6000); return; }
   }
   // Mother ID required for REGULAR Clones-Internal batches (mother batches no
   // longer require a donor at creation — that link gets established later
@@ -7828,10 +7857,12 @@ async function batchCreate(){
     || _seedStrainName
     || (geneticsSource === 'Clones-from-Seeds' && _sourceSeedsBatchRec ? (_sourceSeedsBatchRec.cultivar || '') : '');
   const rec = { id: Date.now(), batchId, cultivar: _cultivarForRec, mother, geneticsSource, externalCompany, notes, createdDate: _created, cloneDate: (geneticsSource === 'Seeds' ? _created : ''), rooms: ['Veg'], plantPhase: _initialPhase, status: 'Open', closedDate: '', synced: false };
-  // T- batch source-tracking: capture which S- batch + which plant number these clones came from.
+  // T- batch source-tracking: capture which S- batch this family was cloned from. Per-plant
+  // lineage is not maintained — individual plants are managed on the future Test Management page.
+  // Also stash the family size so the auto-create intake tx (see below) knows how many to credit.
   if(geneticsSource === 'Clones-from-Seeds'){
     rec.sourceSeedsBatch = _sourceSeedsBatch;
-    rec.sourcePlantNumber = _sourcePlantNumber;
+    rec.testFamilySize = _testInitialCount;
   }
   if(geneticsSource === 'Seeds'){
     if(_seedStrainName) rec.seedStrain = _seedStrainName;
@@ -7848,6 +7879,26 @@ async function batchCreate(){
   }
   batchRecs.unshift(rec);
   lsSet('gp-batch', batchRecs);
+  // T-batch family intake: auto-create the initial Produced/Received tx so the batch
+  // immediately satisfies getFormBatchList()'s "at least one intake tx" rule and appears
+  // in every form's batch dropdown. The qty is the family size the user typed.
+  let _autoIntakeTx = null;
+  if(geneticsSource === 'Clones-from-Seeds' && _testInitialCount > 0){
+    _autoIntakeTx = {
+      id: Date.now() + 1,
+      batchId,
+      date: _created,
+      grower: '',
+      txType: 'Produced/Received',
+      qty: _testInitialCount,
+      currentQtyBefore: 0,
+      plantPhase: 'Clones',
+      notes: 'Initial test family intake — ' + _testInitialCount + ' plant(s) cloned from ' + _sourceSeedsBatch,
+      synced: false
+    };
+    batchTxRecs.unshift(_autoIntakeTx);
+    lsSet('gp-batchtx', batchTxRecs);
+  }
   populateBatchDropdowns();
   populateBatchFilterDropdown();
   // Reset create form
@@ -7869,6 +7920,11 @@ async function batchCreate(){
   document.getElementById('batch-external-company').value = '';
   document.getElementById('batch-external-wrap').style.display='none';
   document.getElementById('batch-notes').value = '';
+  // Reset the Clones-from-Seeds picker + count if they were visible
+  const _srcSeedEl = document.getElementById('batch-srcseed'); if(_srcSeedEl) _srcSeedEl.value = '';
+  const _srcSeedWrap = document.getElementById('batch-srcseed-wrap'); if(_srcSeedWrap) _srcSeedWrap.style.display = 'none';
+  const _tcEl = document.getElementById('batch-testcount'); if(_tcEl) _tcEl.value = '';
+  const _tcWrap = document.getElementById('batch-testcount-wrap'); if(_tcWrap) _tcWrap.style.display = 'none';
   batchIdCheck();
   const msg = document.getElementById('batch-create-msg');
   msg.style.display='block'; msg.style.color='var(--green)'; msg.textContent='Batch '+batchId+' created!';
@@ -7883,6 +7939,27 @@ async function batchCreate(){
       rec.synced=true; lsSet('gp-batch',batchRecs); setSyncPill('ok','Synced'); toast('Batch created and synced to Airtable'); updatePendingBadge();
     }catch(e){ setSyncPill('err','Sync error'); toast('Batch saved locally - Airtable: '+(e.message||'sync failed'),5000); }
   } else { toast('Batch '+batchId+' created!'); }
+  // Sync the T-family auto-intake tx (separate try block so a failure on the tx side
+  // doesn't roll back the batch). Sync Pending will retry on next attempt.
+  if(_autoIntakeTx && cfg.batchtxTbl && cfg.token && cfg.base){
+    try{
+      const f = {
+        'Batch ID': [_autoIntakeTx.batchId],
+        'Date': _autoIntakeTx.date,
+        'Transaction Type': _autoIntakeTx.txType,
+        'Plant Phase': _autoIntakeTx.plantPhase,
+        'Quantity': _autoIntakeTx.qty,
+        'Current Quantity After': _autoIntakeTx.qty,
+        'Notes': _autoIntakeTx.notes
+      };
+      Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
+      const _txRes = await atPost(cfg.batchtxTbl, f);
+      _autoIntakeTx.synced = true;
+      if(_txRes && _txRes.id) _autoIntakeTx.airtableId = _txRes.id;
+      lsSet('gp-batchtx', batchTxRecs);
+      updatePendingBadge();
+    }catch(e){ /* stays unsynced; Sync Pending will retry */ }
+  }
 }
 
 function batchMovUnlock(){
@@ -8093,10 +8170,10 @@ function summaryBatchChanged(){
     : '');
   document.getElementById('si-cultivar').textContent = b.cultivar||'—';
   // Mother ID slot — context-aware label based on the batch's genetics source:
-  //   • Seeds (S-XXX-NNN)            → "Seed Lot Number" + the donor seed lot from inventory.
-  //   • Clones-from-Seeds (T-XXX-NNN) → "Source Seeds" + "S-XXX-NNN · Plant #N" (the source
-  //                                     batch + plant number this test cohort was cloned from).
-  //   • Clones-Internal / External   → "Mother ID" + the M-XXX-NNN clone donor batch ID.
+  //   • Seeds (S-XXX-NNN)             → "Seed Lot Number" + the donor seed lot from inventory.
+  //   • Clones-from-Seeds (T-XXX-NNN) → "Source Seeds" + "S-XXX-NNN" (family-level lineage;
+  //                                     per-plant data lives on the future Test Management page).
+  //   • Clones-Internal / External    → "Mother ID" + the M-XXX-NNN clone donor batch ID.
   const _si_mLbl = document.getElementById('si-mother-label');
   const _si_isSeeds = ((b.geneticsSource||'').toLowerCase() === 'seeds');
   const _si_isTest  = ((b.geneticsSource||'').toLowerCase() === 'clones-from-seeds') || isTestBatchId(b.batchId);
@@ -8107,11 +8184,7 @@ function summaryBatchChanged(){
     _si_mValue = b.seedLotNumber || '—';
   } else if(_si_isTest){
     _si_mLabel = 'Source Seeds';
-    const _ssBatch = b.sourceSeedsBatch || '';
-    const _ssPlant = parseInt(b.sourcePlantNumber) || testBatchPlantNumber(b.batchId) || 0;
-    _si_mValue = _ssBatch
-      ? (_ssBatch + (_ssPlant ? (' · Plant #'+_ssPlant) : ''))
-      : (_ssPlant ? ('— · Plant #'+_ssPlant) : '—');
+    _si_mValue = b.sourceSeedsBatch || '—';
   }
   if(_si_mLbl) _si_mLbl.textContent = _si_mLabel;
   document.getElementById('si-mother').textContent = _si_mValue;
@@ -9194,8 +9267,13 @@ function getAllowedPhases(currentPhase, batchId){
       // Non-mom batches (regular + T- test): stay locked at Clones — Water-In EC entry auto-advances to Veg.
       return isMother ? (_momCanFlower ? ['Clones','Veg','Flower'] : ['Clones','Veg']) : ['Clones'];
     case 'Veg':
-      // Clone-Donor moms stay in Veg (no Flower). Others advance Veg → Flower normally.
-      return (isMother && !_momCanFlower) ? ['Veg'] : ['Veg','Flower'];
+      // Clone-Donor moms stay in Veg (no Flower).
+      // Seeds-genetics batches (S-XXX-NNN) ALSO cap at Veg — they're a holding cohort whose
+      // plants get cloned into T- batches for the actual pheno-hunt flowering. S- batches
+      // themselves never make it to Flower.
+      if(isMother && !_momCanFlower) return ['Veg'];
+      if(isSeedsBatchId(batchId)) return ['Veg'];
+      return ['Veg','Flower'];
     case 'Flower':   return ['Flower'];
     case 'Drying':
       // T- batch flagged Destroy: caps at Drying like moms. Otherwise allows the standard Packaged advance.
