@@ -641,7 +641,7 @@ tr:last-child td { border-bottom: none; }
         <!-- Step 1: Batch ID -->
         <div class="field" style="margin-bottom:10px;">
           <label>Batch ID <span style="font-size:10px;color:var(--text3);font-weight:400;">(XXX-NNN, e.g. SPK-001 — or M-XXX-NNN for a mother batch, e.g. M-SPK-001)</span></label>
-          <input type="text" id="batch-id-input" placeholder="e.g. SPK-001 (regular), M-SPK-001 (mom), or S-LK-001 (seeds)" style="font-family:var(--mono);text-transform:uppercase;" oninput="this.value=this.value.toUpperCase();batchIdCheck()" />
+          <input type="text" id="batch-id-input" placeholder="e.g. SPK-001 (regular), M-SPK-001 (mom), S-LK-001 (seeds), or T-LK-001 (test)" style="font-family:var(--mono);text-transform:uppercase;" oninput="this.value=this.value.toUpperCase();batchIdCheck()" onblur="batchIdAutoComplete()" />
           <div id="batch-id-msg" style="display:none;font-size:11px;margin-top:4px;"></div>
         </div>
 
@@ -659,7 +659,17 @@ tr:last-child td { border-bottom: none; }
             <option value="Seeds">Seeds</option>
             <option value="Clones-Internal">Clones-Internal</option>
             <option value="Clones-External">Clones-External</option>
+            <option value="Clones-from-Seeds">Clones-from-Seeds (pheno-hunt test batch)</option>
           </select>
+        </div>
+        <!-- Source Seeds Batch — only visible for Clones-from-Seeds. Captures the S-XXX-NNN
+             batch this T- test batch was cloned from. Plant number is derived from the T-NNN. -->
+        <div class="field" id="batch-srcseed-wrap" style="display:none;margin-bottom:10px;">
+          <label>Source Seeds Batch <span style="color:var(--red);font-weight:700;">*</span> <span style="font-size:10px;color:var(--text3);font-weight:400;">— the S-XXX-NNN batch this test cohort was cloned from</span></label>
+          <select id="batch-srcseed">
+            <option value="">-- select source S- batch --</option>
+          </select>
+          <div id="batch-srcseed-msg" style="font-size:11px;color:var(--text3);margin-top:4px;"></div>
         </div>
 
         <!-- Step 4: Mother / Plant ID — required (and pickable) only when Clones-Internal is the source.
@@ -2067,6 +2077,9 @@ const REMOTE_MAPPERS = {
       status: f['Status']||'Open',
       closedDate: f['Closed Date']||'',
       momPurpose: f['Mom Purpose']||'',
+      sourceSeedsBatch: f['Source Seeds Batch']||'',
+      sourcePlantNumber: parseInt(f['Source Plant Number'])||0,
+      testDisposition: f['Test Disposition']||'',
       // momPurposeCounts is deliberately NOT included here. Setting it as an explicit
       // property (even to undefined) makes it an own property — which the spread in
       // mergeRemote (`{...localArr[idx], ...mapped}`) would use to overwrite the local's
@@ -3627,6 +3640,9 @@ function buildBatchFields(rec){
     'Closed Date':rec.closedDate||undefined,
     'Mom Purpose':rec.momPurpose||undefined,
     'Mom Purpose Counts':rec.momPurposeCounts ? JSON.stringify(rec.momPurposeCounts) : undefined,
+    'Source Seeds Batch':rec.sourceSeedsBatch||undefined,
+    'Source Plant Number':rec.sourcePlantNumber||undefined,
+    'Test Disposition':rec.testDisposition||undefined,
     'Hydration Date':rec.hydrationDate||undefined,
     'Veg Start Date':rec.vegStart||undefined,
     'Flower Start Date':rec.flowerStart||undefined,
@@ -3665,32 +3681,48 @@ function calcStage(vs,fs,d){if(fs&&d>=fs){const fd=daysBetween(fs,d);return{stag
 //   Regular batches: XXX-NNN          (e.g. SPK-001)
 //   Mother batches:  M-XXX-NNN        (e.g. M-SPK-001) — clone donor stock
 //   Seeds batches:   S-XXX-NNN        (e.g. S-LK-001)  — Seeds-genetics only
+//   Test batches:    T-XXX-NNN        (e.g. T-LK-001)  — pheno-hunt clones from a Seeds batch.
+//                                                       NNN = source plant number within the
+//                                                       Seeds batch. Letter prefix matches
+//                                                       the source S- batch.
 // {2,3} keeps existing 2-letter records (SP-001, M-SP-001) valid — new batches going
 // forward use 3 letters per the updated naming convention.
 const BATCH_ID_RE        = /^[A-Za-z]{2,3}-\d{3}$/;
 const MOTHER_BATCH_ID_RE = /^M-[A-Za-z]{2,3}-\d{3}$/i;
 const SEEDS_BATCH_ID_RE  = /^S-[A-Za-z]{2,3}-\d{3}$/i;
-const BATCH_ID_RE_ANY    = /^(M-|S-)?[A-Za-z]{2,3}-\d{3}$/i;
+const TEST_BATCH_ID_RE   = /^T-[A-Za-z]{2,3}-\d{3}$/i;
+const BATCH_ID_RE_ANY    = /^(M-|S-|T-)?[A-Za-z]{2,3}-\d{3}$/i;
 function isMotherBatch(batchId){
   return MOTHER_BATCH_ID_RE.test((batchId||'').toString().trim());
 }
 function isSeedsBatchId(batchId){
   return SEEDS_BATCH_ID_RE.test((batchId||'').toString().trim());
 }
-// Extract the core letter prefix from any Batch ID format. Strips an optional M- or S-
+function isTestBatchId(batchId){
+  return TEST_BATCH_ID_RE.test((batchId||'').toString().trim());
+}
+// Extract the core letter prefix from any Batch ID format. Strips an optional M-, S-, or T-
 // prefix first so the comparison key is the inner letter segment.
 //   "SPK-001"    → "SPK"
 //   "M-SPK-001"  → "SPK"
 //   "S-SP-001"   → "SP"
+//   "T-SP-001"   → "SP"
 //   "SP-001"     → "SP"
 // Returns '' for malformed IDs.
 function batchIdLetterPrefix(batchId){
   const id = (batchId||'').toString().trim().toUpperCase();
   if(!id) return '';
-  // Strip optional M- or S- format prefix.
-  const stripped = id.replace(/^(M|S)-/i, '');
+  // Strip optional M-, S-, or T- format prefix.
+  const stripped = id.replace(/^(M|S|T)-/i, '');
   const m = stripped.match(/^([A-Za-z]+)-\d+$/i);
   return m ? m[1].toUpperCase() : '';
+}
+// Returns the source plant number embedded in a T-XXX-NNN test batch ID (the trailing
+// NNN). For non-T batches returns 0.
+function testBatchPlantNumber(batchId){
+  const id = (batchId||'').toString().trim().toUpperCase();
+  const m = id.match(/^T-[A-Za-z]+-(\d+)$/i);
+  return m ? parseInt(m[1],10) : 0;
 }
 function getMotherBatchIds(){
   // List of OPEN mother stock batches (M-XXX-NNN). Used to populate the Mother ID
@@ -4044,6 +4076,19 @@ function harvestSyncDispositionOptions(){
   if(!sel) return;
   const batchId = (document.getElementById('harvest-batch-select')||{}).value || '';
   const isMom = batchId && isMotherBatch(batchId);
+  const isTest = batchId && isTestBatchId(batchId);
+  if(isTest){
+    // T- batches (pheno-hunt tests) at harvest: user picks whether the dried flower will
+    // be Sold (full lifecycle continues to Packaged/Delivered) or Tested+Destroyed (caps
+    // at Drying, like a mom). The choice is captured on batchRec.testDisposition and
+    // read by getAllowedPhases to gate post-Drying advancement.
+    sel.innerHTML = ''
+      + '<option value="Drying" selected>Test &amp; Sell (full lifecycle to Delivered)</option>'
+      + '<option value="TestDestroy">Test &amp; Destroy (caps at Drying)</option>';
+    const wrap = document.getElementById('harvest-fresh-buyer-wrap');
+    if(wrap) wrap.style.display = 'none';
+    return;
+  }
   if(isMom){
     // Pre-select the disposition that matches THIS COHORT'S purpose — read from the most
     // recent Phase Advance tx that moved plants into the currently-selected Flower room.
@@ -4106,6 +4151,10 @@ async function harvestComplete(){
   const _isMomBatch = isMotherBatch(batch);
   const _isMomPheno = _isMomBatch && _disposition === 'Pheno';
   const _isMomSeeds = _isMomBatch && _disposition === 'Seeds';
+  // T-batch harvest disposition: 'Drying' (Test & Sell — full lifecycle) or 'TestDestroy'
+  // (caps at Drying like a mom). Captured on batchRec.testDisposition for getAllowedPhases.
+  const _isTestBatch = isTestBatchId(batch);
+  const _isTestDestroy = _isTestBatch && _disposition === 'TestDestroy';
   const _freshBuyer = ((document.getElementById('harvest-fresh-buyer') || {}).value || '').trim();
   const totalNet = Math.round(bins.reduce((s,b)=>s+(b.netWeight||0),0)*1000)/1000;
   const idx = batchRecs.findIndex(r=>r.batchId===batch && !r.type);
@@ -4118,7 +4167,11 @@ async function harvestComplete(){
     toast('Mother batches cannot be sold. Pick "Pheno Hunt" or "Seeds Harvest" instead.', 5500);
     return;
   }
-  const _confirmDispLine = _isFreshSale
+  const _confirmDispLine = _isTestDestroy
+    ? 'Disposition: TEST & DESTROY — flower goes to drying for testing, then batch closes (no Packaged/Delivered).'
+    : _isTestBatch
+      ? 'Disposition: TEST & SELL — full lifecycle (Drying → Packaged → Delivered).'
+      : _isFreshSale
     ? 'Disposition: SOLD AS FRESH to processor' + (_freshBuyer ? ' ('+_freshBuyer+')' : '') + ' — no drying, no post-dry.'
     : _isMomPheno
       ? 'Disposition: PHENO HUNT — flower moves to drying for genetic evaluation. Not for sale.'
@@ -4137,6 +4190,12 @@ async function harvestComplete(){
   // Zero out this room's live distribution
   if(!batchRec.roomDistribution) batchRec.roomDistribution = {};
   batchRec.roomDistribution[room] = 0;
+  // T-batch disposition: persist the user's choice so getAllowedPhases can gate the
+  // Drying → Packaged transition. Only set once (the first Complete Harvest event seals
+  // the disposition for the whole batch). 'Sell' allows full lifecycle; 'Destroy' caps at Drying.
+  if(_isTestBatch && !batchRec.testDisposition){
+    batchRec.testDisposition = _isTestDestroy ? 'Destroy' : 'Sell';
+  }
   batchRec.synced = false;
   // First Harvest Complete advances the batch from Flower → Drying — UNLESS this room is being
   // sold as fresh AND no other rooms in this batch are going through drying. For simplicity we
@@ -6398,14 +6457,21 @@ function migrateRoomNames(){
   lsSet('gp-ec',ecRecs);lsSet('gp-ro',roRecs);
 }
 function clearAllLocalData(){
-  if(!confirm('This will permanently delete ALL local records including synced data, batch IDs, transactions, and dropdowns. This cannot be undone. Continue?'))return;
+  // Two-step confirm for production safety: first a yes/no, then a typed confirmation so
+  // accidental clicks don't blow away a season's data. Airtable credentials (gp-cfg) are
+  // preserved — only data records are cleared.
+  if(!confirm('⚠ RESET LOCAL DATA\n\nThis will permanently delete all locally-stored records: batches, transactions, EC/Runoff/Waste/Harvest/Post-Drying/Bio/Pest/Cleaning logs, seed inventory, and pending sync queue.\n\nAirtable credentials (Settings) will be preserved.\n\nIMPORTANT: Other devices (laptops, phones) using this app still have their own local copies. If you intend to start fresh in production, clear the data on every device — otherwise the un-cleared local data will be re-pushed to Airtable on the next sync.\n\nContinue?')) return;
+  const _typed = prompt('Type RESET (in capital letters) to confirm. Anything else cancels.');
+  if(_typed !== 'RESET'){ toast('Reset cancelled — no data changed.', 4000); return; }
   ecRecs=[];roRecs=[];wasteRecs=[];batchRecs=[];batchTxRecs=[];harvestRecs=[];postDryRecs=[];bioRecs=[];pestRecs=[];sanCleanRecs=[];sanToolRecs=[];sanEditsRecs=[];seedInvRecs=[];
   lsSet('gp-ec',[]);lsSet('gp-ro',[]);lsSet('gp-waste',[]);lsSet('gp-batch',[]);lsSet('gp-batchtx',[]);lsSet('gp-harvest',[]);lsSet('gp-postdry',[]);lsSet('gp-bio',[]);lsSet('gp-pest',[]);lsSet('gp-sanclean',[]);lsSet('gp-santool',[]);lsSet('gp-sanedits',[]);lsSet('gp-seedinv',[]);
+  // Also clear the conflict queue and any in-flight pending tracking.
+  if(Array.isArray(_pendingConflicts)) _pendingConflicts.length = 0;
   populateBatchDropdowns();renderEC();renderRO();
   ecClear();roClear();
   summaryPopulateBatches();
   updatePendingBadge();
-  toast('All local data cleared.');
+  toast('All local data cleared. Credentials preserved. Ready for production data.', 5500);
 }
 // Remove duplicate Batch Transaction records from local storage. Multi-pass dedup —
 // passes are run in order and each one keeps the airtableId-bearing record where possible:
@@ -7365,6 +7431,39 @@ function renderWasteReport(){
 // ── BATCH LOG ────────────────────────────────────────────────────────────────
 let activeBatchId = '';
 
+// Auto-complete the Batch ID input when the user types a partial value like "S-LK-",
+// "M-LK-", "T-LK-", or "LK-" (just the family prefix + letter prefix). On blur, scans
+// existing batchRecs for that family + prefix combo and fills in the next sequential NNN.
+// Does nothing if the input is already a complete batch ID or doesn't end in a dash.
+// For T- batches: NNN represents the source plant number, so auto-suggestion uses the
+// NEXT plant number not yet associated with a T- batch for the given prefix.
+function batchIdAutoComplete(){
+  const el = document.getElementById('batch-id-input');
+  if(!el) return;
+  const raw = (el.value || '').trim().toUpperCase();
+  if(!raw || !raw.endsWith('-')) return; // user typed a complete ID, leave alone
+  // Match the family + letter prefix (e.g. "S-LK-", "M-SPK-", "LK-").
+  const m = raw.match(/^((M|S|T)-)?([A-Za-z]{2,3})-$/i);
+  if(!m) return;
+  const familyPrefix = (m[1] || '').toUpperCase();
+  const letterPrefix = m[3].toUpperCase();
+  const fullPrefix = familyPrefix + letterPrefix + '-';
+  // Find the highest NNN already used for this exact family+prefix combo.
+  let maxN = 0;
+  batchRecs.forEach(r => {
+    if(!r || r.type || !r.batchId) return;
+    const bid = r.batchId.toString().toUpperCase();
+    if(!bid.startsWith(fullPrefix)) return;
+    const tail = bid.slice(fullPrefix.length);
+    const n = parseInt(tail, 10);
+    if(!isNaN(n) && n > maxN) maxN = n;
+  });
+  const next = String(maxN + 1).padStart(3, '0');
+  el.value = fullPrefix + next;
+  // Re-run validation so the form state updates (genetics-source lock, error msg, etc.).
+  if(typeof batchIdCheck === 'function') batchIdCheck();
+}
+
 function batchIdCheck(){
   const val = document.getElementById('batch-id-input').value.trim();
   const msg = document.getElementById('batch-id-msg');
@@ -7398,6 +7497,18 @@ function batchIdCheck(){
       gs.style.cursor = 'not-allowed';
       batchGeneticsChange();
       msg.style.display='block'; msg.style.color='var(--green)'; msg.textContent='Seeds batch — Source of Genetics locked to Seeds. Pick a seed lot from inventory below.';
+    } else if(isTestBatchId(val)){
+      // T- prefix is reserved for pheno-hunt test batches — clones from a specific plant
+      // in a Seeds (S-XXX-NNN) batch. The NNN of T- represents the source plant number
+      // (e.g. T-LK-001 = plant #1's clones from some S-LK-NNN batch).
+      gs.value = 'Clones-from-Seeds';
+      gs.disabled = true;
+      gs.style.background = 'var(--bg2)';
+      gs.style.color = 'var(--text2)';
+      gs.style.cursor = 'not-allowed';
+      batchGeneticsChange();
+      const _plantNum = testBatchPlantNumber(val);
+      msg.style.display='block'; msg.style.color='var(--green)'; msg.textContent='Test batch — Clones-from-Seeds locked. Pick the source S- batch this cohort was cloned from. Plant #'+_plantNum+' inferred from the Batch ID.';
     } else {
       // Regular batch — let the user choose the source. If we previously auto-locked
       // it (because they had typed an M- or S- ID and then backspaced), unlock it now.
@@ -7468,6 +7579,38 @@ function batchGeneticsChange(){
   // "Mother ID".
   const newBatchId = (document.getElementById('batch-id-input').value || '').trim().toUpperCase();
   const newBatchIsMother = isMotherBatch(newBatchId);
+  // Source Seeds Batch picker — only visible for Clones-from-Seeds. Lists all S-prefix
+  // batches whose inner letter prefix matches the T- batch's letter prefix, so e.g.
+  // creating T-LK-001 lets the user pick from S-LK-NNN options.
+  const srcSeedWrap = document.getElementById('batch-srcseed-wrap');
+  const srcSeedSel  = document.getElementById('batch-srcseed');
+  const srcSeedMsg  = document.getElementById('batch-srcseed-msg');
+  if(srcSeedWrap && srcSeedSel){
+    if(sel === 'Clones-from-Seeds'){
+      const _letterPrefix = batchIdLetterPrefix(newBatchId);
+      // Find S-prefix batches whose letter prefix matches. Include closed S- batches too
+      // since the user may be creating T- batches well after the S- batch finished veg.
+      const _candidates = batchRecs
+        .filter(r => r && !r.type && r.batchId && isSeedsBatchId(r.batchId)
+          && (!_letterPrefix || batchIdLetterPrefix(r.batchId) === _letterPrefix))
+        .map(r => ({ id: r.batchId, cultivar: r.cultivar||'', closed: !!r.closedDate || (r.status||'').toLowerCase()==='closed' }))
+        .sort((a,b) => a.id.localeCompare(b.id));
+      const cur = srcSeedSel.value;
+      if(!_candidates.length){
+        srcSeedSel.innerHTML = '<option value="">-- no matching S- batches found '+(_letterPrefix?'(prefix '+_letterPrefix+')':'')+' --</option>';
+        if(srcSeedMsg){ srcSeedMsg.style.color = 'var(--red)'; srcSeedMsg.textContent = 'Create the source Seeds batch (S-'+(_letterPrefix||'XXX')+'-NNN) first.'; }
+      } else {
+        srcSeedSel.innerHTML = '<option value="">-- select source S- batch --</option>'
+          + _candidates.map(c => '<option value="'+c.id+'"'+(c.id===cur?' selected':'')+'>'+c.id+(c.cultivar?(' · '+c.cultivar):'')+(c.closed?' (closed)':'')+'</option>').join('');
+        if(srcSeedMsg){ srcSeedMsg.style.color = 'var(--text3)'; srcSeedMsg.textContent = 'Plant #'+testBatchPlantNumber(newBatchId)+' (from the T- batch ID) is the specific plant these clones came from.'; }
+        if(_candidates.length === 1) srcSeedSel.value = _candidates[0].id;
+      }
+      srcSeedWrap.style.display = '';
+    } else {
+      srcSeedWrap.style.display = 'none';
+      srcSeedSel.value = '';
+    }
+  }
   // External Clone Company — only visible for Clones-External
   if(sel === 'Clones-External'){
     extWrap.style.display='';
@@ -7589,7 +7732,7 @@ function batchUpdateCreateBtn(){
 async function batchCreate(){
   const batchId = document.getElementById('batch-id-input').value.trim().toUpperCase();
   if(!batchId){ toast('Enter a Batch ID.'); return; }
-  if(!BATCH_ID_RE_ANY.test(batchId)){ toast('Invalid Batch ID format. Use XXX-NNN, M-XXX-NNN (mother), or S-XXX-NNN (seeds).', 5500); return; }
+  if(!BATCH_ID_RE_ANY.test(batchId)){ toast('Invalid Batch ID format. Use XXX-NNN, M-XXX-NNN (mother), S-XXX-NNN (seeds), or T-XXX-NNN (pheno-hunt test).', 6000); return; }
   if(batchRecs.some(r=>r.batchId===batchId)){ toast('Batch ID already exists.'); return; }
   const cultivar = document.getElementById('batch-cultivar').value.trim();
   const mother = document.getElementById('batch-mother').value.trim();
@@ -7607,6 +7750,30 @@ async function batchCreate(){
   if(geneticsSource === 'Seeds' && !isSeedsBatchId(batchId)){
     toast('Seeds-genetics batches must use an S-XXX-NNN Batch ID (e.g. S-LK-001).', 5500);
     return;
+  }
+  // T-XXX-NNN ↔ Clones-from-Seeds is a similar two-way invariant. Plant number is embedded
+  // in the NNN segment (T-LK-001 = plant #1).
+  if(isTestBatchId(batchId) && geneticsSource !== 'Clones-from-Seeds'){
+    toast('T- prefix is reserved for pheno-hunt test batches. Pick "Clones-from-Seeds" as the Source of Genetics, or change the Batch ID prefix.', 6500);
+    return;
+  }
+  if(geneticsSource === 'Clones-from-Seeds' && !isTestBatchId(batchId)){
+    toast('Clones-from-Seeds batches must use a T-XXX-NNN Batch ID (e.g. T-LK-001).', 5500);
+    return;
+  }
+  // Clones-from-Seeds: require a source S- batch, and its letter prefix must match the T- prefix.
+  let _sourceSeedsBatch = '', _sourcePlantNumber = 0, _sourceSeedsBatchRec = null;
+  if(geneticsSource === 'Clones-from-Seeds'){
+    _sourceSeedsBatch = ((document.getElementById('batch-srcseed')||{}).value || '').trim();
+    if(!_sourceSeedsBatch){ toast('Pick the source S-XXX-NNN batch this test cohort was cloned from.', 5500); return; }
+    if(!isSeedsBatchId(_sourceSeedsBatch)){ toast('Source must be a Seeds batch (S-XXX-NNN).', 5000); return; }
+    if(batchIdLetterPrefix(batchId) !== batchIdLetterPrefix(_sourceSeedsBatch)){
+      toast('Letter prefix mismatch — '+batchId+' must share the same prefix as its source ('+_sourceSeedsBatch+').', 6500);
+      return;
+    }
+    _sourceSeedsBatchRec = batchRecs.find(r => r.batchId === _sourceSeedsBatch && !r.type);
+    if(!_sourceSeedsBatchRec){ toast('Source Seeds batch '+_sourceSeedsBatch+' not found.', 5000); return; }
+    _sourcePlantNumber = testBatchPlantNumber(batchId);
   }
   // Mother ID required for REGULAR Clones-Internal batches (mother batches no
   // longer require a donor at creation — that link gets established later
@@ -7655,7 +7822,17 @@ async function batchCreate(){
   // For Seeds: cloneDate is set to today (the day the seeds were planted/started).
   // Initial phase: Seeds-genetics batches start in Germination; all others start in Clones.
   const _initialPhase = (geneticsSource === 'Seeds') ? 'Germination' : 'Clones';
-  const rec = { id: Date.now(), batchId, cultivar: cultivar || _seedStrainName, mother, geneticsSource, externalCompany, notes, createdDate: _created, cloneDate: (geneticsSource === 'Seeds' ? _created : ''), rooms: ['Veg'], plantPhase: _initialPhase, status: 'Open', closedDate: '', synced: false };
+  // Cultivar inheritance: Clones-from-Seeds inherits cultivar from the source S- batch
+  // if the user didn't type one. Same pattern as Seeds-genetics inheriting from the seed lot.
+  const _cultivarForRec = cultivar
+    || _seedStrainName
+    || (geneticsSource === 'Clones-from-Seeds' && _sourceSeedsBatchRec ? (_sourceSeedsBatchRec.cultivar || '') : '');
+  const rec = { id: Date.now(), batchId, cultivar: _cultivarForRec, mother, geneticsSource, externalCompany, notes, createdDate: _created, cloneDate: (geneticsSource === 'Seeds' ? _created : ''), rooms: ['Veg'], plantPhase: _initialPhase, status: 'Open', closedDate: '', synced: false };
+  // T- batch source-tracking: capture which S- batch + which plant number these clones came from.
+  if(geneticsSource === 'Clones-from-Seeds'){
+    rec.sourceSeedsBatch = _sourceSeedsBatch;
+    rec.sourcePlantNumber = _sourcePlantNumber;
+  }
   if(geneticsSource === 'Seeds'){
     if(_seedStrainName) rec.seedStrain = _seedStrainName;
     if(_seedLotNumber) rec.seedLotNumber = _seedLotNumber;
@@ -7915,14 +8092,29 @@ function summaryBatchChanged(){
     ? ' <span style="display:inline-block;background:var(--green-pale);color:var(--green);font-size:10px;font-weight:700;font-family:var(--mono);padding:2px 6px;border-radius:8px;letter-spacing:0.05em;vertical-align:middle;margin-left:4px;">MOTHER</span>'
     : '');
   document.getElementById('si-cultivar').textContent = b.cultivar||'—';
-  // Mother ID slot — for Seeds-genetics batches this slot is repurposed to show the seed
-  // Lot Number (the donor seed lot from inventory), with the label swapped to "Seed Lot
-  // Number". For all other genetics sources (Clones-Internal / Clones-External) the slot
-  // shows the M-XXX-NNN clone donor batch ID as before.
+  // Mother ID slot — context-aware label based on the batch's genetics source:
+  //   • Seeds (S-XXX-NNN)            → "Seed Lot Number" + the donor seed lot from inventory.
+  //   • Clones-from-Seeds (T-XXX-NNN) → "Source Seeds" + "S-XXX-NNN · Plant #N" (the source
+  //                                     batch + plant number this test cohort was cloned from).
+  //   • Clones-Internal / External   → "Mother ID" + the M-XXX-NNN clone donor batch ID.
   const _si_mLbl = document.getElementById('si-mother-label');
   const _si_isSeeds = ((b.geneticsSource||'').toLowerCase() === 'seeds');
-  if(_si_mLbl) _si_mLbl.textContent = _si_isSeeds ? 'Seed Lot Number' : 'Mother ID';
-  document.getElementById('si-mother').textContent = _si_isSeeds ? (b.seedLotNumber || '—') : (b.mother || '—');
+  const _si_isTest  = ((b.geneticsSource||'').toLowerCase() === 'clones-from-seeds') || isTestBatchId(b.batchId);
+  let _si_mLabel = 'Mother ID';
+  let _si_mValue = b.mother || '—';
+  if(_si_isSeeds){
+    _si_mLabel = 'Seed Lot Number';
+    _si_mValue = b.seedLotNumber || '—';
+  } else if(_si_isTest){
+    _si_mLabel = 'Source Seeds';
+    const _ssBatch = b.sourceSeedsBatch || '';
+    const _ssPlant = parseInt(b.sourcePlantNumber) || testBatchPlantNumber(b.batchId) || 0;
+    _si_mValue = _ssBatch
+      ? (_ssBatch + (_ssPlant ? (' · Plant #'+_ssPlant) : ''))
+      : (_ssPlant ? ('— · Plant #'+_ssPlant) : '—');
+  }
+  if(_si_mLbl) _si_mLbl.textContent = _si_mLabel;
+  document.getElementById('si-mother').textContent = _si_mValue;
   document.getElementById('si-genetics').textContent = b.geneticsSource ? b.geneticsSource+(b.externalCompany?' ('+b.externalCompany+')':'') : '—';
   document.getElementById('si-created').textContent = b.createdDate||'—';
   document.getElementById('si-phase').textContent = getDisplayPhase(b);
@@ -8985,21 +9177,31 @@ function getAllowedPhases(currentPhase, batchId){
   // no automatic Clones→Veg signal that fits the multi-cohort model.
   if(!currentPhase) return ['Clones'];
   const isMother = batchId ? isMotherBatch(batchId) : false;
+  const isTest = batchId ? isTestBatchId(batchId) : false;
   // Mom Purpose gate: a mom can advance to Flower if it has ANY plants designated for
   // Pheno Hunt or Seed Production (per momPurposeCounts). Clone-Donor-only moms stay in Veg.
   const _momRec = (isMother && batchId) ? batchRecs.find(r => r.batchId === batchId && !r.type) : null;
   const _momCanFlower = isMother && _momRec && momHasFloweringCapacity(_momRec);
+  // T-batch disposition gate: a T- batch whose harvest disposition is 'Destroy' caps at
+  // Drying (like a mom). 'Sell' (or unset, which defaults to Sell when not declared) goes
+  // through the full Drying → Packaged → Delivered lifecycle.
+  const _testRec = (isTest && batchId) ? batchRecs.find(r => r.batchId === batchId && !r.type) : null;
+  const _testDestroy = isTest && _testRec && (_testRec.testDisposition === 'Destroy');
   switch(currentPhase){
     case 'Germination': return ['Germination','Veg']; // Seeds-only starting phase, advances to Veg
     case 'Clones':
       // Clone-Donor moms: only Clones/Veg available. Pheno/Seed moms: include Flower as a forward option.
+      // Non-mom batches (regular + T- test): stay locked at Clones — Water-In EC entry auto-advances to Veg.
       return isMother ? (_momCanFlower ? ['Clones','Veg','Flower'] : ['Clones','Veg']) : ['Clones'];
     case 'Veg':
       // Clone-Donor moms stay in Veg (no Flower). Others advance Veg → Flower normally.
       return (isMother && !_momCanFlower) ? ['Veg'] : ['Veg','Flower'];
     case 'Flower':   return ['Flower'];
-    case 'Drying':   return ['Drying']; // mothers terminate here too
-    case 'Packaged': return isMother ? ['Packaged'] : ['Packaged','Delivered']; // mothers shouldn't reach Packaged anyway
+    case 'Drying':
+      // T- batch flagged Destroy: caps at Drying like moms. Otherwise allows the standard Packaged advance.
+      if(_testDestroy) return ['Drying'];
+      return ['Drying'];
+    case 'Packaged': return (isMother || _testDestroy) ? ['Packaged'] : ['Packaged','Delivered'];
     case 'Delivered':return ['Delivered']; // terminal — only Close (via Status) remains
     case 'Seeds':    return ['Seeds','Germination']; // legacy migration path
     default:         return [currentPhase];
@@ -11892,7 +12094,12 @@ function seedInvRenderList(){
     html += '<tr style="border-top:1px solid var(--border);'+(isLow?'color:var(--text3);':'')+'">';
     html += '<td style="padding:8px 10px;font-weight:700;font-family:var(--mono);color:'+(isLow?'var(--text3)':'var(--green)')+';">'+(r.lotNumber||'—')+'</td>';
     html += '<td style="padding:8px 10px;border-left:1px solid var(--border);font-weight:600;color:'+(isLow?'var(--text3)':'var(--text)')+';">'+(r.strain||'—')+((r.acquisitionType==='Produced')?' <span style="font-size:9px;font-family:var(--mono);background:var(--green-pale);color:var(--green);border-radius:4px;padding:1px 5px;vertical-align:middle;">PRODUCED</span>':'')+'</td>';
-    html += '<td style="padding:8px 10px;border-left:1px solid var(--border);">'+(r.source||'—')+'</td>';
+    // Source column: shows breeder name for Bought lots, OR "Mom: M-XXX-NNN" for Produced lots
+    // so growers can trace which mother batch produced an in-house lot at a glance.
+    const _srcText = (r.acquisitionType === 'Produced' && r.sourceMomBatch)
+      ? '<span style="font-size:11px;color:var(--text3);font-family:var(--mono);">Mom:</span> <span style="font-family:var(--mono);font-weight:600;color:var(--green);">'+r.sourceMomBatch+'</span>'
+      : (r.source || '—');
+    html += '<td style="padding:8px 10px;border-left:1px solid var(--border);">'+_srcText+'</td>';
     // Acquired — the original lot size (qtyAcquired). Locked at first-save value; never decremented.
     // Provides a stable reference point so growers can see how much of the lot has been used.
     html += '<td style="padding:8px 10px;border-left:1px solid var(--border);text-align:right;font-family:var(--mono);color:var(--text2);">'+(acquired || '—')+'</td>';
@@ -11916,12 +12123,41 @@ function seedInvRenderList(){
 // (M-XXX-NNN) — including closed ones, since a breeding project may run a mom through its
 // full flowering lifecycle and then close it. The selected mom is captured into the seed
 // inventory record as rec.sourceMomBatch for traceability.
+// Auto-format helper for Produced lot numbers: SYY-NNN where YY = last 2 digits of the
+// current year and NNN is the next sequential 3-digit number across all Produced lots
+// in that year. Scans existing lots, finds max NNN matching the year prefix, returns +1.
+// Annual reset: S26-NNN restarts at S27-001 in 2027.
+function nextProducedLotNumber(){
+  const yy = String(new Date().getFullYear()).slice(-2);
+  const prefix = 'S' + yy + '-';
+  let maxN = 0;
+  seedInvRecs.forEach(r => {
+    const lot = (r.lotNumber || '').toString().toUpperCase();
+    if(lot.startsWith(prefix)){
+      const tail = lot.slice(prefix.length);
+      const n = parseInt(tail, 10);
+      if(!isNaN(n) && n > maxN) maxN = n;
+    }
+  });
+  return prefix + String(maxN + 1).padStart(3, '0');
+}
+
 function seedInvAcqChanged(){
   const acq = ((document.getElementById('seed-acq')||{}).value || 'Bought');
   const wrap = document.getElementById('seed-momsrc-wrap');
   const sel = document.getElementById('seed-momsrc');
+  const lotInput = document.getElementById('seed-lot');
   if(!wrap || !sel) return;
   if(acq === 'Produced'){
+    // Auto-fill Lot Number with the next Produced sequence (SYY-NNN) if the field is
+    // empty or still showing a previously-suggested SYY-NNN. The user can override.
+    if(lotInput){
+      const cur = (lotInput.value || '').trim().toUpperCase();
+      const _looksAuto = /^S\d{2}-\d{3}$/.test(cur);
+      if(!cur || _looksAuto){
+        lotInput.value = nextProducedLotNumber();
+      }
+    }
     // Populate with all mother batches, sorted by ID. Include closed moms because a closed
     // mom may well be the one that produced the seeds (the close happened post-harvest).
     const moms = batchRecs
@@ -11937,6 +12173,12 @@ function seedInvAcqChanged(){
     }
     wrap.style.display = '';
   } else {
+    // Switching away from Produced — clear an auto-suggested lot number so the user can
+    // type a Bought lot's external value freely.
+    if(lotInput){
+      const cur = (lotInput.value || '').trim().toUpperCase();
+      if(/^S\d{2}-\d{3}$/.test(cur)) lotInput.value = '';
+    }
     wrap.style.display = 'none';
     sel.value = '';
   }
