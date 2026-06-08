@@ -3885,10 +3885,34 @@ function ensureMomPhaseCounts(batchRec){
   if(!batchRec || !isMotherBatch(batchRec.batchId)) return null;
   let changed = false;
   if(!batchRec.momPhaseCounts || typeof batchRec.momPhaseCounts !== 'object'){
+    // Reconstruct momPhaseCounts from roomDistribution + headline plantPhase. Without this
+    // reconstruction, a mom pulled from Airtable (where momPhaseCounts isn't stored — it's
+    // a local-only field) would have all its plants dumped into the headline plantPhase
+    // bucket, losing any Veg/Flower split that the original backfill captured. By deriving
+    // from roomDistribution (which IS synced), we recover the correct multi-phase counts.
+    //   Logic per phase:
+    //     Drying  → all plants in Drying bucket (rooms typically drained post-harvest)
+    //     Flower  → plants in flower rooms = Flower bucket; remainder = Veg bucket
+    //                (the Veg-room plants haven't been advanced to Flower yet)
+    //     Veg     → all in Veg bucket
+    //     Clones  → all in Clones bucket
     const total = calcBatchQty(batchRec.batchId);
     const ph = batchRec.plantPhase || 'Clones';
+    const rd = batchRec.roomDistribution || {};
+    const flowerRoomSum = Object.keys(rd)
+      .filter(r => r !== 'Veg')
+      .reduce((s, r) => s + (parseInt(rd[r]) || 0), 0);
     const m = { Clones: 0, Veg: 0, Flower: 0, Drying: 0 };
-    if(MOM_PHASES.indexOf(ph) >= 0) m[ph] = total; else m.Clones = total;
+    if(ph === 'Drying'){
+      m.Drying = total;
+    } else if(ph === 'Flower' && flowerRoomSum > 0 && flowerRoomSum <= total){
+      m.Flower = flowerRoomSum;
+      m.Veg    = total - flowerRoomSum;
+    } else if(MOM_PHASES.indexOf(ph) >= 0){
+      m[ph] = total;
+    } else {
+      m.Clones = total;
+    }
     batchRec.momPhaseCounts = m;
     changed = true;
   } else {
