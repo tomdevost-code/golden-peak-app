@@ -5116,18 +5116,26 @@ async function postDryComplete(){
   }
   const totalNet = recs.reduce((s,r)=> s + (parseFloat(r.netWeight)||0), 0);
   const _isMom = isMotherBatch(batch);
+  // T-batch with Test & Destroy disposition: caps at Drying like a mom. Post-Drying records
+  // weight (for COA testing samples) but the batch stays in Drying and flower is destroyed
+  // after testing. Treat as "stay-in-drying" path identical to moms.
+  const _idxForChk = batchRecs.findIndex(r => r.batchId === batch && !r.type);
+  const _testDestroyCheck = (_idxForChk >= 0) && isTestBatchId(batch) && (batchRecs[_idxForChk].testDisposition === 'Destroy');
+  const _stayInDrying = _isMom || _testDestroyCheck;
   const _promptMsg = _isMom
     ? ('Complete Post-Drying for mother batch '+batch+'?\n\nTotal: '+totalNet.toFixed(3)+' kg across '+recs.length+' container(s).\n\nThis records the post-drying weight. Mother batches stay in Drying — set Status=Closed when done.')
-    : ('Complete Post-Drying for '+batch+'?\n\nTotal: '+totalNet.toFixed(3)+' kg across '+recs.length+' container(s).\n\nThis will advance the batch to Packaged.');
+    : _testDestroyCheck
+      ? ('Complete Post-Drying for test batch '+batch+' (Test & Destroy)?\n\nTotal: '+totalNet.toFixed(3)+' kg across '+recs.length+' container(s).\n\nThis records the post-drying weight. The batch stays in Drying — set Status=Closed when testing is complete.')
+      : ('Complete Post-Drying for '+batch+'?\n\nTotal: '+totalNet.toFixed(3)+' kg across '+recs.length+' container(s).\n\nThis will advance the batch to Packaged.');
   if(!confirm(_promptMsg)){ return; }
   const idx = batchRecs.findIndex(r => r.batchId === batch && !r.type);
   if(idx < 0){ toast('Batch not found.'); return; }
   const _prevPhase = batchRecs[idx].plantPhase || '';
   const today = localDate();
   batchRecs[idx].postDryingWeight = Math.round(totalNet * 1000) / 1000;
-  if(_isMom){
-    // Mother batch: keep phase at Drying. Just record the weight on a stand-alone
-    // 'Post-Dry Weight' tx (no phase change, qty=0). No packagedDate stamping.
+  if(_stayInDrying){
+    // Mother batch OR T-batch with Test & Destroy: keep phase at Drying. Just record the
+    // weight on a stand-alone 'Post-Dry Weight' tx (no phase change, qty=0). No packagedDate.
     batchRecs[idx].synced = false;
     lsSet('gp-batch', batchRecs);
     const _mw = batchRecs[idx].postDryingWeight;
@@ -5140,7 +5148,7 @@ async function postDryComplete(){
       weight: _mw,
       currentQtyBefore: calcBatchQty(batch),
       plantPhase: _prevPhase,
-      notes: 'Mother batch post-drying weight recorded: '+_mw.toFixed(3)+' kg',
+      notes: (_isMom ? 'Mother batch' : 'Test & Destroy batch')+' post-drying weight recorded: '+_mw.toFixed(3)+' kg',
       synced: false
     };
     batchTxRecs.unshift(_mtx);
@@ -5183,7 +5191,9 @@ async function postDryComplete(){
     msg.style.color = 'var(--green)';
     msg.textContent = _isMom
       ? 'Post-Drying weight recorded: '+totalNet.toFixed(3)+' kg. Mother batch stays in Drying — close it manually via Status when ready.'
-      : 'Post-Drying complete: '+totalNet.toFixed(3)+' kg recorded; batch advanced to Packaged.';
+      : _testDestroyCheck
+        ? 'Post-Drying weight recorded: '+totalNet.toFixed(3)+' kg. Test & Destroy batch stays in Drying — close it manually via Status when testing is complete.'
+        : 'Post-Drying complete: '+totalNet.toFixed(3)+' kg recorded; batch advanced to Packaged.';
     setTimeout(()=>{ msg.style.display = 'none'; }, 5000);
   }
   populateBatchDropdowns();
@@ -7854,7 +7864,12 @@ async function batchCreate(){
   const _cultivarForRec = cultivar
     || _seedStrainName
     || (geneticsSource === 'Clones-from-Seeds' && _sourceSeedsBatchRec ? (_sourceSeedsBatchRec.cultivar || '') : '');
-  const rec = { id: Date.now(), batchId, cultivar: _cultivarForRec, mother, geneticsSource, externalCompany, notes, createdDate: _created, cloneDate: (geneticsSource === 'Seeds' ? _created : ''), rooms: ['Veg'], plantPhase: _initialPhase, status: 'Open', closedDate: '', synced: false };
+  // cloneDate stamping by genetics source:
+  //   - Seeds: today (germination start date)
+  //   - Clones-from-Seeds (T-batch): today (the day the family was cut from S- plants)
+  //   - Clones-Internal/External: empty (captured later on first Produced/Received tx)
+  const _cloneDateAtCreate = (geneticsSource === 'Seeds' || geneticsSource === 'Clones-from-Seeds') ? _created : '';
+  const rec = { id: Date.now(), batchId, cultivar: _cultivarForRec, mother, geneticsSource, externalCompany, notes, createdDate: _created, cloneDate: _cloneDateAtCreate, rooms: ['Veg'], plantPhase: _initialPhase, status: 'Open', closedDate: '', synced: false };
   // T- batch source-tracking: capture which S- batch this family was cloned from. Per-plant
   // lineage is not maintained — individual plants are managed on the future Test Management page.
   // Also stash the family size so the auto-create intake tx (see below) knows how many to credit.
@@ -9496,25 +9511,32 @@ function txTypeChanged(){
       // Build the eligible source list:
       //   1. The current mom batch itself (always allowed).
       //   2. Non-mother open batches in Veg phase whose cultivar matches this mom's cultivar.
+      //   3. T-batches (pheno-hunt test families) in ANY phase, regardless of cultivar match.
+      //      Winner pheno selection happens after flower evaluation, so T-batches will typically
+      //      be in Flower/Drying/Packaged when their cuttings get assigned to new mom batches.
+      //      Cultivar match isn't enforced for T-batches because each plant in a T-family is its
+      //      own pheno expression of the source genetics — the user knows which winner they want.
       const sources = batchRecs
         .filter(b => b && !b.type && b.batchId && !isBatchClosedRec(b))
         .filter(b => {
           if(b.batchId === _curBatch) return true; // self-source
           if(isMotherBatch(b.batchId)) return false; // no other moms
-          if(b.plantPhase !== 'Veg') return false; // Veg-phase non-moms only
+          if(isTestBatchId(b.batchId)) return true; // T-batch — any phase, cultivar check skipped
+          if(b.plantPhase !== 'Veg') return false; // Regular non-moms: Veg-phase only
           const _bCult = ((b.cultivar || '').toString().trim().toLowerCase());
           // Cultivar must match the current mom's cultivar (case-insensitive, trimmed).
           return _curCultivar && _bCult && _bCult === _curCultivar;
         })
-        .map(b => b.batchId)
-        .sort();
+        .map(b => ({ id: b.batchId, phase: b.plantPhase || '' }))
+        .sort((a,b) => a.id.localeCompare(b.id));
       // Default: pre-select the current mom batch (self-source is the typical workflow).
       const prev = srcSel.value;
-      const defaultPick = prev || (sources.includes(_curBatch) ? _curBatch : '');
+      const sourceIds = sources.map(s => s.id);
+      const defaultPick = prev || (sourceIds.includes(_curBatch) ? _curBatch : '');
       srcSel.innerHTML = '<option value="">-- select source batch --</option>'
-        + sources.map(b => {
-            const label = b + (b === _curBatch ? ' — this batch' : ' (Veg)');
-            return '<option value="'+b+'"'+(b===defaultPick?' selected':'')+'>'+label+'</option>';
+        + sources.map(s => {
+            const label = s.id + (s.id === _curBatch ? ' — this batch' : (isTestBatchId(s.id) ? ' (test family · '+(s.phase||'?')+')' : ' (Veg)'));
+            return '<option value="'+s.id+'"'+(s.id===defaultPick?' selected':'')+'>'+label+'</option>';
           }).join('');
       srcWrap.style.display = '';
       if(srcMsg){
@@ -10006,12 +10028,20 @@ async function summaryAddTransaction(){
       toast('Source batch '+_srcCuttingBatchId+' is closed — pick an open one.', 5000);
       return;
     }
-    // Source eligibility: this batch itself, another mother (any phase), OR a non-mom in Veg phase.
-    // Self-source is the most common case — taking new cuttings from existing plants in the same mom batch.
+    // Source eligibility: this batch itself, another mother (any phase), a T-batch in any phase,
+    // OR a non-mom non-test batch in Veg phase.
+    //  - Self-source is the most common case — taking new cuttings from plants in the same mom batch.
+    //  - T-batches are a special case: cuttings get taken EARLY (during the T-batch's Veg), held
+    //    while flower testing runs, then assigned to new mom batches once winners are identified.
+    //    The T-batch will already be in Flower/Drying/Packaged by the time the user records the
+    //    winner-to-mom transfer, so we accept T-batches as a cutting source regardless of phase.
+    //  - Regular non-mom batches must still be in Veg (cuttings from flowering plants generally
+    //    aren't viable).
     const _srcIsMom = isMotherBatch(_srcCuttingBatchId);
     const _srcIsSelf = (_srcCuttingBatchId === batchId);
-    if(!_srcIsMom && !_srcIsSelf && _src.plantPhase !== 'Veg'){
-      toast('A non-mother source batch must be in Veg phase to provide cuttings.', 5500);
+    const _srcIsTest = isTestBatchId(_srcCuttingBatchId);
+    if(!_srcIsMom && !_srcIsSelf && !_srcIsTest && _src.plantPhase !== 'Veg'){
+      toast('A non-mother, non-test source batch must be in Veg phase to provide cuttings.', 5500);
       return;
     }
   }
