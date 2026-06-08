@@ -2030,6 +2030,10 @@ function migrateSanTaskEditsToRecs(){
     lsSet('gp-sanedits', sanEditsRecs);
     console.log('[migrate] sanitation task edits — moved '+migrated+' template(s) into sync layer');
   }
+  // Remove the legacy key whether or not anything was migrated this boot — the migration
+  // already ran successfully on a prior boot if records exist in gp-sanedits. Leaving the
+  // legacy key around causes ghost pending records after a Clear All Local Data wipe.
+  try{ localStorage.removeItem('gp-san-task-edits'); }catch(_){}
 }
 
 function backfillHarvestedTxs(){
@@ -6620,6 +6624,10 @@ function clearAllLocalData(){
   if(_typed !== 'RESET'){ toast('Reset cancelled — no data changed.', 4000); return; }
   ecRecs=[];roRecs=[];wasteRecs=[];batchRecs=[];batchTxRecs=[];harvestRecs=[];postDryRecs=[];bioRecs=[];pestRecs=[];sanCleanRecs=[];sanToolRecs=[];sanEditsRecs=[];seedInvRecs=[];
   lsSet('gp-ec',[]);lsSet('gp-ro',[]);lsSet('gp-waste',[]);lsSet('gp-batch',[]);lsSet('gp-batchtx',[]);lsSet('gp-harvest',[]);lsSet('gp-postdry',[]);lsSet('gp-bio',[]);lsSet('gp-pest',[]);lsSet('gp-sanclean',[]);lsSet('gp-santool',[]);lsSet('gp-sanedits',[]);lsSet('gp-seedinv',[]);
+  // Also nuke legacy storage keys that would otherwise re-seed records on the next boot:
+  //   gp-san-task-edits — pre-sync sanitation template overrides (migrated into gp-sanedits on boot)
+  //   gp-batch-mov      — pre-tx-model batch movement entries (no longer used)
+  ['gp-san-task-edits','gp-batch-mov'].forEach(k => { try{ localStorage.removeItem(k); }catch(_){} });
   // Also clear the conflict queue and any in-flight pending tracking.
   if(Array.isArray(_pendingConflicts)) _pendingConflicts.length = 0;
   populateBatchDropdowns();renderEC();renderRO();
