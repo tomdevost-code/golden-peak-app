@@ -786,17 +786,21 @@ tr:last-child td { border-bottom: none; }
             </div>
             <div class="field" style="margin-bottom:10px;">
               <label>Mom Purpose Distribution <span style="color:var(--red);font-weight:700;">*</span> <span style="font-size:10px;color:var(--text3);font-weight:400;">— how plants are designated</span></label>
-              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:4px;">
+              <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-top:4px;">
                 <label style="display:flex;align-items:center;gap:6px;font-size:12px;border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;background:var(--card);">
-                  <span style="font-weight:600;color:var(--text2);min-width:90px;">Clone Donor</span>
+                  <span style="font-weight:600;color:var(--text2);min-width:130px;">Clone Donor</span>
                   <input type="number" id="batch-backfill-mom-pur-clone" min="0" step="1" placeholder="0" oninput="batchBackfillMomPurposeChanged()" style="width:55px;font-family:var(--mono);text-align:right;" />
                 </label>
                 <label style="display:flex;align-items:center;gap:6px;font-size:12px;border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;background:var(--card);">
-                  <span style="font-weight:600;color:var(--text2);min-width:90px;">Pheno Hunt</span>
+                  <span style="font-weight:600;color:var(--text2);min-width:130px;">Genetic Preservation</span>
+                  <input type="number" id="batch-backfill-mom-pur-genpres" min="0" step="1" placeholder="0" oninput="batchBackfillMomPurposeChanged()" style="width:55px;font-family:var(--mono);text-align:right;" />
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:12px;border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;background:var(--card);">
+                  <span style="font-weight:600;color:var(--text2);min-width:130px;">Pheno Hunt</span>
                   <input type="number" id="batch-backfill-mom-pur-pheno" min="0" step="1" placeholder="0" oninput="batchBackfillMomPurposeChanged()" style="width:55px;font-family:var(--mono);text-align:right;" />
                 </label>
                 <label style="display:flex;align-items:center;gap:6px;font-size:12px;border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;background:var(--card);">
-                  <span style="font-weight:600;color:var(--text2);min-width:100px;">Seed Production</span>
+                  <span style="font-weight:600;color:var(--text2);min-width:130px;">Seed Production</span>
                   <input type="number" id="batch-backfill-mom-pur-seed" min="0" step="1" placeholder="0" oninput="batchBackfillMomPurposeChanged()" style="width:55px;font-family:var(--mono);text-align:right;" />
                 </label>
               </div>
@@ -1097,15 +1101,19 @@ tr:last-child td { border-bottom: none; }
           <!-- Mom Purpose Counts — a single mom batch can have plants designated for different
                  purposes simultaneously. Sum should be ≤ total batch qty (remainder is unassigned
                  and treated as Clone Donor by default). Only Pheno Hunt + Seed Production plants
-                 are allowed to flower; Clone Donor plants stay in Veg.
+                 are allowed to flower; Clone Donor and Genetic Preservation plants stay in Veg.
                  The Mom Purpose Distribution determines which dispositions show up when advancing
                  a cohort to Flower (Veg → Flower picker filters to purposes with > 0 count). -->
           <div class="field" style="margin-bottom:12px;padding:8px 10px;background:var(--green-pale);border:1px solid var(--green-light);border-radius:var(--radius-sm);">
             <label style="font-size:11px;color:var(--green);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;font-weight:600;">Mom Purpose Distribution</label>
-            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:6px;">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-top:6px;">
               <div>
                 <div style="font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Clone Donor</div>
                 <input type="number" id="summary-mom-purpose-clone" min="0" step="1" placeholder="0" onchange="summaryMomPurposeChanged()" onwheel="this.blur()" style="font-size:14px;font-family:var(--mono);font-weight:700;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;outline:none;width:100%;text-align:center;" />
+              </div>
+              <div>
+                <div style="font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Genetic Pres</div>
+                <input type="number" id="summary-mom-purpose-genpres" min="0" step="1" placeholder="0" onchange="summaryMomPurposeChanged()" onwheel="this.blur()" style="font-size:14px;font-family:var(--mono);font-weight:700;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;outline:none;width:100%;text-align:center;" />
               </div>
               <div>
                 <div style="font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Pheno Hunt</div>
@@ -7437,9 +7445,9 @@ async function wasteSave(){
     }
     // For mother batches: subtract the destroyed plants from both per-phase counts AND
     // per-purpose counts. Both walks use junior-first: Clones → Veg → Flower → Drying for
-    // phases, Clone Donor → Pheno Hunt → Seed Production for purposes. Without the purpose
-    // decrement, the Mom Purpose Distribution hint would show stale "N unassigned" warnings
-    // after destruction events.
+    // phases, Clone Donor → Genetic Preservation → Pheno Hunt → Seed Production for purposes.
+    // Without the purpose decrement, the Mom Purpose Distribution hint would show stale
+    // "N unassigned" warnings after destruction events.
     if(_wsBatchRec && isMotherBatch(rec.batch)){
       momPhaseSubtractJunior(_wsBatchRec, rec.plants);
       momPurposeSubtractJunior(_wsBatchRec, rec.plants);
@@ -8027,9 +8035,10 @@ function batchBackfillMomReadFlowerRooms(){
 function batchBackfillMomReadPurposeCounts(){
   const _v = id => parseInt((document.getElementById(id)||{}).value || '0') || 0;
   return {
-    'Clone Donor':     _v('batch-backfill-mom-pur-clone'),
-    'Pheno Hunt':      _v('batch-backfill-mom-pur-pheno'),
-    'Seed Production': _v('batch-backfill-mom-pur-seed')
+    'Clone Donor':         _v('batch-backfill-mom-pur-clone'),
+    'Genetic Preservation':_v('batch-backfill-mom-pur-genpres'),
+    'Pheno Hunt':          _v('batch-backfill-mom-pur-pheno'),
+    'Seed Production':     _v('batch-backfill-mom-pur-seed')
   };
 }
 
@@ -8145,9 +8154,9 @@ function batchUpdateCreateBtn(){
     if(ok && _isNewMother){
       // Mom-specific backfill validation.
       const counts = (typeof batchBackfillMomReadPhaseCounts === 'function') ? batchBackfillMomReadPhaseCounts() : {Clones:0,Veg:0,Flower:0,Drying:0};
-      const purpose = (typeof batchBackfillMomReadPurposeCounts === 'function') ? batchBackfillMomReadPurposeCounts() : {'Clone Donor':0,'Pheno Hunt':0,'Seed Production':0};
+      const purpose = (typeof batchBackfillMomReadPurposeCounts === 'function') ? batchBackfillMomReadPurposeCounts() : {'Clone Donor':0,'Genetic Preservation':0,'Pheno Hunt':0,'Seed Production':0};
       const phaseTotal = counts.Clones + counts.Veg + counts.Flower + counts.Drying;
-      const purposeTotal = purpose['Clone Donor'] + purpose['Pheno Hunt'] + purpose['Seed Production'];
+      const purposeTotal = purpose['Clone Donor'] + purpose['Genetic Preservation'] + purpose['Pheno Hunt'] + purpose['Seed Production'];
       if(phaseTotal < 1) ok = false; // mom must have at least one plant in some phase
       if(ok && purposeTotal !== phaseTotal) ok = false;
       // Required dates per which buckets have plants.
@@ -8313,13 +8322,14 @@ async function batchCreate(){
     if(_seedLotNumber) rec.seedLotNumber = _seedLotNumber;
   }
   // Mom batches default to Clone Donor purpose for all plants — Veg only, no flowering.
-  // The user can redistribute plants among Clone Donor / Pheno Hunt / Seed Production on
-  // the Summary page when they want to flower part of the mom for evaluation or breeding.
-  // momPurposeCounts is lazy-init'd via ensureMomPurposeCounts on first read (it'll seed
-  // all current qty into 'Clone Donor' — appropriate for a freshly-created mom with no plants).
+  // The user can redistribute plants among Clone Donor / Genetic Preservation / Pheno Hunt /
+  // Seed Production on the Summary page when they want to flower part of the mom for
+  // evaluation or breeding (only Pheno Hunt + Seed Production allow flowering; the other two
+  // stay in Veg). momPurposeCounts is lazy-init'd via ensureMomPurposeCounts on first read
+  // (it'll seed all current qty into 'Clone Donor' — appropriate for a freshly-created mom).
   if(isMotherBatch(batchId)){
     rec.momPurpose = 'Clone Donor';
-    rec.momPurposeCounts = { 'Clone Donor': 0, 'Pheno Hunt': 0, 'Seed Production': 0 };
+    rec.momPurposeCounts = { 'Clone Donor': 0, 'Genetic Preservation': 0, 'Pheno Hunt': 0, 'Seed Production': 0 };
   }
   // ─── BACKFILL MODE OVERRIDES ────────────────────────────────────────────────
   // When the user has toggled Backfill mode ON, override the freshly-created rec
@@ -8382,7 +8392,7 @@ async function batchCreate(){
       const _mFlower  = batchBackfillMomReadFlowerRooms();
       const _mPurpose = batchBackfillMomReadPurposeCounts();
       const _mPhaseTotal = _mCounts.Clones + _mCounts.Veg + _mCounts.Flower + _mCounts.Drying;
-      const _mPurposeTotal = _mPurpose['Clone Donor'] + _mPurpose['Pheno Hunt'] + _mPurpose['Seed Production'];
+      const _mPurposeTotal = _mPurpose['Clone Donor'] + _mPurpose['Genetic Preservation'] + _mPurpose['Pheno Hunt'] + _mPurpose['Seed Production'];
       if(_mPhaseTotal < 1){ toast('Mother batch must have at least one plant in some phase.', 5000); return; }
       if(_mPurposeTotal !== _mPhaseTotal){
         toast('Mom Purpose total ('+_mPurposeTotal+') must equal Phase total ('+_mPhaseTotal+').', 6000); return;
@@ -8403,7 +8413,7 @@ async function batchCreate(){
       rec.momPurposeCounts = { ..._mPurpose };
       // Mom Purpose dropdown value — use the purpose that has the most plants (with Clone Donor
       // as tiebreaker). The Summary card picks this as the primary purpose label.
-      const _purposeOrder = ['Clone Donor','Pheno Hunt','Seed Production'];
+      const _purposeOrder = ['Clone Donor','Genetic Preservation','Pheno Hunt','Seed Production'];
       let _topPurpose = 'Clone Donor', _topPurposeQty = -1;
       for(const p of _purposeOrder){
         if(_mPurpose[p] > _topPurposeQty){ _topPurpose = p; _topPurposeQty = _mPurpose[p]; }
@@ -9027,24 +9037,25 @@ function summaryRenderFlowerAlerts(batchId){
 // Synced to Airtable on the next pending-flush; not pushed eagerly so rapid clicks don't
 // hammer the API.
 // Build / read the Mom Purpose Counts on a batch record. Returns the counts object with
-// the three keys ('Clone Donor', 'Pheno Hunt', 'Seed Production') always present. Unassigned
-// plants (when sum < total batch qty) are implicitly Clone Donor — the helper does NOT
-// auto-fill them, callers compute the "any-clone-donor-capacity" rule by comparing sum vs total.
+// the four keys ('Clone Donor', 'Genetic Preservation', 'Pheno Hunt', 'Seed Production')
+// always present. Unassigned plants (when sum < total batch qty) are implicitly Clone Donor
+// — the helper does NOT auto-fill them, callers compute the "any-clone-donor-capacity" rule
+// by comparing sum vs total.
 function ensureMomPurposeCounts(batchRec){
   if(!batchRec || !isMotherBatch(batchRec.batchId)) return null;
   // Migration: legacy single-string `momPurpose` → counts object with all qty on that purpose.
   if(!batchRec.momPurposeCounts || typeof batchRec.momPurposeCounts !== 'object'){
     const totalQty = calcBatchQty(batchRec.batchId);
     const legacy = batchRec.momPurpose || 'Clone Donor';
-    const m = { 'Clone Donor':0, 'Pheno Hunt':0, 'Seed Production':0 };
+    const m = { 'Clone Donor':0, 'Genetic Preservation':0, 'Pheno Hunt':0, 'Seed Production':0 };
     if(m.hasOwnProperty(legacy)) m[legacy] = totalQty;
     else m['Clone Donor'] = totalQty;
     batchRec.momPurposeCounts = m;
     // Don't flip synced — initialization is bookkeeping, not a user edit.
     lsSet('gp-batch', batchRecs);
   } else {
-    // Backfill missing keys.
-    ['Clone Donor','Pheno Hunt','Seed Production'].forEach(k => {
+    // Backfill missing keys (handles old records that pre-date Genetic Preservation).
+    ['Clone Donor','Genetic Preservation','Pheno Hunt','Seed Production'].forEach(k => {
       if(typeof batchRec.momPurposeCounts[k] !== 'number') batchRec.momPurposeCounts[k] = 0;
     });
   }
@@ -9053,26 +9064,29 @@ function ensureMomPurposeCounts(batchRec){
 function momPurposeTotal(batchRec){
   const c = ensureMomPurposeCounts(batchRec);
   if(!c) return 0;
-  return (parseInt(c['Clone Donor'])||0) + (parseInt(c['Pheno Hunt'])||0) + (parseInt(c['Seed Production'])||0);
+  return (parseInt(c['Clone Donor'])||0) + (parseInt(c['Genetic Preservation'])||0)
+       + (parseInt(c['Pheno Hunt'])||0) + (parseInt(c['Seed Production'])||0);
 }
 // Returns true if this mom has ANY plant designated for a flowering purpose (Pheno or Seed).
 // Used by getAllowedPhases to determine whether Flower is offered as a forward target.
+// Clone Donor + Genetic Preservation plants both stay in Veg — neither contributes capacity.
 function momHasFloweringCapacity(batchRec){
   const c = ensureMomPurposeCounts(batchRec);
   if(!c) return false;
   return (parseInt(c['Pheno Hunt'])||0) > 0 || (parseInt(c['Seed Production'])||0) > 0;
 }
 // Decrement qty plants from a mom's momPurposeCounts using the junior-first rule
-// (Clone Donor → Pheno Hunt → Seed Production). Used when plants leave the mom without
-// an explicit purpose — most commonly the auto-Destroyed tx from a Vegetative Waste record.
-// Junior-first matches the rationale that uncommitted plants (Clone Donor) are the most
-// likely to be the ones being destroyed; specific Pheno/Seed cohorts are usually deliberate.
+// (Clone Donor → Genetic Preservation → Pheno Hunt → Seed Production). Used when plants
+// leave the mom without an explicit purpose — most commonly the auto-Destroyed tx from a
+// Vegetative Waste record. Junior-first matches the rationale that uncommitted plants
+// (Clone Donor / Genetic Preservation) are the most likely to be the ones being destroyed;
+// specific Pheno/Seed cohorts are usually deliberate.
 // Local-only field — does NOT flip synced (caller handles sync via its own data-field changes).
 function momPurposeSubtractJunior(batchRec, qty){
   const c = ensureMomPurposeCounts(batchRec);
   if(!c) return false;
   let rem = parseInt(qty)||0;
-  ['Clone Donor','Pheno Hunt','Seed Production'].forEach(p => {
+  ['Clone Donor','Genetic Preservation','Pheno Hunt','Seed Production'].forEach(p => {
     if(rem <= 0) return;
     const have = parseInt(c[p])||0;
     const take = Math.min(have, rem);
@@ -9106,14 +9120,16 @@ function summaryMomPurposeChanged(){
   const _bRec = batchRecs.find(r => r.batchId === batchId && !r.type);
   if(!_bRec || !isMotherBatch(batchId)) return;
   const _cIn = document.getElementById('summary-mom-purpose-clone');
+  const _gIn = document.getElementById('summary-mom-purpose-genpres');
   const _pIn = document.getElementById('summary-mom-purpose-pheno');
   const _sIn = document.getElementById('summary-mom-purpose-seed');
   const _hint = document.getElementById('summary-mom-purpose-hint');
-  if(!_cIn || !_pIn || !_sIn) return;
-  const newClone = Math.max(0, parseInt(_cIn.value) || 0);
-  const newPheno = Math.max(0, parseInt(_pIn.value) || 0);
-  const newSeed  = Math.max(0, parseInt(_sIn.value) || 0);
-  const sum   = newClone + newPheno + newSeed;
+  if(!_cIn || !_pIn || !_sIn || !_gIn) return;
+  const newClone   = Math.max(0, parseInt(_cIn.value) || 0);
+  const newGenPres = Math.max(0, parseInt(_gIn.value) || 0);
+  const newPheno   = Math.max(0, parseInt(_pIn.value) || 0);
+  const newSeed    = Math.max(0, parseInt(_sIn.value) || 0);
+  const sum   = newClone + newGenPres + newPheno + newSeed;
   const total = calcBatchQty(batchId);
   const oldCounts = _bRec.momPurposeCounts || {};
   // Over-allocation guard: refuse to persist a sum > total batch qty. Restore the inputs to
@@ -9122,6 +9138,7 @@ function summaryMomPurposeChanged(){
   // count + CTLS Flipped-to-Flower metric.
   if(total > 0 && sum > total){
     _cIn.value = parseInt(oldCounts['Clone Donor'])||0;
+    _gIn.value = parseInt(oldCounts['Genetic Preservation'])||0;
     _pIn.value = parseInt(oldCounts['Pheno Hunt'])||0;
     _sIn.value = parseInt(oldCounts['Seed Production'])||0;
     if(_hint){
@@ -9131,18 +9148,22 @@ function summaryMomPurposeChanged(){
     toast('Over-allocated: '+sum+' assigned vs '+total+' available. Reduce a count and try again.', 5000);
     return;
   }
-  const changed = (parseInt(oldCounts['Clone Donor'])||0) !== newClone
-               || (parseInt(oldCounts['Pheno Hunt'])||0)  !== newPheno
-               || (parseInt(oldCounts['Seed Production'])||0) !== newSeed;
+  const changed = (parseInt(oldCounts['Clone Donor'])||0)         !== newClone
+               || (parseInt(oldCounts['Genetic Preservation'])||0)!== newGenPres
+               || (parseInt(oldCounts['Pheno Hunt'])||0)          !== newPheno
+               || (parseInt(oldCounts['Seed Production'])||0)     !== newSeed;
   _bRec.momPurposeCounts = {
-    'Clone Donor':     newClone,
-    'Pheno Hunt':      newPheno,
-    'Seed Production': newSeed
+    'Clone Donor':          newClone,
+    'Genetic Preservation': newGenPres,
+    'Pheno Hunt':           newPheno,
+    'Seed Production':      newSeed
   };
   // Keep the legacy momPurpose field as the "primary" (highest count) for back-compat readers.
-  let _primary = 'Clone Donor';
-  if(newPheno > newClone && newPheno >= newSeed) _primary = 'Pheno Hunt';
-  else if(newSeed > newClone && newSeed > newPheno) _primary = 'Seed Production';
+  // Tie-breaking order: Clone Donor → Genetic Preservation → Pheno Hunt → Seed Production.
+  let _primary = 'Clone Donor', _primaryQty = newClone;
+  if(newGenPres > _primaryQty){ _primary = 'Genetic Preservation'; _primaryQty = newGenPres; }
+  if(newPheno   > _primaryQty){ _primary = 'Pheno Hunt';           _primaryQty = newPheno;   }
+  if(newSeed    > _primaryQty){ _primary = 'Seed Production';      _primaryQty = newSeed;    }
   _bRec.momPurpose = _primary;
   if(changed){
     _bRec.synced = false;
@@ -9197,13 +9218,15 @@ function summaryRefreshMomPhase(batchId){
     return;
   }
   card.style.display = '';
-  // Mom Purpose Counts: hydrate the three count inputs from the batch record. Legacy
+  // Mom Purpose Counts: hydrate the four count inputs from the batch record. Legacy
   // single-value `momPurpose` is migrated by ensureMomPurposeCounts (entire qty → that purpose).
   const _pCounts = ensureMomPurposeCounts(b);
   const _cIn = document.getElementById('summary-mom-purpose-clone');
+  const _gIn = document.getElementById('summary-mom-purpose-genpres');
   const _pIn = document.getElementById('summary-mom-purpose-pheno');
   const _sIn = document.getElementById('summary-mom-purpose-seed');
   if(_cIn) _cIn.value = (_pCounts && _pCounts['Clone Donor']) || 0;
+  if(_gIn) _gIn.value = (_pCounts && _pCounts['Genetic Preservation']) || 0;
   if(_pIn) _pIn.value = (_pCounts && _pCounts['Pheno Hunt']) || 0;
   if(_sIn) _sIn.value = (_pCounts && _pCounts['Seed Production']) || 0;
   // Refresh hint text + phase dropdown.
