@@ -729,23 +729,79 @@ tr:last-child td { border-bottom: none; }
           <div style="font-size:12px;color:var(--text2);margin-bottom:10px;">
             Enter the dates and current state for this legacy batch. The app will create it with these values set, auto-record a backfill Produced/Received transaction, and stamp Phase Change transactions for each lifecycle boundary already crossed. Going forward the batch behaves normally.
           </div>
-          <div class="field" style="margin-bottom:8px;">
-            <label>Current Phase <span style="color:var(--red);font-weight:700;">*</span></label>
-            <select id="batch-backfill-phase" onchange="batchBackfillPhaseChanged()">
-              <option value="">-- pick current phase --</option>
-              <option value="Germination">Germination</option>
-              <option value="Clones">Clones</option>
-              <option value="Veg">Veg</option>
-              <option value="Flower">Flower</option>
-              <option value="Drying">Drying</option>
-              <option value="Packaged">Packaged</option>
-              <option value="Delivered">Delivered</option>
-            </select>
+          <!-- Non-mom backfill: single Current Phase + Plant Count.
+               Hidden when the Batch ID is an M-XXX-NNN (mom batches have plants in multiple phases). -->
+          <div id="batch-backfill-nonmom-section">
+            <div class="field" style="margin-bottom:8px;">
+              <label>Current Phase <span style="color:var(--red);font-weight:700;">*</span></label>
+              <select id="batch-backfill-phase" onchange="batchBackfillPhaseChanged()">
+                <option value="">-- pick current phase --</option>
+                <option value="Germination">Germination</option>
+                <option value="Clones">Clones</option>
+                <option value="Veg">Veg</option>
+                <option value="Flower">Flower</option>
+                <option value="Drying">Drying</option>
+                <option value="Packaged">Packaged</option>
+                <option value="Delivered">Delivered</option>
+              </select>
+            </div>
+            <div class="field" style="margin-bottom:8px;">
+              <label>Current Plant Count <span style="color:var(--red);font-weight:700;">*</span></label>
+              <input type="number" id="batch-backfill-qty" min="0" step="1" placeholder="e.g. 48" oninput="batchUpdateCreateBtn()" />
+              <div style="font-size:11px;color:var(--text3);margin-top:4px;">Will be recorded as a single backfill Produced/Received transaction dated to the earliest lifecycle date.</div>
+            </div>
           </div>
-          <div class="field" style="margin-bottom:8px;">
-            <label>Current Plant Count <span style="color:var(--red);font-weight:700;">*</span></label>
-            <input type="number" id="batch-backfill-qty" min="0" step="1" placeholder="e.g. 48" oninput="batchUpdateCreateBtn()" />
-            <div style="font-size:11px;color:var(--text3);margin-top:4px;">Will be recorded as a single backfill Produced/Received transaction dated to the earliest lifecycle date.</div>
+
+          <!-- Mom backfill: per-phase distribution + per-room Flower breakdown + Mom Purpose split.
+               Visible only when the Batch ID is an M-XXX-NNN. -->
+          <div id="batch-backfill-mom-section" style="display:none;">
+            <div style="font-size:12px;color:var(--text2);margin-bottom:8px;padding:8px;border-left:3px solid var(--green);background:var(--green-pale);border-radius:var(--radius-sm);">
+              <strong>Mother batch:</strong> enter the current count in each phase. Plants in Flower must be broken out per Flower room.
+            </div>
+            <div class="field" style="margin-bottom:10px;">
+              <label>Phase Distribution <span style="color:var(--red);font-weight:700;">*</span></label>
+              <div id="batch-backfill-mom-phase-grid" style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-top:4px;">
+                <label style="display:flex;align-items:center;gap:6px;font-size:12px;border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;background:var(--card);">
+                  <span style="font-weight:600;color:var(--text2);min-width:70px;">Clones</span>
+                  <input type="number" id="batch-backfill-mom-clones" min="0" step="1" placeholder="0" oninput="batchBackfillMomChanged()" style="width:60px;font-family:var(--mono);text-align:right;" />
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:12px;border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;background:var(--card);">
+                  <span style="font-weight:600;color:var(--text2);min-width:70px;">Veg</span>
+                  <input type="number" id="batch-backfill-mom-veg" min="0" step="1" placeholder="0" oninput="batchBackfillMomChanged()" style="width:60px;font-family:var(--mono);text-align:right;" />
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:12px;border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;background:var(--card);">
+                  <span style="font-weight:600;color:var(--text2);min-width:70px;">Flower</span>
+                  <input type="number" id="batch-backfill-mom-flower-total" disabled placeholder="auto" style="width:60px;font-family:var(--mono);text-align:right;background:var(--bg2);color:var(--text2);" />
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:12px;border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;background:var(--card);">
+                  <span style="font-weight:600;color:var(--text2);min-width:70px;">Drying</span>
+                  <input type="number" id="batch-backfill-mom-drying" min="0" step="1" placeholder="0" oninput="batchBackfillMomChanged()" style="width:60px;font-family:var(--mono);text-align:right;" />
+                </label>
+              </div>
+              <div id="batch-backfill-mom-flower-wrap" style="display:none;margin-top:8px;padding:8px;border:1px dashed var(--border);border-radius:var(--radius-sm);background:var(--card);">
+                <div style="font-size:11px;color:var(--text3);margin-bottom:6px;">Distribute Flower-phase plants across rooms:</div>
+                <div id="batch-backfill-mom-flower-grid" style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px;"></div>
+              </div>
+              <div id="batch-backfill-mom-total-msg" style="font-size:11px;color:var(--text3);margin-top:6px;font-family:var(--mono);">Total: 0 plants</div>
+            </div>
+            <div class="field" style="margin-bottom:10px;">
+              <label>Mom Purpose Distribution <span style="color:var(--red);font-weight:700;">*</span> <span style="font-size:10px;color:var(--text3);font-weight:400;">— how plants are designated</span></label>
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:4px;">
+                <label style="display:flex;align-items:center;gap:6px;font-size:12px;border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;background:var(--card);">
+                  <span style="font-weight:600;color:var(--text2);min-width:90px;">Clone Donor</span>
+                  <input type="number" id="batch-backfill-mom-pur-clone" min="0" step="1" placeholder="0" oninput="batchBackfillMomPurposeChanged()" style="width:55px;font-family:var(--mono);text-align:right;" />
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:12px;border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;background:var(--card);">
+                  <span style="font-weight:600;color:var(--text2);min-width:90px;">Pheno Hunt</span>
+                  <input type="number" id="batch-backfill-mom-pur-pheno" min="0" step="1" placeholder="0" oninput="batchBackfillMomPurposeChanged()" style="width:55px;font-family:var(--mono);text-align:right;" />
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:12px;border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;background:var(--card);">
+                  <span style="font-weight:600;color:var(--text2);min-width:100px;">Seed Production</span>
+                  <input type="number" id="batch-backfill-mom-pur-seed" min="0" step="1" placeholder="0" oninput="batchBackfillMomPurposeChanged()" style="width:55px;font-family:var(--mono);text-align:right;" />
+                </label>
+              </div>
+              <div id="batch-backfill-mom-purpose-msg" style="font-size:11px;color:var(--text3);margin-top:6px;font-family:var(--mono);">Purpose total: 0 (must equal phase total)</div>
+            </div>
           </div>
           <div class="field" style="margin-bottom:8px;">
             <label>Created Date <span style="color:var(--red);font-weight:700;">*</span></label>
@@ -7642,6 +7698,10 @@ function batchIdCheck(){
       msg.style.display='block'; msg.style.color='var(--red)'; msg.textContent='Batch ID already exists.';
     } else { msg.style.display='none'; }
   }
+  // Swap the backfill panel between non-mom and mom UIs whenever the Batch ID changes
+  // (so typing M-RVR-001 reveals the per-phase distribution grid).
+  if(typeof batchBackfillSwapForMomBatch === 'function') batchBackfillSwapForMomBatch();
+  if(typeof batchBackfillPhaseChanged === 'function') batchBackfillPhaseChanged();
   batchUpdateCreateBtn();
 }
 
@@ -7838,31 +7898,164 @@ function batchBackfillToggle(){
     ['batch-backfill-phase','batch-backfill-qty','batch-backfill-created',
      'batch-backfill-clone','batch-backfill-hyd','batch-backfill-veg',
      'batch-backfill-flw','batch-backfill-harv','batch-backfill-pkg',
-     'batch-backfill-deliv','batch-backfill-status'].forEach(id => {
+     'batch-backfill-deliv','batch-backfill-status',
+     'batch-backfill-mom-clones','batch-backfill-mom-veg','batch-backfill-mom-drying',
+     'batch-backfill-mom-flower-total',
+     'batch-backfill-mom-pur-clone','batch-backfill-mom-pur-pheno','batch-backfill-mom-pur-seed'].forEach(id => {
       const el = document.getElementById(id);
       if(el){ if(el.tagName === 'SELECT') el.value = (id==='batch-backfill-status'?'Open':''); else el.value = ''; }
     });
     const _rg = document.getElementById('batch-backfill-rooms-grid'); if(_rg) _rg.innerHTML = '';
     const _rw = document.getElementById('batch-backfill-rooms-wrap'); if(_rw) _rw.style.display = 'none';
+    const _mfg = document.getElementById('batch-backfill-mom-flower-grid'); if(_mfg) _mfg.innerHTML = '';
+    const _mfw = document.getElementById('batch-backfill-mom-flower-wrap'); if(_mfw) _mfw.style.display = 'none';
   }
+  batchBackfillSwapForMomBatch();
   batchBackfillPhaseChanged();
   batchUpdateCreateBtn();
 }
 
+// Swap between the non-mom and mom backfill UI sections based on whether the current
+// Batch ID is an M-XXX-NNN. Called when toggle changes OR when the Batch ID input changes.
+function batchBackfillSwapForMomBatch(){
+  const cb = document.getElementById('batch-backfill-toggle');
+  if(!cb || !cb.checked) return;
+  const batchId = (document.getElementById('batch-id-input')||{}).value || '';
+  const isMom = isMotherBatch(batchId);
+  const nonMomSec = document.getElementById('batch-backfill-nonmom-section');
+  const momSec    = document.getElementById('batch-backfill-mom-section');
+  if(nonMomSec) nonMomSec.style.display = isMom ? 'none' : '';
+  if(momSec)    momSec.style.display    = isMom ? '' : 'none';
+  if(isMom){
+    // Build the per-Flower-room sub-grid for mom Flower distribution. Only ever needs building once
+    // per backfill session, but cheap to rebuild on every swap.
+    const _mfg = document.getElementById('batch-backfill-mom-flower-grid');
+    if(_mfg && !_mfg.children.length){
+      const _rooms = ['Flower 1','Flower 2','Flower 3','Flower 4','Flower 5','Tent'];
+      _mfg.innerHTML = _rooms.map(r => {
+        const _id = 'batch-backfill-mom-frm-' + r.replace(/\s+/g,'-').toLowerCase();
+        return '<label style="display:flex;align-items:center;gap:6px;font-size:11px;border:1px solid var(--border);border-radius:var(--radius-sm);padding:5px 7px;background:var(--bg);">'+
+                 '<span style="font-weight:600;color:var(--text2);min-width:55px;">'+r+'</span>'+
+                 '<input type="number" id="'+_id+'" min="0" step="1" placeholder="0" data-room="'+r+'" oninput="batchBackfillMomChanged()" style="width:50px;font-family:var(--mono);text-align:right;" />'+
+               '</label>';
+      }).join('');
+    }
+  }
+}
+
+// Recalculate the running mom-phase total and toggle the Flower-room sub-grid visibility.
+function batchBackfillMomChanged(){
+  const _v = id => parseInt((document.getElementById(id)||{}).value || '0') || 0;
+  const clones = _v('batch-backfill-mom-clones');
+  const veg    = _v('batch-backfill-mom-veg');
+  const drying = _v('batch-backfill-mom-drying');
+  // Flower total comes from the per-room sub-grid (sum of all room inputs).
+  let flower = 0;
+  document.querySelectorAll('#batch-backfill-mom-flower-grid input[data-room]').forEach(inp => {
+    flower += parseInt(inp.value || '0') || 0;
+  });
+  const _flwEl = document.getElementById('batch-backfill-mom-flower-total');
+  if(_flwEl) _flwEl.value = flower || '';
+  const total = clones + veg + flower + drying;
+  // Show the per-Flower-room sub-grid only when a Flower count is being set. We expose it
+  // whenever the user has typed in any flower-room field OR has a non-zero total in any
+  // advanced phase (heuristic: show always when total > 0 to make the room inputs available).
+  const _mfw = document.getElementById('batch-backfill-mom-flower-wrap');
+  if(_mfw) _mfw.style.display = total > 0 ? '' : 'none';
+  const tMsg = document.getElementById('batch-backfill-mom-total-msg');
+  if(tMsg){
+    tMsg.textContent = 'Total: ' + total + ' plant' + (total === 1 ? '' : 's') + ' · Clones ' + clones + ' / Veg ' + veg + ' / Flower ' + flower + ' / Drying ' + drying;
+  }
+  batchBackfillMomPurposeChanged(); // refresh the purpose total comparison
+  batchUpdateCreateBtn();
+}
+
+// Validate that Mom Purpose totals match the Phase total.
+function batchBackfillMomPurposeChanged(){
+  const _v = id => parseInt((document.getElementById(id)||{}).value || '0') || 0;
+  const phaseTotal = _v('batch-backfill-mom-clones') + _v('batch-backfill-mom-veg')
+                   + _v('batch-backfill-mom-flower-total') + _v('batch-backfill-mom-drying');
+  const purposeTotal = _v('batch-backfill-mom-pur-clone') + _v('batch-backfill-mom-pur-pheno') + _v('batch-backfill-mom-pur-seed');
+  const msg = document.getElementById('batch-backfill-mom-purpose-msg');
+  if(msg){
+    if(purposeTotal === phaseTotal){
+      msg.style.color = 'var(--green)';
+      msg.textContent = 'Purpose total: ' + purposeTotal + ' ✓ matches phase total';
+    } else {
+      msg.style.color = 'var(--amber)';
+      msg.textContent = 'Purpose total: ' + purposeTotal + ' (must equal phase total ' + phaseTotal + ')';
+    }
+  }
+  batchUpdateCreateBtn();
+}
+
+// Helper: read mom-phase counts as an object {Clones, Veg, Flower, Drying}.
+function batchBackfillMomReadPhaseCounts(){
+  const _v = id => parseInt((document.getElementById(id)||{}).value || '0') || 0;
+  let flower = 0;
+  document.querySelectorAll('#batch-backfill-mom-flower-grid input[data-room]').forEach(inp => {
+    flower += parseInt(inp.value || '0') || 0;
+  });
+  return {
+    'Clones': _v('batch-backfill-mom-clones'),
+    'Veg':    _v('batch-backfill-mom-veg'),
+    'Flower': flower,
+    'Drying': _v('batch-backfill-mom-drying')
+  };
+}
+
+// Helper: read mom Flower-room distribution as a {Room: qty} map.
+function batchBackfillMomReadFlowerRooms(){
+  const out = {};
+  document.querySelectorAll('#batch-backfill-mom-flower-grid input[data-room]').forEach(inp => {
+    const r = inp.getAttribute('data-room');
+    const n = parseInt(inp.value || '0') || 0;
+    if(r && n > 0) out[r] = n;
+  });
+  return out;
+}
+
+// Helper: read mom purpose counts.
+function batchBackfillMomReadPurposeCounts(){
+  const _v = id => parseInt((document.getElementById(id)||{}).value || '0') || 0;
+  return {
+    'Clone Donor':     _v('batch-backfill-mom-pur-clone'),
+    'Pheno Hunt':      _v('batch-backfill-mom-pur-pheno'),
+    'Seed Production': _v('batch-backfill-mom-pur-seed')
+  };
+}
+
 function batchBackfillPhaseChanged(){
-  const phase = (document.getElementById('batch-backfill-phase')||{}).value || '';
+  // For mother batches, the "reached phase" calculation is driven by per-bucket counts
+  // (any non-zero count in Veg or later requires vegStart, etc.). For non-moms it's driven
+  // by the single Current Phase dropdown.
+  const batchIdNow = (document.getElementById('batch-id-input')||{}).value || '';
+  const isMomNow = isMotherBatch(batchIdNow);
+  let phase = '';
+  let reachedVeg, reachedFlower, reachedHarvest, reachedPackage, reachedDeliv;
+  if(isMomNow){
+    const counts = (typeof batchBackfillMomReadPhaseCounts === 'function') ? batchBackfillMomReadPhaseCounts() : {Clones:0,Veg:0,Flower:0,Drying:0};
+    reachedVeg     = (counts.Veg + counts.Flower + counts.Drying) > 0;
+    reachedFlower  = (counts.Flower + counts.Drying) > 0;
+    reachedHarvest = counts.Drying > 0;
+    // Mothers never advance past Drying — Packaged/Delivered dates are never required.
+    reachedPackage = false;
+    reachedDeliv   = false;
+  } else {
+    phase = (document.getElementById('batch-backfill-phase')||{}).value || '';
+    reachedVeg     = ['Veg','Flower','Drying','Packaged','Delivered'].includes(phase);
+    reachedFlower  = ['Flower','Drying','Packaged','Delivered'].includes(phase);
+    reachedHarvest = ['Drying','Packaged','Delivered'].includes(phase);
+    reachedPackage = ['Packaged','Delivered'].includes(phase);
+    reachedDeliv   = ['Delivered'].includes(phase);
+  }
   // Phase-dependent date field visibility. Each field is shown only if the
-  // batch has actually CROSSED that lifecycle boundary based on its current phase.
+  // batch has actually CROSSED that lifecycle boundary.
   // Lifecycle order: Created → Clone/Germ → Hydration → Veg → Flower → Harvest → Package → Delivered.
   const _show = (id, on) => {
     const el = document.getElementById(id);
     if(el) el.style.display = on ? '' : 'none';
   };
-  const reachedVeg     = ['Veg','Flower','Drying','Packaged','Delivered'].includes(phase);
-  const reachedFlower  = ['Flower','Drying','Packaged','Delivered'].includes(phase);
-  const reachedHarvest = ['Drying','Packaged','Delivered'].includes(phase);
-  const reachedPackage = ['Packaged','Delivered'].includes(phase);
-  const reachedDeliv   = ['Delivered'].includes(phase);
   _show('batch-backfill-veg-wrap',   reachedVeg);
   _show('batch-backfill-flw-wrap',   reachedFlower);
   _show('batch-backfill-harv-wrap',  reachedHarvest);
@@ -7876,13 +8069,13 @@ function batchBackfillPhaseChanged(){
       ? 'Germination Date <span style="color:var(--red);font-weight:700;">*</span> <span style="font-size:10px;color:var(--text3);font-weight:400;">— when seeds were planted</span>'
       : 'Clone Date <span style="color:var(--red);font-weight:700;">*</span> <span style="font-size:10px;color:var(--text3);font-weight:400;">— when clones were cut / batch life began</span>';
   }
-  // Per-Flower-room distribution: shown for Flower / Drying / Packaged phases.
-  // For Flower phase the user picks where plants ARE currently. For Drying/Packaged it
-  // captures the rooms the batch used (totals can be 0 since rooms get drained at harvest).
+  // Per-Flower-room distribution: shown for Flower / Drying / Packaged phases for NON-mom batches.
+  // For mother batches the per-room Flower breakdown lives in the mom section instead, so the
+  // generic rooms grid stays hidden when isMomNow is true.
   const roomsWrap = document.getElementById('batch-backfill-rooms-wrap');
   const grid = document.getElementById('batch-backfill-rooms-grid');
   if(roomsWrap && grid){
-    const showRooms = ['Flower','Drying','Packaged'].includes(phase);
+    const showRooms = !isMomNow && ['Flower','Drying','Packaged'].includes(phase);
     roomsWrap.style.display = showRooms ? '' : 'none';
     if(showRooms){
       const _rooms = ['Flower 1','Flower 2','Flower 3','Flower 4','Flower 5','Tent'];
@@ -7933,30 +8126,48 @@ function batchUpdateCreateBtn(){
     const _tc  = parseInt((document.getElementById('batch-testcount')||{}).value || '0') || 0;
     if(!_src || _tc < 1) ok = false;
   }
-  // Backfill mode gates: phase + plant count + all reached-lifecycle dates required
+  // Backfill mode gates: phase + plant count + all reached-lifecycle dates required.
+  // Mom backfill takes a different path: per-phase distribution AND purpose distribution
+  // must match, and date fields are required based on which buckets have plants.
   const bfToggle = document.getElementById('batch-backfill-toggle');
   if(ok && bfToggle && bfToggle.checked){
-    const phase = (document.getElementById('batch-backfill-phase')||{}).value || '';
-    const qty   = parseInt((document.getElementById('batch-backfill-qty')||{}).value || '0') || 0;
     const created = (document.getElementById('batch-backfill-created')||{}).value || '';
     const clone   = (document.getElementById('batch-backfill-clone')||{}).value || '';
-    if(!phase || qty < 0 || !created || !clone) ok = false;
-    if(ok){
-      const reachedVeg     = ['Veg','Flower','Drying','Packaged','Delivered'].includes(phase);
-      const reachedFlower  = ['Flower','Drying','Packaged','Delivered'].includes(phase);
-      const reachedHarvest = ['Drying','Packaged','Delivered'].includes(phase);
-      const reachedPackage = ['Packaged','Delivered'].includes(phase);
-      const reachedDeliv   = ['Delivered'].includes(phase);
-      if(reachedVeg     && !(document.getElementById('batch-backfill-veg')||{}).value)   ok = false;
-      if(reachedFlower  && !(document.getElementById('batch-backfill-flw')||{}).value)   ok = false;
-      if(reachedHarvest && !(document.getElementById('batch-backfill-harv')||{}).value)  ok = false;
-      if(reachedPackage && !(document.getElementById('batch-backfill-pkg')||{}).value)   ok = false;
-      if(reachedDeliv   && !(document.getElementById('batch-backfill-deliv')||{}).value) ok = false;
-      // Room distribution required for Flower phase (plants must be allocated to specific rooms).
-      if(ok && phase === 'Flower'){
-        const dist = batchBackfillReadRooms();
-        const distSum = Object.values(dist).reduce((s,n) => s+n, 0);
-        if(distSum !== qty) ok = false;
+    if(!created || !clone) ok = false;
+    if(ok && _isNewMother){
+      // Mom-specific backfill validation.
+      const counts = (typeof batchBackfillMomReadPhaseCounts === 'function') ? batchBackfillMomReadPhaseCounts() : {Clones:0,Veg:0,Flower:0,Drying:0};
+      const purpose = (typeof batchBackfillMomReadPurposeCounts === 'function') ? batchBackfillMomReadPurposeCounts() : {'Clone Donor':0,'Pheno Hunt':0,'Seed Production':0};
+      const phaseTotal = counts.Clones + counts.Veg + counts.Flower + counts.Drying;
+      const purposeTotal = purpose['Clone Donor'] + purpose['Pheno Hunt'] + purpose['Seed Production'];
+      if(phaseTotal < 1) ok = false; // mom must have at least one plant in some phase
+      if(ok && purposeTotal !== phaseTotal) ok = false;
+      // Required dates per which buckets have plants.
+      if(ok && (counts.Veg + counts.Flower + counts.Drying) > 0 && !(document.getElementById('batch-backfill-veg')||{}).value)  ok = false;
+      if(ok && (counts.Flower + counts.Drying) > 0           && !(document.getElementById('batch-backfill-flw')||{}).value)  ok = false;
+      if(ok && counts.Drying > 0                              && !(document.getElementById('batch-backfill-harv')||{}).value) ok = false;
+    } else if(ok){
+      // Non-mom backfill validation.
+      const phase = (document.getElementById('batch-backfill-phase')||{}).value || '';
+      const qty   = parseInt((document.getElementById('batch-backfill-qty')||{}).value || '0') || 0;
+      if(!phase || qty < 0) ok = false;
+      if(ok){
+        const reachedVeg     = ['Veg','Flower','Drying','Packaged','Delivered'].includes(phase);
+        const reachedFlower  = ['Flower','Drying','Packaged','Delivered'].includes(phase);
+        const reachedHarvest = ['Drying','Packaged','Delivered'].includes(phase);
+        const reachedPackage = ['Packaged','Delivered'].includes(phase);
+        const reachedDeliv   = ['Delivered'].includes(phase);
+        if(reachedVeg     && !(document.getElementById('batch-backfill-veg')||{}).value)   ok = false;
+        if(reachedFlower  && !(document.getElementById('batch-backfill-flw')||{}).value)   ok = false;
+        if(reachedHarvest && !(document.getElementById('batch-backfill-harv')||{}).value)  ok = false;
+        if(reachedPackage && !(document.getElementById('batch-backfill-pkg')||{}).value)   ok = false;
+        if(reachedDeliv   && !(document.getElementById('batch-backfill-deliv')||{}).value) ok = false;
+        // Room distribution required for Flower phase (plants must be allocated to specific rooms).
+        if(ok && phase === 'Flower'){
+          const dist = batchBackfillReadRooms();
+          const distSum = Object.values(dist).reduce((s,n) => s+n, 0);
+          if(distSum !== qty) ok = false;
+        }
       }
     }
   }
@@ -8113,8 +8324,7 @@ async function batchCreate(){
   let _backfillQty = 0;
   let _backfillEarliestDate = _created;
   if(_isBackfill){
-    const _bfPhase   = (document.getElementById('batch-backfill-phase')||{}).value || '';
-    const _bfQty     = parseInt((document.getElementById('batch-backfill-qty')||{}).value || '0') || 0;
+    const _bfIsMom = isMotherBatch(batchId);
     const _bfCreated = (document.getElementById('batch-backfill-created')||{}).value || '';
     const _bfClone   = (document.getElementById('batch-backfill-clone')||{}).value || '';
     const _bfHyd     = (document.getElementById('batch-backfill-hyd')||{}).value || '';
@@ -8124,8 +8334,8 @@ async function batchCreate(){
     const _bfPkg     = (document.getElementById('batch-backfill-pkg')||{}).value || '';
     const _bfDeliv   = (document.getElementById('batch-backfill-deliv')||{}).value || '';
     const _bfStatus  = (document.getElementById('batch-backfill-status')||{}).value || 'Open';
-    const _bfDist    = batchBackfillReadRooms();
     // Chronology check — every date present must be ≥ the previous one in lifecycle order.
+    // Mothers never reach Packaged/Delivered, so those entries stay empty for moms.
     const _chronOrder = [
       ['Created', _bfCreated],
       ['Clone/Germination', _bfClone],
@@ -8145,58 +8355,109 @@ async function batchCreate(){
       }
       _prev = d; _prevLabel = label;
     }
-    // For Flower phase, the room distribution must equal the plant count (validated in
-    // batchUpdateCreateBtn, but re-check here for safety).
-    if(_bfPhase === 'Flower'){
-      const _sum = Object.values(_bfDist).reduce((s,n) => s+n, 0);
-      if(_sum !== _bfQty){
-        toast('Flower room distribution sums to '+_sum+' but plant count is '+_bfQty+'. Adjust before saving.', 6500);
-        return;
-      }
-    }
-    // Apply overrides to rec.
-    rec.createdDate    = _bfCreated;
-    rec.cloneDate      = _bfClone;
-    if(_bfHyd)     rec.hydrationDate = _bfHyd;
-    if(_bfVeg)     rec.vegStart      = _bfVeg;
-    if(_bfFlw)     rec.flowerStart   = _bfFlw;
-    if(_bfHarv)    rec.harvestDate   = _bfHarv;
-    if(_bfPkg)     rec.packagedDate  = _bfPkg;
-    if(_bfDeliv)   rec.deliveredDate = _bfDeliv;
-    rec.plantPhase = _bfPhase;
-    rec.status     = _bfStatus;
+    // Common date applications.
+    rec.createdDate = _bfCreated;
+    rec.cloneDate   = _bfClone;
+    if(_bfHyd)   rec.hydrationDate = _bfHyd;
+    if(_bfVeg)   rec.vegStart      = _bfVeg;
+    if(_bfFlw)   rec.flowerStart   = _bfFlw;
+    if(_bfHarv)  rec.harvestDate   = _bfHarv;
+    if(_bfPkg)   rec.packagedDate  = _bfPkg;
+    if(_bfDeliv) rec.deliveredDate = _bfDeliv;
+    rec.status   = _bfStatus;
     if(_bfStatus === 'Closed') rec.closedDate = localDate();
-    // Room assignment by phase:
-    //   Clones / Germination → Veg room only
-    //   Veg                  → Veg room (plants haven't moved into flower yet)
-    //   Flower               → the flower rooms the user filled in (with their distributions)
-    //   Drying               → completedHarvests (assume rooms used = ones in distribution, all completed)
-    //   Packaged / Delivered → no rooms (plants no longer in any room)
-    if(['Clones','Germination','Veg'].includes(_bfPhase)){
-      rec.rooms = ['Veg'];
-    } else if(_bfPhase === 'Flower'){
-      rec.rooms = Object.keys(_bfDist).sort();
-      rec.roomDistribution = _bfDist;
-    } else if(_bfPhase === 'Drying'){
-      // Use the room distribution as historical record. Mark all listed rooms as completedHarvests.
-      const _drRooms = Object.keys(_bfDist).sort();
-      rec.rooms = _drRooms;
-      rec.completedHarvests = _drRooms.slice();
-      rec.roomDistribution = {}; // drained at harvest
-      // Initialize harvestedPlants / harvestedWeights as empty placeholders for the backfilled rooms.
-      rec.harvestedPlants  = {};
-      rec.harvestedWeights = {};
-      _drRooms.forEach(r => { rec.harvestedPlants[r] = _bfDist[r] || 0; rec.harvestedWeights[r] = 0; });
+    if(_bfIsMom){
+      // ─── MOM BACKFILL BRANCH ────────────────────────────────────────────────
+      // Plants live in multiple phases simultaneously via momPhaseCounts. The
+      // "headline" plantPhase reflects the most advanced phase that has plants.
+      const _mCounts  = batchBackfillMomReadPhaseCounts();
+      const _mFlower  = batchBackfillMomReadFlowerRooms();
+      const _mPurpose = batchBackfillMomReadPurposeCounts();
+      const _mPhaseTotal = _mCounts.Clones + _mCounts.Veg + _mCounts.Flower + _mCounts.Drying;
+      const _mPurposeTotal = _mPurpose['Clone Donor'] + _mPurpose['Pheno Hunt'] + _mPurpose['Seed Production'];
+      if(_mPhaseTotal < 1){ toast('Mother batch must have at least one plant in some phase.', 5000); return; }
+      if(_mPurposeTotal !== _mPhaseTotal){
+        toast('Mom Purpose total ('+_mPurposeTotal+') must equal Phase total ('+_mPhaseTotal+').', 6000); return;
+      }
+      if(_mCounts.Flower > 0){
+        const _flwSum = Object.values(_mFlower).reduce((s,n) => s+n, 0);
+        if(_flwSum !== _mCounts.Flower){
+          toast('Flower per-room sum ('+_flwSum+') must equal Flower-phase plant count ('+_mCounts.Flower+').', 6000); return;
+        }
+      }
+      // Headline phase = most advanced bucket with plants.
+      let _headlinePhase = 'Clones';
+      if(_mCounts.Drying > 0) _headlinePhase = 'Drying';
+      else if(_mCounts.Flower > 0) _headlinePhase = 'Flower';
+      else if(_mCounts.Veg > 0) _headlinePhase = 'Veg';
+      rec.plantPhase = _headlinePhase;
+      rec.momPhaseCounts = { ..._mCounts };
+      rec.momPurposeCounts = { ..._mPurpose };
+      // Mom Purpose dropdown value — use the purpose that has the most plants (with Clone Donor
+      // as tiebreaker). The Summary card picks this as the primary purpose label.
+      const _purposeOrder = ['Clone Donor','Pheno Hunt','Seed Production'];
+      let _topPurpose = 'Clone Donor', _topPurposeQty = -1;
+      for(const p of _purposeOrder){
+        if(_mPurpose[p] > _topPurposeQty){ _topPurpose = p; _topPurposeQty = _mPurpose[p]; }
+      }
+      rec.momPurpose = _topPurpose;
+      // Rooms + roomDistribution: include Veg if any plants are in Clones/Veg; include each
+      // Flower room from the breakdown.
+      const _rooms = [];
+      if((_mCounts.Clones + _mCounts.Veg) > 0) _rooms.push('Veg');
+      Object.keys(_mFlower).forEach(r => { if(!_rooms.includes(r)) _rooms.push(r); });
+      rec.rooms = _rooms;
+      rec.roomDistribution = { ..._mFlower };
+      // For Drying-bucket plants we don't allocate to a room (no harvest record yet).
+      _backfillQty = _mPhaseTotal;
     } else {
-      rec.rooms = [];
-      rec.roomDistribution = {};
+      // ─── NON-MOM BACKFILL BRANCH ────────────────────────────────────────────
+      const _bfPhase = (document.getElementById('batch-backfill-phase')||{}).value || '';
+      const _bfQty   = parseInt((document.getElementById('batch-backfill-qty')||{}).value || '0') || 0;
+      const _bfDist  = batchBackfillReadRooms();
+      // For Flower phase, the room distribution must equal the plant count.
+      if(_bfPhase === 'Flower'){
+        const _sum = Object.values(_bfDist).reduce((s,n) => s+n, 0);
+        if(_sum !== _bfQty){
+          toast('Flower room distribution sums to '+_sum+' but plant count is '+_bfQty+'. Adjust before saving.', 6500);
+          return;
+        }
+      }
+      rec.plantPhase = _bfPhase;
+      // Room assignment by phase:
+      //   Clones / Germination → Veg room only
+      //   Veg                  → Veg room (plants haven't moved into flower yet)
+      //   Flower               → the flower rooms the user filled in (with their distributions)
+      //   Drying               → completedHarvests (assume rooms used = ones in distribution, all completed)
+      //   Packaged / Delivered → no rooms (plants no longer in any room)
+      if(['Clones','Germination','Veg'].includes(_bfPhase)){
+        rec.rooms = ['Veg'];
+      } else if(_bfPhase === 'Flower'){
+        rec.rooms = Object.keys(_bfDist).sort();
+        rec.roomDistribution = _bfDist;
+      } else if(_bfPhase === 'Drying'){
+        const _drRooms = Object.keys(_bfDist).sort();
+        rec.rooms = _drRooms;
+        rec.completedHarvests = _drRooms.slice();
+        rec.roomDistribution = {};
+        rec.harvestedPlants  = {};
+        rec.harvestedWeights = {};
+        _drRooms.forEach(r => { rec.harvestedPlants[r] = _bfDist[r] || 0; rec.harvestedWeights[r] = 0; });
+      } else {
+        rec.rooms = [];
+        rec.roomDistribution = {};
+      }
+      _backfillQty = _bfQty;
     }
     // Determine the earliest reasonable date for the auto-intake P/R tx.
     _backfillEarliestDate = _bfClone || _bfCreated || _created;
-    _backfillQty = _bfQty;
     // Build Phase Change txs for each lifecycle boundary the batch has crossed.
-    // Date of each Phase Change tx = the date the new phase started.
-    const _seqAll = [
+    // Date of each Phase Change tx = the date the new phase started. Mothers stop at Drying.
+    const _seqAll = _bfIsMom ? [
+      { from: 'Clones',  to: 'Veg',    date: _bfVeg  },
+      { from: 'Veg',     to: 'Flower', date: _bfFlw  },
+      { from: 'Flower',  to: 'Drying', date: _bfHarv },
+    ] : [
       { from: (geneticsSource === 'Seeds' ? 'Germination' : 'Clones'), to: 'Veg',       date: _bfVeg  },
       { from: 'Veg',       to: 'Flower',    date: _bfFlw   },
       { from: 'Flower',    to: 'Drying',    date: _bfHarv  },
