@@ -689,6 +689,14 @@ tr:last-child td { border-bottom: none; }
           </select>
           <div id="batch-seedinv-msg" style="font-size:11px;color:var(--text3);margin-top:4px;"></div>
         </div>
+        <!-- Seeds-family size — only visible for Seeds genetics. Number of seeds being
+             cupped/germinated in this batch. On save, decrements the seed lot by this amount
+             and auto-creates a Seeds Germinated tx that seats the initial plant count. -->
+        <div class="field" id="batch-seedqty-wrap" style="display:none;margin-bottom:10px;">
+          <label>Plants to germinate <span style="color:var(--red);font-weight:700;">*</span> <span style="font-size:10px;color:var(--text3);font-weight:400;">— number of seeds being cupped in this batch</span></label>
+          <input id="batch-seedqty" type="number" min="1" step="1" placeholder="e.g. 20" oninput="batchUpdateCreateBtn()" />
+          <div id="batch-seedqty-msg" style="font-size:11px;color:var(--text3);margin-top:4px;">Decrements the seed lot by this amount and auto-creates a Seeds Germinated transaction. Add clones later via Produced/Received on the Summary page (cuttings stay under the same batch ID).</div>
+        </div>
 
         <!-- Notes -->
         <div class="field" style="margin-bottom:10px;">
@@ -7644,11 +7652,14 @@ function batchGeneticsChange(){
   const momMsg  = document.getElementById('batch-mother-msg');
   const momLbl  = document.getElementById('batch-mother-label');
   const momHint = document.getElementById('batch-mother-hint');
-  // Seed lot picker — only relevant when Genetics Source = Seeds. No quantity input at creation:
-  // the actual plant count is recorded later via a Seeds Germinated transaction on Batch Mgmt.
+  // Seed lot picker + family-size input — only relevant when Genetics Source = Seeds.
+  // The family-size input drives an auto-created Seeds Germinated tx at save time so
+  // the batch starts with its full plant count in one step.
   const seedWrap = document.getElementById('batch-seedinv-wrap');
   const seedSel  = document.getElementById('batch-seedinv');
   const seedMsg  = document.getElementById('batch-seedinv-msg');
+  const seedQtyWrap = document.getElementById('batch-seedqty-wrap');
+  const seedQtyInput = document.getElementById('batch-seedqty');
   if(seedWrap && seedSel){
     if(sel === 'Seeds'){
       const eligible = seedInvRecs
@@ -7658,13 +7669,16 @@ function batchGeneticsChange(){
       seedSel.innerHTML = '<option value="">-- select lot --</option>' +
         eligible.map(r => '<option value="'+r.id+'"'+(String(r.id)===cur?' selected':'')+'>'+(r.lotNumber||'(no lot)')+' · '+(r.strain||'?')+' · '+r.qtyOnHand+' seeds available'+(r.source?' · '+r.source:'')+'</option>').join('');
       seedWrap.style.display='';
+      if(seedQtyWrap) seedQtyWrap.style.display = '';
       if(seedMsg){
         if(!eligible.length) { seedMsg.style.color = 'var(--red)'; seedMsg.textContent = 'No seed lots with stock on hand. Add to inventory on the Seeds page first.'; }
-        else { seedMsg.style.color = 'var(--text3)'; seedMsg.textContent = 'After creating the batch, log a "Seeds Germinated" transaction on Batch Mgmt when seeds sprout.'; }
+        else { seedMsg.style.color = 'var(--text3)'; seedMsg.textContent = 'After creating the batch, add clones to it via a Produced/Received transaction on the Summary page — cuttings stay under the same batch ID.'; }
       }
     } else {
       seedWrap.style.display='none';
       seedSel.value = '';
+      if(seedQtyWrap) seedQtyWrap.style.display = 'none';
+      if(seedQtyInput) seedQtyInput.value = '';
     }
   }
   // Is the batch being CREATED itself a mother batch? If so, the donor field
@@ -8018,6 +8032,17 @@ function batchUpdateCreateBtn(){
   const _isNewMother = isMotherBatch(val);
   let ok = formatOk && !exists;
   if(ok && genetics === 'Clones-Internal' && !mother && !_isNewMother) ok = false;
+  // Seeds genetics: require a seed lot AND a plants-to-germinate count (must be ≤ lot's qtyOnHand).
+  if(ok && genetics === 'Seeds'){
+    const _siId = parseInt((document.getElementById('batch-seedinv')||{}).value || '0') || 0;
+    const _sq   = parseInt((document.getElementById('batch-seedqty')||{}).value || '0') || 0;
+    if(!_siId || _sq < 1) ok = false;
+    if(ok){
+      const _siRec = seedInvRecs.find(r => r.id === _siId);
+      const _onHand = _siRec ? (parseInt(_siRec.qtyOnHand)||0) : 0;
+      if(_sq > _onHand) ok = false;
+    }
+  }
   // Backfill mode gates: phase + plant count + all reached-lifecycle dates required.
   // Mom backfill takes a different path: per-phase distribution AND purpose distribution
   // must match, and date fields are required based on which buckets have plants.
@@ -8116,9 +8141,10 @@ async function batchCreate(){
       return;
     }
   }
-  // Seeds genetics — must pick a lot from inventory. NO quantity entry here: the actual
-  // plant count comes later via a "Seeds Germinated" transaction (see summaryAddTransaction).
-  let _seedInvId = 0, _seedStrainName = '', _seedLotNumber = '';
+  // Seeds genetics — must pick a lot from inventory AND specify how many seeds are being
+  // germinated in this batch. Cap qty at lot's qtyOnHand. On save the lot is decremented
+  // by qty and an auto Seeds Germinated tx is created (seats the initial plant count).
+  let _seedInvId = 0, _seedStrainName = '', _seedLotNumber = '', _seedFamilyQty = 0;
   if(geneticsSource === 'Seeds'){
     _seedInvId = parseInt((document.getElementById('batch-seedinv')||{}).value || '0') || 0;
     if(!_seedInvId){ toast('Pick a seed lot from inventory.'); return; }
@@ -8126,6 +8152,10 @@ async function batchCreate(){
     if(!_siRec){ toast('Selected seed lot not found in inventory.'); return; }
     _seedStrainName = _siRec.strain;
     _seedLotNumber = _siRec.lotNumber;
+    _seedFamilyQty = parseInt((document.getElementById('batch-seedqty')||{}).value || '0') || 0;
+    if(_seedFamilyQty < 1){ toast('Enter how many seeds to germinate in this batch.'); return; }
+    const _onHand = parseInt(_siRec.qtyOnHand)||0;
+    if(_seedFamilyQty > _onHand){ toast('Only '+_onHand+' seed'+(_onHand===1?'':'s')+' available in lot '+_seedLotNumber+'. Reduce the count or add inventory on the Seeds page.', 6000); return; }
   }
   // All new batches start with qty=0, so the zero-qty rule applies:
   //   phase='Clones' (or 'Germination' for Seeds-genetics), rooms=['Veg'].
@@ -8351,6 +8381,48 @@ async function batchCreate(){
     _phaseChangeTxs.forEach(t => batchTxRecs.unshift(t));
     lsSet('gp-batchtx', batchTxRecs);
   }
+  // ─── SEEDS FAMILY INTAKE ────────────────────────────────────────────────────
+  // For Seeds-genetics non-backfill batches: auto-create a Seeds Germinated tx
+  // with the family size the user entered. Decrements the seed lot's qtyOnHand
+  // and increments its qtyGerminated. Skipped in backfill mode (the backfill
+  // intake P/R already seeded the count).
+  let _seedsIntakeTx = null;
+  if(!_isBackfill && geneticsSource === 'Seeds' && _seedFamilyQty > 0){
+    _seedsIntakeTx = {
+      id: Date.now() + 3,
+      batchId,
+      date: _created,
+      grower: '',
+      txType: 'Seeds Germinated',
+      qty: _seedFamilyQty,
+      currentQtyBefore: 0,
+      plantPhase: 'Germination',
+      notes: 'Initial seed-family intake — ' + _seedFamilyQty + ' seed(s) from lot ' + _seedLotNumber,
+      synced: false
+    };
+    batchTxRecs.unshift(_seedsIntakeTx);
+    lsSet('gp-batchtx', batchTxRecs);
+    // Decrement the seed lot's on-hand stock and bump qtyGerminated.
+    const _siRecForDec = seedInvRecs.find(r => r.id === _seedInvId);
+    if(_siRecForDec){
+      _siRecForDec.qtyOnHand = Math.max(0, (parseInt(_siRecForDec.qtyOnHand)||0) - _seedFamilyQty);
+      _siRecForDec.qtyGerminated = (parseInt(_siRecForDec.qtyGerminated)||0) + _seedFamilyQty;
+      _siRecForDec.synced = false;
+      lsSet('gp-seedinv', seedInvRecs);
+      // Fire-and-forget Airtable sync for the lot record. Sync Pending retries on failure.
+      if(cfg.seedInvTbl && cfg.token && cfg.base){
+        (async () => {
+          try {
+            const _id = await seedInvPushRemote(_siRecForDec);
+            if(_id) _siRecForDec.airtableId = _id;
+            _siRecForDec.synced = true;
+            lsSet('gp-seedinv', seedInvRecs);
+            if(typeof seedInvRenderList === 'function') seedInvRenderList();
+          } catch(_) {}
+        })();
+      }
+    }
+  }
   populateBatchDropdowns();
   populateBatchFilterDropdown();
   // Reset create form
@@ -8372,6 +8444,11 @@ async function batchCreate(){
   document.getElementById('batch-external-company').value = '';
   document.getElementById('batch-external-wrap').style.display='none';
   document.getElementById('batch-notes').value = '';
+  // Reset Seeds-family inputs if they were visible
+  const _siEl = document.getElementById('batch-seedinv'); if(_siEl) _siEl.value = '';
+  const _siWrap = document.getElementById('batch-seedinv-wrap'); if(_siWrap) _siWrap.style.display = 'none';
+  const _sqEl = document.getElementById('batch-seedqty'); if(_sqEl) _sqEl.value = '';
+  const _sqWrap = document.getElementById('batch-seedqty-wrap'); if(_sqWrap) _sqWrap.style.display = 'none';
   // Reset Backfill mode toggle + panel
   const _bfTog = document.getElementById('batch-backfill-toggle');
   if(_bfTog && _bfTog.checked){ _bfTog.checked = false; batchBackfillToggle(); }
@@ -8389,10 +8466,11 @@ async function batchCreate(){
       rec.synced=true; lsSet('gp-batch',batchRecs); setSyncPill('ok','Synced'); toast('Batch created and synced to Airtable'); updatePendingBadge();
     }catch(e){ setSyncPill('err','Sync error'); toast('Batch saved locally - Airtable: '+(e.message||'sync failed'),5000); }
   } else { toast('Batch '+batchId+' created!'); }
-  // Sync the Backfill intake P/R tx + every Phase Change tx we generated. Each in its own
-  // try block — partial failure leaves the unsynced ones to be retried via Sync Pending.
+  // Sync the auto-created intake txs (backfill intake P/R, Phase Change txs, AND the
+  // Seeds family intake) one-by-one. Partial failure leaves unsynced ones for Sync Pending.
   const _bfTxsToSync = [];
   if(_backfillIntakeTx) _bfTxsToSync.push(_backfillIntakeTx);
+  if(_seedsIntakeTx)    _bfTxsToSync.push(_seedsIntakeTx);
   _phaseChangeTxs.forEach(t => _bfTxsToSync.push(t));
   if(_bfTxsToSync.length && cfg.batchtxTbl && cfg.token && cfg.base){
     for(const _bfTx of _bfTxsToSync){
@@ -9945,31 +10023,38 @@ function txTypeChanged(){
   const srcMsg  = document.getElementById('tx-src-batch-msg');
   if(srcWrap && srcSel){
     const _curBatch = document.getElementById('summary-batch-select').value;
-    if(t === 'Produced/Received' && isMotherBatch(_curBatch)){
+    const _curIsMom   = isMotherBatch(_curBatch);
+    const _curIsSeeds = isSeedsBatchId(_curBatch);
+    // Cutting-source picker shows for Produced/Received tx on mother batches AND on S-batches.
+    // For S-batches, the eligible source is just the S-batch itself — clones from its own plants
+    // stay under the same batch ID (the user's pheno-hunt model).
+    if(t === 'Produced/Received' && (_curIsMom || _curIsSeeds)){
       const _curRec = batchRecs.find(r => r.batchId === _curBatch && !r.type);
       const _curCultivar = ((_curRec && _curRec.cultivar) || '').toString().trim().toLowerCase();
-      // Build the eligible source list:
-      //   1. The current mom batch itself (always allowed).
-      //   2. Non-mother open batches in Veg phase whose cultivar matches this mom's cultivar.
-      //   3. S-batches (Seeds-genetics) in ANY phase, regardless of cultivar match.
-      //      Winner pheno selection happens after the S-batch flowers out, so S-batches will
-      //      typically be in Flower/Drying/Packaged when their cuttings get assigned to new mom
-      //      batches. Cultivar match isn't enforced because each seed plant is its own pheno
-      //      expression of the source genetics — the user knows which winner they want.
-      const sources = batchRecs
-        .filter(b => b && !b.type && b.batchId && !isBatchClosedRec(b))
-        .filter(b => {
-          if(b.batchId === _curBatch) return true; // self-source
-          if(isMotherBatch(b.batchId)) return false; // no other moms
-          if(isSeedsBatchId(b.batchId)) return true; // S-batch — any phase, cultivar check skipped
-          if(b.plantPhase !== 'Veg') return false; // Regular non-moms: Veg-phase only
-          const _bCult = ((b.cultivar || '').toString().trim().toLowerCase());
-          // Cultivar must match the current mom's cultivar (case-insensitive, trimmed).
-          return _curCultivar && _bCult && _bCult === _curCultivar;
-        })
-        .map(b => ({ id: b.batchId, phase: b.plantPhase || '' }))
-        .sort((a,b) => a.id.localeCompare(b.id));
-      // Default: pre-select the current mom batch (self-source is the typical workflow).
+      let sources;
+      if(_curIsSeeds){
+        // S-batch self-source only: clones taken from the S-batch's own plants go back into
+        // the same batch. No cross-batch cutting flow for S-batches.
+        sources = (_curRec && !isBatchClosedRec(_curRec)) ? [{ id: _curBatch, phase: _curRec.plantPhase || '' }] : [];
+      } else {
+        // Mom batch source list:
+        //   1. The current mom batch itself (always allowed).
+        //   2. Non-mother open batches in Veg phase whose cultivar matches this mom's cultivar.
+        //   3. S-batches in ANY phase, cultivar check skipped (each seed plant is its own pheno).
+        sources = batchRecs
+          .filter(b => b && !b.type && b.batchId && !isBatchClosedRec(b))
+          .filter(b => {
+            if(b.batchId === _curBatch) return true; // self-source
+            if(isMotherBatch(b.batchId)) return false; // no other moms
+            if(isSeedsBatchId(b.batchId)) return true; // S-batch — any phase, cultivar check skipped
+            if(b.plantPhase !== 'Veg') return false; // Regular non-moms: Veg-phase only
+            const _bCult = ((b.cultivar || '').toString().trim().toLowerCase());
+            return _curCultivar && _bCult && _bCult === _curCultivar;
+          })
+          .map(b => ({ id: b.batchId, phase: b.plantPhase || '' }))
+          .sort((a,b) => a.id.localeCompare(b.id));
+      }
+      // Default: pre-select the current batch (self-source is the typical workflow).
       const prev = srcSel.value;
       const sourceIds = sources.map(s => s.id);
       const defaultPick = prev || (sourceIds.includes(_curBatch) ? _curBatch : '');
@@ -9982,11 +10067,15 @@ function txTypeChanged(){
       if(srcMsg){
         if(!sources.length){
           srcMsg.style.color = 'var(--amber)';
-          srcMsg.textContent = 'No eligible source batches. Cuttings must come from this mother batch itself or a Veg-phase non-mother batch with the same cultivar'
-            + (_curCultivar ? (' ("'+(_curRec && _curRec.cultivar ? _curRec.cultivar : '')+'").') : ' (cultivar missing on this mother).');
+          srcMsg.textContent = _curIsSeeds
+            ? 'This S-batch is closed — cannot add cuttings.'
+            : ('No eligible source batches. Cuttings must come from this mother batch itself or a Veg-phase non-mother batch with the same cultivar'
+                + (_curCultivar ? (' ("'+(_curRec && _curRec.cultivar ? _curRec.cultivar : '')+'").') : ' (cultivar missing on this mother).'));
         } else if(defaultPick === _curBatch){
           srcMsg.style.color = 'var(--text3)';
-          srcMsg.textContent = 'Defaulted to this batch (cuttings from its own plants). Change if the cuttings came from a same-cultivar Veg batch.';
+          srcMsg.textContent = _curIsSeeds
+            ? 'Cuttings from this S-batch’s own plants. Source qty is not decremented — clones stay under the same batch ID.'
+            : 'Defaulted to this batch (cuttings from its own plants). Change if the cuttings came from a same-cultivar Veg batch.';
         } else {
           srcMsg.style.color = 'var(--amber)';
           srcMsg.textContent = 'Required — which batch did the cuttings come from? Source is not decremented (cuttings, not transfers).';
@@ -10086,11 +10175,19 @@ function summaryUpdateTxTypeOptions(batchId){
     if(!opts.includes('Sent to Lab')) opts.push('Sent to Lab');
   }
   // Seeds Germinated is for Seeds-genetics batches only. It records how many seeds sprouted
-  // and decrements the seed lot's On Hand count. Hide Produced/Received for Seeds batches —
-  // their plant intake is exclusively via Seeds Germinated.
+  // and decrements the seed lot's On Hand count.
+  // Produced/Received stays available for S-batches as the cutting-intake mechanism: cuttings
+  // taken from the batch's own plants get logged as P/R with cutting source = self, and the
+  // clones live under the same S-batch ID. So we don't filter P/R out for Seeds batches —
+  // we ADD Seeds Germinated alongside it, and ensure P/R is in opts even in Veg/Flower phases
+  // (where it's normally blocked for non-mom non-Seeds batches).
   if(b && (b.geneticsSource||'').toLowerCase() === 'seeds'){
-    opts = opts.filter(o => o !== 'Produced/Received');
     if(!opts.includes('Seeds Germinated')) opts.unshift('Seeds Germinated');
+    // Ensure P/R is available across the S-batch's growth phases (Germination/Clones/Veg/Flower)
+    // since cuttings can be added throughout. Excluded in Drying/Packaged/Delivered.
+    if(['Germination','Clones','Veg','Flower'].includes(phase)){
+      if(!opts.includes('Produced/Received')) opts.unshift('Produced/Received');
+    }
   } else {
     opts = opts.filter(o => o !== 'Seeds Germinated');
   }
@@ -10452,15 +10549,23 @@ async function summaryAddTransaction(){
     const _ssRaw = (document.getElementById('tx-sale-stage')||{}).value || '';
     _saleStage = _ssRaw || (_isLivePlantSale ? 'Clone' : 'Dry');
   }
-  // Mother batches receiving Produced/Received clones need a Cutting Source Batch
-  // (another mother, or a non-mom batch in Veg). Source is NOT decremented — these
-  // are cuttings, the source plants stay put. Recorded into tx.notes for traceability.
+  // Mother batches AND S-batches receiving Produced/Received clones need a Cutting Source Batch.
+  // For moms: another mother, an S-batch (any phase), or a non-mom batch in Veg.
+  // For S-batches: only self-source (the same S-batch) — clones stay under the same batch ID.
+  // Source is NOT decremented in either case — these are cuttings, the source plants stay put.
+  // Recorded into tx.notes for traceability.
   let _srcCuttingBatchId = '';
-  if(txType === 'Produced/Received' && isMotherBatch(batchId)){
+  if(txType === 'Produced/Received' && (isMotherBatch(batchId) || isSeedsBatchId(batchId))){
     _srcCuttingBatchId = (document.getElementById('tx-src-batch')?.value || '').trim();
     if(!_srcCuttingBatchId){
-      toast('Pick which batch the cuttings came from (this batch, another mother, or a Veg-phase non-mom).', 5500);
+      toast(isSeedsBatchId(batchId)
+        ? 'Pick the cutting source (this S-batch itself — clones stay under the same batch ID).'
+        : 'Pick which batch the cuttings came from (this batch, another mother, or a Veg-phase non-mom).', 5500);
       return;
+    }
+    // S-batches accept only self-source (defensive — the picker only shows self anyway).
+    if(isSeedsBatchId(batchId) && _srcCuttingBatchId !== batchId){
+      toast('S-batches can only receive cuttings from themselves. Clones stay under the same batch ID.', 6000); return;
     }
     const _src = batchRecs.find(r => r.batchId === _srcCuttingBatchId && !r.type);
     if(!_src){ toast('Source batch '+_srcCuttingBatchId+' not found.', 4500); return; }
@@ -10543,12 +10648,13 @@ async function summaryAddTransaction(){
     toast('Cannot save: balance would go below 0. Current: '+currentQtyBefore+', requested: '+qty+'.',5000);
     return;
   }
-  // Guard: in Flower phase, only Harvested is allowed — EXCEPT mother batches,
-  // which keep producing new clones throughout their lifecycle.
+  // Guard: in Flower phase, only Harvested is allowed — EXCEPT mother batches AND S-batches,
+  // both of which keep producing new clones throughout their lifecycle.
   const _bGuard = batchRecs.find(r=>r.batchId===batchId && !r.type);
   const _isMomBatch = isMotherBatch(batchId);
+  const _isSeedsBatch = isSeedsBatchId(batchId);
   if(_bGuard && _bGuard.plantPhase==='Flower' && txType!=='Harvested'
-     && !(_isMomBatch && txType==='Produced/Received')){
+     && !((_isMomBatch || _isSeedsBatch) && txType==='Produced/Received')){
     toast('In Flower phase, only Harvested transactions are allowed.',5000);
     return;
   }
@@ -10557,9 +10663,9 @@ async function summaryAddTransaction(){
     toast('Cannot harvest plants while in '+_bGuard.plantPhase+' phase.',5000);
     return;
   }
-  // Guard: in Veg phase, no more Produced/Received transactions (additions stop once
-  // plants leave Clones) — EXCEPT for mother batches, which can keep adding new clones.
-  if(_bGuard && _bGuard.plantPhase==='Veg' && txType==='Produced/Received' && !_isMomBatch){
+  // Guard: in Veg phase, no more Produced/Received transactions (additions stop once plants
+  // leave Clones) — EXCEPT for mother batches AND S-batches, both of which keep cloning.
+  if(_bGuard && _bGuard.plantPhase==='Veg' && txType==='Produced/Received' && !_isMomBatch && !_isSeedsBatch){
     toast('Cannot add plants once the batch is in Veg phase.',5000);
     return;
   }
