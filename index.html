@@ -7983,6 +7983,10 @@ function batchBackfillMomChanged(){
     tMsg.textContent = 'Total: ' + total + ' plant' + (total === 1 ? '' : 's') + ' · Clones ' + clones + ' / Veg ' + veg + ' / Flower ' + flower + ' / Drying ' + drying;
   }
   batchBackfillMomPurposeChanged(); // refresh the purpose total comparison
+  // Re-run the date-field visibility logic — moms reveal Veg Start / Flower Start / Harvest
+  // Date inputs based on which phase buckets have non-zero counts. Without this call, typing
+  // a Flower-room count wouldn't reveal the Flower Start Date input.
+  batchBackfillPhaseChanged();
   batchUpdateCreateBtn();
 }
 
