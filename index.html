@@ -7542,13 +7542,20 @@ let activeBatchId = '';
 
 // Sort state for the Batches-page active list. Persisted in localStorage so the user's
 // preferred sort survives page reloads. Defaults to Batch ID ascending.
-let batchTableSort = (function(){
+// Uses `var` (not `let`) on purpose: if any earlier boot-time code throws and halts script
+// execution before this line runs, `var` leaves the binding as `undefined` (safe to fall
+// back from) instead of locking it in a Temporal Dead Zone that crashes renderBatchLog.
+var batchTableSort = (function(){
   try{ const s = JSON.parse(localStorage.getItem('gp-batch-list-sort')||'{}'); if(s && s.col) return {col:s.col, dir:(s.dir==='desc'?'desc':'asc')}; }catch(_){}
   return { col: 'batchId', dir: 'asc' };
 })();
 // Click handler for column headers — toggles direction when clicking the same column,
 // otherwise switches to the new column with ascending direction.
 function setBatchTableSort(col){
+  // Defensive: if batchTableSort never initialized (earlier boot threw), seed it now.
+  if(typeof batchTableSort === 'undefined' || !batchTableSort){
+    batchTableSort = { col: 'batchId', dir: 'asc' };
+  }
   if(batchTableSort.col === col){
     batchTableSort.dir = (batchTableSort.dir === 'asc') ? 'desc' : 'asc';
   } else {
@@ -8629,9 +8636,11 @@ function renderBatchLog(){
     }
     return '';
   }
+  // Defensive fallback if batchTableSort somehow isn't initialized (e.g., earlier boot code threw).
+  const _sortState = (typeof batchTableSort !== 'undefined' && batchTableSort) ? batchTableSort : { col: 'batchId', dir: 'asc' };
   function _cmp(a, b){
-    const _ka = _sortKey(a, batchTableSort.col);
-    const _kb = _sortKey(b, batchTableSort.col);
+    const _ka = _sortKey(a, _sortState.col);
+    const _kb = _sortKey(b, _sortState.col);
     let res = 0;
     if(typeof _ka === 'number' && typeof _kb === 'number'){
       res = _ka - _kb;
@@ -8639,7 +8648,7 @@ function renderBatchLog(){
       res = String(_ka).localeCompare(String(_kb));
     }
     if(res === 0) res = (a.batchId||'').localeCompare(b.batchId||''); // stable fallback by Batch ID
-    return batchTableSort.dir === 'desc' ? -res : res;
+    return _sortState.dir === 'desc' ? -res : res;
   }
   const active = batchRecs.filter(b => {
     if(b.type) return false;
@@ -8672,9 +8681,9 @@ function renderBatchLog(){
   // Sortable column headers. Active column shows a ▲/▼ indicator; inactive columns show a dim ⇅.
   // Clicking a header toggles direction if it's already active, otherwise switches to that column ascending.
   function _hdr(label, col, extraStyle){
-    const _active = (batchTableSort.col === col);
+    const _active = (_sortState.col === col);
     const _arrow = _active
-      ? '<span style="margin-left:4px;color:var(--green);">' + (batchTableSort.dir === 'desc' ? '▼' : '▲') + '</span>'
+      ? '<span style="margin-left:4px;color:var(--green);">' + (_sortState.dir === 'desc' ? '▼' : '▲') + '</span>'
       : '<span style="margin-left:4px;color:var(--text3);opacity:0.5;">⇅</span>';
     const _base = 'padding:8px 10px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);cursor:pointer;user-select:none;';
     return '<th onclick="setBatchTableSort(\''+col+'\')" style="'+_base+(extraStyle||'')+'" title="Click to sort">'+label+_arrow+'</th>';
