@@ -7540,6 +7540,27 @@ function renderWasteReport(){
 // ── BATCH LOG ────────────────────────────────────────────────────────────────
 let activeBatchId = '';
 
+// Sort state for the Batches-page active list. Persisted in localStorage so the user's
+// preferred sort survives page reloads. Defaults to Batch ID ascending.
+let batchTableSort = (function(){
+  try{ const s = JSON.parse(localStorage.getItem('gp-batch-list-sort')||'{}'); if(s && s.col) return {col:s.col, dir:(s.dir==='desc'?'desc':'asc')}; }catch(_){}
+  return { col: 'batchId', dir: 'asc' };
+})();
+// Click handler for column headers — toggles direction when clicking the same column,
+// otherwise switches to the new column with ascending direction.
+function setBatchTableSort(col){
+  if(batchTableSort.col === col){
+    batchTableSort.dir = (batchTableSort.dir === 'asc') ? 'desc' : 'asc';
+  } else {
+    batchTableSort.col = col;
+    batchTableSort.dir = 'asc';
+  }
+  try{ localStorage.setItem('gp-batch-list-sort', JSON.stringify(batchTableSort)); }catch(_){}
+  if(typeof renderBatchLog === 'function') renderBatchLog();
+}
+// Phase ordering for logical sort (Germination first → Delivered last).
+const _BATCH_PHASE_ORDER = { 'Germination':0,'Clones':1,'Veg':2,'Flower':3,'Drying':4,'Packaged':5,'Delivered':6 };
+
 // Auto-complete the Batch ID input when the user types a partial value like "S-LK-",
 // "M-LK-", or "LK-" (just the family prefix + letter prefix). On blur, scans
 // existing batchRecs for that family + prefix combo and fills in the next sequential NNN.
@@ -8584,6 +8605,42 @@ function renderBatchLog(){
                           : (fStatus === 'all')    ? 'All Batches'
                           :                           'Active Batches';
   // Status filter: open / closed / all.
+  const _todayForSort = localDate();
+  // Pull-out helper: returns a comparable value (string or number) for the given row + column.
+  // Used by both the comparator below and the sort-indicator headers.
+  function _sortKey(b, col){
+    if(col === 'batchId')  return (b.batchId  || '').toUpperCase();
+    if(col === 'cultivar') return (b.cultivar || '').toLowerCase();
+    if(col === 'phase')    return _BATCH_PHASE_ORDER[(b.plantPhase||'')] != null ? _BATCH_PHASE_ORDER[b.plantPhase] : 99;
+    if(col === 'rooms'){
+      // Sort by first room name, alphabetically. Veg-only batches and empty-rooms batches sort first/last.
+      const _r = (b.rooms && b.rooms.length) ? b.rooms.slice().sort()[0] : 'zzz';
+      return _r.toLowerCase();
+    }
+    if(col === 'day'){
+      // Numeric — max day across all day-parts for this batch. No-day rows sort to the bottom.
+      const _parts = (typeof computeBatchDayParts === 'function') ? computeBatchDayParts(b, _todayForSort) : [];
+      let _max = -1;
+      _parts.forEach(p => {
+        const _m = /(\d+)/.exec(p.label || '');
+        if(_m){ const _n = parseInt(_m[1], 10); if(_n > _max) _max = _n; }
+      });
+      return _max;
+    }
+    return '';
+  }
+  function _cmp(a, b){
+    const _ka = _sortKey(a, batchTableSort.col);
+    const _kb = _sortKey(b, batchTableSort.col);
+    let res = 0;
+    if(typeof _ka === 'number' && typeof _kb === 'number'){
+      res = _ka - _kb;
+    } else {
+      res = String(_ka).localeCompare(String(_kb));
+    }
+    if(res === 0) res = (a.batchId||'').localeCompare(b.batchId||''); // stable fallback by Batch ID
+    return batchTableSort.dir === 'desc' ? -res : res;
+  }
   const active = batchRecs.filter(b => {
     if(b.type) return false;
     const isClosed = !!b.closedDate || (b.status && b.status !== 'Open');
@@ -8597,7 +8654,7 @@ function renderBatchLog(){
     if(fType === 'regular' && isMotherBatch(b.batchId)) return false;
     if(fType === 'mother' && !isMotherBatch(b.batchId)) return false;
     return true;
-  }).sort((a,b) => (a.batchId||'').localeCompare(b.batchId||''));
+  }).sort(_cmp);
   if(!active.length){
     const filtered = (fId || fCultivar || fPhase || fType);
     const emptyMsg = filtered
@@ -8612,12 +8669,22 @@ function renderBatchLog(){
   // Compact 4-column table: Batch ID, Cultivar, Plant Phase, Current Day
   let html = '<div style="background:#fff;border:1px solid var(--border);border-radius:var(--radius-sm);overflow-x:auto;">';
   html += '<table style="width:100%;border-collapse:collapse;font-size:13px;">';
+  // Sortable column headers. Active column shows a ▲/▼ indicator; inactive columns show a dim ⇅.
+  // Clicking a header toggles direction if it's already active, otherwise switches to that column ascending.
+  function _hdr(label, col, extraStyle){
+    const _active = (batchTableSort.col === col);
+    const _arrow = _active
+      ? '<span style="margin-left:4px;color:var(--green);">' + (batchTableSort.dir === 'desc' ? '▼' : '▲') + '</span>'
+      : '<span style="margin-left:4px;color:var(--text3);opacity:0.5;">⇅</span>';
+    const _base = 'padding:8px 10px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);cursor:pointer;user-select:none;';
+    return '<th onclick="setBatchTableSort(\''+col+'\')" style="'+_base+(extraStyle||'')+'" title="Click to sort">'+label+_arrow+'</th>';
+  }
   html += '<thead><tr style="background:#f5f5f5;">'+
-    '<th style="padding:8px 10px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);">Batch ID</th>'+
-    '<th style="padding:8px 10px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Cultivar</th>'+
-    '<th style="padding:8px 10px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Plant Phase</th>'+
-    '<th style="padding:8px 10px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Rooms</th>'+
-    '<th style="padding:8px 10px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Current Day</th>'+
+    _hdr('Batch ID',    'batchId',  '')+
+    _hdr('Cultivar',    'cultivar', 'border-left:1px solid var(--border);')+
+    _hdr('Plant Phase', 'phase',    'border-left:1px solid var(--border);')+
+    _hdr('Rooms',       'rooms',    'border-left:1px solid var(--border);')+
+    _hdr('Current Day', 'day',      'border-left:1px solid var(--border);')+
   '</tr></thead><tbody>';
   active.forEach(b => {
     // Display phase reuses the same helper as Batch Mgmt — covers Sold override and Drying/Flower mix.
