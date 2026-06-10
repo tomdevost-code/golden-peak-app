@@ -4193,12 +4193,13 @@ function harvestRenderBins(){
   list.style.padding = '0';
   let html = '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
   html += '<thead><tr style="background:#f5f5f5;">';
-  ['#','Date','Bin','Tare','Total','Net','Notes'].forEach(h=>{
+  ['#','Date','Bin','Tare','Total','Net','Notes','Actions'].forEach(h=>{
     html += '<th style="padding:6px 8px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">'+h+'</th>';
   });
   html += '</tr></thead><tbody>';
   bins.forEach((b,i)=>{
     const notes = (b.notes||'').length > 30 ? b.notes.slice(0,30)+'…' : (b.notes||'');
+    const _hIdArg = "'" + String(b.id).replace(/\\/g,'\\\\').replace(/'/g,"\\'") + "'";
     html += '<tr style="border-bottom:1px solid var(--bg2);">';
     html += '<td style="padding:6px 8px;font-family:var(--mono);">'+(bins.length-i)+'</td>';
     html += '<td style="padding:6px 8px;font-family:var(--mono);">'+b.date+'</td>';
@@ -4207,10 +4208,65 @@ function harvestRenderBins(){
     html += '<td style="padding:6px 8px;font-family:var(--mono);">'+(b.totalWeight||0).toFixed(3)+'</td>';
     html += '<td style="padding:6px 8px;font-family:var(--mono);font-weight:700;color:var(--green);">'+(b.netWeight||0).toFixed(3)+'</td>';
     html += '<td style="padding:6px 8px;font-size:11px;color:var(--text3);">'+notes+'</td>';
+    html += '<td style="padding:6px 8px;white-space:nowrap;">'+(isComplete
+      ? '<span style="font-size:10px;color:var(--text3);">locked</span>'
+      : ('<button type="button" onclick="harvestEditStart('+_hIdArg+')" style="font-size:11px;padding:3px 8px;margin-right:4px;border:1px solid var(--border);background:var(--bg2);border-radius:var(--radius-sm);cursor:pointer;color:var(--text2);">Edit</button>'
+        +'<button type="button" onclick="harvestDelete('+_hIdArg+')" style="font-size:11px;padding:3px 8px;border:1px solid var(--red);background:var(--red-pale);border-radius:var(--radius-sm);cursor:pointer;color:var(--red);">Delete</button>'))+'</td>';
     html += '</tr>';
   });
   html += '</tbody></table>';
   list.innerHTML = html;
+}
+// ===== Harvest bin edit/delete =====
+let harvestEditId = null;
+function harvestEditCancel(){
+  harvestEditId = null;
+  const btn = document.getElementById('harvest-btn'); if(btn) btn.textContent = 'Save Bin';
+}
+function harvestEditStart(id){
+  const rec = harvestRecs.find(r => String(r.id) === String(id));
+  if(!rec){ toast('Bin not found.'); return; }
+  harvestEditId = id;
+  const bs = document.getElementById('harvest-batch-select'); if(bs) bs.value = rec.batch || '';
+  if(typeof harvestBatchSelect === 'function'){ try { harvestBatchSelect(); } catch(_){} }
+  const rEl = document.getElementById('harvest-room');
+  if(rEl){
+    if(rec.room && !Array.from(rEl.options).some(o => o.value === rec.room)){ const opt=document.createElement('option'); opt.value=rec.room; opt.textContent=rec.room; rEl.appendChild(opt); }
+    rEl.value = rec.room || '';
+  }
+  const gEl = document.getElementById('harvest-grower'); if(gEl) gEl.value = rec.grower || '';
+  const dEl = document.getElementById('harvest-date'); if(dEl && rec.date) dEl.value = rec.date;
+  const binEl = document.getElementById('harvest-bin-num');
+  if(binEl){
+    if(rec.binNumber != null && !Array.from(binEl.options).some(o => String(o.value) === String(rec.binNumber))){ const opt=document.createElement('option'); opt.value=rec.binNumber; opt.textContent=rec.binNumber; binEl.appendChild(opt); }
+    binEl.value = (rec.binNumber != null ? rec.binNumber : '');
+  }
+  if(typeof harvestBinChanged === 'function'){ try { harvestBinChanged(); } catch(_){} }
+  const tEl = document.getElementById('harvest-total'); if(tEl) tEl.value = (rec.totalWeight != null ? rec.totalWeight : '');
+  const nEl = document.getElementById('harvest-notes'); if(nEl) nEl.value = rec.notes || '';
+  if(typeof harvestNetCalc === 'function'){ try { harvestNetCalc(); } catch(_){} }
+  harvestRenderBins();
+  const btn = document.getElementById('harvest-btn'); if(btn){ btn.disabled=false; btn.style.opacity=''; btn.style.cursor=''; btn.textContent='Update Bin'; }
+  toast('Editing bin — change values and press Update.',4000);
+  if(btn && btn.scrollIntoView) btn.scrollIntoView({behavior:'smooth',block:'center'});
+}
+async function harvestDelete(id){
+  const idx = harvestRecs.findIndex(r => String(r.id) === String(id));
+  if(idx < 0){ toast('Bin not found.'); return; }
+  const rec = harvestRecs[idx];
+  if(!confirm('Delete this harvest bin'+(rec.netWeight!=null?' (net '+rec.netWeight.toFixed(3)+' kg)':'')+'? This cannot be undone.')) return;
+  if(rec.airtableId && cfg.harvestTbl && cfg.token && cfg.base){
+    setSyncPill('ing','Deleting...');
+    const ok = await atDelete(cfg.harvestTbl, rec.airtableId);
+    if(!ok){ setSyncPill('err','Delete failed'); toast('Could not delete from Airtable — bin kept. Try again when online.',5000); return; }
+    setSyncPill('ok','Synced');
+  }
+  harvestRecs.splice(idx,1);
+  lsSet('gp-harvest', harvestRecs);
+  if(String(harvestEditId)===String(id)) harvestEditCancel();
+  updatePendingBadge();
+  harvestRenderBins();
+  toast('Bin deleted.');
 }
 function harvestIsRoomComplete(batchId, room){
   const b = batchRecs.find(r=>r.batchId===batchId && !r.type);
@@ -4471,9 +4527,20 @@ async function harvestSave(){
   if(!totalWeight || totalWeight <= 0){ toast('Enter a valid total weight.'); return; }
   const netWeight = totalWeight - tareWeight;
   if(netWeight <= 0){ toast('Total weight must exceed bin tare ('+tareWeight.toFixed(3)+' kg).',4500); return; }
-  const rec = { id: Date.now(), date, grower, batch, room, binNumber, tareWeight, totalWeight, netWeight: Math.round(netWeight*1000)/1000, notes, synced: false };
-  harvestRecs.unshift(rec);
-  lsSet('gp-harvest', harvestRecs);
+  const _hEditing = harvestEditId != null;
+  let rec;
+  if(_hEditing){
+    rec = harvestRecs.find(r => String(r.id) === String(harvestEditId));
+    if(!rec){ toast('The bin being edited was not found.'); harvestEditId=null; return; }
+    Object.assign(rec, { date, grower, batch, room, binNumber, tareWeight, totalWeight, netWeight: Math.round(netWeight*1000)/1000, notes, synced:false });
+    lsSet('gp-harvest', harvestRecs);
+    harvestEditId = null;
+    const _hb = document.getElementById('harvest-btn'); if(_hb) _hb.textContent = 'Save Bin';
+  } else {
+    rec = { id: Date.now(), date, grower, batch, room, binNumber, tareWeight, totalWeight, netWeight: Math.round(netWeight*1000)/1000, notes, synced: false };
+    harvestRecs.unshift(rec);
+    lsSet('gp-harvest', harvestRecs);
+  }
   // Clear only the bin entry fields — keep grower/batch/room for the next bin
   document.getElementById('harvest-bin-num').value = '';
   document.getElementById('harvest-total').value = '';
@@ -4483,7 +4550,7 @@ async function harvestSave(){
   harvestNetCalc();
   harvestRenderBins();
   updatePendingBadge();
-  toast('Bin saved (net '+rec.netWeight.toFixed(3)+' kg)');
+  toast((_hEditing?'Bin updated (net ':'Bin saved (net ')+rec.netWeight.toFixed(3)+' kg)');
   // Sync to Airtable
   if(cfg.harvestTbl && cfg.token && cfg.base){
     setSyncPill('ing','Syncing...');
@@ -4500,9 +4567,9 @@ async function harvestSave(){
         'Notes': rec.notes || undefined
       };
       Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
-      const _hRes = await atPost(cfg.harvestTbl, f);
+      if(_hEditing && rec.airtableId){ await atUpdateById(cfg.harvestTbl, rec.airtableId, f); }
+      else { const _hRes = await atPost(cfg.harvestTbl, f); if(_hRes && _hRes.id) rec.airtableId = _hRes.id; }
       rec.synced = true;
-      if(_hRes && _hRes.id) rec.airtableId = _hRes.id;
       lsSet('gp-harvest', harvestRecs);
       setSyncPill('ok','Synced');
     }catch(e){
@@ -5204,15 +5271,26 @@ async function postDrySave(){
   if(isNaN(tare) || tare < 0){ toast('Enter a valid tare weight.'); return; }
   if(isNaN(gross) || gross <= 0){ toast('Enter a valid gross weight.'); return; }
   if(gross <= tare){ toast('Gross weight must exceed tare weight ('+tare.toFixed(3)+' kg).',4500); return; }
-  const binNumber = postDryNextBinNum(batch);
   const netWeight = Math.round((gross - tare) * 1000) / 1000;
-  const rec = {
-    id: Date.now(), date, grower, batch, binNumber,
-    tareWeight: tare, grossWeight: gross, netWeight,
-    containerType, sampleType, notes, synced: false
-  };
-  postDryRecs.unshift(rec);
-  lsSet('gp-postdry', postDryRecs);
+  const _pdEditing = postDryEditId != null;
+  let rec;
+  if(_pdEditing){
+    rec = postDryRecs.find(r => String(r.id) === String(postDryEditId));
+    if(!rec){ toast('The container being edited was not found.'); postDryEditId=null; return; }
+    Object.assign(rec, { date, grower, batch, tareWeight: tare, grossWeight: gross, netWeight, containerType, sampleType, notes, synced:false });
+    lsSet('gp-postdry', postDryRecs);
+    postDryEditId = null;
+    const _pb = document.getElementById('postdry-btn'); if(_pb) _pb.textContent = 'Save Container';
+  } else {
+    const binNumber = postDryNextBinNum(batch);
+    rec = {
+      id: Date.now(), date, grower, batch, binNumber,
+      tareWeight: tare, grossWeight: gross, netWeight,
+      containerType, sampleType, notes, synced: false
+    };
+    postDryRecs.unshift(rec);
+    lsSet('gp-postdry', postDryRecs);
+  }
   // Clear the per-bin fields; keep grower + batch + date for the next container
   document.getElementById('postdry-tare').value = '';
   document.getElementById('postdry-gross').value = '';
@@ -5222,7 +5300,7 @@ async function postDrySave(){
   document.getElementById('postdry-notes').value = '';
   document.getElementById('postdry-net').textContent = '— kg';
   postDrySetupChanged();
-  toast('Container '+binNumber+' saved ('+netWeight.toFixed(3)+' kg net)');
+  toast('Container '+rec.binNumber+(_pdEditing?' updated (':' saved (')+netWeight.toFixed(3)+' kg net)');
   updatePendingBadge();
   // Airtable sync
   if(cfg.postDryTbl && cfg.token && cfg.base){
@@ -5241,9 +5319,9 @@ async function postDrySave(){
         'Notes': rec.notes || undefined
       };
       Object.keys(f).forEach(k=>{ if(f[k]===undefined||f[k]===null||f[k]==='') delete f[k]; });
-      const _pdRes = await atPost(cfg.postDryTbl, f);
+      if(_pdEditing && rec.airtableId){ await atUpdateById(cfg.postDryTbl, rec.airtableId, f); }
+      else { const _pdRes = await atPost(cfg.postDryTbl, f); if(_pdRes && _pdRes.id) rec.airtableId = _pdRes.id; }
       rec.synced = true;
-      if(_pdRes && _pdRes.id) rec.airtableId = _pdRes.id;
       lsSet('gp-postdry', postDryRecs);
       setSyncPill('ok','Synced');
       updatePendingBadge();
@@ -5286,9 +5364,11 @@ function postDryRenderBins(batchId){
     '<th style="padding:6px 10px;text-align:right;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);white-space:nowrap;">Gross</th>'+
     '<th style="padding:6px 10px;text-align:right;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);white-space:nowrap;">Net (kg)</th>'+
     '<th style="padding:6px 10px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);white-space:nowrap;">Type</th>'+
+    '<th style="padding:6px 10px;text-align:center;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);white-space:nowrap;">Actions</th>'+
   '</tr></thead><tbody>';
   recs.forEach(r=>{
     const typeDisp = r.containerType || '—';
+    const _pdIdArg = "'" + String(r.id).replace(/\\/g,'\\\\').replace(/'/g,"\\'") + "'";
     html += '<tr>'+
       '<td style="padding:6px 10px;font-family:var(--mono);font-weight:600;border-top:1px solid var(--border);">'+r.binNumber+'</td>'+
       '<td style="padding:6px 10px;font-family:var(--mono);border-top:1px solid var(--border);border-left:1px solid var(--border);white-space:nowrap;">'+r.date+'</td>'+
@@ -5296,10 +5376,57 @@ function postDryRenderBins(batchId){
       '<td style="padding:6px 10px;font-family:var(--mono);text-align:right;border-top:1px solid var(--border);border-left:1px solid var(--border);background:var(--bg2);">'+(parseFloat(r.grossWeight)||0).toFixed(3)+'</td>'+
       '<td style="padding:6px 10px;font-family:var(--mono);text-align:right;font-weight:600;color:var(--green);border-top:1px solid var(--border);border-left:1px solid var(--border);background:var(--green-pale);">'+(parseFloat(r.netWeight)||0).toFixed(3)+'</td>'+
       '<td style="padding:6px 10px;font-size:11px;color:var(--text2);border-top:1px solid var(--border);border-left:1px solid var(--border);">'+typeDisp+'</td>'+
+      '<td style="padding:6px 10px;text-align:center;white-space:nowrap;border-top:1px solid var(--border);border-left:1px solid var(--border);">'+
+        '<button type="button" onclick="postDryEditStart('+_pdIdArg+')" style="font-size:11px;padding:3px 8px;margin-right:4px;border:1px solid var(--border);background:var(--bg2);border-radius:var(--radius-sm);cursor:pointer;color:var(--text2);">Edit</button>'+
+        '<button type="button" onclick="postDryDelete('+_pdIdArg+')" style="font-size:11px;padding:3px 8px;border:1px solid var(--red);background:var(--red-pale);border-radius:var(--radius-sm);cursor:pointer;color:var(--red);">Delete</button>'+
+      '</td>'+
     '</tr>';
   });
   html += '</tbody></table>';
   listEl.innerHTML = html;
+}
+// ===== Post-Drying container edit/delete =====
+let postDryEditId = null;
+function postDryEditCancel(){
+  postDryEditId = null;
+  const btn = document.getElementById('postdry-btn'); if(btn) btn.textContent = 'Save Container';
+}
+function postDryEditStart(id){
+  const rec = postDryRecs.find(r => String(r.id) === String(id));
+  if(!rec){ toast('Container not found.'); return; }
+  postDryEditId = id;
+  const bs = document.getElementById('postdry-batch-select'); if(bs) bs.value = rec.batch || '';
+  const gEl = document.getElementById('postdry-grower'); if(gEl) gEl.value = rec.grower || '';
+  if(typeof postDrySetupChanged === 'function'){ try { postDrySetupChanged(); } catch(_){} }
+  const dEl = document.getElementById('postdry-date'); if(dEl && rec.date) dEl.value = rec.date;
+  const tEl = document.getElementById('postdry-tare'); if(tEl) tEl.value = (rec.tareWeight != null ? rec.tareWeight : '');
+  const grEl = document.getElementById('postdry-gross'); if(grEl) grEl.value = (rec.grossWeight != null ? rec.grossWeight : '');
+  const tyEl = document.getElementById('postdry-type'); if(tyEl) tyEl.value = rec.containerType || '';
+  const stEl = document.getElementById('postdry-sampletype'); if(stEl) stEl.value = rec.sampleType || 'Sold';
+  const nEl = document.getElementById('postdry-notes'); if(nEl) nEl.value = rec.notes || '';
+  const binEl = document.getElementById('postdry-bin-num'); if(binEl) binEl.value = 'Container ' + (rec.binNumber != null ? rec.binNumber : '');
+  if(typeof postDryCalcNet === 'function'){ try { postDryCalcNet(); } catch(_){} }
+  const btn = document.getElementById('postdry-btn'); if(btn){ btn.disabled=false; btn.textContent = 'Update Container'; }
+  toast('Editing container '+(rec.binNumber!=null?rec.binNumber:'')+' — change values and press Update.',4000);
+  if(btn && btn.scrollIntoView) btn.scrollIntoView({behavior:'smooth',block:'center'});
+}
+async function postDryDelete(id){
+  const idx = postDryRecs.findIndex(r => String(r.id) === String(id));
+  if(idx < 0){ toast('Container not found.'); return; }
+  const rec = postDryRecs[idx];
+  if(!confirm('Delete this container'+(rec.netWeight!=null?' (net '+rec.netWeight.toFixed(3)+' kg)':'')+'? This cannot be undone.')) return;
+  if(rec.airtableId && cfg.postDryTbl && cfg.token && cfg.base){
+    setSyncPill('ing','Deleting...');
+    const ok = await atDelete(cfg.postDryTbl, rec.airtableId);
+    if(!ok){ setSyncPill('err','Delete failed'); toast('Could not delete from Airtable — container kept. Try again when online.',5000); return; }
+    setSyncPill('ok','Synced');
+  }
+  postDryRecs.splice(idx,1);
+  lsSet('gp-postdry', postDryRecs);
+  if(String(postDryEditId)===String(id)) postDryEditCancel();
+  updatePendingBadge();
+  postDryRenderBins(rec.batch);
+  toast('Container deleted.');
 }
 async function postDryComplete(){
   // Sums all post-drying net weights for the batch, stores on batchRec, advances phase
