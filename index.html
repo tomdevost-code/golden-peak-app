@@ -6995,19 +6995,19 @@ async function cleanAirtableDuplicateTx(){
   const setStatus = (msg, color) => { if(el){ el.textContent = msg; el.style.color = color || 'var(--text2)'; } };
   // Tables to check. Each entry: { label, tblId, localArr, remoteKeyFn }
   const tables = [
-    { label:'Batch Log',          tblId:cfg.batchTbl,   localArr:batchRecs,    remoteKeyFn:NAT_KEY_FN_REMOTE.batch },
-    { label:'Batch Transactions', tblId:cfg.batchtxTbl, localArr:batchTxRecs, remoteKeyFn:NAT_KEY_FN_REMOTE.batchtx },
-    { label:'EC Log',             tblId:cfg.ecTbl,      localArr:ecRecs,       remoteKeyFn:NAT_KEY_FN_REMOTE.ec },
-    { label:'Runoff',             tblId:cfg.roTbl,      localArr:roRecs,       remoteKeyFn:NAT_KEY_FN_REMOTE.ro },
-    { label:'Waste',              tblId:cfg.wasteTbl,   localArr:wasteRecs,    remoteKeyFn:NAT_KEY_FN_REMOTE.waste },
-    { label:'Harvest',            tblId:cfg.harvestTbl, localArr:harvestRecs,  remoteKeyFn:NAT_KEY_FN_REMOTE.harvest },
-    { label:'Post-Drying',        tblId:cfg.postDryTbl, localArr:postDryRecs,  remoteKeyFn:NAT_KEY_FN_REMOTE.postdry },
-    { label:'Bio Control',        tblId:cfg.bioTbl,     localArr:bioRecs,      remoteKeyFn:NAT_KEY_FN_REMOTE.bio },
-    { label:'Pest ID',            tblId:cfg.pestTbl,    localArr:pestRecs,     remoteKeyFn:NAT_KEY_FN_REMOTE.pest },
-    { label:'Batch Cleaning',     tblId:cfg.sanCleanTbl,localArr:sanCleanRecs, remoteKeyFn:NAT_KEY_FN_REMOTE.sanclean },
-    { label:'Tool Cleaning',      tblId:cfg.sanToolTbl, localArr:sanToolRecs,  remoteKeyFn:NAT_KEY_FN_REMOTE.santool },
-    { label:'Task Edits',         tblId:cfg.sanEditsTbl,localArr:sanEditsRecs, remoteKeyFn:NAT_KEY_FN_REMOTE.sanedits },
-    { label:'Seed Inventory',     tblId:cfg.seedInvTbl, localArr:seedInvRecs,  remoteKeyFn:NAT_KEY_FN_REMOTE.seedinv }
+    { label:'Batch Log',          tblId:cfg.batchTbl,   localArr:batchRecs,    remoteKeyFn:NAT_KEY_FN_REMOTE.batch,    lsKey:'gp-batch' },
+    { label:'Batch Transactions', tblId:cfg.batchtxTbl, localArr:batchTxRecs, remoteKeyFn:NAT_KEY_FN_REMOTE.batchtx,  lsKey:'gp-batchtx' },
+    { label:'EC Log',             tblId:cfg.ecTbl,      localArr:ecRecs,       remoteKeyFn:NAT_KEY_FN_REMOTE.ec,       lsKey:'gp-ec' },
+    { label:'Runoff',             tblId:cfg.roTbl,      localArr:roRecs,       remoteKeyFn:NAT_KEY_FN_REMOTE.ro,       lsKey:'gp-ro' },
+    { label:'Waste',              tblId:cfg.wasteTbl,   localArr:wasteRecs,    remoteKeyFn:NAT_KEY_FN_REMOTE.waste,    lsKey:'gp-waste' },
+    { label:'Harvest',            tblId:cfg.harvestTbl, localArr:harvestRecs,  remoteKeyFn:NAT_KEY_FN_REMOTE.harvest,  lsKey:'gp-harvest' },
+    { label:'Post-Drying',        tblId:cfg.postDryTbl, localArr:postDryRecs,  remoteKeyFn:NAT_KEY_FN_REMOTE.postdry,  lsKey:'gp-postdry' },
+    { label:'Bio Control',        tblId:cfg.bioTbl,     localArr:bioRecs,      remoteKeyFn:NAT_KEY_FN_REMOTE.bio,      lsKey:'gp-bio' },
+    { label:'Pest ID',            tblId:cfg.pestTbl,    localArr:pestRecs,     remoteKeyFn:NAT_KEY_FN_REMOTE.pest,     lsKey:'gp-pest' },
+    { label:'Batch Cleaning',     tblId:cfg.sanCleanTbl,localArr:sanCleanRecs, remoteKeyFn:NAT_KEY_FN_REMOTE.sanclean, lsKey:'gp-sanclean' },
+    { label:'Tool Cleaning',      tblId:cfg.sanToolTbl, localArr:sanToolRecs,  remoteKeyFn:NAT_KEY_FN_REMOTE.santool,  lsKey:'gp-santool' },
+    { label:'Task Edits',         tblId:cfg.sanEditsTbl,localArr:sanEditsRecs, remoteKeyFn:NAT_KEY_FN_REMOTE.sanedits, lsKey:'gp-sanedits' },
+    { label:'Seed Inventory',     tblId:cfg.seedInvTbl, localArr:seedInvRecs,  remoteKeyFn:NAT_KEY_FN_REMOTE.seedinv,  lsKey:'gp-seedinv' }
   ];
   setStatus('Scanning Airtable for duplicates across '+tables.length+' tables...', 'var(--text2)');
   // First pass: scan everything to find the total count.
@@ -7045,9 +7045,10 @@ async function cleanAirtableDuplicateTx(){
   }
   // Second pass: actually delete.
   setStatus('Deleting '+totalDupes+' duplicate(s) from Airtable...', 'var(--text2)');
-  let totalDeleted = 0, totalFailed = 0;
+  let totalDeleted = 0, totalFailed = 0, localPruned = 0;
   for(const s of scan){
     if(!s.groups || s.found === 0) continue;
+    const deletedIds = [];
     for(const recs of Object.values(s.groups)){
       if(recs.length < 2) continue;
       let keeper = recs.find(rr => s.localByAt[rr.id]);
@@ -7055,14 +7056,27 @@ async function cleanAirtableDuplicateTx(){
       for(const rr of recs){
         if(rr.id === keeper.id) continue;
         const ok = await atDelete(s.tblId, rr.id);
-        if(ok) totalDeleted++; else totalFailed++;
+        if(ok){ totalDeleted++; deletedIds.push(rr.id); } else totalFailed++;
       }
     }
+    // Prune the local rows that pointed at the Airtable rows we just deleted, so the
+    // duplicates disappear from the app right away (the normal pull never deletes locals).
+    if(deletedIds.length && s.localArr && s.lsKey){
+      const delSet = new Set(deletedIds);
+      for(let i = s.localArr.length - 1; i >= 0; i--){
+        const r = s.localArr[i];
+        if(r && r.airtableId && delSet.has(r.airtableId)){ s.localArr.splice(i, 1); localPruned++; }
+      }
+      lsSet(s.lsKey, s.localArr);
+    }
   }
-  setStatus('Deleted '+totalDeleted+' duplicate(s) from Airtable.'+(totalFailed?' '+totalFailed+' delete(s) failed.':''), totalFailed ? 'var(--amber)' : 'var(--green)');
+  setStatus('Deleted '+totalDeleted+' duplicate(s) from Airtable'+(localPruned?' and removed '+localPruned+' local copy(ies)':'')+'.'+(totalFailed?' '+totalFailed+' delete(s) failed.':''), totalFailed ? 'var(--amber)' : 'var(--green)');
   toast('Cleaned '+totalDeleted+' Airtable duplicate(s)' + (totalFailed ? ' ('+totalFailed+' failed)' : '') + '.', 5000);
-  // Refresh local from Airtable now that the duplicates are gone.
+  // Refresh local from Airtable now that the duplicates are gone, then refresh visible views.
   pullFromAirtable({manual:true});
+  try { if(typeof renderWaste==='function') renderWaste(); }catch(_){}
+  try { if(typeof renderWasteReport==='function') renderWasteReport(); }catch(_){}
+  try { if(typeof renderBatchLog==='function') renderBatchLog(); }catch(_){}
 }
 
 // Diagnostic-only — log every batch transaction grouped by batch so we can SEE what's
