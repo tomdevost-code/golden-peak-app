@@ -4644,7 +4644,7 @@ async function bioSave(){
   let rec;
   const _bioEditing = bioEditId != null;
   if(_bioEditing){
-    rec = bioRecs.find(r => r.id === bioEditId);
+    rec = bioRecs.find(r => String(r.id) === String(bioEditId));
     if(!rec){ toast('The entry being edited was not found.'); bioEditId = null; return; }
     rec.date=date; rec.grower=grower; rec.batch=batch; rec.room=room;
     rec.product=product; rec.quantity=quantity; rec.unit=unit; rec.reason=reason; rec.synced=false;
@@ -4736,6 +4736,9 @@ function bioRenderHistory(batch, room){
   recs.forEach(r => {
     const unit = r.unit || (BIO_PRODUCTS[r.product] && BIO_PRODUCTS[r.product].unit) || '';
     const qtyStr = (r.quantity != null) ? (r.quantity + (unit ? ' ' + unit : '')) : '—';
+    // ids may be numeric (locally created) or strings (pulled from Airtable, e.g. 'bio_recXXX'),
+    // so pass as a quoted, escaped string literal and match loosely in the handlers.
+    const _idArg = "'" + String(r.id).replace(/\\/g,'\\\\').replace(/'/g,"\\'") + "'";
     html += '<tr>'+
       '<td style="padding:5px 8px;font-family:var(--mono);border-top:1px solid var(--border);white-space:nowrap;">'+r.date+'</td>'+
       '<td style="padding:5px 8px;border-top:1px solid var(--border);border-left:1px solid var(--border);">'+(r.product||'—')+'</td>'+
@@ -4743,8 +4746,8 @@ function bioRenderHistory(batch, room){
       '<td style="padding:5px 8px;font-size:11px;color:var(--text2);border-top:1px solid var(--border);border-left:1px solid var(--border);">'+(r.grower||'—')+'</td>'+
       '<td style="padding:5px 8px;font-size:11px;color:var(--text3);border-top:1px solid var(--border);border-left:1px solid var(--border);max-width:200px;">'+(r.reason||'—')+'</td>'+
       '<td style="padding:5px 8px;border-top:1px solid var(--border);border-left:1px solid var(--border);white-space:nowrap;text-align:center;">'+
-        '<button type="button" onclick="bioEditStart('+r.id+')" style="font-size:11px;padding:3px 8px;margin-right:4px;border:1px solid var(--border);background:var(--bg2);border-radius:var(--radius-sm);cursor:pointer;color:var(--text2);">Edit</button>'+
-        '<button type="button" onclick="bioDelete('+r.id+')" style="font-size:11px;padding:3px 8px;border:1px solid var(--red);background:var(--red-pale);border-radius:var(--radius-sm);cursor:pointer;color:var(--red);">Delete</button>'+
+        '<button type="button" onclick="bioEditStart('+_idArg+')" style="font-size:11px;padding:3px 8px;margin-right:4px;border:1px solid var(--border);background:var(--bg2);border-radius:var(--radius-sm);cursor:pointer;color:var(--text2);">Edit</button>'+
+        '<button type="button" onclick="bioDelete('+_idArg+')" style="font-size:11px;padding:3px 8px;border:1px solid var(--red);background:var(--red-pale);border-radius:var(--radius-sm);cursor:pointer;color:var(--red);">Delete</button>'+
       '</td>'+
     '</tr>';
   });
@@ -4757,7 +4760,7 @@ function bioRenderHistory(batch, room){
 // (null = normal "add new" mode). bioSave() branches on it.
 let bioEditId = null;
 function bioEditStart(id){
-  const rec = bioRecs.find(r => r.id === id);
+  const rec = bioRecs.find(r => String(r.id) === String(id));
   if(!rec){ toast('Entry not found.'); return; }
   bioEditId = id;
   // Load the record into the form. Set batch first, then re-apply the saved values
@@ -4791,7 +4794,7 @@ function bioEditCancel(){
   if(typeof bioProductChanged === 'function') bioProductChanged();
 }
 async function bioDelete(id){
-  const idx = bioRecs.findIndex(r => r.id === id);
+  const idx = bioRecs.findIndex(r => String(r.id) === String(id));
   if(idx < 0){ toast('Entry not found.'); return; }
   const rec = bioRecs[idx];
   if(!confirm('Delete this Bio Control entry ('+(rec.product||'')+(rec.date?' on '+rec.date:'')+')? This cannot be undone.')) return;
@@ -4805,7 +4808,7 @@ async function bioDelete(id){
   bioRecs.splice(idx, 1);
   lsSet('gp-bio', bioRecs);
   updatePendingBadge();
-  if(bioEditId === id) bioEditCancel();
+  if(String(bioEditId) === String(id)) bioEditCancel();
   toast('Entry deleted.');
   bioRenderHistory(rec.batch, rec.room);
 }
