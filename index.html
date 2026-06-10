@@ -3018,21 +3018,13 @@ async function pullFromAirtable(opts){
     const totalConflicts= Object.values(summary).reduce((s,o)=>s+o.conflicts, 0);
     lastPullAt = Date.now();
     console.log('[pull] '+new Date().toLocaleTimeString()+' →', summary, 'totals: +'+totalAdded+' / ~'+totalUpdated+' / !'+totalConflicts);
-    const _mergeMs = Math.round(performance.now() - _mergeStart);
-    console.log('[pull timing] synchronous merge of all tables: '+_mergeMs+' ms. Remote row counts:', _remoteCounts);
     // Best-effort refresh of any visible views
-    const _renderStart = performance.now();
     try { populateBatchDropdowns(); }catch(_){}
     try { if(typeof renderBatchLog==='function') renderBatchLog(); }catch(_){}
     try { if(typeof summaryRender==='function') summaryRender(); }catch(_){}
     try { if(typeof updatePendingBadge==='function') updatePendingBadge(); }catch(_){}
     try { if(typeof renderPullStatus==='function') renderPullStatus(); }catch(_){}
     try { renderConflictBanner(); }catch(_){}
-    const _renderMs = Math.round(performance.now() - _renderStart);
-    console.log('[pull timing] fetch(network)='+_fetchMs+'ms  merge='+_mergeMs+'ms  render='+_renderMs+'ms  rows='+JSON.stringify(_remoteCounts));
-    const _rowsTotal = Object.values(_remoteCounts).reduce((s,n)=>s+n,0);
-    const _biggest = Object.entries(_remoteCounts).sort((a,b)=>b[1]-a[1]).slice(0,3).map(e=>e[0]+':'+e[1]).join(', ');
-    try{ toast('Fetched '+_rowsTotal+' rows in '+Math.round(_fetchMs/1000)+'s. Biggest: '+_biggest,15000); }catch(_){}
     if(opts.manual){
       if(totalConflicts){
         toast(totalConflicts+' conflict(s) — review at top of page', 5000);
@@ -3626,7 +3618,7 @@ function dedupeBatchRecs(){
   const order = []; // preserves first-seen index for stable iteration
   batchRecs.forEach((r, i) => {
     if(!r || r.type) return; // skip movement entries
-    const k = (r.batchId || '').toString().toUpperCase();
+    const k = (r.batchId || '').toString().trim().toUpperCase();
     if(!k) return;
     if(byId[k] === undefined){ byId[k] = [i]; order.push(k); }
     else byId[k].push(i);
@@ -6764,6 +6756,11 @@ function dedupeBatchTxLocal(){
 // linked-record id (same shape across all remote rows of the same batch, no resolution
 // needed). Used by cleanAirtableDuplicates to find orphan dupes server-side.
 const NAT_KEY_FN_REMOTE = {
+  batch(rrec){
+    // Batch Log's "Batch ID" is a plain text primary field (not a linked array).
+    const f = rrec.fields || {};
+    return (f['Batch ID'] || '').toString().trim().toUpperCase();
+  },
   batchtx(rrec){
     const f = rrec.fields || {};
     const linkId = Array.isArray(f['Batch ID']) ? f['Batch ID'][0] : '';
@@ -6927,6 +6924,7 @@ async function cleanAirtableDuplicateTx(){
   const setStatus = (msg, color) => { if(el){ el.textContent = msg; el.style.color = color || 'var(--text2)'; } };
   // Tables to check. Each entry: { label, tblId, localArr, remoteKeyFn }
   const tables = [
+    { label:'Batch Log',          tblId:cfg.batchTbl,   localArr:batchRecs,    remoteKeyFn:NAT_KEY_FN_REMOTE.batch },
     { label:'Batch Transactions', tblId:cfg.batchtxTbl, localArr:batchTxRecs, remoteKeyFn:NAT_KEY_FN_REMOTE.batchtx },
     { label:'EC Log',             tblId:cfg.ecTbl,      localArr:ecRecs,       remoteKeyFn:NAT_KEY_FN_REMOTE.ec },
     { label:'Runoff',             tblId:cfg.roTbl,      localArr:roRecs,       remoteKeyFn:NAT_KEY_FN_REMOTE.ro },
