@@ -2967,6 +2967,8 @@ async function pullFromAirtable(opts){
       if(bid) batchIdByRecId[b.id] = bid;
     });
     const ctx = { batchIdByRecId };
+    const _mergeStart = performance.now();
+    const _remoteCounts = {batch:batches.length, ec:ecs.length, ro:ros.length, waste:ws.length, batchtx:txs.length, harvest:hs.length, postdry:pds.length, bio:bs.length, pest:ps.length, sanclean:scs.length, santool:sts.length, seedinv:siv.length};
     const summary = {};
     summary.batch   = mergeRemote(batchRecs,   batches, REMOTE_MAPPERS.batch,   ctx, 'batch',   'gp-batch');
     // After batch merge, run dedupe in case a remote arrived that links to a
@@ -3012,6 +3014,9 @@ async function pullFromAirtable(opts){
     const totalConflicts= Object.values(summary).reduce((s,o)=>s+o.conflicts, 0);
     lastPullAt = Date.now();
     console.log('[pull] '+new Date().toLocaleTimeString()+' →', summary, 'totals: +'+totalAdded+' / ~'+totalUpdated+' / !'+totalConflicts);
+    const _mergeMs = Math.round(performance.now() - _mergeStart);
+    console.log('[pull timing] synchronous merge of all tables: '+_mergeMs+' ms. Remote row counts:', _remoteCounts);
+    if(_mergeMs > 1500){ try{ toast('Airtable merge took '+_mergeMs+'ms — that is the freeze. Rows: '+JSON.stringify(_remoteCounts),12000); }catch(_){} }
     // Best-effort refresh of any visible views
     try { populateBatchDropdowns(); }catch(_){}
     try { if(typeof renderBatchLog==='function') renderBatchLog(); }catch(_){}
@@ -7232,7 +7237,29 @@ document.getElementById('ro-date').readOnly=true;
 document.getElementById('ro-date').style.background='var(--bg2)';
 document.getElementById('ro-date').style.color='var(--text3)';
 document.getElementById('ro-date').style.cursor='default';
-buildECEvents();buildROSamples();loadAll();installMomsFilterButtons();populateBatchDropdowns();setVegMin();applyCascadeLocks();updatePendingBadge();ecSeqUnlock();wasteSeqUnlock();summaryPopulateBatches();initSections();document.getElementById('waste-date').textContent=new Date().toISOString().split('T')[0];
+(function bootTimed(){
+  const _marks=[];
+  const _t=(name,fn)=>{const s=performance.now();try{fn();}catch(e){console.error('[boot]'+name+' threw',e);}finally{_marks.push([name,Math.round(performance.now()-s)]);}};
+  _t('buildECEvents',buildECEvents);
+  _t('buildROSamples',buildROSamples);
+  _t('loadAll',loadAll);
+  _t('installMomsFilterButtons',installMomsFilterButtons);
+  _t('populateBatchDropdowns',populateBatchDropdowns);
+  _t('setVegMin',setVegMin);
+  _t('applyCascadeLocks',applyCascadeLocks);
+  _t('updatePendingBadge',updatePendingBadge);
+  _t('ecSeqUnlock',ecSeqUnlock);
+  _t('wasteSeqUnlock',wasteSeqUnlock);
+  _t('summaryPopulateBatches',summaryPopulateBatches);
+  _t('initSections',initSections);
+  document.getElementById('waste-date').textContent=new Date().toISOString().split('T')[0];
+  _marks.sort((a,b)=>b[1]-a[1]);
+  const total=_marks.reduce((s,m)=>s+m[1],0);
+  console.log('[boot timing] total synchronous boot: '+total+' ms');
+  console.table(_marks.map(m=>({phase:m[0],ms:m[1]})));
+  window.__bootMarks=_marks;
+  try{ toast('Boot '+total+'ms — slowest: '+_marks[0][0]+' '+_marks[0][1]+'ms',9000); }catch(_){}
+})();
 // Kick off auto-sync (60s polling) if Airtable is configured. Idempotent —
 // also re-invoked from saveSettings() so a fresh token starts the timer.
 startAutoSync();
