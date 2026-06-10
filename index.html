@@ -6989,6 +6989,52 @@ async function _cleanAirtableDupesForTable(tblId, localArr, remoteKeyFn, label){
 //
 // This is the permanent fix for the dedup-then-pull loop — once the orphan records are
 // gone from Airtable, future pulls won't keep re-creating local duplicates.
+
+// Collapse LOCAL-only duplicate rows for the child log tables. These arise when an
+// unlinked local row (no airtableId) and its Airtable twin (pulled in with an airtableId)
+// both sit in the array under the same natural key. We keep the synced row (the one with
+// airtableId — the canonical Airtable record) and drop ONLY the unsynced phantom copies.
+// We never remove rows from a group that has no synced member, so genuinely unsynced data
+// is preserved (it needs syncing, not deleting). Arrays are mutated in place so the global
+// references stay valid. Returns the number of local rows removed.
+function cleanLocalDuplicates(){
+  const tbls = [
+    { lsKey:'gp-ec',       arr:ecRecs,       fn:NAT_KEY_FN.ec },
+    { lsKey:'gp-ro',       arr:roRecs,       fn:NAT_KEY_FN.ro },
+    { lsKey:'gp-waste',    arr:wasteRecs,    fn:NAT_KEY_FN.waste },
+    { lsKey:'gp-harvest',  arr:harvestRecs,  fn:NAT_KEY_FN.harvest },
+    { lsKey:'gp-postdry',  arr:postDryRecs,  fn:NAT_KEY_FN.postdry },
+    { lsKey:'gp-bio',      arr:bioRecs,      fn:NAT_KEY_FN.bio },
+    { lsKey:'gp-pest',     arr:pestRecs,     fn:NAT_KEY_FN.pest },
+    { lsKey:'gp-sanclean', arr:sanCleanRecs, fn:NAT_KEY_FN.sanclean },
+    { lsKey:'gp-santool',  arr:sanToolRecs,  fn:NAT_KEY_FN.santool }
+  ].filter(t => Array.isArray(t.arr) && typeof t.fn === 'function');
+  let removed = 0;
+  tbls.forEach(t => {
+    const groups = {};
+    t.arr.forEach((r, i) => { const k = t.fn(r); if(!k) return; (groups[k] = groups[k] || []).push(i); });
+    const drop = new Set();
+    Object.values(groups).forEach(idxs => {
+      if(idxs.length < 2) return;
+      const keeperIdx = idxs.find(i => t.arr[i] && t.arr[i].airtableId);
+      if(keeperIdx == null) return; // no synced canonical — leave the unsynced rows alone
+      idxs.forEach(i => {
+        if(i === keeperIdx) return;
+        if(!t.arr[i].airtableId) drop.add(i); // drop only unsynced phantom copies
+      });
+    });
+    if(drop.size){
+      const kept = t.arr.filter((_, i) => !drop.has(i));
+      t.arr.length = 0;
+      Array.prototype.push.apply(t.arr, kept);
+      lsSet(t.lsKey, t.arr);
+      removed += drop.size;
+    }
+  });
+  if(removed) console.log('[cleanLocalDuplicates] removed '+removed+' local phantom duplicate row(s)');
+  return removed;
+}
+
 async function cleanAirtableDuplicateTx(){
   if(!atReady()){ toast('Configure Airtable in Settings first.'); return; }
   const el = document.getElementById('clean-air-dupes-status');
@@ -7033,8 +7079,20 @@ async function cleanAirtableDuplicateTx(){
     }
   }
   if(!totalDupes){
-    setStatus('No Airtable duplicates found across any table.', 'var(--green)');
-    toast('No Airtable duplicates found.', 3500);
+    // No Airtable-side duplicates — but there may still be local-only phantom copies
+    // (an unlinked local row sitting next to its synced Airtable twin). Collapse those.
+    const _localRemovedEarly = cleanLocalDuplicates();
+    if(_localRemovedEarly){
+      setStatus('No Airtable duplicates. Removed '+_localRemovedEarly+' local duplicate copy(ies).', 'var(--green)');
+      toast('Removed '+_localRemovedEarly+' local duplicate(s).', 4000);
+      try { if(typeof renderWaste==='function') renderWaste(); }catch(_){}
+      try { if(typeof renderWasteReport==='function') renderWasteReport(); }catch(_){}
+      try { if(typeof renderBatchLog==='function') renderBatchLog(); }catch(_){}
+      try { if(typeof updatePendingBadge==='function') updatePendingBadge(); }catch(_){}
+    } else {
+      setStatus('No duplicates found (Airtable or local).', 'var(--green)');
+      toast('No duplicates found.', 3500);
+    }
     return;
   }
   // Build a per-table summary for the confirm.
@@ -7070,6 +7128,8 @@ async function cleanAirtableDuplicateTx(){
       lsSet(s.lsKey, s.localArr);
     }
   }
+  const _localDeduped = cleanLocalDuplicates();
+  localPruned += _localDeduped;
   setStatus('Deleted '+totalDeleted+' duplicate(s) from Airtable'+(localPruned?' and removed '+localPruned+' local copy(ies)':'')+'.'+(totalFailed?' '+totalFailed+' delete(s) failed.':''), totalFailed ? 'var(--amber)' : 'var(--green)');
   toast('Cleaned '+totalDeleted+' Airtable duplicate(s)' + (totalFailed ? ' ('+totalFailed+' failed)' : '') + '.', 5000);
   // Refresh local from Airtable now that the duplicates are gone, then refresh visible views.
