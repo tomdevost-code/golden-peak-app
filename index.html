@@ -7629,6 +7629,20 @@ async function wasteSave(){
       return;
     }
   }
+  // EDIT MODE: validations above have passed. Fully reverse + remove the original record
+  // (its Destroyed tx, roomDistribution and cohort effects), then fall through to save fresh.
+  if(wasteEditId != null){
+    const _oldIdx = wasteRecs.findIndex(r => String(r.id) === String(wasteEditId));
+    if(_oldIdx >= 0){
+      const _old = wasteRecs[_oldIdx];
+      const _ob = await wasteReverseDestroyed(_old);
+      if(_old.airtableId && cfg.wasteTbl && cfg.token && cfg.base){ try { await atDelete(cfg.wasteTbl, _old.airtableId); } catch(_){} }
+      wasteRecs.splice(_oldIdx, 1); lsSet('gp-waste', wasteRecs);
+      if(_ob && cfg.batchTbl && cfg.token && cfg.base){ try { await atUpsert(cfg.batchTbl, buildBatchFields(_ob), ['Batch ID']); _ob.synced = true; lsSet('gp-batch', batchRecs); } catch(_){} }
+    }
+    wasteEditId = null;
+    const _wb = document.getElementById('waste-btn'); if(_wb) _wb.textContent = 'Save Waste Record';
+  }
   const rec={id:Date.now(),date,grower,batch,room,type,subtype:subtype||'',weight,plants,notes,synced:false};
   wasteRecs.unshift(rec);lsSet('gp-waste',wasteRecs);
   // Auto-create a "Destroyed" Batch Transaction when plants are destroyed via Vegetative Waste
@@ -7639,8 +7653,9 @@ async function wasteSave(){
     batchTxRecs.filter(t=>t.batchId===rec.batch).forEach(t=>{const q=parseInt(t.qty)||0;if(t.txType==='Produced/Received'||t.txType==='Seeds Germinated')qtyBefore+=q;else qtyBefore-=q;});
     if(qtyBefore<0)qtyBefore=0;
     const _dtPhase = _wsBatchRec ? (_wsBatchRec.plantPhase||'') : '';
-    destroyedTx={id:Date.now()+1,batchId:rec.batch,date:rec.date,txType:'Destroyed',qty:rec.plants,notes:'Auto-created from Vegetative Waste record',currentQtyBefore:qtyBefore,plantPhase:_dtPhase,synced:false};
-    batchTxRecs.unshift(destroyedTx);lsSet('gp-batchtx',batchTxRecs);
+    destroyedTx={id:Date.now()+1,batchId:rec.batch,date:rec.date,txType:'Destroyed',qty:rec.plants,notes:'Auto-created from Vegetative Waste record',currentQtyBefore:qtyBefore,plantPhase:_dtPhase,sourceWasteId:rec.id,synced:false};
+    rec.destroyedTxId=destroyedTx.id;
+    batchTxRecs.unshift(destroyedTx);lsSet('gp-batchtx',batchTxRecs);lsSet('gp-waste',wasteRecs);
     // Decrement the per-room plant distribution for the room these plants came from
     if(_wsBatchRec && _wsBatchRec.roomDistribution && _wsBatchRec.roomDistribution[rec.room] != null){
       _wsBatchRec.roomDistribution[rec.room] = Math.max(0, _wsBatchRec.roomDistribution[rec.room] - rec.plants);
@@ -7783,9 +7798,126 @@ function renderWaste(){
   const filterWeight = data.reduce((s,r)=>s+(parseFloat(r.weight)||0),0);
   const filterPlants = data.reduce((s,r)=>s+(parseInt(r.plants)||0),0);
   const totalsHtml = '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--green-pale);border-bottom:1px solid var(--green-light);font-family:var(--mono);font-size:12px;color:var(--green);"><span style="text-transform:uppercase;letter-spacing:0.05em;font-size:10px;font-weight:600;">Filter Totals (' + data.length + ' record' + (data.length===1?'':'s') + ')</span><span><strong style="font-size:14px;">' + filterWeight.toFixed(3) + ' kg</strong> &nbsp;·&nbsp; <strong style="font-size:14px;">' + filterPlants + ' plants</strong></span></div>';
-  tbl.innerHTML='<div style="overflow-x:auto;background:#fff;border-radius:var(--radius-sm);border:1px solid var(--border);">'+totalsHtml+'<table style="width:100%;border-collapse:collapse;font-size:12px;background:#fff;"><thead><tr style="background:#f5f5f5;"><th style="padding:8px 6px;text-align:left;font-family:var(--mono);font-weight:600;font-size:11px;color:#333;">Date</th><th style="padding:8px 6px;text-align:left;color:#333;">Grower</th><th style="padding:8px 6px;text-align:left;color:#333;">Batch</th><th style="padding:8px 6px;text-align:left;color:#333;">Room</th><th style="padding:8px 6px;text-align:left;color:#333;">Type</th><th style="padding:8px 6px;text-align:left;color:#333;">Sub-Category</th><th style="padding:8px 6px;text-align:right;color:#333;">Weight</th><th style="padding:8px 6px;text-align:right;color:#333;">Plants</th></tr></thead><tbody>'+
-    data.map(r=>'<tr style="background:#fff;border-bottom:1px solid #e0e0e0;"><td style="padding:7px 6px;font-family:var(--mono);font-size:11px;">'+r.date+'</td><td style="padding:7px 6px;">'+r.grower+'</td><td style="padding:7px 6px;font-family:var(--mono);">'+r.batch+'</td><td style="padding:7px 6px;">'+roomDot(r.room)+'</td><td style="padding:7px 6px;"><span style="font-size:11px;background:'+(r.type==='Vegetative Waste'?'var(--green-pale)':'var(--amber-pale)')+';color:'+(r.type==='Vegetative Waste'?'var(--green)':'var(--amber)')+';border-radius:20px;padding:2px 8px;">'+r.type+'</span></td><td style="padding:7px 6px;font-size:11px;color:var(--text2);">'+(r.subtype||'—')+'</td><td style="padding:7px 6px;text-align:right;font-family:var(--mono);">'+r.weight.toFixed(3)+' kg</td><td style="padding:7px 6px;text-align:right;font-family:var(--mono);">'+(r.plants||0)+'</td></tr>').join('')+
+  tbl.innerHTML='<div style="overflow-x:auto;background:#fff;border-radius:var(--radius-sm);border:1px solid var(--border);">'+totalsHtml+'<table style="width:100%;border-collapse:collapse;font-size:12px;background:#fff;"><thead><tr style="background:#f5f5f5;"><th style="padding:8px 6px;text-align:left;font-family:var(--mono);font-weight:600;font-size:11px;color:#333;">Date</th><th style="padding:8px 6px;text-align:left;color:#333;">Grower</th><th style="padding:8px 6px;text-align:left;color:#333;">Batch</th><th style="padding:8px 6px;text-align:left;color:#333;">Room</th><th style="padding:8px 6px;text-align:left;color:#333;">Type</th><th style="padding:8px 6px;text-align:left;color:#333;">Sub-Category</th><th style="padding:8px 6px;text-align:right;color:#333;">Weight</th><th style="padding:8px 6px;text-align:right;color:#333;">Plants</th><th style="padding:8px 6px;text-align:center;color:#333;">Actions</th></tr></thead><tbody>'+
+    data.map(r=>{ const _wIdArg = "'" + String(r.id).replace(/\\/g,'\\\\').replace(/'/g,"\\'") + "'"; return '<tr style="background:#fff;border-bottom:1px solid #e0e0e0;"><td style="padding:7px 6px;font-family:var(--mono);font-size:11px;">'+r.date+'</td><td style="padding:7px 6px;">'+r.grower+'</td><td style="padding:7px 6px;font-family:var(--mono);">'+r.batch+'</td><td style="padding:7px 6px;">'+roomDot(r.room)+'</td><td style="padding:7px 6px;"><span style="font-size:11px;background:'+(r.type==='Vegetative Waste'?'var(--green-pale)':'var(--amber-pale)')+';color:'+(r.type==='Vegetative Waste'?'var(--green)':'var(--amber)')+';border-radius:20px;padding:2px 8px;">'+r.type+'</span></td><td style="padding:7px 6px;font-size:11px;color:var(--text2);">'+(r.subtype||'—')+'</td><td style="padding:7px 6px;text-align:right;font-family:var(--mono);">'+r.weight.toFixed(3)+' kg</td><td style="padding:7px 6px;text-align:right;font-family:var(--mono);">'+(r.plants||0)+'</td><td style="padding:7px 6px;text-align:center;white-space:nowrap;"><button type="button" onclick="wasteEditStart('+_wIdArg+')" style="font-size:11px;padding:3px 8px;margin-right:4px;border:1px solid var(--border);background:var(--bg2);border-radius:var(--radius-sm);cursor:pointer;color:var(--text2);">Edit</button><button type="button" onclick="wasteDelete('+_wIdArg+')" style="font-size:11px;padding:3px 8px;border:1px solid var(--red);background:var(--red-pale);border-radius:var(--radius-sm);cursor:pointer;color:var(--red);">Delete</button></td></tr>'; }).join('')+
     '</tbody></table></div>';
+}
+
+// ===== Waste edit/delete (with auto-reverse of the linked Destroyed transaction) =====
+let wasteEditId = null;
+
+// Index in batchTxRecs of the Destroyed tx a Vegetative-Waste record created (link first, then heuristic).
+function wasteFindDestroyedTxIdx(rec){
+  if(!rec) return -1;
+  if(rec.destroyedTxId != null){
+    const i = batchTxRecs.findIndex(t => t && String(t.id) === String(rec.destroyedTxId));
+    if(i >= 0) return i;
+  }
+  return batchTxRecs.findIndex(t => t && t.txType === 'Destroyed' && t.batchId === rec.batch
+      && t.date === rec.date && (parseInt(t.qty)||0) === (parseInt(rec.plants)||0)
+      && /Auto-created from Vegetative Waste/.test(t.notes || ''));
+}
+
+// Undo a Vegetative-Waste record's side-effects: remove its Destroyed tx (local + Airtable),
+// add the plants back to roomDistribution, and (mothers) restore cohort counts best-effort.
+// Returns the affected batch (for syncing) or null.
+async function wasteReverseDestroyed(rec){
+  if(!rec || rec.type !== 'Vegetative Waste' || !((parseInt(rec.plants)||0) > 0)) return null;
+  const qty = parseInt(rec.plants) || 0;
+  const idx = wasteFindDestroyedTxIdx(rec);
+  if(idx >= 0){
+    const tx = batchTxRecs[idx];
+    if(tx.airtableId && cfg.batchtxTbl && cfg.token && cfg.base){ try { await atDelete(cfg.batchtxTbl, tx.airtableId); } catch(_){} }
+    batchTxRecs.splice(idx, 1);
+    lsSet('gp-batchtx', batchTxRecs);
+  }
+  const b = batchRecs.find(r => r.batchId === rec.batch && !r.type);
+  if(b){
+    b.roomDistribution = b.roomDistribution || {};
+    if(b.roomDistribution[rec.room] != null) b.roomDistribution[rec.room] = (parseInt(b.roomDistribution[rec.room])||0) + qty;
+    if(isMotherBatch(rec.batch)){
+      const _phase = (rec.room === 'Veg') ? 'Veg' : (/^Flower/.test(rec.room) ? 'Flower' : 'Veg');
+      if(typeof momPhaseAdjust === 'function') momPhaseAdjust(b, _phase, qty);
+      b.momPurposeCounts = b.momPurposeCounts || {};
+      b.momPurposeCounts['Clone Donor'] = (parseInt(b.momPurposeCounts['Clone Donor'])||0) + qty;
+    }
+    b.synced = false;
+    lsSet('gp-batch', batchRecs);
+  }
+  return b;
+}
+
+async function wasteDelete(id){
+  const idx = wasteRecs.findIndex(r => String(r.id) === String(id));
+  if(idx < 0){ toast('Entry not found.'); return; }
+  const rec = wasteRecs[idx];
+  const restoresPlants = (rec.type === 'Vegetative Waste' && (parseInt(rec.plants)||0) > 0);
+  if(!confirm('Delete this waste record ('+(rec.type||'')+(rec.date?' on '+rec.date:'')+')?'
+      + (restoresPlants ? ' This will also restore the '+rec.plants+' destroyed plant(s) to the batch.' : '')
+      + ' This cannot be undone.')) return;
+  if(rec.airtableId && cfg.wasteTbl && cfg.token && cfg.base){
+    setSyncPill('ing','Deleting...');
+    const ok = await atDelete(cfg.wasteTbl, rec.airtableId);
+    if(!ok){ setSyncPill('err','Delete failed'); toast('Could not delete from Airtable — entry kept. Try again when online.',5000); return; }
+    setSyncPill('ok','Synced');
+  }
+  const b = await wasteReverseDestroyed(rec);
+  wasteRecs.splice(idx, 1);
+  lsSet('gp-waste', wasteRecs);
+  if(String(wasteEditId) === String(id)) wasteEditCancel();
+  if(b && cfg.batchTbl && cfg.token && cfg.base){
+    try { await atUpsert(cfg.batchTbl, buildBatchFields(b), ['Batch ID']); b.synced = true; lsSet('gp-batch', batchRecs); } catch(_){}
+  }
+  populateBatchDropdowns();
+  renderWaste();
+  updatePendingBadge();
+  const _sel = document.getElementById('summary-batch-select');
+  if(_sel && _sel.value === rec.batch){
+    try { if(typeof summaryCalcQty==='function') summaryCalcQty(rec.batch); } catch(_){}
+    try { if(typeof summaryRenderHistory==='function') summaryRenderHistory(rec.batch); } catch(_){}
+    try { if(typeof summaryRefreshBatchTotals==='function') summaryRefreshBatchTotals(rec.batch); } catch(_){}
+  }
+  toast('Waste record deleted.'+(restoresPlants?' Plants restored.':''));
+}
+
+function wasteEditCancel(){
+  wasteEditId = null;
+  const btn = document.getElementById('waste-btn'); if(btn) btn.textContent = 'Save Waste Record';
+}
+
+function wasteEditStart(id){
+  const rec = wasteRecs.find(r => String(r.id) === String(id));
+  if(!rec){ toast('Entry not found.'); return; }
+  wasteEditId = id;
+  const bs = document.getElementById('waste-batch-select'); if(bs) bs.value = rec.batch || '';
+  if(typeof wasteBatchSelect === 'function') wasteBatchSelect();
+  const gEl = document.getElementById('waste-grower'); if(gEl){ gEl.disabled=false; gEl.value = rec.grower || ''; }
+  if(typeof wasteSeqUnlock === 'function') wasteSeqUnlock();
+  const rEl = document.getElementById('waste-room');
+  if(rEl){
+    if(rec.room && !Array.from(rEl.options).some(o => o.value === rec.room)){
+      const opt = document.createElement('option'); opt.value = rec.room; opt.textContent = rec.room; rEl.appendChild(opt);
+    }
+    rEl.disabled = false; rEl.style.background=''; rEl.style.color=''; rEl.style.cursor=''; rEl.value = rec.room || '';
+  }
+  if(typeof wasteSeqUnlock === 'function') wasteSeqUnlock();
+  const tEl = document.getElementById('waste-type'); if(tEl){ tEl.disabled=false; tEl.style.background=''; tEl.style.color=''; tEl.style.cursor=''; tEl.value = rec.type || ''; }
+  if(typeof wastePlantsToggle === 'function') wastePlantsToggle();
+  const subEl = document.getElementById('waste-subtype');
+  if(subEl && rec.subtype){
+    if(!Array.from(subEl.options).some(o => o.value === rec.subtype)){
+      const opt = document.createElement('option'); opt.value = rec.subtype; opt.textContent = rec.subtype; subEl.appendChild(opt);
+    }
+    subEl.disabled=false; subEl.value = rec.subtype;
+    if(typeof wastePlantsToggle === 'function') wastePlantsToggle();
+  }
+  const wEl = document.getElementById('waste-weight'); if(wEl){ wEl.disabled=false; wEl.style.background=''; wEl.style.color=''; wEl.style.cursor=''; wEl.value = (rec.weight != null ? rec.weight : ''); }
+  const pEl = document.getElementById('waste-plants'); if(pEl && (parseInt(rec.plants)||0) > 0){ pEl.disabled=false; pEl.style.background=''; pEl.style.color=''; pEl.style.cursor=''; pEl.value = rec.plants; }
+  const nEl = document.getElementById('waste-notes'); if(nEl){ nEl.disabled=false; nEl.style.background=''; nEl.style.color=''; nEl.style.cursor=''; nEl.value = rec.notes || ''; }
+  const dEl = document.getElementById('waste-date'); if(dEl && rec.date) dEl.textContent = rec.date;
+  const btn = document.getElementById('waste-btn'); if(btn) btn.textContent = 'Update Waste Record';
+  toast('Editing waste from '+(rec.date||'')+' — change values and press Update.',4000);
+  if(btn && btn.scrollIntoView) btn.scrollIntoView({behavior:'smooth',block:'center'});
 }
 // ── END WASTE LOG ─────────────────────────────────────────────────────────────
 
