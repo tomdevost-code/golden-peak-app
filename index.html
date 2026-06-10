@@ -4,7 +4,13 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Golden Peak Cannabis — Field Log</title>
-<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+<!-- Fonts loaded NON-render-blocking: the page paints immediately with fallback fonts and
+     swaps to DM Sans/Mono if/when Google Fonts loads. Prevents a blank-page freeze on networks
+     where fonts.googleapis.com is blocked or slow (the stylesheet link used to block rendering). -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" onload="this.onload=null;this.rel='stylesheet'" />
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" /></noscript>
 <style>
 :root {
   --green: #2D6A4F; --green-light: #52B788; --green-pale: #D8F3DC;
@@ -7270,7 +7276,9 @@ document.getElementById('ro-date').style.cursor='default';
   console.log('[boot timing] total synchronous boot: '+total+' ms');
   console.table(_marks.map(m=>({phase:m[0],ms:m[1]})));
   window.__bootMarks=_marks;
-  try{ toast('Boot '+total+'ms — slowest: '+_marks[0][0]+' '+_marks[0][1]+'ms',9000); }catch(_){}
+  const _navMs = Math.round(performance.now());
+  console.log('[boot] JS started '+_navMs+'ms after page navigation. If this is large (tens of thousands), a render-blocking <head> resource stalled the page before any script ran — now fixed for Google Fonts.');
+  try{ toast('JS started '+_navMs+'ms after load · boot '+total+'ms',9000); }catch(_){}
 })();
 // Freeze watchdog: a 500ms heartbeat. If the gap between ticks is much larger
 // than 500ms, the main thread was blocked (a freeze). Report how long.
