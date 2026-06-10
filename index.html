@@ -7016,12 +7016,18 @@ function cleanLocalDuplicates(){
     const drop = new Set();
     Object.values(groups).forEach(idxs => {
       if(idxs.length < 2) return;
-      const keeperIdx = idxs.find(i => t.arr[i] && t.arr[i].airtableId);
-      if(keeperIdx == null) return; // no synced canonical — leave the unsynced rows alone
+      // Keeper preference: a row already in Airtable (airtableId) > a synced row > the first row.
+      // We keep exactly one row per identical-key group and drop the rest. This matches the app's
+      // own model where identical-key entries collapse to a single record on sync, so it doesn't
+      // lose anything sync wouldn't already merge.
+      let keeperIdx = idxs[0];
       idxs.forEach(i => {
-        if(i === keeperIdx) return;
-        if(!t.arr[i].airtableId) drop.add(i); // drop only unsynced phantom copies
+        const a = t.arr[keeperIdx], b = t.arr[i];
+        if(b.airtableId && !a.airtableId){ keeperIdx = i; return; }
+        if(a.airtableId && !b.airtableId) return;
+        if(b.synced && !a.synced) keeperIdx = i;
       });
+      idxs.forEach(i => { if(i !== keeperIdx) drop.add(i); });
     });
     if(drop.size){
       const kept = t.arr.filter((_, i) => !drop.has(i));
