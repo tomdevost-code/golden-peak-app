@@ -3028,7 +3028,9 @@ async function pullFromAirtable(opts){
     try { renderConflictBanner(); }catch(_){}
     const _renderMs = Math.round(performance.now() - _renderStart);
     console.log('[pull timing] fetch(network)='+_fetchMs+'ms  merge='+_mergeMs+'ms  render='+_renderMs+'ms  rows='+JSON.stringify(_remoteCounts));
-    try{ toast('Pull: fetch '+_fetchMs+'ms · merge '+_mergeMs+'ms · render '+_renderMs+'ms',12000); }catch(_){}
+    const _rowsTotal = Object.values(_remoteCounts).reduce((s,n)=>s+n,0);
+    const _biggest = Object.entries(_remoteCounts).sort((a,b)=>b[1]-a[1]).slice(0,3).map(e=>e[0]+':'+e[1]).join(', ');
+    try{ toast('Fetched '+_rowsTotal+' rows in '+Math.round(_fetchMs/1000)+'s. Biggest: '+_biggest,15000); }catch(_){}
     if(opts.manual){
       if(totalConflicts){
         toast(totalConflicts+' conflict(s) — review at top of page', 5000);
