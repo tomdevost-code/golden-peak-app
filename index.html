@@ -4641,17 +4641,30 @@ async function bioSave(){
     return;
   }
   const unit = (BIO_PRODUCTS[product] && BIO_PRODUCTS[product].unit) || '';
-  const rec = {
-    id: Date.now(), date, grower, batch, room,
-    product, quantity, unit, reason, synced: false
-  };
-  bioRecs.unshift(rec);
-  lsSet('gp-bio', bioRecs);
-  toast('Saved: '+product+' '+quantity+' '+unit);
-  updatePendingBadge();
+  let rec;
+  const _bioEditing = bioEditId != null;
+  if(_bioEditing){
+    rec = bioRecs.find(r => r.id === bioEditId);
+    if(!rec){ toast('The entry being edited was not found.'); bioEditId = null; return; }
+    rec.date=date; rec.grower=grower; rec.batch=batch; rec.room=room;
+    rec.product=product; rec.quantity=quantity; rec.unit=unit; rec.reason=reason; rec.synced=false;
+    lsSet('gp-bio', bioRecs);
+    toast('Updated: '+product+' '+quantity+' '+unit);
+    updatePendingBadge();
+  } else {
+    rec = {
+      id: Date.now(), date, grower, batch, room,
+      product, quantity, unit, reason, synced: false
+    };
+    bioRecs.unshift(rec);
+    lsSet('gp-bio', bioRecs);
+    toast('Saved: '+product+' '+quantity+' '+unit);
+    updatePendingBadge();
+  }
   // Soft-refresh: keep batch/grower/room/time, clear product/quantity/reason, refresh history
   ['bio-product','bio-quantity','bio-reason'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
   bioProductChanged(); // reset the unit label/step
+  if(_bioEditing){ bioEditId = null; const _bb=document.getElementById('bio-btn'); if(_bb) _bb.textContent='Save Bio Control Entry'; }
   bioRenderHistory(batch, room);
   // Sync to Airtable. The new single-select 'Product' field carries the product name; 'Quantity'
   // holds the numeric amount; 'Unit' is the unit string (also configurable as a single-select).
@@ -4669,9 +4682,13 @@ async function bioSave(){
         'Reason': rec.reason || undefined
       };
       Object.keys(f).forEach(k => { if(f[k]===undefined||f[k]===null||f[k]==='') delete f[k]; });
-      const _bioRes = await atPost(cfg.bioTbl, f);
+      if(_bioEditing && rec.airtableId){
+        await atUpdateById(cfg.bioTbl, rec.airtableId, f);
+      } else {
+        const _bioRes = await atPost(cfg.bioTbl, f);
+        if(_bioRes && _bioRes.id) rec.airtableId = _bioRes.id;
+      }
       rec.synced = true;
-      if(_bioRes && _bioRes.id) rec.airtableId = _bioRes.id;
       lsSet('gp-bio', bioRecs);
       setSyncPill('ok','Synced');
       updatePendingBadge();
@@ -4714,6 +4731,7 @@ function bioRenderHistory(batch, room){
     '<th style="padding:6px 8px;text-align:right;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Quantity</th>'+
     '<th style="padding:6px 8px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Grower</th>'+
     '<th style="padding:6px 8px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Reason</th>'+
+    '<th style="padding:6px 8px;text-align:center;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Actions</th>'+
   '</tr></thead><tbody>';
   recs.forEach(r => {
     const unit = r.unit || (BIO_PRODUCTS[r.product] && BIO_PRODUCTS[r.product].unit) || '';
@@ -4724,10 +4742,72 @@ function bioRenderHistory(batch, room){
       '<td style="padding:5px 8px;font-family:var(--mono);text-align:right;border-top:1px solid var(--border);border-left:1px solid var(--border);">'+qtyStr+'</td>'+
       '<td style="padding:5px 8px;font-size:11px;color:var(--text2);border-top:1px solid var(--border);border-left:1px solid var(--border);">'+(r.grower||'—')+'</td>'+
       '<td style="padding:5px 8px;font-size:11px;color:var(--text3);border-top:1px solid var(--border);border-left:1px solid var(--border);max-width:200px;">'+(r.reason||'—')+'</td>'+
+      '<td style="padding:5px 8px;border-top:1px solid var(--border);border-left:1px solid var(--border);white-space:nowrap;text-align:center;">'+
+        '<button type="button" onclick="bioEditStart('+r.id+')" style="font-size:11px;padding:3px 8px;margin-right:4px;border:1px solid var(--border);background:var(--bg2);border-radius:var(--radius-sm);cursor:pointer;color:var(--text2);">Edit</button>'+
+        '<button type="button" onclick="bioDelete('+r.id+')" style="font-size:11px;padding:3px 8px;border:1px solid var(--red);background:var(--red-pale);border-radius:var(--radius-sm);cursor:pointer;color:var(--red);">Delete</button>'+
+      '</td>'+
     '</tr>';
   });
   html += '</tbody></table></div>';
   list.innerHTML = html;
+}
+
+// Edit/Delete for Bio Control entries.
+// bioEditId holds the id of the record currently loaded into the form for editing
+// (null = normal "add new" mode). bioSave() branches on it.
+let bioEditId = null;
+function bioEditStart(id){
+  const rec = bioRecs.find(r => r.id === id);
+  if(!rec){ toast('Entry not found.'); return; }
+  bioEditId = id;
+  // Load the record into the form. Set batch first, then re-apply the saved values
+  // AFTER bioBatchSelect() (which resets the date + room list).
+  const bs = document.getElementById('bio-batch-select'); if(bs) bs.value = rec.batch || '';
+  const bh = document.getElementById('bio-batch'); if(bh) bh.value = rec.batch || '';
+  if(typeof bioBatchSelect === 'function') bioBatchSelect();
+  const dEl = document.getElementById('bio-date'); if(dEl && rec.date) dEl.value = rec.date;
+  const gEl = document.getElementById('bio-grower'); if(gEl) gEl.value = rec.grower || '';
+  const rEl = document.getElementById('bio-room');
+  if(rEl){
+    // Make sure the saved room is selectable even if the batch no longer lists it.
+    if(rec.room && !Array.from(rEl.options).some(o => o.value === rec.room)){
+      const opt = document.createElement('option'); opt.value = rec.room; opt.textContent = rec.room; rEl.appendChild(opt);
+    }
+    rEl.value = rec.room || '';
+  }
+  const pEl = document.getElementById('bio-product'); if(pEl) pEl.value = rec.product || '';
+  if(typeof bioProductChanged === 'function') bioProductChanged();
+  const qEl = document.getElementById('bio-quantity'); if(qEl) qEl.value = (rec.quantity != null ? rec.quantity : '');
+  const rsEl = document.getElementById('bio-reason'); if(rsEl) rsEl.value = rec.reason || '';
+  const btn = document.getElementById('bio-btn'); if(btn) btn.textContent = 'Update Bio Control Entry';
+  bioRenderHistory(rec.batch, rec.room);
+  toast('Editing entry from '+(rec.date||'')+' — change values and press Update.',4000);
+  if(btn && btn.scrollIntoView) btn.scrollIntoView({behavior:'smooth',block:'center'});
+}
+function bioEditCancel(){
+  bioEditId = null;
+  const btn = document.getElementById('bio-btn'); if(btn) btn.textContent = 'Save Bio Control Entry';
+  ['bio-product','bio-quantity','bio-reason'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
+  if(typeof bioProductChanged === 'function') bioProductChanged();
+}
+async function bioDelete(id){
+  const idx = bioRecs.findIndex(r => r.id === id);
+  if(idx < 0){ toast('Entry not found.'); return; }
+  const rec = bioRecs[idx];
+  if(!confirm('Delete this Bio Control entry ('+(rec.product||'')+(rec.date?' on '+rec.date:'')+')? This cannot be undone.')) return;
+  // Delete from Airtable FIRST when it's been synced — otherwise the next pull re-adds it.
+  if(rec.airtableId && cfg.bioTbl && cfg.token && cfg.base){
+    setSyncPill('ing','Deleting...');
+    const ok = await atDelete(cfg.bioTbl, rec.airtableId);
+    if(!ok){ setSyncPill('err','Delete failed'); toast('Could not delete from Airtable — entry kept. Try again when online.',5000); return; }
+    setSyncPill('ok','Synced');
+  }
+  bioRecs.splice(idx, 1);
+  lsSet('gp-bio', bioRecs);
+  updatePendingBadge();
+  if(bioEditId === id) bioEditCancel();
+  toast('Entry deleted.');
+  bioRenderHistory(rec.batch, rec.room);
 }
 
 // ─── PEST IDENTIFICATION LOG ─────────────────────────────────────────────────
