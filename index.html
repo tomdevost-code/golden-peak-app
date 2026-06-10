@@ -2945,6 +2945,7 @@ async function pullFromAirtable(opts){
   isPulling = true;
   if(opts.manual) setSyncPill('ing','Syncing…');
   try {
+    const _fetchStart = performance.now();
     const [batches, ecs, ros, ws, txs, hs, pds, bs, ps, scs, sts, sed, siv] = await Promise.all([
       atFetchAll(cfg.batchTbl),
       atFetchAll(cfg.ecTbl),
@@ -2967,6 +2968,7 @@ async function pullFromAirtable(opts){
       if(bid) batchIdByRecId[b.id] = bid;
     });
     const ctx = { batchIdByRecId };
+    const _fetchMs = Math.round(performance.now() - _fetchStart);
     const _mergeStart = performance.now();
     const _remoteCounts = {batch:batches.length, ec:ecs.length, ro:ros.length, waste:ws.length, batchtx:txs.length, harvest:hs.length, postdry:pds.length, bio:bs.length, pest:ps.length, sanclean:scs.length, santool:sts.length, seedinv:siv.length};
     const summary = {};
@@ -3016,14 +3018,17 @@ async function pullFromAirtable(opts){
     console.log('[pull] '+new Date().toLocaleTimeString()+' →', summary, 'totals: +'+totalAdded+' / ~'+totalUpdated+' / !'+totalConflicts);
     const _mergeMs = Math.round(performance.now() - _mergeStart);
     console.log('[pull timing] synchronous merge of all tables: '+_mergeMs+' ms. Remote row counts:', _remoteCounts);
-    if(_mergeMs > 1500){ try{ toast('Airtable merge took '+_mergeMs+'ms — that is the freeze. Rows: '+JSON.stringify(_remoteCounts),12000); }catch(_){} }
     // Best-effort refresh of any visible views
+    const _renderStart = performance.now();
     try { populateBatchDropdowns(); }catch(_){}
     try { if(typeof renderBatchLog==='function') renderBatchLog(); }catch(_){}
     try { if(typeof summaryRender==='function') summaryRender(); }catch(_){}
     try { if(typeof updatePendingBadge==='function') updatePendingBadge(); }catch(_){}
     try { if(typeof renderPullStatus==='function') renderPullStatus(); }catch(_){}
     try { renderConflictBanner(); }catch(_){}
+    const _renderMs = Math.round(performance.now() - _renderStart);
+    console.log('[pull timing] fetch(network)='+_fetchMs+'ms  merge='+_mergeMs+'ms  render='+_renderMs+'ms  rows='+JSON.stringify(_remoteCounts));
+    try{ toast('Pull: fetch '+_fetchMs+'ms · merge '+_mergeMs+'ms · render '+_renderMs+'ms',12000); }catch(_){}
     if(opts.manual){
       if(totalConflicts){
         toast(totalConflicts+' conflict(s) — review at top of page', 5000);
