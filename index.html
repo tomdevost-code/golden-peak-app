@@ -5863,6 +5863,7 @@ function roRenderHistory(batch, room){
     '<th style="padding:6px 10px;text-align:center;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);white-space:nowrap;">Avg pH</th>'+
     '<th style="padding:6px 10px;text-align:center;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);white-space:nowrap;">Variance</th>'+
     '<th style="padding:6px 10px;text-align:center;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);white-space:nowrap;">Samples</th>'+
+    '<th style="padding:6px 10px;text-align:center;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);white-space:nowrap;">Actions</th>'+
   '</tr></thead><tbody>';
   recs.forEach(r => {
     const ec = (r.avgEC != null && !isNaN(parseFloat(r.avgEC))) ? parseFloat(r.avgEC).toFixed(2) : '—';
@@ -5874,16 +5875,74 @@ function roRenderHistory(batch, room){
     const varStyle = alert
       ? 'padding:6px 10px;font-family:var(--mono);text-align:center;border-top:1px solid var(--border);border-left:1px solid var(--border);background:var(--red-pale);color:var(--red);font-weight:700;'
       : 'padding:6px 10px;font-family:var(--mono);text-align:center;border-top:1px solid var(--border);border-left:1px solid var(--border);background:var(--bg2);';
+    const _roIdArg = "'" + String(r.id).replace(/\\/g,'\\\\').replace(/'/g,"\\'") + "'";
     html += '<tr>'+
       '<td style="padding:6px 10px;font-family:var(--mono);border-top:1px solid var(--border);white-space:nowrap;">'+(r.date||'—')+(alert?' <span title="Variance >1.0 alert" style="color:var(--red);font-size:10px;">⚠</span>':'')+'</td>'+
       '<td style="padding:6px 10px;font-family:var(--mono);text-align:center;border-top:1px solid var(--border);border-left:1px solid var(--border);background:var(--bg2);">'+ec+'</td>'+
       '<td style="padding:6px 10px;font-family:var(--mono);text-align:center;border-top:1px solid var(--border);border-left:1px solid var(--border);background:var(--bg2);">'+ph+'</td>'+
       '<td style="'+varStyle+'">'+variance+'</td>'+
       '<td style="padding:6px 10px;font-family:var(--mono);text-align:center;border-top:1px solid var(--border);border-left:1px solid var(--border);color:var(--text3);">'+sampleCount+'/8</td>'+
+      '<td style="padding:6px 10px;border-top:1px solid var(--border);border-left:1px solid var(--border);white-space:nowrap;text-align:center;">'+
+        '<button type="button" onclick="roEditStart('+_roIdArg+')" style="font-size:11px;padding:3px 8px;margin-right:4px;border:1px solid var(--border);background:var(--bg2);border-radius:var(--radius-sm);cursor:pointer;color:var(--text2);">Edit</button>'+
+        '<button type="button" onclick="roDelete('+_roIdArg+')" style="font-size:11px;padding:3px 8px;border:1px solid var(--red);background:var(--red-pale);border-radius:var(--radius-sm);cursor:pointer;color:var(--red);">Delete</button>'+
+      '</td>'+
     '</tr>';
   });
   html += '</tbody></table></div>';
   el.innerHTML = html;
+}
+// Edit/Delete for Runoff entries. roEditId = id of the record loaded into the form (null = add mode).
+let roEditId = null;
+function roEditStart(id){
+  const rec = roRecs.find(r => String(r.id) === String(id));
+  if(!rec){ toast('Entry not found.'); return; }
+  roEditId = id;
+  const bs = document.getElementById('ro-batch-select'); if(bs) bs.value = rec.batch || '';
+  if(typeof roBatchSelect === 'function') roBatchSelect();   // populates rooms + lifecycle dates
+  const rEl = document.getElementById('ro-room');
+  if(rEl){
+    if(rec.room && !Array.from(rEl.options).some(o => o.value === rec.room)){
+      const opt = document.createElement('option'); opt.value = rec.room; opt.textContent = rec.room; rEl.appendChild(opt);
+    }
+    rEl.disabled = false; rEl.value = rec.room || '';
+  }
+  const gEl = document.getElementById('ro-grower'); if(gEl) gEl.value = rec.grower || '';
+  const dEl = document.getElementById('ro-date'); if(dEl && rec.date) dEl.value = rec.date;
+  const samples = Array.isArray(rec.samples) ? rec.samples : [];
+  for(let i=1;i<=8;i++){
+    const s = samples[i-1] || {};
+    const ecEl = document.getElementById('ro-ec-'+i); if(ecEl) ecEl.value = (s.ec != null ? s.ec : '');
+    const phEl = document.getElementById('ro-ph-'+i); if(phEl) phEl.value = (s.ph != null ? s.ph : '');
+  }
+  const nEl = document.getElementById('ro-notes'); if(nEl) nEl.value = rec.notes || '';
+  if(typeof roCalc === 'function') roCalc();
+  if(typeof roRoomChanged === 'function') roRoomChanged();
+  const btn = document.getElementById('ro-btn'); if(btn) btn.textContent = 'Update Runoff Entry';
+  toast('Editing runoff from '+(rec.date||'')+' — change values and press Update.',4000);
+  if(btn && btn.scrollIntoView) btn.scrollIntoView({behavior:'smooth',block:'center'});
+}
+function roEditCancel(){
+  roEditId = null;
+  const btn = document.getElementById('ro-btn'); if(btn) btn.textContent = 'Save Runoff Entry';
+}
+async function roDelete(id){
+  const idx = roRecs.findIndex(r => String(r.id) === String(id));
+  if(idx < 0){ toast('Entry not found.'); return; }
+  const rec = roRecs[idx];
+  if(!confirm('Delete this Runoff entry'+(rec.date?' from '+rec.date:'')+'? This cannot be undone.')) return;
+  if(rec.airtableId && cfg.roTbl && cfg.token && cfg.base){
+    setSyncPill('ing','Deleting...');
+    const ok = await atDelete(cfg.roTbl, rec.airtableId);
+    if(!ok){ setSyncPill('err','Delete failed'); toast('Could not delete from Airtable — entry kept. Try again when online.',5000); return; }
+    setSyncPill('ok','Synced');
+  }
+  roRecs.splice(idx, 1);
+  lsSet('gp-ro', roRecs);
+  updatePendingBadge();
+  if(String(roEditId) === String(id)) roEditCancel();
+  toast('Entry deleted.');
+  roRenderHistory(rec.batch, rec.room);
+  if(typeof roRenderSummary === 'function') roRenderSummary(rec.batch);
 }
 function findBatchDates(batch,recs){const match=recs.find(r=>r.batch&&r.batch.trim().toLowerCase()===batch.trim().toLowerCase());return match?{hydrationDate:match.hydrationDate||'',vegStart:match.vegStart||'',flowerStart:match.flowerStart||'',harvestDate:match.harvestDate||''}:null;}
 function isBatchClosed(batch){const found=findBatchDates(batch,[...ecRecs,...roRecs]);return found&&found.harvestDate?found.harvestDate:null;}
@@ -6577,18 +6636,30 @@ async function roSave(){
   const avgEC=avg(ecV),avgPH=avg(phV),variance=avgEC!==null&&inputEC!==null?Math.round((avgEC-inputEC)*100)/100:null;
   const{stage,day}=calcStage(vs,fs,date);
   const hydrationDate=ecRecs.find(r=>r.batch===batchVal)?.hydrationDate||null;
-  const rec={id:Date.now(),date,room:document.getElementById('ro-room').value,grower,batch:document.getElementById('ro-batch').value.trim(),hydrationDate,vegStart:vs,flowerStart:fs,harvestDate:harvestDate||null,stage,day,inputEC,samples,avgEC,avgPH,variance,ecAlert:variance!==null&&variance>RO_VAR_ALERT,notes:document.getElementById('ro-notes').value.trim(),synced:false};
-  roRecs.unshift(rec);lsSet('gp-ro',roRecs);saveBatchRoom(rec.batch,rec.room);populateBatchDropdowns();
+  const _roEditing = roEditId != null;
+  let rec;
+  if(_roEditing){
+    rec = roRecs.find(r => String(r.id) === String(roEditId));
+    if(!rec){ toast('The runoff entry being edited was not found.'); roEditId=null; return; }
+    Object.assign(rec, {date,room:document.getElementById('ro-room').value,grower,batch:document.getElementById('ro-batch').value.trim(),hydrationDate,vegStart:vs,flowerStart:fs,harvestDate:harvestDate||null,stage,day,inputEC,samples,avgEC,avgPH,variance,ecAlert:variance!==null&&variance>RO_VAR_ALERT,notes:document.getElementById('ro-notes').value.trim(),synced:false});
+    lsSet('gp-ro',roRecs);saveBatchRoom(rec.batch,rec.room);populateBatchDropdowns();
+  } else {
+    rec={id:Date.now(),date,room:document.getElementById('ro-room').value,grower,batch:document.getElementById('ro-batch').value.trim(),hydrationDate,vegStart:vs,flowerStart:fs,harvestDate:harvestDate||null,stage,day,inputEC,samples,avgEC,avgPH,variance,ecAlert:variance!==null&&variance>RO_VAR_ALERT,notes:document.getElementById('ro-notes').value.trim(),synced:false};
+    roRecs.unshift(rec);lsSet('gp-ro',roRecs);saveBatchRoom(rec.batch,rec.room);populateBatchDropdowns();
+  }
   if(atReady()){
     setSyncPill('ing','Syncing...');document.getElementById('ro-btn').disabled=true;
     try{
       const f={'Date':rec.date,'Room':rec.room,'Grower':rec.grower,'Batch ID':rec.batch?[rec.batch]:undefined,'Input EC':rec.inputEC||undefined,'EC Variance':rec.variance||undefined,'Notes':rec.notes||undefined};
       rec.samples.forEach((s,i)=>{if(s.ec)f['S'+(i+1)+' EC']=s.ec;if(s.ph)f['S'+(i+1)+' pH']=s.ph;});
       Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
-      const _roRes = await atPost(cfg.roTbl,f);rec.synced=true;if(_roRes && _roRes.id) rec.airtableId=_roRes.id;lsSet('gp-ro',roRecs);setSyncPill('ok','Synced');toast('Saved and synced to Airtable');
+      if(_roEditing && rec.airtableId){ await atUpdateById(cfg.roTbl, rec.airtableId, f); }
+      else { const _roRes = await atPost(cfg.roTbl,f); if(_roRes && _roRes.id) rec.airtableId=_roRes.id; }
+      rec.synced=true;lsSet('gp-ro',roRecs);setSyncPill('ok','Synced');toast(_roEditing?'Updated and synced to Airtable':'Saved and synced to Airtable');
     }catch(e){setSyncPill('err','Sync failed');toast('Saved locally - Airtable sync failed.',3500);}
     document.getElementById('ro-btn').disabled=false;
-  }else{toast('Entry saved locally');}
+  }else{toast(_roEditing?'Entry updated locally':'Entry saved locally');}
+  if(_roEditing) roEditCancel();
   roClear();updatePendingBadge();
 }
 function roClear(){for(let i=1;i<=8;i++){document.getElementById('ro-ec-'+i).value='';document.getElementById('ro-ph-'+i).value='';}['ro-notes'].forEach(id=>document.getElementById(id).value='');['ro-avg-ec','ro-avg-ph','ro-variance'].forEach(id=>document.getElementById(id).textContent='-');document.getElementById('ro-count').textContent='0/8';document.getElementById('ro-warn').style.display='none';document.getElementById('ro-ok').style.display='none';document.getElementById('ro-batch-select').value='';document.getElementById('ro-batch').value='';document.getElementById('ro-veg').value='';document.getElementById('ro-flower').value='';document.getElementById('ro-harvest').value='';document.getElementById('ro-badge').innerHTML='<span style="font-size:12px;color:var(--text3);">Select a batch to calculate stage</span>';clearBatchRoomLock('ro');hideClosedWarning('ro');roRenderHistory('','');roRenderSummary('');}
