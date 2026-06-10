@@ -2951,27 +2951,21 @@ async function pullFromAirtable(opts){
   isPulling = true;
   if(opts.manual) setSyncPill('ing','Syncing…');
   try {
-    const _fetchStart = performance.now();
-    const _perTbl = {};
-    const _ft = (name, p) => { const s = performance.now(); return p.then(r => { _perTbl[name] = Math.round(performance.now()-s); return r; }); };
     const [batches, ecs, ros, ws, txs, hs, pds, bs, ps, scs, sts, sed, siv] = await Promise.all([
-      _ft('batch', atFetchAll(cfg.batchTbl)),
-      _ft('ec', atFetchAll(cfg.ecTbl)),
-      _ft('ro', atFetchAll(cfg.roTbl)),
-      _ft('waste', atFetchAll(cfg.wasteTbl)),
-      _ft('batchtx', atFetchAll(cfg.batchtxTbl)),
-      _ft('harvest', atFetchAll(cfg.harvestTbl)),
-      _ft('postdry', atFetchAll(cfg.postDryTbl)),
-      _ft('bio', atFetchAll(cfg.bioTbl)),
-      _ft('pest', atFetchAll(cfg.pestTbl)),
-      _ft('sanclean', atFetchAll(cfg.sanCleanTbl)),
-      _ft('santool', atFetchAll(cfg.sanToolTbl)),
-      _ft('sanedits', atFetchAll(cfg.sanEditsTbl)),
-      _ft('seedinv', atFetchAll(cfg.seedInvTbl))
+      atFetchAll(cfg.batchTbl),
+      atFetchAll(cfg.ecTbl),
+      atFetchAll(cfg.roTbl),
+      atFetchAll(cfg.wasteTbl),
+      atFetchAll(cfg.batchtxTbl),
+      atFetchAll(cfg.harvestTbl),
+      atFetchAll(cfg.postDryTbl),
+      atFetchAll(cfg.bioTbl),
+      atFetchAll(cfg.pestTbl),
+      atFetchAll(cfg.sanCleanTbl),
+      atFetchAll(cfg.sanToolTbl),
+      atFetchAll(cfg.sanEditsTbl),
+      atFetchAll(cfg.seedInvTbl)
     ]);
-    console.log('[pull timing] per-table fetch ms:', _perTbl);
-    { const _slow = Object.entries(_perTbl).sort((a,b)=>b[1]-a[1]).slice(0,3).map(e=>e[0]+':'+e[1]+'ms').join(', ');
-      try{ toast('Per-table fetch — slowest: '+_slow, 15000); }catch(_){} }
     // Resolve linked-record refs by building recordId→Batch-ID-string lookup
     const batchIdByRecId = {};
     batches.forEach(b => {
@@ -2979,9 +2973,6 @@ async function pullFromAirtable(opts){
       if(bid) batchIdByRecId[b.id] = bid;
     });
     const ctx = { batchIdByRecId };
-    const _fetchMs = Math.round(performance.now() - _fetchStart);
-    const _mergeStart = performance.now();
-    const _remoteCounts = {batch:batches.length, ec:ecs.length, ro:ros.length, waste:ws.length, batchtx:txs.length, harvest:hs.length, postdry:pds.length, bio:bs.length, pest:ps.length, sanclean:scs.length, santool:sts.length, seedinv:siv.length};
     const summary = {};
     summary.batch   = mergeRemote(batchRecs,   batches, REMOTE_MAPPERS.batch,   ctx, 'batch',   'gp-batch');
     // After batch merge, run dedupe in case a remote arrived that links to a
@@ -7255,58 +7246,7 @@ document.getElementById('ro-date').readOnly=true;
 document.getElementById('ro-date').style.background='var(--bg2)';
 document.getElementById('ro-date').style.color='var(--text3)';
 document.getElementById('ro-date').style.cursor='default';
-(function bootTimed(){
-  const _marks=[];
-  const _t=(name,fn)=>{const s=performance.now();try{fn();}catch(e){console.error('[boot]'+name+' threw',e);}finally{_marks.push([name,Math.round(performance.now()-s)]);}};
-  _t('buildECEvents',buildECEvents);
-  _t('buildROSamples',buildROSamples);
-  _t('loadAll',loadAll);
-  _t('installMomsFilterButtons',installMomsFilterButtons);
-  _t('populateBatchDropdowns',populateBatchDropdowns);
-  _t('setVegMin',setVegMin);
-  _t('applyCascadeLocks',applyCascadeLocks);
-  _t('updatePendingBadge',updatePendingBadge);
-  _t('ecSeqUnlock',ecSeqUnlock);
-  _t('wasteSeqUnlock',wasteSeqUnlock);
-  _t('summaryPopulateBatches',summaryPopulateBatches);
-  _t('initSections',initSections);
-  document.getElementById('waste-date').textContent=new Date().toISOString().split('T')[0];
-  _marks.sort((a,b)=>b[1]-a[1]);
-  const total=_marks.reduce((s,m)=>s+m[1],0);
-  console.log('[boot timing] total synchronous boot: '+total+' ms');
-  console.table(_marks.map(m=>({phase:m[0],ms:m[1]})));
-  window.__bootMarks=_marks;
-  const _navMs = Math.round(performance.now());
-  console.log('[boot] JS started '+_navMs+'ms after page navigation. If this is large (tens of thousands), a render-blocking <head> resource stalled the page before any script ran — now fixed for Google Fonts.');
-  try{ toast('JS started '+_navMs+'ms after load · boot '+total+'ms',9000); }catch(_){}
-})();
-// Freeze watchdog: a 500ms heartbeat. If the gap between ticks is much larger
-// than 500ms, the main thread was blocked (a freeze). Report how long.
-(function freezeWatchdog(){
-  let _last = performance.now();
-  setInterval(()=>{
-    const now = performance.now();
-    const gap = now - _last;
-    _last = now;
-    if(gap > 2000){
-      console.warn('[freeze] main thread blocked for '+Math.round(gap)+'ms');
-      try{ toast('Freeze detected: '+Math.round(gap/1000)+'s blocked',8000); }catch(_){}
-    }
-  }, 500);
-  // Capture long tasks with whatever attribution the browser provides.
-  try{
-    if(window.PerformanceObserver){
-      const po = new PerformanceObserver(list=>{
-        list.getEntries().forEach(e=>{
-          if(e.duration > 800){
-            console.warn('[longtask] '+Math.round(e.duration)+'ms', e.attribution && e.attribution.map ? e.attribution.map(a=>a.name) : e);
-          }
-        });
-      });
-      po.observe({entryTypes:['longtask']});
-    }
-  }catch(_){}
-})();
+buildECEvents();buildROSamples();loadAll();installMomsFilterButtons();populateBatchDropdowns();setVegMin();applyCascadeLocks();updatePendingBadge();ecSeqUnlock();wasteSeqUnlock();summaryPopulateBatches();initSections();document.getElementById('waste-date').textContent=new Date().toISOString().split('T')[0];
 // Kick off auto-sync (60s polling) if Airtable is configured. Idempotent —
 // also re-invoked from saveSettings() so a fresh token starts the timer.
 startAutoSync();
