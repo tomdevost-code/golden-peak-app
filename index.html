@@ -12036,26 +12036,47 @@ function renderBatchReport(batchId){
     ])
   );
 
-  // Water used (flow meter). The meter is zeroed per batch, so the highest reading logged for
-  // each batch/room is the total water used. Prefer the snapshot captured at harvest; fall back
-  // to computing the running max from EC data for rooms not yet harvested.
+  // Water used (flow meter). The meter is zeroed per batch, so within each (batch, room) the
+  // readings climb from 0 and the delta between consecutive readings is the water dispensed for
+  // that watering event. We attribute each delta to its entry's watering type and phase, and sum
+  // per room for the total. (All three breakdowns sum to the same grand total.)
   {
-    const flowRooms = {};
-    if(b.flowTotals && typeof b.flowTotals === 'object'){
-      Object.keys(b.flowTotals).forEach(rm => { const v = parseFloat(b.flowTotals[rm]); if(!isNaN(v)) flowRooms[rm] = v; });
-    }
-    ecs.forEach(r => {
-      if(r.flow == null || isNaN(parseFloat(r.flow))) return;
-      const rm = r.room || '—';
-      const v = parseFloat(r.flow);
-      if(flowRooms[rm] == null || v > flowRooms[rm]) flowRooms[rm] = v;
-    });
-    const flowKeys = Object.keys(flowRooms).sort();
-    if(flowKeys.length){
-      const flowTotal = flowKeys.reduce((acc,rm)=>acc+(flowRooms[rm]||0),0);
-      const rowsFlow = flowKeys.map(rm => [rm, (Math.round((flowRooms[rm]||0)*1000)/1000).toFixed(3)+' L']);
-      rowsFlow.push(['Total Water Used', (Math.round(flowTotal*1000)/1000).toFixed(3)+' L']);
-      s += sectionCard('Water Used (Flow Meter)', twoCol(rowsFlow));
+    const ecFlow = ecs.filter(r => r.flow != null && !isNaN(parseFloat(r.flow)));
+    if(ecFlow.length){
+      const byRoom = {};
+      ecFlow.forEach(r => { const rm = r.room || '—'; (byRoom[rm] = byRoom[rm] || []).push(r); });
+      const byType = {}, byPhase = {}, byRoomTotal = {};
+      let grand = 0;
+      Object.keys(byRoom).forEach(rm => {
+        const list = byRoom[rm].slice().sort((a,c)=>(parseFloat(a.flow)||0)-(parseFloat(c.flow)||0));
+        let prev = 0;
+        list.forEach(r => {
+          const cur = parseFloat(r.flow)||0;
+          let delta = cur - prev; if(delta < 0) delta = cur; prev = cur;
+          const wt = r.wtype || 'Other';
+          byType[wt] = (byType[wt]||0) + delta;
+          const ph = (r.stage === 'flower') ? 'Flower' : (r.stage === 'veg') ? 'Veg' : 'Clones / Pre-Veg';
+          byPhase[ph] = (byPhase[ph]||0) + delta;
+          byRoomTotal[rm] = (byRoomTotal[rm]||0) + delta;
+          grand += delta;
+        });
+      });
+      const L = v => (Math.round((v||0)*1000)/1000).toFixed(3) + ' L';
+      // By phase
+      const phaseOrder = ['Clones / Pre-Veg','Veg','Flower'];
+      const phaseRows = phaseOrder.filter(p => byPhase[p] != null).map(p => [p, L(byPhase[p])]);
+      phaseRows.push(['Total Water Used', L(grand)]);
+      s += sectionCard('Water Used by Phase', twoCol(phaseRows));
+      // By watering type (preferred order first, then any others)
+      const typeOrder = ['Hydration','Pre-Charge','Water In','Full Saturation','Feed','Flush','Fade','RO Water'];
+      const seenT = {};
+      const typeRows = [];
+      typeOrder.forEach(t => { if(byType[t] != null){ typeRows.push([t, L(byType[t])]); seenT[t]=1; } });
+      Object.keys(byType).forEach(t => { if(!seenT[t]) typeRows.push([t, L(byType[t])]); });
+      s += sectionCard('Water Used by Watering Type', twoCol(typeRows));
+      // By room
+      const roomRows = Object.keys(byRoomTotal).sort().map(rm => [rm, L(byRoomTotal[rm])]);
+      s += sectionCard('Water Used by Room', twoCol(roomRows));
     }
   }
 
