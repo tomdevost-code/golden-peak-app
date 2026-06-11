@@ -4387,6 +4387,16 @@ async function harvestComplete(){
   // Zero out this room's live distribution
   if(!batchRec.roomDistribution) batchRec.roomDistribution = {};
   batchRec.roomDistribution[room] = 0;
+  // Capture the flow-meter total (water used) for this batch/room. The meter is zeroed per batch,
+  // so the highest reading logged for this batch+room is the total water used. Snapshot it on the
+  // batch (local) for the Batch Report; the report also recomputes from EC data as a fallback.
+  if(!batchRec.flowTotals) batchRec.flowTotals = {};
+  {
+    const _flows = ecRecs
+      .filter(r => r.batch === batch && r.room === room && r.flow != null && !isNaN(parseFloat(r.flow)))
+      .map(r => parseFloat(r.flow));
+    batchRec.flowTotals[room] = _flows.length ? Math.round(Math.max(..._flows) * 1000) / 1000 : 0;
+  }
   batchRec.synced = false;
   // First Harvest Complete advances the batch from Flower → Drying — UNLESS this room is being
   // sold as fresh AND no other rooms in this batch are going through drying. For simplicity we
@@ -6507,7 +6517,99 @@ function ecRenderRecent(batch /*, room — ignored: filters by batch only */){
     '</tr>';
   });
   html += '</tbody></table></div>';
+  // Per-entry editable list for the current form date — so a mistyped reading can be fixed right
+  // after saving. Scoped to that day's entries (agreed scope); older days stay in the summary above.
+  const _ecEditDate = (document.getElementById('ec-date')||{}).value || localDate();
+  const _ecTodayRecs = recs.filter(r => r.date === _ecEditDate).sort((a,b)=>(b.id||0)-(a.id||0));
+  if(_ecTodayRecs.length){
+    html += '<div style="margin-top:12px;"><div style="font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;margin-bottom:6px;">Edit / delete entries for '+_ecEditDate+'</div>';
+    html += '<div style="border:1px solid var(--border);border-radius:var(--radius-sm);background:#fff;overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#f5f5f5;">'+
+      '<th style="padding:6px 8px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Type</th>'+
+      '<th style="padding:6px 8px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;border-left:1px solid var(--border);">Room</th>'+
+      '<th style="padding:6px 8px;text-align:center;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;border-left:1px solid var(--border);">EC</th>'+
+      '<th style="padding:6px 8px;text-align:center;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;border-left:1px solid var(--border);">pH</th>'+
+      '<th style="padding:6px 8px;text-align:center;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;border-left:1px solid var(--border);">ml</th>'+
+      '<th style="padding:6px 8px;text-align:center;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;border-left:1px solid var(--border);">Flow</th>'+
+      '<th style="padding:6px 8px;text-align:center;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;border-left:1px solid var(--border);">Actions</th>'+
+    '</tr></thead><tbody>';
+    _ecTodayRecs.forEach(r => {
+      const _ecIdArg = "'" + String(r.id).replace(/\\/g,'\\\\').replace(/'/g,"\\'") + "'";
+      const _ecv = (r.dripEc!=null && !isNaN(parseFloat(r.dripEc)))?parseFloat(r.dripEc).toFixed(2):'—';
+      const _phv = (r.dripPh!=null && !isNaN(parseFloat(r.dripPh)))?parseFloat(r.dripPh).toFixed(2):'—';
+      const _mlv = (r.totalML!=null && !isNaN(parseFloat(r.totalML)))?parseFloat(r.totalML).toFixed(0):'—';
+      const _flv = (r.flow!=null && !isNaN(parseFloat(r.flow)))?parseFloat(r.flow).toFixed(2):'—';
+      html += '<tr>'+
+        '<td style="padding:5px 8px;border-top:1px solid var(--border);">'+(r.wtype||'—')+'</td>'+
+        '<td style="padding:5px 8px;border-top:1px solid var(--border);border-left:1px solid var(--border);font-family:var(--mono);">'+(r.room||'—')+'</td>'+
+        '<td style="padding:5px 8px;border-top:1px solid var(--border);border-left:1px solid var(--border);text-align:center;font-family:var(--mono);">'+_ecv+'</td>'+
+        '<td style="padding:5px 8px;border-top:1px solid var(--border);border-left:1px solid var(--border);text-align:center;font-family:var(--mono);">'+_phv+'</td>'+
+        '<td style="padding:5px 8px;border-top:1px solid var(--border);border-left:1px solid var(--border);text-align:center;font-family:var(--mono);">'+_mlv+'</td>'+
+        '<td style="padding:5px 8px;border-top:1px solid var(--border);border-left:1px solid var(--border);text-align:center;font-family:var(--mono);">'+_flv+'</td>'+
+        '<td style="padding:5px 8px;border-top:1px solid var(--border);border-left:1px solid var(--border);text-align:center;white-space:nowrap;">'+
+          '<button type="button" onclick="ecEditStart('+_ecIdArg+')" style="font-size:11px;padding:3px 8px;margin-right:4px;border:1px solid var(--border);background:var(--bg2);border-radius:var(--radius-sm);cursor:pointer;color:var(--text2);">Edit</button>'+
+          '<button type="button" onclick="ecDelete('+_ecIdArg+')" style="font-size:11px;padding:3px 8px;border:1px solid var(--red);background:var(--red-pale);border-radius:var(--radius-sm);cursor:pointer;color:var(--red);">Delete</button>'+
+        '</td>'+
+      '</tr>';
+    });
+    html += '</tbody></table></div></div>';
+  }
   el.innerHTML = html;
+}
+// ===== EC entry edit/delete (scoped to the current day's entries) =====
+let ecEditId = null;
+function ecEditCancel(){
+  ecEditId = null;
+  const btn = document.getElementById('ec-btn'); if(btn) btn.textContent = 'Save EC Entry';
+}
+function ecEditStart(id){
+  const rec = ecRecs.find(r => String(r.id) === String(id));
+  if(!rec){ toast('Entry not found.'); return; }
+  ecEditId = id;
+  const bs = document.getElementById('ec-batch-select'); if(bs) bs.value = rec.batch || '';
+  const bh = document.getElementById('ec-batch'); if(bh) bh.value = rec.batch || '';
+  if(typeof ecBatchLookup === 'function'){ try { ecBatchLookup(); } catch(_){} }
+  const rEl = document.getElementById('ec-room');
+  if(rEl){
+    if(rec.room && !Array.from(rEl.options).some(o => o.value === rec.room)){ const opt=document.createElement('option'); opt.value=rec.room; opt.textContent=rec.room; rEl.appendChild(opt); }
+    rEl.value = rec.room || '';
+  }
+  const gEl = document.getElementById('ec-grower'); if(gEl) gEl.value = rec.grower || '';
+  const dEl = document.getElementById('ec-date'); if(dEl && rec.date) dEl.value = rec.date;
+  const ecPens = document.querySelectorAll('.ec-drip-ec');
+  const phPens = document.querySelectorAll('.ec-drip-ph');
+  for(let i=0;i<ecPens.length;i++){ ecPens[i].value = (rec.dripEcPens && rec.dripEcPens[i] != null) ? rec.dripEcPens[i] : ''; }
+  for(let i=0;i<phPens.length;i++){ phPens[i].value = (rec.dripPhPens && rec.dripPhPens[i] != null) ? rec.dripPhPens[i] : ''; }
+  for(let i=1;i<=8;i++){ const e=document.getElementById('ec-evt-'+i); if(e) e.value = (rec.events && rec.events[i-1] != null) ? rec.events[i-1] : ''; }
+  const wEl = document.getElementById('ec-wtype');
+  if(wEl){
+    if(rec.wtype && !Array.from(wEl.options).some(o => o.value === rec.wtype)){ const opt=document.createElement('option'); opt.value=rec.wtype; opt.textContent=rec.wtype; wEl.appendChild(opt); }
+    wEl.value = rec.wtype || '';
+  }
+  const fEl = document.getElementById('ec-flow'); if(fEl) fEl.value = (rec.flow != null ? rec.flow : '');
+  const nEl = document.getElementById('ec-notes'); if(nEl) nEl.value = rec.notes || '';
+  if(typeof ecAvgs === 'function'){ try { ecAvgs(); } catch(_){} }
+  if(typeof ecRenderEvents === 'function'){ try { ecRenderEvents(); } catch(_){} }
+  const btn = document.getElementById('ec-btn'); if(btn) btn.textContent = 'Update EC Entry';
+  toast('Editing entry — change values and press Update. (Phase/lifecycle effects are unchanged.)',5000);
+  if(btn && btn.scrollIntoView) btn.scrollIntoView({behavior:'smooth',block:'center'});
+}
+async function ecDelete(id){
+  const idx = ecRecs.findIndex(r => String(r.id) === String(id));
+  if(idx < 0){ toast('Entry not found.'); return; }
+  const rec = ecRecs[idx];
+  if(!confirm('Delete this EC entry ('+(rec.wtype||'')+(rec.date?' on '+rec.date:'')+')? This cannot be undone. (It will not change the batch phase or lifecycle dates.)')) return;
+  if(rec.airtableId && cfg.ecTbl && cfg.token && cfg.base){
+    setSyncPill('ing','Deleting...');
+    const ok = await atDelete(cfg.ecTbl, rec.airtableId);
+    if(!ok){ setSyncPill('err','Delete failed'); toast('Could not delete from Airtable — entry kept. Try again when online.',5000); return; }
+    setSyncPill('ok','Synced');
+  }
+  ecRecs.splice(idx,1);
+  lsSet('gp-ec', ecRecs);
+  if(String(ecEditId)===String(id)) ecEditCancel();
+  updatePendingBadge();
+  ecRenderRecent(rec.batch);
+  toast('EC entry deleted.');
 }
 function ecHydrationChanged(){setVegMin();applyCascadeLocks();}
 function applyCascadeLocks(){
@@ -6648,7 +6750,7 @@ async function ecSave(){
   if(_flowValRaw !== '' && !isNaN(_flowVal) && _flowVal > 0){
     const _batchValForFlow = document.getElementById('ec-batch').value.trim();
     const _priorFlows = ecRecs
-      .filter(r => r.batch === _batchValForFlow && r.room === room && r.flow != null && !isNaN(parseFloat(r.flow)) && parseFloat(r.flow) > 0)
+      .filter(r => r.batch === _batchValForFlow && r.room === room && String(r.id) !== String(ecEditId) && r.flow != null && !isNaN(parseFloat(r.flow)) && parseFloat(r.flow) > 0)
       .map(r => parseFloat(r.flow));
     if(_priorFlows.length){
       const _maxPrev = Math.max(..._priorFlows);
@@ -6696,6 +6798,31 @@ async function ecSave(){
   const evts=[];let totalML=0;for(let i=1;i<=8;i++){const v=parseFloat(document.getElementById('ec-evt-'+i).value)||null;evts.push(v);if(v)totalML+=v;}
   if(!totalML){toast('Enter at least one watering event.');return;}
   const rec={id:Date.now(),date,room:document.getElementById('ec-room').value,grower,batch:document.getElementById('ec-batch').value.trim(),hydrationDate:hydrationDate||null,vegStart:vs,flowerStart:fs,harvestDate:harvestDate||null,stage,day,dripEcPens,dripPhPens,dripEc,dripPh,wtype,events:evts,totalML:totalML||null,flow:parseFloat(document.getElementById('ec-flow').value)||null,notes:document.getElementById('ec-notes').value.trim(),synced:false};
+  // EDIT MODE: update the existing entry in place + sync, WITHOUT re-firing phase/hydration
+  // side-effects (those fired when the entry was first saved). Limited to the current day's entries.
+  if(ecEditId != null){
+    const _old = ecRecs.find(r => String(r.id) === String(ecEditId));
+    if(!_old){ toast('The entry being edited was not found.'); ecEditId=null; return; }
+    Object.assign(_old, {date:rec.date, room:rec.room, grower:rec.grower, vegStart:rec.vegStart, flowerStart:rec.flowerStart, harvestDate:rec.harvestDate, stage:rec.stage, day:rec.day, dripEcPens:rec.dripEcPens, dripPhPens:rec.dripPhPens, dripEc:rec.dripEc, dripPh:rec.dripPh, wtype:rec.wtype, events:rec.events, totalML:rec.totalML, flow:rec.flow, notes:rec.notes, synced:false});
+    lsSet('gp-ec', ecRecs);
+    ecEditId = null;
+    const _eb=document.getElementById('ec-btn'); if(_eb) _eb.textContent='Save EC Entry';
+    if(atReady() && _old.airtableId){
+      setSyncPill('ing','Syncing...');
+      try{
+        const f={'Date':_old.date,'Room':_old.room,'Grower':_old.grower,'Batch ID':_old.batch?[_old.batch]:undefined,'Watering Type':_old.wtype||undefined,'Drip EC Pen 1':_old.dripEcPens[0]||undefined,'Drip EC Pen 2':_old.dripEcPens[1]||undefined,'Drip EC Pen 3':_old.dripEcPens[2]||undefined,'Drip pH Pen 1':_old.dripPhPens[0]||undefined,'Drip pH Pen 2':_old.dripPhPens[1]||undefined,'Drip pH Pen 3':_old.dripPhPens[2]||undefined,'Event 1 ml/plant':_old.events[0]||undefined,'Event 2 ml/plant':_old.events[1]||undefined,'Event 3 ml/plant':_old.events[2]||undefined,'Event 4 ml/plant':_old.events[3]||undefined,'Event 5 ml/plant':_old.events[4]||undefined,'Event 6 ml/plant':_old.events[5]||undefined,'Event 7 ml/plant':_old.events[6]||undefined,'Event 8 ml/plant':_old.events[7]||undefined,'Flow Meter Reading':_old.flow||undefined,'Notes':_old.notes||undefined};
+        Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
+        await atUpdateById(cfg.ecTbl, _old.airtableId, f);
+        _old.synced=true; lsSet('gp-ec',ecRecs); setSyncPill('ok','Synced'); toast('EC entry updated');
+      }catch(e){ setSyncPill('err','Sync failed'); toast('Updated locally - Airtable: '+(e.message||'sync failed'),5000); }
+    } else {
+      toast('EC entry updated locally');
+    }
+    updatePendingBadge();
+    ecRefreshAfterSave(rec.batch, rec.room);
+    applyCascadeLocks();
+    return;
+  }
   ecRecs.unshift(rec);lsSet('gp-ec',ecRecs);saveBatchRoom(rec.batch,rec.room);populateBatchDropdowns();
   // Capture hydration date on the batch if this EC entry is the trigger
   let _hydrationCaptured = false;
@@ -11908,6 +12035,29 @@ function renderBatchReport(batchId){
       ['Dry Waste Weight',  fmtKg(dryWaste)]
     ])
   );
+
+  // Water used (flow meter). The meter is zeroed per batch, so the highest reading logged for
+  // each batch/room is the total water used. Prefer the snapshot captured at harvest; fall back
+  // to computing the running max from EC data for rooms not yet harvested.
+  {
+    const flowRooms = {};
+    if(b.flowTotals && typeof b.flowTotals === 'object'){
+      Object.keys(b.flowTotals).forEach(rm => { const v = parseFloat(b.flowTotals[rm]); if(!isNaN(v)) flowRooms[rm] = v; });
+    }
+    ecs.forEach(r => {
+      if(r.flow == null || isNaN(parseFloat(r.flow))) return;
+      const rm = r.room || '—';
+      const v = parseFloat(r.flow);
+      if(flowRooms[rm] == null || v > flowRooms[rm]) flowRooms[rm] = v;
+    });
+    const flowKeys = Object.keys(flowRooms).sort();
+    if(flowKeys.length){
+      const flowTotal = flowKeys.reduce((acc,rm)=>acc+(flowRooms[rm]||0),0);
+      const rowsFlow = flowKeys.map(rm => [rm, (Math.round((flowRooms[rm]||0)*1000)/1000).toFixed(3)+' L']);
+      rowsFlow.push(['Total Water Used', (Math.round(flowTotal*1000)/1000).toFixed(3)+' L']);
+      s += sectionCard('Water Used (Flow Meter)', twoCol(rowsFlow));
+    }
+  }
 
   // Transaction history
   if(txs.length){
