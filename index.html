@@ -7552,21 +7552,31 @@ async function _cleanAirtableDupesForTable(tblId, localArr, remoteKeyFn, label){
 // references stay valid. Returns the number of local rows removed.
 function cleanLocalDuplicates(){
   const tbls = [
-    { lsKey:'gp-ec',       arr:ecRecs,       fn:NAT_KEY_FN.ec },
-    { lsKey:'gp-ro',       arr:roRecs,       fn:NAT_KEY_FN.ro },
-    { lsKey:'gp-waste',    arr:wasteRecs,    fn:NAT_KEY_FN.waste },
-    { lsKey:'gp-harvest',  arr:harvestRecs,  fn:NAT_KEY_FN.harvest },
-    { lsKey:'gp-postdry',  arr:postDryRecs,  fn:NAT_KEY_FN.postdry },
-    { lsKey:'gp-bio',      arr:bioRecs,      fn:NAT_KEY_FN.bio },
-    { lsKey:'gp-pest',     arr:pestRecs,     fn:NAT_KEY_FN.pest },
-    { lsKey:'gp-sanclean', arr:sanCleanRecs, fn:NAT_KEY_FN.sanclean },
-    { lsKey:'gp-santool',  arr:sanToolRecs,  fn:NAT_KEY_FN.santool },
-    { lsKey:'gp-flow',     arr:flowRecs,     fn:NAT_KEY_FN.flow }
-  ].filter(t => Array.isArray(t.arr) && typeof t.fn === 'function');
+    { lsKey:'gp-ec',       arr:ecRecs },
+    { lsKey:'gp-ro',       arr:roRecs },
+    { lsKey:'gp-waste',    arr:wasteRecs },
+    { lsKey:'gp-batchtx',  arr:batchTxRecs },
+    { lsKey:'gp-harvest',  arr:harvestRecs },
+    { lsKey:'gp-postdry',  arr:postDryRecs },
+    { lsKey:'gp-bio',      arr:bioRecs },
+    { lsKey:'gp-pest',     arr:pestRecs },
+    { lsKey:'gp-sanclean', arr:sanCleanRecs },
+    { lsKey:'gp-santool',  arr:sanToolRecs },
+    { lsKey:'gp-flow',     arr:flowRecs }
+  ].filter(t => Array.isArray(t.arr));
+  // Full-content signature so only records identical in EVERY meaningful field collapse — this
+  // never merges two genuinely different entries (a Feed vs a Flush, two sequential destroys, etc).
+  const IGNORE = { id:1, airtableId:1, synced:1, sourceWasteId:1, destroyedTxId:1 };
+  const sig = r => {
+    if(!r || typeof r !== 'object') return '';
+    const o = {};
+    Object.keys(r).sort().forEach(k => { if(IGNORE[k]) return; o[k] = r[k]; });
+    try { return JSON.stringify(o); } catch(_) { return ''; }
+  };
   let removed = 0;
   tbls.forEach(t => {
     const groups = {};
-    t.arr.forEach((r, i) => { const k = t.fn(r); if(!k) return; (groups[k] = groups[k] || []).push(i); });
+    t.arr.forEach((r, i) => { const k = sig(r); if(!k) return; (groups[k] = groups[k] || []).push(i); });
     const drop = new Set();
     Object.values(groups).forEach(idxs => {
       if(idxs.length < 2) return;
