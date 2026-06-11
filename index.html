@@ -5087,20 +5087,31 @@ async function pestSave(){
     toast('This batch is closed (Status=Closed). No new entries.',3500);
     return;
   }
-  const rec = {
-    id: Date.now(),
-    date, grower, batch, room,
-    location: loc,
-    cardNumber,
-    pests,
-    quantity,
-    notes,
-    synced: false
-  };
-  pestRecs.unshift(rec);
-  lsSet('gp-pest', pestRecs);
-  toast('Saved: '+quantity+' × '+pests.join(', '));
-  updatePendingBadge();
+  const _pestEditing = pestEditId != null;
+  let rec;
+  if(_pestEditing){
+    rec = pestRecs.find(r => String(r.id) === String(pestEditId));
+    if(!rec){ toast('The entry being edited was not found.'); pestEditId=null; return; }
+    Object.assign(rec, { date, grower, batch, room, location: loc, cardNumber, pests, quantity, notes, synced:false });
+    lsSet('gp-pest', pestRecs);
+    toast('Updated: '+quantity+' × '+pests.join(', '));
+    updatePendingBadge();
+  } else {
+    rec = {
+      id: Date.now(),
+      date, grower, batch, room,
+      location: loc,
+      cardNumber,
+      pests,
+      quantity,
+      notes,
+      synced: false
+    };
+    pestRecs.unshift(rec);
+    lsSet('gp-pest', pestRecs);
+    toast('Saved: '+quantity+' × '+pests.join(', '));
+    updatePendingBadge();
+  }
   // Soft-refresh: clear pests + card + qty + notes; keep batch/grower/room/location ready
   document.querySelectorAll('.pest-known').forEach(cb => cb.checked = false);
   _pestOtherList = [];
@@ -5109,6 +5120,7 @@ async function pestSave(){
   document.getElementById('pest-quantity').value = '';
   document.getElementById('pest-notes').value = '';
   document.getElementById('pest-card-num').value = '';
+  if(_pestEditing){ pestEditId = null; const _pb=document.getElementById('pest-btn'); if(_pb) _pb.textContent='Save Pest ID Entry'; }
   pestRenderHistory(batch, room);
   pestSeqUnlock();
   // Sync to Airtable
@@ -5127,9 +5139,9 @@ async function pestSave(){
         'Notes': rec.notes || undefined
       };
       Object.keys(f).forEach(k => { if(f[k]===undefined||f[k]===null||f[k]==='') delete f[k]; });
-      const _pRes = await atPost(cfg.pestTbl, f);
+      if(_pestEditing && rec.airtableId){ await atUpdateById(cfg.pestTbl, rec.airtableId, f); }
+      else { const _pRes = await atPost(cfg.pestTbl, f); if(_pRes && _pRes.id) rec.airtableId = _pRes.id; }
       rec.synced = true;
-      if(_pRes && _pRes.id) rec.airtableId = _pRes.id;
       lsSet('gp-pest', pestRecs);
       setSyncPill('ok','Synced');
       updatePendingBadge();
@@ -5184,11 +5196,13 @@ function pestRenderHistory(batch, room){
     '<th style="padding:6px 8px;text-align:right;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Qty</th>'+
     '<th style="padding:6px 8px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Grower</th>'+
     '<th style="padding:6px 8px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Notes</th>'+
+    '<th style="padding:6px 8px;text-align:center;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Actions</th>'+
   '</tr></thead><tbody>';
   recs.forEach(r => {
     const pestList = Array.isArray(r.pests) ? r.pests.join(', ') : (r.pests||'—');
     const cardStr = r.cardNumber ? ('#'+r.cardNumber) : '—';
     const qtyStr = r.quantity ? String(r.quantity) : '—';
+    const _pIdArg = "'" + String(r.id).replace(/\\/g,'\\\\').replace(/'/g,"\\'") + "'";
     html += '<tr>'+
       '<td style="padding:5px 8px;font-family:var(--mono);border-top:1px solid var(--border);white-space:nowrap;">'+r.date+'</td>'+
       '<td style="padding:5px 8px;border-top:1px solid var(--border);border-left:1px solid var(--border);font-weight:600;">'+(r.room||'—')+'</td>'+
@@ -5198,10 +5212,69 @@ function pestRenderHistory(batch, room){
       '<td style="padding:5px 8px;font-family:var(--mono);text-align:right;border-top:1px solid var(--border);border-left:1px solid var(--border);font-weight:600;">'+qtyStr+'</td>'+
       '<td style="padding:5px 8px;font-size:11px;color:var(--text2);border-top:1px solid var(--border);border-left:1px solid var(--border);">'+(r.grower||'—')+'</td>'+
       '<td style="padding:5px 8px;font-size:11px;color:var(--text3);border-top:1px solid var(--border);border-left:1px solid var(--border);max-width:200px;">'+(r.notes||'—')+'</td>'+
+      '<td style="padding:5px 8px;text-align:center;white-space:nowrap;border-top:1px solid var(--border);border-left:1px solid var(--border);">'+
+        '<button type="button" onclick="pestEditStart('+_pIdArg+')" style="font-size:11px;padding:3px 8px;margin-right:4px;border:1px solid var(--border);background:var(--bg2);border-radius:var(--radius-sm);cursor:pointer;color:var(--text2);">Edit</button>'+
+        '<button type="button" onclick="pestDelete('+_pIdArg+')" style="font-size:11px;padding:3px 8px;border:1px solid var(--red);background:var(--red-pale);border-radius:var(--radius-sm);cursor:pointer;color:var(--red);">Delete</button>'+
+      '</td>'+
     '</tr>';
   });
   html += '</tbody></table></div>';
   list.innerHTML = html;
+}
+// ===== Pest ID edit/delete =====
+let pestEditId = null;
+function pestEditCancel(){
+  pestEditId = null;
+  const btn = document.getElementById('pest-btn'); if(btn) btn.textContent = 'Save Pest ID Entry';
+}
+function pestEditStart(id){
+  const rec = pestRecs.find(r => String(r.id) === String(id));
+  if(!rec){ toast('Entry not found.'); return; }
+  pestEditId = id;
+  const bs = document.getElementById('pest-batch-select'); if(bs) bs.value = rec.batch || '';
+  const bh = document.getElementById('pest-batch'); if(bh) bh.value = rec.batch || '';
+  if(typeof pestBatchSelect === 'function'){ try { pestBatchSelect(); } catch(_){} }
+  const rEl = document.getElementById('pest-room');
+  if(rEl){
+    if(rec.room && !Array.from(rEl.options).some(o => o.value === rec.room)){ const opt=document.createElement('option'); opt.value=rec.room; opt.textContent=rec.room; rEl.appendChild(opt); }
+    rEl.disabled=false; rEl.value = rec.room || '';
+  }
+  const gEl = document.getElementById('pest-grower'); if(gEl){ gEl.disabled=false; gEl.value = rec.grower || ''; }
+  const dEl = document.getElementById('pest-date'); if(dEl && rec.date) dEl.value = rec.date;
+  const locEl = document.getElementById('pest-location'); if(locEl){ locEl.disabled=false; locEl.value = rec.location || ''; }
+  const cardWrap = document.getElementById('pest-card-wrap');
+  if(cardWrap) cardWrap.style.display = (rec.location === 'Sticky Card') ? '' : 'none';
+  const cardEl = document.getElementById('pest-card-num'); if(cardEl) cardEl.value = (rec.cardNumber != null ? rec.cardNumber : '');
+  // Restore selected pests: tick known checkboxes, push the rest into the "other" chips.
+  const known = Array.from(document.querySelectorAll('.pest-known'));
+  const knownVals = known.map(cb => cb.value);
+  known.forEach(cb => { cb.checked = Array.isArray(rec.pests) && rec.pests.includes(cb.value); });
+  _pestOtherList = (Array.isArray(rec.pests) ? rec.pests : []).filter(p => !knownVals.includes(p));
+  if(typeof pestRenderOtherChips === 'function') pestRenderOtherChips();
+  const qEl = document.getElementById('pest-quantity'); if(qEl){ qEl.disabled=false; qEl.value = (rec.quantity != null ? rec.quantity : ''); }
+  const nEl = document.getElementById('pest-notes'); if(nEl){ nEl.disabled=false; nEl.value = rec.notes || ''; }
+  if(typeof pestSeqUnlock === 'function'){ try { pestSeqUnlock(); } catch(_){} }
+  const btn = document.getElementById('pest-btn'); if(btn) btn.textContent = 'Update Pest ID Entry';
+  toast('Editing pest entry from '+(rec.date||'')+' — change values and press Update.',4000);
+  if(btn && btn.scrollIntoView) btn.scrollIntoView({behavior:'smooth',block:'center'});
+}
+async function pestDelete(id){
+  const idx = pestRecs.findIndex(r => String(r.id) === String(id));
+  if(idx < 0){ toast('Entry not found.'); return; }
+  const rec = pestRecs[idx];
+  if(!confirm('Delete this Pest ID entry'+(rec.date?' from '+rec.date:'')+'? This cannot be undone.')) return;
+  if(rec.airtableId && cfg.pestTbl && cfg.token && cfg.base){
+    setSyncPill('ing','Deleting...');
+    const ok = await atDelete(cfg.pestTbl, rec.airtableId);
+    if(!ok){ setSyncPill('err','Delete failed'); toast('Could not delete from Airtable — entry kept. Try again when online.',5000); return; }
+    setSyncPill('ok','Synced');
+  }
+  pestRecs.splice(idx,1);
+  lsSet('gp-pest', pestRecs);
+  if(String(pestEditId)===String(id)) pestEditCancel();
+  updatePendingBadge();
+  pestRenderHistory(rec.batch, rec.room);
+  toast('Pest entry deleted.');
 }
 
 function postDryPopulateBatches(){
@@ -12507,8 +12580,30 @@ function sanclRenderRecent(){
   card.style.display='';
   list.innerHTML = recs.map(r => {
     const initials = (r.grower||'').split(' ').map(s=>s[0]||'').join('').toUpperCase();
-    return (r.date||'')+' · '+(r.template||'')+' · '+(r.phase||'')+' · '+(r.task||'')+' · '+initials;
-  }).join('<br>');
+    const _scIdArg = "'" + String(r.id).replace(/\\/g,'\\\\').replace(/'/g,"\\'") + "'";
+    const txt = (r.date||'')+' · '+(r.template||'')+' · '+(r.phase||'')+' · '+(r.task||'')+' · '+initials;
+    return '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:5px 0;border-bottom:1px solid var(--bg2);">'
+      +'<span style="font-size:12px;">'+txt+'</span>'
+      +'<button type="button" onclick="sanclDelete('+_scIdArg+')" style="font-size:10px;padding:2px 7px;border:1px solid var(--red);background:var(--red-pale);border-radius:var(--radius-sm);cursor:pointer;color:var(--red);flex-shrink:0;">Delete</button>'
+      +'</div>';
+  }).join('');
+}
+async function sanclDelete(id){
+  const idx = sanCleanRecs.findIndex(r => String(r.id) === String(id));
+  if(idx < 0){ toast('Entry not found.'); return; }
+  const rec = sanCleanRecs[idx];
+  if(!confirm('Delete this cleaning entry ('+(rec.task||'')+(rec.date?' on '+rec.date:'')+')? This cannot be undone.')) return;
+  if(rec.airtableId && cfg.sanCleanTbl && cfg.token && cfg.base){
+    setSyncPill('ing','Deleting...');
+    const ok = await atDelete(cfg.sanCleanTbl, rec.airtableId);
+    if(!ok){ setSyncPill('err','Delete failed'); toast('Could not delete from Airtable — entry kept. Try again when online.',5000); return; }
+    setSyncPill('ok','Synced');
+  }
+  sanCleanRecs.splice(idx,1);
+  lsSet('gp-sanclean', sanCleanRecs);
+  updatePendingBadge();
+  sanclRenderRecent();
+  toast('Cleaning entry deleted.');
 }
 
 // (sanclSelectedTasks is declared near the top of the script alongside the in-memory data
@@ -12747,8 +12842,30 @@ function santoolRenderRecent(){
   list.innerHTML = recs.map(r => {
     const initials = (r.grower||'').split(' ').map(s=>s[0]||'').join('').toUpperCase();
     const flags = (r.cleaned?'C':'') + (r.sanitized?'S':'') || '—';
-    return (r.date||'')+' · '+(r.batch||'(no batch)')+' · '+(r.tool||'')+' · '+flags+' · '+initials;
-  }).join('<br>');
+    const _stIdArg = "'" + String(r.id).replace(/\\/g,'\\\\').replace(/'/g,"\\'") + "'";
+    const txt = (r.date||'')+' · '+(r.batch||'(no batch)')+' · '+(r.tool||'')+' · '+flags+' · '+initials;
+    return '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:5px 0;border-bottom:1px solid var(--bg2);">'
+      +'<span style="font-size:12px;">'+txt+'</span>'
+      +'<button type="button" onclick="santoolDelete('+_stIdArg+')" style="font-size:10px;padding:2px 7px;border:1px solid var(--red);background:var(--red-pale);border-radius:var(--radius-sm);cursor:pointer;color:var(--red);flex-shrink:0;">Delete</button>'
+      +'</div>';
+  }).join('');
+}
+async function santoolDelete(id){
+  const idx = sanToolRecs.findIndex(r => String(r.id) === String(id));
+  if(idx < 0){ toast('Entry not found.'); return; }
+  const rec = sanToolRecs[idx];
+  if(!confirm('Delete this tool cleaning entry ('+(rec.tool||'')+(rec.date?' on '+rec.date:'')+')? This cannot be undone.')) return;
+  if(rec.airtableId && cfg.sanToolTbl && cfg.token && cfg.base){
+    setSyncPill('ing','Deleting...');
+    const ok = await atDelete(cfg.sanToolTbl, rec.airtableId);
+    if(!ok){ setSyncPill('err','Delete failed'); toast('Could not delete from Airtable — entry kept. Try again when online.',5000); return; }
+    setSyncPill('ok','Synced');
+  }
+  sanToolRecs.splice(idx,1);
+  lsSet('gp-santool', sanToolRecs);
+  updatePendingBadge();
+  santoolRenderRecent();
+  toast('Tool cleaning entry deleted.');
 }
 
 // Save EVERY chip-added tool as its own sanToolRec. Same Date, Grower, Batch, Notes, and the
