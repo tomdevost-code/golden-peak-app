@@ -266,7 +266,7 @@ tr:last-child td { border-bottom: none; }
                 <option>Full Saturation</option><option>Feed</option><option>Flush</option><option>Fade</option><option>RO Water</option>
               </select>
             </div>
-            <div class="field"><label>Flow meter (L)</label>
+            <div class="field" style="display:none;"><label>Flow meter (L)</label>
               <input type="number" id="ec-flow" step="0.01" placeholder="0.00" />
             </div>
           </div>
@@ -288,6 +288,42 @@ tr:last-child td { border-bottom: none; }
       </div>
       <button class="btn-primary" id="ec-btn" onclick="ecSave()">Save EC Entry</button>
       <button class="btn-secondary" style="width:100%;margin-top:8px;" onclick="ecClearConfirm()">Clear Form</button>
+
+      <div class="section" style="margin-top:20px;">
+        <div class="section-label">Flow Meter Reading</div>
+        <div class="card">
+          <div style="font-size:11px;color:var(--text3);margin-bottom:10px;line-height:1.4;">Log a flow-meter total for a room. Set the date &amp; time the reading belongs to (e.g. the prior light cycle), pick the room, and enter the cumulative meter reading. The meter is zeroed per batch, so the highest reading is the total water used.</div>
+          <div class="g2" style="margin-bottom:10px;">
+            <div class="field"><label>Batch</label>
+              <select id="flow-batch-select" onchange="flowBatchChanged()"><option value="">-- select batch --</option></select>
+            </div>
+            <div class="field"><label>Room</label>
+              <select id="flow-room" onchange="flowRenderRecent()"><option value="">select room</option></select>
+            </div>
+          </div>
+          <div class="g2" style="margin-bottom:10px;">
+            <div class="field"><label>Date</label>
+              <input type="date" id="flow-date" />
+            </div>
+            <div class="field"><label>Time</label>
+              <input type="time" id="flow-time" />
+            </div>
+          </div>
+          <div class="g2" style="margin-bottom:10px;">
+            <div class="field"><label>Grower</label>
+              <select id="flow-grower"><option value="">select grower</option><option>Jordan Elliott</option><option>Brandon Cail</option><option>Tom Devost</option></select>
+            </div>
+            <div class="field"><label>Flow Meter Reading (L)</label>
+              <input type="number" id="flow-reading" step="0.001" min="0" placeholder="0.000" onwheel="this.blur()" />
+            </div>
+          </div>
+          <div class="field" style="margin-bottom:10px;"><label>Notes</label>
+            <textarea id="flow-notes" rows="2" style="width:100%;font-size:14px;font-family:var(--sans);border-radius:var(--radius-sm);border:1px solid var(--border);padding:10px;background:var(--card);color:var(--text);outline:none;" placeholder="Optional"></textarea>
+          </div>
+          <button class="btn-save" id="flow-btn" onclick="flowSave()">Save Flow Reading</button>
+          <div id="flow-recent" style="margin-top:12px;"></div>
+        </div>
+      </div>
     </div>
 
     <!-- RUNOFF -->
@@ -1655,6 +1691,7 @@ tr:last-child td { border-bottom: none; }
         <div class="sfield"><label>Tool Cleaning Log Table ID <span style="font-size:10px;color:var(--text3);font-weight:400;">(Sanitation)</span></label><input type="text" id="s-santool" placeholder="tblXXXXXXXXXXXXXX" /></div>
         <div class="sfield"><label>Sanitation Task Edits Table ID <span style="font-size:10px;color:var(--text3);font-weight:400;">(Sanitation — task list edits)</span></label><input type="text" id="s-sanedits" placeholder="tblXXXXXXXXXXXXXX" /></div>
         <div class="sfield"><label>Seed Inventory Table ID <span style="font-size:10px;color:var(--text3);font-weight:400;">(Cultivation — seed strains)</span></label><input type="text" id="s-seedinv" placeholder="tblXXXXXXXXXXXXXX" /></div>
+        <div class="sfield"><label>Flow Meter Table ID <span style="font-size:10px;color:var(--text3);font-weight:400;">(Cultivation — flow meter readings)</span></label><input type="text" id="s-flow" placeholder="tblXXXXXXXXXXXXXX" /></div>
         <button class="btn-save" onclick="saveSettings()">Save and Test Connection</button>
         <div class="conn-status" id="conn-status"></div>
         <div style="margin-top:14px;padding-top:12px;border-top:1px dashed var(--border);">
@@ -1899,7 +1936,7 @@ tr:last-child td { border-bottom: none; }
 <script>
 const EC_LO=2.2,EC_HI=2.3,PH_EC_LO=6.2,PH_EC_HI=6.3;
 const RO_PH_LO=6.0,RO_PH_HI=6.5,RO_VAR_LO=0.3,RO_VAR_HI=0.5,RO_VAR_ALERT=1.0;
-let ecRecs=[],roRecs=[],wasteRecs=[],batchRecs=[],batchTxRecs=[],harvestRecs=[],postDryRecs=[],bioRecs=[],pestRecs=[],sanCleanRecs=[],sanToolRecs=[],sanEditsRecs=[],seedInvRecs=[],cfg={token:'',base:'',ecTbl:'',roTbl:'',wasteTbl:'',batchTbl:'',batchtxTbl:'',harvestTbl:'',postDryTbl:'',bioTbl:'',pestTbl:'',sanCleanTbl:'',sanToolTbl:'',sanEditsTbl:'',seedInvTbl:''};
+let ecRecs=[],roRecs=[],wasteRecs=[],batchRecs=[],batchTxRecs=[],harvestRecs=[],postDryRecs=[],bioRecs=[],pestRecs=[],sanCleanRecs=[],sanToolRecs=[],sanEditsRecs=[],seedInvRecs=[],flowRecs=[],cfg={token:'',base:'',ecTbl:'',roTbl:'',wasteTbl:'',batchTbl:'',batchtxTbl:'',harvestTbl:'',postDryTbl:'',bioTbl:'',pestTbl:'',sanCleanTbl:'',sanToolTbl:'',sanEditsTbl:'',seedInvTbl:'',flowTbl:''};
 
 // ── SANITATION ──────────────────────────────────────────────────────────────
 // Section toggle: 'cultivation' or 'sanitation'. Drives which pages are visible and which
@@ -2008,7 +2045,7 @@ function sanGetTasks(template, phase){
 
 function lsGet(k){try{return JSON.parse(localStorage.getItem(k)||'null');}catch(e){return null;}}
 function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
-function loadAll(){ecRecs=lsGet('gp-ec')||[];roRecs=lsGet('gp-ro')||[];wasteRecs=lsGet('gp-waste')||[];batchRecs=lsGet('gp-batch')||[];batchTxRecs=lsGet('gp-batchtx')||[];harvestRecs=lsGet('gp-harvest')||[];postDryRecs=lsGet('gp-postdry')||[];bioRecs=lsGet('gp-bio')||[];pestRecs=lsGet('gp-pest')||[];sanCleanRecs=lsGet('gp-sanclean')||[];sanToolRecs=lsGet('gp-santool')||[];sanEditsRecs=lsGet('gp-sanedits')||[];seedInvRecs=lsGet('gp-seedinv')||[];migrateSanTaskEditsToRecs();wasteRecs.forEach(r=>{if(r.type==='Vegetative waste')r.type='Vegetative Waste';});lsSet('gp-waste',wasteRecs);const s=lsGet('gp-cfg');if(s){cfg=s;applySettings();}dedupeBatchRecs();backfillHarvestedTxs();reconcileAllPackagedBatches();}
+function loadAll(){ecRecs=lsGet('gp-ec')||[];roRecs=lsGet('gp-ro')||[];wasteRecs=lsGet('gp-waste')||[];batchRecs=lsGet('gp-batch')||[];batchTxRecs=lsGet('gp-batchtx')||[];harvestRecs=lsGet('gp-harvest')||[];postDryRecs=lsGet('gp-postdry')||[];bioRecs=lsGet('gp-bio')||[];pestRecs=lsGet('gp-pest')||[];sanCleanRecs=lsGet('gp-sanclean')||[];sanToolRecs=lsGet('gp-santool')||[];sanEditsRecs=lsGet('gp-sanedits')||[];seedInvRecs=lsGet('gp-seedinv')||[];flowRecs=lsGet('gp-flow')||[];migrateSanTaskEditsToRecs();wasteRecs.forEach(r=>{if(r.type==='Vegetative waste')r.type='Vegetative Waste';});lsSet('gp-waste',wasteRecs);const s=lsGet('gp-cfg');if(s){cfg=s;applySettings();}dedupeBatchRecs();backfillHarvestedTxs();reconcileAllPackagedBatches();}
 
 // One-time migration of the previous gp-san-task-edits localStorage shape into the new
 // synced sanEditsRecs array. Runs on every boot but only does work the first time.
@@ -2479,6 +2516,24 @@ const REMOTE_MAPPERS = {
       synced: true
     };
   },
+  flow(rec, ctx){
+    const f = rec.fields || {};
+    const link = Array.isArray(f['Batch ID']) ? f['Batch ID'][0] : null;
+    const batch = link ? (ctx.batchIdByRecId[link]||'') : '';
+    if(!batch) return null;
+    return {
+      id: 'fl_'+rec.id,
+      airtableId: rec.id,
+      date: f['Date']||'',
+      time: f['Time']||'',
+      room: f['Room']||'',
+      grower: f['Grower']||'',
+      batch,
+      reading: f['Flow Reading'] != null ? parseFloat(f['Flow Reading']) : null,
+      notes: f['Notes']||'',
+      synced: true
+    };
+  },
   sanedits(rec){
     const f = rec.fields || {};
     const tpl = (f['Template']||'').toString().trim();
@@ -2666,6 +2721,16 @@ const NAT_KEY_FN = {
       (r.tool||'').toString(),
       r.cleaned ? 'C' : '',
       r.sanitized ? 'S' : ''
+    ].join('|');
+  },
+  flow(r){
+    if(!r) return '';
+    // Flow reading natural key: one reading per batch + room + date + time.
+    return [
+      (r.batch||'').toString().toUpperCase(),
+      r.date||'',
+      (r.time||'').toString(),
+      (r.room||'').toString()
     ].join('|');
   },
   sanedits(r){
@@ -2955,7 +3020,7 @@ async function pullFromAirtable(opts){
   isPulling = true;
   if(opts.manual) setSyncPill('ing','Syncing…');
   try {
-    const [batches, ecs, ros, ws, txs, hs, pds, bs, ps, scs, sts, sed, siv] = await Promise.all([
+    const [batches, ecs, ros, ws, txs, hs, pds, bs, ps, scs, sts, sed, siv, fls] = await Promise.all([
       atFetchAll(cfg.batchTbl),
       atFetchAll(cfg.ecTbl),
       atFetchAll(cfg.roTbl),
@@ -2968,7 +3033,8 @@ async function pullFromAirtable(opts){
       atFetchAll(cfg.sanCleanTbl),
       atFetchAll(cfg.sanToolTbl),
       atFetchAll(cfg.sanEditsTbl),
-      atFetchAll(cfg.seedInvTbl)
+      atFetchAll(cfg.seedInvTbl),
+      atFetchAll(cfg.flowTbl)
     ]);
     // Resolve linked-record refs by building recordId→Batch-ID-string lookup
     const batchIdByRecId = {};
@@ -2993,6 +3059,7 @@ async function pullFromAirtable(opts){
     summary.pest    = mergeRemote(pestRecs,    ps,      REMOTE_MAPPERS.pest,    ctx, 'pest',    'gp-pest');
     summary.sanclean= mergeRemote(sanCleanRecs, scs,    REMOTE_MAPPERS.sanclean,ctx, 'sanclean','gp-sanclean');
     summary.santool = mergeRemote(sanToolRecs,  sts,    REMOTE_MAPPERS.santool, ctx, 'santool', 'gp-santool');
+    summary.flow    = mergeRemote(flowRecs,    fls,     REMOTE_MAPPERS.flow,    ctx, 'flow',    'gp-flow');
     // Sanitation Task Edits — one row per template. Custom merge (upsert by template) since
     // the row is config, not a logged event. Remote always wins for synced local rows.
     summary.sanedits = mergeRemoteSanEdits(sed);
@@ -3002,7 +3069,7 @@ async function pullFromAirtable(opts){
     // matches the remote (could happen if mergeRemote just repaired a stale
     // airtableId link, or if the local was deleted out from under us).
     _pendingConflicts = _pendingConflicts.filter(c => {
-      const arr = {batch:batchRecs, ec:ecRecs, ro:roRecs, waste:wasteRecs, batchtx:batchTxRecs, harvest:harvestRecs, postdry:postDryRecs, bio:bioRecs, pest:pestRecs, sanclean:sanCleanRecs, santool:sanToolRecs}[c.table] || [];
+      const arr = {batch:batchRecs, ec:ecRecs, ro:roRecs, waste:wasteRecs, batchtx:batchTxRecs, harvest:harvestRecs, postdry:postDryRecs, bio:bioRecs, pest:pestRecs, sanclean:sanCleanRecs, santool:sanToolRecs, flow:flowRecs}[c.table] || [];
       const stillLocal = arr.find(r => r && r.airtableId === c.airtableId);
       if(!stillLocal) return false;
       return _recordsLookEquivalent(stillLocal, c.remote, c.table);
@@ -3017,6 +3084,7 @@ async function pullFromAirtable(opts){
     lsSet('gp-pest',     pestRecs);
     lsSet('gp-sanclean', sanCleanRecs);
     lsSet('gp-santool',  sanToolRecs);
+    lsSet('gp-flow',     flowRecs);
     const totalAdded    = Object.values(summary).reduce((s,o)=>s+o.added, 0);
     const totalUpdated  = Object.values(summary).reduce((s,o)=>s+o.updated, 0);
     const totalConflicts= Object.values(summary).reduce((s,o)=>s+o.conflicts, 0);
@@ -4392,9 +4460,14 @@ async function harvestComplete(){
   // batch (local) for the Batch Report; the report also recomputes from EC data as a fallback.
   if(!batchRec.flowTotals) batchRec.flowTotals = {};
   {
-    const _flows = ecRecs
-      .filter(r => r.batch === batch && r.room === room && r.flow != null && !isNaN(parseFloat(r.flow)))
-      .map(r => parseFloat(r.flow));
+    let _flows = flowRecs
+      .filter(r => r.batch === batch && r.room === room && r.reading != null && !isNaN(parseFloat(r.reading)))
+      .map(r => parseFloat(r.reading));
+    if(!_flows.length){
+      _flows = ecRecs
+        .filter(r => r.batch === batch && r.room === room && r.flow != null && !isNaN(parseFloat(r.flow)))
+        .map(r => parseFloat(r.flow));
+    }
     batchRec.flowTotals[room] = _flows.length ? Math.round(Math.max(..._flows) * 1000) / 1000 : 0;
   }
   batchRec.synced = false;
@@ -5829,6 +5902,8 @@ function populateBatchDropdowns(){
   if(typeof bioPopulateBatches === 'function') bioPopulateBatches();
   // Pest ID batch dropdown filters by growing phase too
   if(typeof pestPopulateBatches === 'function') pestPopulateBatches();
+  // Flow Meter batch dropdown (EC page card) — handled separately
+  if(typeof flowPopulateBatches === 'function') flowPopulateBatches();
   // Auto-pick if only one batch exists
   autoSelectIfSingle('ec-batch-select');
   autoSelectIfSingle('ro-batch-select');
@@ -6611,6 +6686,161 @@ async function ecDelete(id){
   ecRenderRecent(rec.batch);
   toast('EC entry deleted.');
 }
+// ════════════════════════════════════════════════════════════════════════════════
+// FLOW METER LOG — standalone water-meter readings, decoupled from EC entries so a reading
+// can be dated/timed to the correct light cycle (some rooms' cycles cross midnight). Synced to
+// its own table (cfg.flowTbl). Meter is zeroed per batch → highest reading per (batch,room) = total.
+// ════════════════════════════════════════════════════════════════════════════════
+let flowEditId = null;
+function flowPopulateBatches(){
+  const sel = document.getElementById('flow-batch-select');
+  if(!sel) return;
+  const cur = sel.value;
+  const list = (typeof getFormBatchList === 'function') ? getFormBatchList() : [];
+  sel.innerHTML = '<option value="">-- select batch --</option>' +
+    list.map(b => '<option value="'+b.batchId+'">'+b.batchId+(b.cultivar?' — '+b.cultivar:'')+(b.closed?' (harvested)':'')+'</option>').join('');
+  sel.value = cur;
+}
+function flowBatchChanged(){
+  const batch = (document.getElementById('flow-batch-select')||{}).value || '';
+  const roomEl = document.getElementById('flow-room');
+  if(roomEl){
+    const b = batchRecs.find(r => r.batchId === batch && !r.type);
+    const rooms = (b && Array.isArray(b.rooms)) ? b.rooms.slice() : [];
+    const cur = roomEl.value;
+    roomEl.innerHTML = '<option value="">select room</option>' + rooms.map(r => '<option'+(r===cur?' selected':'')+'>'+r+'</option>').join('');
+  }
+  const dEl = document.getElementById('flow-date'); if(dEl && !dEl.value) dEl.value = localDate();
+  flowRenderRecent();
+}
+async function flowSave(){
+  const batch = (document.getElementById('flow-batch-select')||{}).value || '';
+  const room  = (document.getElementById('flow-room')||{}).value || '';
+  const date  = (document.getElementById('flow-date')||{}).value || '';
+  const time  = (document.getElementById('flow-time')||{}).value || '';
+  const grower= (document.getElementById('flow-grower')||{}).value || '';
+  const reading = parseFloat((document.getElementById('flow-reading')||{}).value);
+  const notes = ((document.getElementById('flow-notes')||{}).value || '').trim();
+  if(!batch){ toast('Please select a batch.'); return; }
+  if(!room){ toast('Please select a room.'); return; }
+  if(!date){ toast('Please set a date.'); return; }
+  if(!grower){ toast('Please select a grower.'); return; }
+  if(isNaN(reading) || reading < 0){ toast('Enter a valid flow meter reading.'); return; }
+  const _prior = flowRecs
+    .filter(r => r.batch === batch && r.room === room && String(r.id) !== String(flowEditId) && r.reading != null && !isNaN(parseFloat(r.reading)))
+    .map(r => parseFloat(r.reading));
+  if(_prior.length){
+    const _maxPrev = Math.max(..._prior);
+    if(reading < _maxPrev && !confirm('This reading ('+reading.toFixed(3)+' L) is LOWER than the highest existing reading for '+batch+' / '+room+' ('+_maxPrev.toFixed(3)+' L). The meter is zeroed per batch and should climb. Save anyway?')) return;
+  }
+  const _flowEditing = flowEditId != null;
+  let rec;
+  if(_flowEditing){
+    rec = flowRecs.find(r => String(r.id) === String(flowEditId));
+    if(!rec){ toast('The reading being edited was not found.'); flowEditId=null; return; }
+    Object.assign(rec, { date, time, room, grower, batch, reading, notes, synced:false });
+    lsSet('gp-flow', flowRecs);
+    flowEditId = null;
+    const _fb=document.getElementById('flow-btn'); if(_fb) _fb.textContent='Save Flow Reading';
+    toast('Flow reading updated ('+reading.toFixed(3)+' L)');
+  } else {
+    rec = { id: Date.now(), date, time, room, grower, batch, reading, notes, synced:false };
+    flowRecs.unshift(rec);
+    lsSet('gp-flow', flowRecs);
+    toast('Flow reading saved ('+reading.toFixed(3)+' L)');
+  }
+  updatePendingBadge();
+  ['flow-reading','flow-notes','flow-time'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
+  flowRenderRecent();
+  if(cfg.flowTbl && cfg.token && cfg.base){
+    setSyncPill('ing','Syncing...');
+    try{
+      const f = { 'Batch ID': rec.batch?[rec.batch]:undefined, 'Date': rec.date, 'Time': rec.time||undefined, 'Room': rec.room, 'Grower': rec.grower, 'Flow Reading': rec.reading, 'Notes': rec.notes||undefined };
+      Object.keys(f).forEach(k=>{ if(f[k]===undefined||f[k]===null||f[k]==='') delete f[k]; });
+      if(_flowEditing && rec.airtableId){ await atUpdateById(cfg.flowTbl, rec.airtableId, f); }
+      else { const _fRes = await atPost(cfg.flowTbl, f); if(_fRes && _fRes.id) rec.airtableId = _fRes.id; }
+      rec.synced = true; lsSet('gp-flow', flowRecs); setSyncPill('ok','Synced'); updatePendingBadge();
+    }catch(e){ setSyncPill('err','Sync failed'); toast('Saved locally - Airtable: '+(e.message||'sync failed'),5000); }
+  } else {
+    toast('Saved locally — set the Flow Meter Table ID in Settings to sync.',4500);
+  }
+}
+function flowRenderRecent(){
+  const wrap = document.getElementById('flow-recent');
+  if(!wrap) return;
+  const batch = (document.getElementById('flow-batch-select')||{}).value || '';
+  if(!batch){ wrap.innerHTML=''; return; }
+  const recs = flowRecs.filter(r => r.batch === batch)
+    .sort((a,b)=> (b.date||'').localeCompare(a.date||'') || (b.time||'').localeCompare(a.time||'') || (b.id||0)-(a.id||0))
+    .slice(0,15);
+  if(!recs.length){ wrap.innerHTML = '<div style="font-size:11px;color:var(--text3);">No flow readings yet for '+batch+'.</div>'; return; }
+  let html = '<div style="font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;margin-bottom:6px;">Recent flow readings — '+batch+'</div>';
+  html += '<div style="border:1px solid var(--border);border-radius:var(--radius-sm);background:#fff;overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#f5f5f5;">'+
+    '<th style="padding:6px 8px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Date</th>'+
+    '<th style="padding:6px 8px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;border-left:1px solid var(--border);">Time</th>'+
+    '<th style="padding:6px 8px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;border-left:1px solid var(--border);">Room</th>'+
+    '<th style="padding:6px 8px;text-align:right;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;border-left:1px solid var(--border);">Reading (L)</th>'+
+    '<th style="padding:6px 8px;text-align:center;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;border-left:1px solid var(--border);">Actions</th>'+
+  '</tr></thead><tbody>';
+  recs.forEach(r => {
+    const _fIdArg = "'" + String(r.id).replace(/\\/g,'\\\\').replace(/'/g,"\\'") + "'";
+    html += '<tr>'+
+      '<td style="padding:5px 8px;font-family:var(--mono);border-top:1px solid var(--border);white-space:nowrap;">'+(r.date||'—')+'</td>'+
+      '<td style="padding:5px 8px;font-family:var(--mono);border-top:1px solid var(--border);border-left:1px solid var(--border);">'+(r.time||'—')+'</td>'+
+      '<td style="padding:5px 8px;border-top:1px solid var(--border);border-left:1px solid var(--border);">'+(r.room||'—')+'</td>'+
+      '<td style="padding:5px 8px;font-family:var(--mono);text-align:right;border-top:1px solid var(--border);border-left:1px solid var(--border);">'+((r.reading!=null&&!isNaN(parseFloat(r.reading)))?parseFloat(r.reading).toFixed(3):'—')+'</td>'+
+      '<td style="padding:5px 8px;text-align:center;white-space:nowrap;border-top:1px solid var(--border);border-left:1px solid var(--border);">'+
+        '<button type="button" onclick="flowEditStart('+_fIdArg+')" style="font-size:11px;padding:3px 8px;margin-right:4px;border:1px solid var(--border);background:var(--bg2);border-radius:var(--radius-sm);cursor:pointer;color:var(--text2);">Edit</button>'+
+        '<button type="button" onclick="flowDelete('+_fIdArg+')" style="font-size:11px;padding:3px 8px;border:1px solid var(--red);background:var(--red-pale);border-radius:var(--radius-sm);cursor:pointer;color:var(--red);">Delete</button>'+
+      '</td>'+
+    '</tr>';
+  });
+  html += '</tbody></table></div>';
+  wrap.innerHTML = html;
+}
+function flowEditCancel(){
+  flowEditId = null;
+  const btn = document.getElementById('flow-btn'); if(btn) btn.textContent = 'Save Flow Reading';
+}
+function flowEditStart(id){
+  const rec = flowRecs.find(r => String(r.id) === String(id));
+  if(!rec){ toast('Reading not found.'); return; }
+  flowEditId = id;
+  const bs = document.getElementById('flow-batch-select'); if(bs) bs.value = rec.batch || '';
+  flowBatchChanged();
+  const rEl = document.getElementById('flow-room');
+  if(rEl){
+    if(rec.room && !Array.from(rEl.options).some(o => o.value === rec.room)){ const opt=document.createElement('option'); opt.value=rec.room; opt.textContent=rec.room; rEl.appendChild(opt); }
+    rEl.value = rec.room || '';
+  }
+  const dEl=document.getElementById('flow-date'); if(dEl) dEl.value = rec.date || '';
+  const tEl=document.getElementById('flow-time'); if(tEl) tEl.value = rec.time || '';
+  const gEl=document.getElementById('flow-grower'); if(gEl) gEl.value = rec.grower || '';
+  const rdEl=document.getElementById('flow-reading'); if(rdEl) rdEl.value = (rec.reading!=null?rec.reading:'');
+  const nEl=document.getElementById('flow-notes'); if(nEl) nEl.value = rec.notes || '';
+  const btn=document.getElementById('flow-btn'); if(btn) btn.textContent='Update Flow Reading';
+  flowRenderRecent();
+  toast('Editing flow reading — change values and press Update.',4000);
+  if(btn && btn.scrollIntoView) btn.scrollIntoView({behavior:'smooth',block:'center'});
+}
+async function flowDelete(id){
+  const idx = flowRecs.findIndex(r => String(r.id) === String(id));
+  if(idx < 0){ toast('Reading not found.'); return; }
+  const rec = flowRecs[idx];
+  if(!confirm('Delete this flow reading'+(rec.date?' from '+rec.date:'')+((rec.reading!=null)?' ('+parseFloat(rec.reading).toFixed(3)+' L)':'')+'? This cannot be undone.')) return;
+  if(rec.airtableId && cfg.flowTbl && cfg.token && cfg.base){
+    setSyncPill('ing','Deleting...');
+    const ok = await atDelete(cfg.flowTbl, rec.airtableId);
+    if(!ok){ setSyncPill('err','Delete failed'); toast('Could not delete from Airtable — reading kept. Try again when online.',5000); return; }
+    setSyncPill('ok','Synced');
+  }
+  flowRecs.splice(idx,1);
+  lsSet('gp-flow', flowRecs);
+  if(String(flowEditId)===String(id)) flowEditCancel();
+  updatePendingBadge();
+  flowRenderRecent();
+  toast('Flow reading deleted.');
+}
 function ecHydrationChanged(){setVegMin();applyCascadeLocks();}
 function applyCascadeLocks(){
   // Lifecycle dates are now managed on the Summary page (hidden inputs on the EC form).
@@ -6742,24 +6972,7 @@ async function ecSave(){
       return;
     }
   }
-  // Flow-meter validation: each new reading for this (batch, room) must be strictly greater than
-  // every prior reading. The meter is logically scoped per (batch, room) — once the batch is
-  // harvested and a new batch enters the same room the comparison naturally starts fresh.
-  const _flowValRaw = document.getElementById('ec-flow').value;
-  const _flowVal = parseFloat(_flowValRaw);
-  if(_flowValRaw !== '' && !isNaN(_flowVal) && _flowVal > 0){
-    const _batchValForFlow = document.getElementById('ec-batch').value.trim();
-    const _priorFlows = ecRecs
-      .filter(r => r.batch === _batchValForFlow && r.room === room && String(r.id) !== String(ecEditId) && r.flow != null && !isNaN(parseFloat(r.flow)) && parseFloat(r.flow) > 0)
-      .map(r => parseFloat(r.flow));
-    if(_priorFlows.length){
-      const _maxPrev = Math.max(..._priorFlows);
-      if(_flowVal <= _maxPrev){
-        toast('Flow meter reading must be higher than the previous ('+_maxPrev.toFixed(2)+' L) for '+_batchValForFlow+' / '+room+'.',5500);
-        return;
-      }
-    }
-  }
+  // Flow-meter readings are logged separately now (Flow Meter card / flow log), not on EC entries.
   // Event-driven hydration date:
   //   - If batchRec already has hydrationDate, use it (any wtype is allowed)
   //   - If not, only a wtype='Hydration' entry can set it; otherwise refuse
@@ -6789,8 +7002,7 @@ async function ecSave(){
   const harvestDate=document.getElementById('ec-harvest').value;
   if(hydrationDate&&date<hydrationDate){toast('Entry date cannot be before hydration date ('+hydrationDate+').',3500);return;}
   if(!wtype){toast('Please select a watering type.');return;}
-  const flowVal=parseFloat(document.getElementById('ec-flow').value);
-  if(!flowVal||flowVal<=0){toast('Please enter a flow meter reading.');return;}
+  // Flow is no longer captured on EC entries (it lives in the separate Flow Meter log).
   const dripEcPens=pens('.ec-drip-ec'),dripPhPens=pens('.ec-drip-ph');
   const dripEc=avg(dripEcPens.filter(v=>v)),dripPh=avg(dripPhPens.filter(v=>v));
   if(dripEc===null&&dripPh===null){toast('Enter at least one reading.');return;}
@@ -6997,7 +7209,7 @@ function roClear(){for(let i=1;i<=8;i++){document.getElementById('ro-ec-'+i).val
 
 // Pending badge
 function updatePendingBadge(){
-  const n=(ecRecs.filter(r=>!r.synced).length)+(roRecs.filter(r=>!r.synced).length)+(wasteRecs.filter(r=>!r.synced).length)+(batchRecs.filter(r=>!r.synced).length)+(batchTxRecs.filter(r=>!r.synced).length)+(harvestRecs.filter(r=>!r.synced).length)+(postDryRecs.filter(r=>!r.synced).length)+(bioRecs.filter(r=>!r.synced).length)+(pestRecs.filter(r=>!r.synced).length)+(sanCleanRecs.filter(r=>!r.synced).length)+(sanToolRecs.filter(r=>!r.synced).length)+(sanEditsRecs.filter(r=>!r.synced).length)+(seedInvRecs.filter(r=>!r.synced).length);
+  const n=(ecRecs.filter(r=>!r.synced).length)+(roRecs.filter(r=>!r.synced).length)+(wasteRecs.filter(r=>!r.synced).length)+(batchRecs.filter(r=>!r.synced).length)+(batchTxRecs.filter(r=>!r.synced).length)+(harvestRecs.filter(r=>!r.synced).length)+(postDryRecs.filter(r=>!r.synced).length)+(bioRecs.filter(r=>!r.synced).length)+(pestRecs.filter(r=>!r.synced).length)+(sanCleanRecs.filter(r=>!r.synced).length)+(sanToolRecs.filter(r=>!r.synced).length)+(sanEditsRecs.filter(r=>!r.synced).length)+(seedInvRecs.filter(r=>!r.synced).length)+(flowRecs.filter(r=>!r.synced).length);
   // Update the Settings badge — Settings only appears in the Cultivation bottom nav now.
   const b=document.getElementById('pending-badge');
   if(b){ if(n>0){b.textContent=n;b.style.display='block';}else{b.style.display='none';} }
@@ -7265,6 +7477,16 @@ const NAT_KEY_FN_REMOTE = {
       f['Sanitized'] ? 'S' : ''
     ].join('|');
   },
+  flow(rrec){
+    const f = rrec.fields || {};
+    const linkId = Array.isArray(f['Batch ID']) ? f['Batch ID'][0] : '';
+    return [
+      (linkId||'').toString(),
+      (f['Date']||'').toString(),
+      (f['Time']||'').toString(),
+      (f['Room']||'').toString()
+    ].join('|');
+  },
   sanedits(rrec){
     const f = rrec.fields || {};
     return (f['Template']||'').toString();
@@ -7338,7 +7560,8 @@ function cleanLocalDuplicates(){
     { lsKey:'gp-bio',      arr:bioRecs,      fn:NAT_KEY_FN.bio },
     { lsKey:'gp-pest',     arr:pestRecs,     fn:NAT_KEY_FN.pest },
     { lsKey:'gp-sanclean', arr:sanCleanRecs, fn:NAT_KEY_FN.sanclean },
-    { lsKey:'gp-santool',  arr:sanToolRecs,  fn:NAT_KEY_FN.santool }
+    { lsKey:'gp-santool',  arr:sanToolRecs,  fn:NAT_KEY_FN.santool },
+    { lsKey:'gp-flow',     arr:flowRecs,     fn:NAT_KEY_FN.flow }
   ].filter(t => Array.isArray(t.arr) && typeof t.fn === 'function');
   let removed = 0;
   tbls.forEach(t => {
@@ -7390,7 +7613,8 @@ async function cleanAirtableDuplicateTx(){
     { label:'Batch Cleaning',     tblId:cfg.sanCleanTbl,localArr:sanCleanRecs, remoteKeyFn:NAT_KEY_FN_REMOTE.sanclean, lsKey:'gp-sanclean' },
     { label:'Tool Cleaning',      tblId:cfg.sanToolTbl, localArr:sanToolRecs,  remoteKeyFn:NAT_KEY_FN_REMOTE.santool,  lsKey:'gp-santool' },
     { label:'Task Edits',         tblId:cfg.sanEditsTbl,localArr:sanEditsRecs, remoteKeyFn:NAT_KEY_FN_REMOTE.sanedits, lsKey:'gp-sanedits' },
-    { label:'Seed Inventory',     tblId:cfg.seedInvTbl, localArr:seedInvRecs,  remoteKeyFn:NAT_KEY_FN_REMOTE.seedinv,  lsKey:'gp-seedinv' }
+    { label:'Seed Inventory',     tblId:cfg.seedInvTbl, localArr:seedInvRecs,  remoteKeyFn:NAT_KEY_FN_REMOTE.seedinv,  lsKey:'gp-seedinv' },
+    { label:'Flow Meter',         tblId:cfg.flowTbl,    localArr:flowRecs,     remoteKeyFn:NAT_KEY_FN_REMOTE.flow,     lsKey:'gp-flow' }
   ];
   setStatus('Scanning Airtable for duplicates across '+tables.length+' tables...', 'var(--text2)');
   // First pass: scan everything to find the total count.
@@ -7715,8 +7939,8 @@ async function syncPending(){
   else if(ok>0){setSyncPill('err','Partial sync');st.style.background='var(--amber-pale)';st.style.color='var(--amber)';st.textContent=ok+' synced, '+fail+' failed. Check connection and retry.';}
   else{setSyncPill('err','Sync failed');st.style.background='var(--red-pale)';st.style.color='var(--red)';st.textContent='Sync failed: '+(lastErr||'Check your Airtable connection.');}
 }
-function applySettings(){document.getElementById('s-token').value=cfg.token||'';document.getElementById('s-base').value=cfg.base||'';document.getElementById('s-ec').value=cfg.ecTbl||'';document.getElementById('s-ro').value=cfg.roTbl||'';document.getElementById('s-waste').value=cfg.wasteTbl||'';document.getElementById('s-batch').value=cfg.batchTbl||'';document.getElementById('s-batchtx').value=cfg.batchtxTbl||'';const sh=document.getElementById('s-harvest'); if(sh) sh.value=cfg.harvestTbl||'';const spd=document.getElementById('s-postdry'); if(spd) spd.value=cfg.postDryTbl||'';const sbio=document.getElementById('s-bio'); if(sbio) sbio.value=cfg.bioTbl||'';const spest=document.getElementById('s-pest'); if(spest) spest.value=cfg.pestTbl||'';const ssc=document.getElementById('s-sanclean'); if(ssc) ssc.value=cfg.sanCleanTbl||'';const sst=document.getElementById('s-santool'); if(sst) sst.value=cfg.sanToolTbl||'';const sse=document.getElementById('s-sanedits'); if(sse) sse.value=cfg.sanEditsTbl||'';const ssi=document.getElementById('s-seedinv'); if(ssi) ssi.value=cfg.seedInvTbl||'';setSyncPill(atReady()?'ok':'off',atReady()?'Airtable connected':'Not configured');}
-async function saveSettings(){cfg={token:document.getElementById('s-token').value.trim(),base:document.getElementById('s-base').value.trim(),ecTbl:document.getElementById('s-ec').value.trim(),roTbl:document.getElementById('s-ro').value.trim(),wasteTbl:document.getElementById('s-waste').value.trim(),batchTbl:document.getElementById('s-batch').value.trim(),batchtxTbl:document.getElementById('s-batchtx').value.trim(),harvestTbl:(document.getElementById('s-harvest')?.value||'').trim(),postDryTbl:(document.getElementById('s-postdry')?.value||'').trim(),bioTbl:(document.getElementById('s-bio')?.value||'').trim(),pestTbl:(document.getElementById('s-pest')?.value||'').trim(),sanCleanTbl:(document.getElementById('s-sanclean')?.value||'').trim(),sanToolTbl:(document.getElementById('s-santool')?.value||'').trim(),sanEditsTbl:(document.getElementById('s-sanedits')?.value||'').trim(),seedInvTbl:(document.getElementById('s-seedinv')?.value||'').trim()};const st=document.getElementById('conn-status');st.style.display='block';st.style.background='var(--bg2)';st.style.color='var(--text2)';st.textContent='Testing connection...';if(!atReady()){st.textContent='Please fill in all fields.';st.style.background='var(--amber-pale)';st.style.color='var(--amber)';return;}try{const r=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+cfg.ecTbl+'?maxRecords=1',{headers:{'Authorization':'Bearer '+cfg.token}});if(r.ok){lsSet('gp-cfg',cfg);applySettings();st.textContent='Connected! Credentials saved.';st.style.background='var(--green-pale)';st.style.color='var(--green)';startAutoSync();}else{st.textContent='Failed ('+r.status+'). Check your credentials.';st.style.background='var(--red-pale)';st.style.color='var(--red)';}}catch(e){st.textContent='Could not reach Airtable. Check internet connection.';st.style.background='var(--red-pale)';st.style.color='var(--red)';}}
+function applySettings(){document.getElementById('s-token').value=cfg.token||'';document.getElementById('s-base').value=cfg.base||'';document.getElementById('s-ec').value=cfg.ecTbl||'';document.getElementById('s-ro').value=cfg.roTbl||'';document.getElementById('s-waste').value=cfg.wasteTbl||'';document.getElementById('s-batch').value=cfg.batchTbl||'';document.getElementById('s-batchtx').value=cfg.batchtxTbl||'';const sh=document.getElementById('s-harvest'); if(sh) sh.value=cfg.harvestTbl||'';const spd=document.getElementById('s-postdry'); if(spd) spd.value=cfg.postDryTbl||'';const sbio=document.getElementById('s-bio'); if(sbio) sbio.value=cfg.bioTbl||'';const spest=document.getElementById('s-pest'); if(spest) spest.value=cfg.pestTbl||'';const ssc=document.getElementById('s-sanclean'); if(ssc) ssc.value=cfg.sanCleanTbl||'';const sst=document.getElementById('s-santool'); if(sst) sst.value=cfg.sanToolTbl||'';const sse=document.getElementById('s-sanedits'); if(sse) sse.value=cfg.sanEditsTbl||'';const ssi=document.getElementById('s-seedinv'); if(ssi) ssi.value=cfg.seedInvTbl||'';const sfl=document.getElementById('s-flow'); if(sfl) sfl.value=cfg.flowTbl||'';setSyncPill(atReady()?'ok':'off',atReady()?'Airtable connected':'Not configured');}
+async function saveSettings(){cfg={token:document.getElementById('s-token').value.trim(),base:document.getElementById('s-base').value.trim(),ecTbl:document.getElementById('s-ec').value.trim(),roTbl:document.getElementById('s-ro').value.trim(),wasteTbl:document.getElementById('s-waste').value.trim(),batchTbl:document.getElementById('s-batch').value.trim(),batchtxTbl:document.getElementById('s-batchtx').value.trim(),harvestTbl:(document.getElementById('s-harvest')?.value||'').trim(),postDryTbl:(document.getElementById('s-postdry')?.value||'').trim(),bioTbl:(document.getElementById('s-bio')?.value||'').trim(),pestTbl:(document.getElementById('s-pest')?.value||'').trim(),sanCleanTbl:(document.getElementById('s-sanclean')?.value||'').trim(),sanToolTbl:(document.getElementById('s-santool')?.value||'').trim(),sanEditsTbl:(document.getElementById('s-sanedits')?.value||'').trim(),seedInvTbl:(document.getElementById('s-seedinv')?.value||'').trim(),flowTbl:(document.getElementById('s-flow')?.value||'').trim()};const st=document.getElementById('conn-status');st.style.display='block';st.style.background='var(--bg2)';st.style.color='var(--text2)';st.textContent='Testing connection...';if(!atReady()){st.textContent='Please fill in all fields.';st.style.background='var(--amber-pale)';st.style.color='var(--amber)';return;}try{const r=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+cfg.ecTbl+'?maxRecords=1',{headers:{'Authorization':'Bearer '+cfg.token}});if(r.ok){lsSet('gp-cfg',cfg);applySettings();st.textContent='Connected! Credentials saved.';st.style.background='var(--green-pale)';st.style.color='var(--green)';startAutoSync();}else{st.textContent='Failed ('+r.status+'). Check your credentials.';st.style.background='var(--red-pale)';st.style.color='var(--red)';}}catch(e){st.textContent='Could not reach Airtable. Check internet connection.';st.style.background='var(--red-pale)';st.style.color='var(--red)';}}
 
 function localDate(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 const today=localDate();
@@ -12036,45 +12260,42 @@ function renderBatchReport(batchId){
     ])
   );
 
-  // Water used (flow meter). The meter is zeroed per batch, so within each (batch, room) the
-  // readings climb from 0 and the delta between consecutive readings is the water dispensed for
-  // that watering event. We attribute each delta to its entry's watering type and phase, and sum
-  // per room for the total. (All three breakdowns sum to the same grand total.)
+  // Water used (flow meter). Source = the separate Flow Meter log (flowRecs); for older batches
+  // logged before the flow log existed, fall back to any flow readings stored on EC entries.
+  // The meter is zeroed per batch, so within each (batch, room) readings climb from 0 — the delta
+  // between consecutive readings is the water for that cycle, attributed to the phase of its date.
   {
-    const ecFlow = ecs.filter(r => r.flow != null && !isNaN(parseFloat(r.flow)));
-    if(ecFlow.length){
+    let src = flowRecs
+      .filter(r => r.batch === batchId && r.reading != null && !isNaN(parseFloat(r.reading)))
+      .map(r => ({ room: r.room || '—', date: r.date, time: r.time || '', reading: parseFloat(r.reading) }));
+    if(!src.length){
+      src = ecs
+        .filter(r => r.flow != null && !isNaN(parseFloat(r.flow)))
+        .map(r => ({ room: r.room || '—', date: r.date, time: '', reading: parseFloat(r.flow) }));
+    }
+    if(src.length){
       const byRoom = {};
-      ecFlow.forEach(r => { const rm = r.room || '—'; (byRoom[rm] = byRoom[rm] || []).push(r); });
-      const byType = {}, byPhase = {}, byRoomTotal = {};
+      src.forEach(r => { (byRoom[r.room] = byRoom[r.room] || []).push(r); });
+      const byPhase = {}, byRoomTotal = {};
       let grand = 0;
       Object.keys(byRoom).forEach(rm => {
-        const list = byRoom[rm].slice().sort((a,c)=>(parseFloat(a.flow)||0)-(parseFloat(c.flow)||0));
+        const list = byRoom[rm].slice().sort((a,c)=> (a.reading - c.reading) || (a.date||'').localeCompare(c.date||'') || (a.time||'').localeCompare(c.time||''));
         let prev = 0;
         list.forEach(r => {
-          const cur = parseFloat(r.flow)||0;
+          const cur = r.reading || 0;
           let delta = cur - prev; if(delta < 0) delta = cur; prev = cur;
-          const wt = r.wtype || 'Other';
-          byType[wt] = (byType[wt]||0) + delta;
-          const ph = (r.stage === 'flower') ? 'Flower' : (r.stage === 'veg') ? 'Veg' : 'Clones / Pre-Veg';
+          const st = (typeof calcStage === 'function') ? calcStage(b.vegStart, b.flowerStart, r.date) : null;
+          const ph = (st && st.stage === 'flower') ? 'Flower' : (st && st.stage === 'veg') ? 'Veg' : 'Clones / Pre-Veg';
           byPhase[ph] = (byPhase[ph]||0) + delta;
           byRoomTotal[rm] = (byRoomTotal[rm]||0) + delta;
           grand += delta;
         });
       });
       const L = v => (Math.round((v||0)*1000)/1000).toFixed(3) + ' L';
-      // By phase
       const phaseOrder = ['Clones / Pre-Veg','Veg','Flower'];
       const phaseRows = phaseOrder.filter(p => byPhase[p] != null).map(p => [p, L(byPhase[p])]);
       phaseRows.push(['Total Water Used', L(grand)]);
       s += sectionCard('Water Used by Phase', twoCol(phaseRows));
-      // By watering type (preferred order first, then any others)
-      const typeOrder = ['Hydration','Pre-Charge','Water In','Full Saturation','Feed','Flush','Fade','RO Water'];
-      const seenT = {};
-      const typeRows = [];
-      typeOrder.forEach(t => { if(byType[t] != null){ typeRows.push([t, L(byType[t])]); seenT[t]=1; } });
-      Object.keys(byType).forEach(t => { if(!seenT[t]) typeRows.push([t, L(byType[t])]); });
-      s += sectionCard('Water Used by Watering Type', twoCol(typeRows));
-      // By room
       const roomRows = Object.keys(byRoomTotal).sort().map(rm => [rm, L(byRoomTotal[rm])]);
       s += sectionCard('Water Used by Room', twoCol(roomRows));
     }
