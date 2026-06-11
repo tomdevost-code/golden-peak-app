@@ -2854,7 +2854,11 @@ function mergeRemote(localArr, remoteRecs, mapper, ctx, table, lsKey){
         }
         conflicts++;
       } else {
-        localArr[idx] = {...localArr[idx], ...mapped};
+        // Preserve the local `id` — it's the stable per-device handle the rendered Edit/Delete
+        // buttons reference. The remote mapper assigns its own id (e.g. 'h_'+recId); letting that
+        // overwrite the local id would invalidate already-rendered action buttons until the next
+        // re-render (the "not found on delete right after creating" bug).
+        localArr[idx] = {...localArr[idx], ...mapped, id: localArr[idx].id};
         updated++;
       }
     } else {
