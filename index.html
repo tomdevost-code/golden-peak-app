@@ -1341,6 +1341,58 @@ tr:last-child td { border-bottom: none; }
       </div>
     </div>
 
+    <!-- DESTRUCTION -->
+    <div class="page" id="page-destroy">
+      <div class="section">
+        <div class="section-label">Record Destruction</div>
+        <div class="card">
+          <div style="font-size:11px;color:var(--text3);margin-bottom:10px;line-height:1.4;">Officially destroy all waste logged since the last destruction. This records the event, marks those waste records destroyed, and produces a printable Destruction Log + Attestation per batch.</div>
+          <div class="g2" style="margin-bottom:10px;">
+            <div class="field"><label>Date Destroyed</label><input type="date" id="destroy-date" /></div>
+            <div class="field"><label>Employee</label>
+              <select id="destroy-employee"><option value="">select employee</option><option>Jordan Elliott</option><option>Brandon Cail</option><option>Tom Devost</option></select>
+            </div>
+          </div>
+          <div class="g2" style="margin-bottom:10px;">
+            <div class="field"><label>Destruction Method</label><input type="text" id="destroy-method" placeholder="e.g. Ground &amp; denatured" /></div>
+            <div class="field"><label>Witness (security-cleared)</label><input type="text" id="destroy-witness" value="Tom Devost" /></div>
+          </div>
+          <div class="field" style="margin-bottom:10px;"><label>Address of destruction</label><input type="text" id="destroy-address" value="2796 Rt 115, Irishtown NB" /></div>
+          <div class="field" style="margin-bottom:10px;"><label>Notes</label>
+            <textarea id="destroy-notes" rows="2" style="width:100%;font-size:14px;font-family:var(--sans);border-radius:var(--radius-sm);border:1px solid var(--border);padding:10px;background:var(--card);color:var(--text);outline:none;" placeholder="Optional"></textarea>
+          </div>
+          <div style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;background:var(--bg2);margin-bottom:10px;">
+            <label style="display:flex;align-items:flex-start;gap:8px;font-size:12px;color:var(--text2);cursor:pointer;">
+              <input type="checkbox" id="destroy-attest" style="margin-top:2px;" />
+              <span>I, the undersigned, attest that I have witnessed the destruction of the cannabis material listed below.</span>
+            </label>
+            <div style="margin-top:10px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;gap:6px;flex-wrap:wrap;">
+                <label style="font-size:11px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Signature</label>
+                <div style="display:flex;gap:4px;">
+                  <button type="button" id="destroy-sig-mode-draw" onclick="destroySetSigMode('draw')" style="font-size:11px;padding:3px 8px;border:1px solid var(--border);background:var(--green-pale);border-radius:var(--radius-sm);cursor:pointer;">Draw</button>
+                  <button type="button" id="destroy-sig-mode-type" onclick="destroySetSigMode('type')" style="font-size:11px;padding:3px 8px;border:1px solid var(--border);background:var(--bg2);border-radius:var(--radius-sm);cursor:pointer;">Type</button>
+                  <button type="button" onclick="destroyClearSig()" style="font-size:11px;padding:3px 8px;border:1px solid var(--border);background:var(--bg2);border-radius:var(--radius-sm);cursor:pointer;">Clear</button>
+                </div>
+              </div>
+              <canvas id="destroy-sig-canvas" width="600" height="140" style="width:100%;height:120px;border:1px dashed var(--border);border-radius:var(--radius-sm);background:#fff;touch-action:none;"></canvas>
+              <input type="text" id="destroy-sig-typed" placeholder="Type full name as signature" style="display:none;width:100%;font-size:20px;font-family:'Brush Script MT','Segoe Script',cursive;border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px;background:#fff;color:var(--text);outline:none;margin-top:4px;" />
+            </div>
+          </div>
+          <button class="btn-primary" id="destroy-btn" onclick="destroySave()">Record Destruction</button>
+        </div>
+      </div>
+      <div class="section">
+        <div class="section-label">Pending — waste since last destruction</div>
+        <div class="card"><div id="destroy-pending"></div></div>
+      </div>
+      <div class="section">
+        <div class="section-label">Destruction History</div>
+        <div class="card"><div id="destroy-history"></div></div>
+      </div>
+      <div id="destroy-print" style="display:none;"></div>
+    </div>
+
     <!-- HARVEST LOG -->
     <div class="page" id="page-harvest">
       <div class="section">
@@ -1692,6 +1744,7 @@ tr:last-child td { border-bottom: none; }
         <div class="sfield"><label>Sanitation Task Edits Table ID <span style="font-size:10px;color:var(--text3);font-weight:400;">(Sanitation — task list edits)</span></label><input type="text" id="s-sanedits" placeholder="tblXXXXXXXXXXXXXX" /></div>
         <div class="sfield"><label>Seed Inventory Table ID <span style="font-size:10px;color:var(--text3);font-weight:400;">(Cultivation — seed strains)</span></label><input type="text" id="s-seedinv" placeholder="tblXXXXXXXXXXXXXX" /></div>
         <div class="sfield"><label>Flow Meter Table ID <span style="font-size:10px;color:var(--text3);font-weight:400;">(Cultivation — flow meter readings)</span></label><input type="text" id="s-flow" placeholder="tblXXXXXXXXXXXXXX" /></div>
+        <div class="sfield"><label>Destruction Log Table ID <span style="font-size:10px;color:var(--text3);font-weight:400;">(Cultivation — waste destruction events)</span></label><input type="text" id="s-destroy" placeholder="tblXXXXXXXXXXXXXX" /></div>
         <button class="btn-save" onclick="saveSettings()">Save and Test Connection</button>
         <div class="conn-status" id="conn-status"></div>
         <div style="margin-top:14px;padding-top:12px;border-top:1px dashed var(--border);">
@@ -1891,6 +1944,10 @@ tr:last-child td { border-bottom: none; }
       <svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>
       Waste
     </button>
+    <button class="bnav-btn" id="bn-destroy" onclick="switchPage('destroy',this)">
+      <svg viewBox="0 0 24 24"><path d="M12 2c1 4 4 5 4 9a4 4 0 01-8 0c0-2 1-3 2-4 0 1 1 2 2 2 0-3-1-5-2-7z"/></svg>
+      Destroy
+    </button>
     <button class="bnav-btn" id="bn-harvest" onclick="switchPage('harvest',this)">
       <svg viewBox="0 0 24 24"><path d="M12 2v8M8 6l4-4 4 4M5 14l7 7 7-7M5 14a7 7 0 0114 0"/></svg>
       Harvest
@@ -1936,7 +1993,7 @@ tr:last-child td { border-bottom: none; }
 <script>
 const EC_LO=2.2,EC_HI=2.3,PH_EC_LO=6.2,PH_EC_HI=6.3;
 const RO_PH_LO=6.0,RO_PH_HI=6.5,RO_VAR_LO=0.3,RO_VAR_HI=0.5,RO_VAR_ALERT=1.0;
-let ecRecs=[],roRecs=[],wasteRecs=[],batchRecs=[],batchTxRecs=[],harvestRecs=[],postDryRecs=[],bioRecs=[],pestRecs=[],sanCleanRecs=[],sanToolRecs=[],sanEditsRecs=[],seedInvRecs=[],flowRecs=[],cfg={token:'',base:'',ecTbl:'',roTbl:'',wasteTbl:'',batchTbl:'',batchtxTbl:'',harvestTbl:'',postDryTbl:'',bioTbl:'',pestTbl:'',sanCleanTbl:'',sanToolTbl:'',sanEditsTbl:'',seedInvTbl:'',flowTbl:''};
+let ecRecs=[],roRecs=[],wasteRecs=[],batchRecs=[],batchTxRecs=[],harvestRecs=[],postDryRecs=[],bioRecs=[],pestRecs=[],sanCleanRecs=[],sanToolRecs=[],sanEditsRecs=[],seedInvRecs=[],flowRecs=[],destroyRecs=[],cfg={token:'',base:'',ecTbl:'',roTbl:'',wasteTbl:'',batchTbl:'',batchtxTbl:'',harvestTbl:'',postDryTbl:'',bioTbl:'',pestTbl:'',sanCleanTbl:'',sanToolTbl:'',sanEditsTbl:'',seedInvTbl:'',flowTbl:'',destroyTbl:''};
 
 // ── SANITATION ──────────────────────────────────────────────────────────────
 // Section toggle: 'cultivation' or 'sanitation'. Drives which pages are visible and which
@@ -2045,7 +2102,7 @@ function sanGetTasks(template, phase){
 
 function lsGet(k){try{return JSON.parse(localStorage.getItem(k)||'null');}catch(e){return null;}}
 function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
-function loadAll(){ecRecs=lsGet('gp-ec')||[];roRecs=lsGet('gp-ro')||[];wasteRecs=lsGet('gp-waste')||[];batchRecs=lsGet('gp-batch')||[];batchTxRecs=lsGet('gp-batchtx')||[];harvestRecs=lsGet('gp-harvest')||[];postDryRecs=lsGet('gp-postdry')||[];bioRecs=lsGet('gp-bio')||[];pestRecs=lsGet('gp-pest')||[];sanCleanRecs=lsGet('gp-sanclean')||[];sanToolRecs=lsGet('gp-santool')||[];sanEditsRecs=lsGet('gp-sanedits')||[];seedInvRecs=lsGet('gp-seedinv')||[];flowRecs=lsGet('gp-flow')||[];migrateSanTaskEditsToRecs();wasteRecs.forEach(r=>{if(r.type==='Vegetative waste')r.type='Vegetative Waste';});lsSet('gp-waste',wasteRecs);const s=lsGet('gp-cfg');if(s){cfg=s;applySettings();}dedupeBatchRecs();backfillHarvestedTxs();reconcileAllPackagedBatches();}
+function loadAll(){ecRecs=lsGet('gp-ec')||[];roRecs=lsGet('gp-ro')||[];wasteRecs=lsGet('gp-waste')||[];batchRecs=lsGet('gp-batch')||[];batchTxRecs=lsGet('gp-batchtx')||[];harvestRecs=lsGet('gp-harvest')||[];postDryRecs=lsGet('gp-postdry')||[];bioRecs=lsGet('gp-bio')||[];pestRecs=lsGet('gp-pest')||[];sanCleanRecs=lsGet('gp-sanclean')||[];sanToolRecs=lsGet('gp-santool')||[];sanEditsRecs=lsGet('gp-sanedits')||[];seedInvRecs=lsGet('gp-seedinv')||[];flowRecs=lsGet('gp-flow')||[];destroyRecs=lsGet('gp-destroy')||[];migrateSanTaskEditsToRecs();wasteRecs.forEach(r=>{if(r.type==='Vegetative waste')r.type='Vegetative Waste';});lsSet('gp-waste',wasteRecs);const s=lsGet('gp-cfg');if(s){cfg=s;applySettings();}dedupeBatchRecs();backfillHarvestedTxs();reconcileAllPackagedBatches();}
 
 // One-time migration of the previous gp-san-task-edits localStorage shape into the new
 // synced sanEditsRecs array. Runs on every boot but only does work the first time.
@@ -2534,6 +2591,29 @@ const REMOTE_MAPPERS = {
       synced: true
     };
   },
+  destroy(rec){
+    const f = rec.fields || {};
+    let coveredKeys = [];
+    try { if(f['Covered Waste']){ const p = JSON.parse(f['Covered Waste']); if(Array.isArray(p)) coveredKeys = p; } } catch(_){}
+    const batches = (f['Batch IDs']||'').toString().split(',').map(s=>s.trim()).filter(Boolean);
+    return {
+      id: 'ds_'+rec.id,
+      airtableId: rec.id,
+      date: f['Date']||'',
+      employee: f['Employee']||'',
+      method: f['Method']||'',
+      address: f['Address']||'',
+      witness: f['Witness']||'',
+      attest: !!f['Attestation'],
+      sig: f['Signature']||'',
+      coveredKeys,
+      batches,
+      vegWeight: f['Veg Weight (kg)'] != null ? parseFloat(f['Veg Weight (kg)']) : 0,
+      dryWeight: f['Dry Weight (kg)'] != null ? parseFloat(f['Dry Weight (kg)']) : 0,
+      notes: f['Notes']||'',
+      synced: true
+    };
+  },
   sanedits(rec){
     const f = rec.fields || {};
     const tpl = (f['Template']||'').toString().trim();
@@ -2732,6 +2812,11 @@ const NAT_KEY_FN = {
       (r.time||'').toString(),
       (r.room||'').toString()
     ].join('|');
+  },
+  destroy(r){
+    if(!r) return '';
+    // One destruction event per date + employee + witness.
+    return [ r.date||'', (r.employee||'').toString(), (r.witness||'').toString() ].join('|');
   },
   sanedits(r){
     if(!r) return '';
@@ -3020,7 +3105,7 @@ async function pullFromAirtable(opts){
   isPulling = true;
   if(opts.manual) setSyncPill('ing','Syncing…');
   try {
-    const [batches, ecs, ros, ws, txs, hs, pds, bs, ps, scs, sts, sed, siv, fls] = await Promise.all([
+    const [batches, ecs, ros, ws, txs, hs, pds, bs, ps, scs, sts, sed, siv, fls, dss] = await Promise.all([
       atFetchAll(cfg.batchTbl),
       atFetchAll(cfg.ecTbl),
       atFetchAll(cfg.roTbl),
@@ -3034,7 +3119,8 @@ async function pullFromAirtable(opts){
       atFetchAll(cfg.sanToolTbl),
       atFetchAll(cfg.sanEditsTbl),
       atFetchAll(cfg.seedInvTbl),
-      atFetchAll(cfg.flowTbl)
+      atFetchAll(cfg.flowTbl),
+      atFetchAll(cfg.destroyTbl)
     ]);
     // Resolve linked-record refs by building recordId→Batch-ID-string lookup
     const batchIdByRecId = {};
@@ -3060,6 +3146,7 @@ async function pullFromAirtable(opts){
     summary.sanclean= mergeRemote(sanCleanRecs, scs,    REMOTE_MAPPERS.sanclean,ctx, 'sanclean','gp-sanclean');
     summary.santool = mergeRemote(sanToolRecs,  sts,    REMOTE_MAPPERS.santool, ctx, 'santool', 'gp-santool');
     summary.flow    = mergeRemote(flowRecs,    fls,     REMOTE_MAPPERS.flow,    ctx, 'flow',    'gp-flow');
+    summary.destroy = mergeRemote(destroyRecs, dss,     REMOTE_MAPPERS.destroy, ctx, 'destroy', 'gp-destroy');
     // Sanitation Task Edits — one row per template. Custom merge (upsert by template) since
     // the row is config, not a logged event. Remote always wins for synced local rows.
     summary.sanedits = mergeRemoteSanEdits(sed);
@@ -3069,7 +3156,7 @@ async function pullFromAirtable(opts){
     // matches the remote (could happen if mergeRemote just repaired a stale
     // airtableId link, or if the local was deleted out from under us).
     _pendingConflicts = _pendingConflicts.filter(c => {
-      const arr = {batch:batchRecs, ec:ecRecs, ro:roRecs, waste:wasteRecs, batchtx:batchTxRecs, harvest:harvestRecs, postdry:postDryRecs, bio:bioRecs, pest:pestRecs, sanclean:sanCleanRecs, santool:sanToolRecs, flow:flowRecs}[c.table] || [];
+      const arr = {batch:batchRecs, ec:ecRecs, ro:roRecs, waste:wasteRecs, batchtx:batchTxRecs, harvest:harvestRecs, postdry:postDryRecs, bio:bioRecs, pest:pestRecs, sanclean:sanCleanRecs, santool:sanToolRecs, flow:flowRecs, destroy:destroyRecs}[c.table] || [];
       const stillLocal = arr.find(r => r && r.airtableId === c.airtableId);
       if(!stillLocal) return false;
       return _recordsLookEquivalent(stillLocal, c.remote, c.table);
@@ -3085,6 +3172,7 @@ async function pullFromAirtable(opts){
     lsSet('gp-sanclean', sanCleanRecs);
     lsSet('gp-santool',  sanToolRecs);
     lsSet('gp-flow',     flowRecs);
+    lsSet('gp-destroy',  destroyRecs);
     const totalAdded    = Object.values(summary).reduce((s,o)=>s+o.added, 0);
     const totalUpdated  = Object.values(summary).reduce((s,o)=>s+o.updated, 0);
     const totalConflicts= Object.values(summary).reduce((s,o)=>s+o.conflicts, 0);
@@ -4097,7 +4185,7 @@ function setAvg(id,val,lo,hi){const el=document.getElementById(id);if(val===null
 function stageLabel(r){if(!r.stage||!r.day)return'<span style="color:var(--text3)">-</span>';return r.stage==='flower'?'<span class="flower-txt">F'+r.day+'</span>':'<span class="veg-txt">V'+r.day+'</span>';}
 function toast(msg,dur){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),dur||2500);}
 
-function switchPage(page,btn){document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.bnav-btn').forEach(b=>b.classList.remove('active'));document.getElementById('page-'+page).classList.add('active');btn.classList.add('active');if(page==='report'){renderEC();renderRO();ctlsDefaultMonth();}if(page==='waste'){renderWaste();}if(page==='batch'){renderBatchLog();}if(page==='summary'){summaryPopulateBatches();}if(page==='harvest'){harvestPopulateBatches();harvestRefreshDate();harvestPopulateBinNumbers();}if(page==='postdry'){postDryPopulateBatches();postDrySetupChanged();}if(page==='bio'){bioRefreshDate();bioSeqUnlock();}if(page==='pest'){pestRefreshDate();pestPopulateBatches();pestSeqUnlock();}if(page==='sancleaning'){sanclEnter();}if(page==='santool'){santoolEnter();}if(page==='seeds'){seedInvEnter();}
+function switchPage(page,btn){document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.bnav-btn').forEach(b=>b.classList.remove('active'));document.getElementById('page-'+page).classList.add('active');btn.classList.add('active');if(page==='report'){renderEC();renderRO();ctlsDefaultMonth();}if(page==='waste'){renderWaste();}if(page==='batch'){renderBatchLog();}if(page==='summary'){summaryPopulateBatches();}if(page==='harvest'){harvestPopulateBatches();harvestRefreshDate();harvestPopulateBinNumbers();}if(page==='postdry'){postDryPopulateBatches();postDrySetupChanged();}if(page==='bio'){bioRefreshDate();bioSeqUnlock();}if(page==='pest'){pestRefreshDate();pestPopulateBatches();pestSeqUnlock();}if(page==='destroy'){if(typeof destroyEnter==='function')destroyEnter();}if(page==='sancleaning'){sanclEnter();}if(page==='santool'){santoolEnter();}if(page==='seeds'){seedInvEnter();}
   // Remember the last-page-visited per section so toggling sections returns the user to where they left off.
   if(page === 'settings') {
     // Settings is shared between sections — don't update per-section memory.
@@ -7211,7 +7299,7 @@ function roClear(){for(let i=1;i<=8;i++){document.getElementById('ro-ec-'+i).val
 
 // Pending badge
 function updatePendingBadge(){
-  const n=(ecRecs.filter(r=>!r.synced).length)+(roRecs.filter(r=>!r.synced).length)+(wasteRecs.filter(r=>!r.synced).length)+(batchRecs.filter(r=>!r.synced).length)+(batchTxRecs.filter(r=>!r.synced).length)+(harvestRecs.filter(r=>!r.synced).length)+(postDryRecs.filter(r=>!r.synced).length)+(bioRecs.filter(r=>!r.synced).length)+(pestRecs.filter(r=>!r.synced).length)+(sanCleanRecs.filter(r=>!r.synced).length)+(sanToolRecs.filter(r=>!r.synced).length)+(sanEditsRecs.filter(r=>!r.synced).length)+(seedInvRecs.filter(r=>!r.synced).length)+(flowRecs.filter(r=>!r.synced).length);
+  const n=(ecRecs.filter(r=>!r.synced).length)+(roRecs.filter(r=>!r.synced).length)+(wasteRecs.filter(r=>!r.synced).length)+(batchRecs.filter(r=>!r.synced).length)+(batchTxRecs.filter(r=>!r.synced).length)+(harvestRecs.filter(r=>!r.synced).length)+(postDryRecs.filter(r=>!r.synced).length)+(bioRecs.filter(r=>!r.synced).length)+(pestRecs.filter(r=>!r.synced).length)+(sanCleanRecs.filter(r=>!r.synced).length)+(sanToolRecs.filter(r=>!r.synced).length)+(sanEditsRecs.filter(r=>!r.synced).length)+(seedInvRecs.filter(r=>!r.synced).length)+(flowRecs.filter(r=>!r.synced).length)+(destroyRecs.filter(r=>!r.synced).length);
   // Update the Settings badge — Settings only appears in the Cultivation bottom nav now.
   const b=document.getElementById('pending-badge');
   if(b){ if(n>0){b.textContent=n;b.style.display='block';}else{b.style.display='none';} }
@@ -7489,6 +7577,10 @@ const NAT_KEY_FN_REMOTE = {
       (f['Room']||'').toString()
     ].join('|');
   },
+  destroy(rrec){
+    const f = rrec.fields || {};
+    return [ (f['Date']||'').toString(), (f['Employee']||'').toString(), (f['Witness']||'').toString() ].join('|');
+  },
   sanedits(rrec){
     const f = rrec.fields || {};
     return (f['Template']||'').toString();
@@ -7564,7 +7656,8 @@ function cleanLocalDuplicates(){
     { lsKey:'gp-pest',     arr:pestRecs },
     { lsKey:'gp-sanclean', arr:sanCleanRecs },
     { lsKey:'gp-santool',  arr:sanToolRecs },
-    { lsKey:'gp-flow',     arr:flowRecs }
+    { lsKey:'gp-flow',     arr:flowRecs },
+    { lsKey:'gp-destroy',  arr:destroyRecs }
   ].filter(t => Array.isArray(t.arr));
   // Full-content signature so only records identical in EVERY meaningful field collapse — this
   // never merges two genuinely different entries (a Feed vs a Flush, two sequential destroys, etc).
@@ -7626,7 +7719,8 @@ async function cleanAirtableDuplicateTx(){
     { label:'Tool Cleaning',      tblId:cfg.sanToolTbl, localArr:sanToolRecs,  remoteKeyFn:NAT_KEY_FN_REMOTE.santool,  lsKey:'gp-santool' },
     { label:'Task Edits',         tblId:cfg.sanEditsTbl,localArr:sanEditsRecs, remoteKeyFn:NAT_KEY_FN_REMOTE.sanedits, lsKey:'gp-sanedits' },
     { label:'Seed Inventory',     tblId:cfg.seedInvTbl, localArr:seedInvRecs,  remoteKeyFn:NAT_KEY_FN_REMOTE.seedinv,  lsKey:'gp-seedinv' },
-    { label:'Flow Meter',         tblId:cfg.flowTbl,    localArr:flowRecs,     remoteKeyFn:NAT_KEY_FN_REMOTE.flow,     lsKey:'gp-flow' }
+    { label:'Flow Meter',         tblId:cfg.flowTbl,    localArr:flowRecs,     remoteKeyFn:NAT_KEY_FN_REMOTE.flow,     lsKey:'gp-flow' },
+    { label:'Destruction Log',    tblId:cfg.destroyTbl, localArr:destroyRecs,  remoteKeyFn:NAT_KEY_FN_REMOTE.destroy,  lsKey:'gp-destroy' }
   ];
   setStatus('Scanning Airtable for duplicates across '+tables.length+' tables...', 'var(--text2)');
   // First pass: scan everything to find the total count.
@@ -7951,8 +8045,8 @@ async function syncPending(){
   else if(ok>0){setSyncPill('err','Partial sync');st.style.background='var(--amber-pale)';st.style.color='var(--amber)';st.textContent=ok+' synced, '+fail+' failed. Check connection and retry.';}
   else{setSyncPill('err','Sync failed');st.style.background='var(--red-pale)';st.style.color='var(--red)';st.textContent='Sync failed: '+(lastErr||'Check your Airtable connection.');}
 }
-function applySettings(){document.getElementById('s-token').value=cfg.token||'';document.getElementById('s-base').value=cfg.base||'';document.getElementById('s-ec').value=cfg.ecTbl||'';document.getElementById('s-ro').value=cfg.roTbl||'';document.getElementById('s-waste').value=cfg.wasteTbl||'';document.getElementById('s-batch').value=cfg.batchTbl||'';document.getElementById('s-batchtx').value=cfg.batchtxTbl||'';const sh=document.getElementById('s-harvest'); if(sh) sh.value=cfg.harvestTbl||'';const spd=document.getElementById('s-postdry'); if(spd) spd.value=cfg.postDryTbl||'';const sbio=document.getElementById('s-bio'); if(sbio) sbio.value=cfg.bioTbl||'';const spest=document.getElementById('s-pest'); if(spest) spest.value=cfg.pestTbl||'';const ssc=document.getElementById('s-sanclean'); if(ssc) ssc.value=cfg.sanCleanTbl||'';const sst=document.getElementById('s-santool'); if(sst) sst.value=cfg.sanToolTbl||'';const sse=document.getElementById('s-sanedits'); if(sse) sse.value=cfg.sanEditsTbl||'';const ssi=document.getElementById('s-seedinv'); if(ssi) ssi.value=cfg.seedInvTbl||'';const sfl=document.getElementById('s-flow'); if(sfl) sfl.value=cfg.flowTbl||'';setSyncPill(atReady()?'ok':'off',atReady()?'Airtable connected':'Not configured');}
-async function saveSettings(){cfg={token:document.getElementById('s-token').value.trim(),base:document.getElementById('s-base').value.trim(),ecTbl:document.getElementById('s-ec').value.trim(),roTbl:document.getElementById('s-ro').value.trim(),wasteTbl:document.getElementById('s-waste').value.trim(),batchTbl:document.getElementById('s-batch').value.trim(),batchtxTbl:document.getElementById('s-batchtx').value.trim(),harvestTbl:(document.getElementById('s-harvest')?.value||'').trim(),postDryTbl:(document.getElementById('s-postdry')?.value||'').trim(),bioTbl:(document.getElementById('s-bio')?.value||'').trim(),pestTbl:(document.getElementById('s-pest')?.value||'').trim(),sanCleanTbl:(document.getElementById('s-sanclean')?.value||'').trim(),sanToolTbl:(document.getElementById('s-santool')?.value||'').trim(),sanEditsTbl:(document.getElementById('s-sanedits')?.value||'').trim(),seedInvTbl:(document.getElementById('s-seedinv')?.value||'').trim(),flowTbl:(document.getElementById('s-flow')?.value||'').trim()};const st=document.getElementById('conn-status');st.style.display='block';st.style.background='var(--bg2)';st.style.color='var(--text2)';st.textContent='Testing connection...';if(!atReady()){st.textContent='Please fill in all fields.';st.style.background='var(--amber-pale)';st.style.color='var(--amber)';return;}try{const r=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+cfg.ecTbl+'?maxRecords=1',{headers:{'Authorization':'Bearer '+cfg.token}});if(r.ok){lsSet('gp-cfg',cfg);applySettings();st.textContent='Connected! Credentials saved.';st.style.background='var(--green-pale)';st.style.color='var(--green)';startAutoSync();}else{st.textContent='Failed ('+r.status+'). Check your credentials.';st.style.background='var(--red-pale)';st.style.color='var(--red)';}}catch(e){st.textContent='Could not reach Airtable. Check internet connection.';st.style.background='var(--red-pale)';st.style.color='var(--red)';}}
+function applySettings(){document.getElementById('s-token').value=cfg.token||'';document.getElementById('s-base').value=cfg.base||'';document.getElementById('s-ec').value=cfg.ecTbl||'';document.getElementById('s-ro').value=cfg.roTbl||'';document.getElementById('s-waste').value=cfg.wasteTbl||'';document.getElementById('s-batch').value=cfg.batchTbl||'';document.getElementById('s-batchtx').value=cfg.batchtxTbl||'';const sh=document.getElementById('s-harvest'); if(sh) sh.value=cfg.harvestTbl||'';const spd=document.getElementById('s-postdry'); if(spd) spd.value=cfg.postDryTbl||'';const sbio=document.getElementById('s-bio'); if(sbio) sbio.value=cfg.bioTbl||'';const spest=document.getElementById('s-pest'); if(spest) spest.value=cfg.pestTbl||'';const ssc=document.getElementById('s-sanclean'); if(ssc) ssc.value=cfg.sanCleanTbl||'';const sst=document.getElementById('s-santool'); if(sst) sst.value=cfg.sanToolTbl||'';const sse=document.getElementById('s-sanedits'); if(sse) sse.value=cfg.sanEditsTbl||'';const ssi=document.getElementById('s-seedinv'); if(ssi) ssi.value=cfg.seedInvTbl||'';const sfl=document.getElementById('s-flow'); if(sfl) sfl.value=cfg.flowTbl||'';const sde=document.getElementById('s-destroy'); if(sde) sde.value=cfg.destroyTbl||'';setSyncPill(atReady()?'ok':'off',atReady()?'Airtable connected':'Not configured');}
+async function saveSettings(){cfg={token:document.getElementById('s-token').value.trim(),base:document.getElementById('s-base').value.trim(),ecTbl:document.getElementById('s-ec').value.trim(),roTbl:document.getElementById('s-ro').value.trim(),wasteTbl:document.getElementById('s-waste').value.trim(),batchTbl:document.getElementById('s-batch').value.trim(),batchtxTbl:document.getElementById('s-batchtx').value.trim(),harvestTbl:(document.getElementById('s-harvest')?.value||'').trim(),postDryTbl:(document.getElementById('s-postdry')?.value||'').trim(),bioTbl:(document.getElementById('s-bio')?.value||'').trim(),pestTbl:(document.getElementById('s-pest')?.value||'').trim(),sanCleanTbl:(document.getElementById('s-sanclean')?.value||'').trim(),sanToolTbl:(document.getElementById('s-santool')?.value||'').trim(),sanEditsTbl:(document.getElementById('s-sanedits')?.value||'').trim(),seedInvTbl:(document.getElementById('s-seedinv')?.value||'').trim(),flowTbl:(document.getElementById('s-flow')?.value||'').trim(),destroyTbl:(document.getElementById('s-destroy')?.value||'').trim()};const st=document.getElementById('conn-status');st.style.display='block';st.style.background='var(--bg2)';st.style.color='var(--text2)';st.textContent='Testing connection...';if(!atReady()){st.textContent='Please fill in all fields.';st.style.background='var(--amber-pale)';st.style.color='var(--amber)';return;}try{const r=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+cfg.ecTbl+'?maxRecords=1',{headers:{'Authorization':'Bearer '+cfg.token}});if(r.ok){lsSet('gp-cfg',cfg);applySettings();st.textContent='Connected! Credentials saved.';st.style.background='var(--green-pale)';st.style.color='var(--green)';startAutoSync();}else{st.textContent='Failed ('+r.status+'). Check your credentials.';st.style.background='var(--red-pale)';st.style.color='var(--red)';}}catch(e){st.textContent='Could not reach Airtable. Check internet connection.';st.style.background='var(--red-pale)';st.style.color='var(--red)';}}
 
 function localDate(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 const today=localDate();
@@ -8487,6 +8581,268 @@ function wasteEditStart(id){
   if(btn && btn.scrollIntoView) btn.scrollIntoView({behavior:'smooth',block:'center'});
 }
 // ── END WASTE LOG ─────────────────────────────────────────────────────────────
+
+// ════════════════════════════════════════════════════════════════════════════════
+// DESTRUCTION LOG — weekly formal destruction of accumulated waste. One event covers all waste
+// logged since the last destruction (matched by waste natural key, so it's cross-device safe and
+// doesn't modify waste records). Captures a drawn or typed signature, syncs to cfg.destroyTbl, and
+// produces a printable Destruction Log + Attestation per batch.
+// ════════════════════════════════════════════════════════════════════════════════
+let destroySigMode = 'draw';
+let _destroySigPad = { drawing:false, hasInk:false, bound:false, last:null };
+
+function destroyEnter(){
+  const dEl = document.getElementById('destroy-date'); if(dEl && !dEl.value) dEl.value = localDate();
+  destroyInitSigPad();
+  destroySetSigMode(destroySigMode);
+  destroyRenderPending();
+  destroyRenderHistory();
+}
+function destroyCoveredKeySet(){
+  const s = new Set();
+  destroyRecs.forEach(d => { (d.coveredKeys||[]).forEach(k => s.add(k)); });
+  return s;
+}
+function destroyPendingWaste(){
+  const covered = destroyCoveredKeySet();
+  return wasteRecs.filter(w => !covered.has(NAT_KEY_FN.waste(w)))
+    .sort((a,b)=> (a.date||'').localeCompare(b.date||'') || (a.batch||'').localeCompare(b.batch||''));
+}
+function destroyRenderPending(){
+  const el = document.getElementById('destroy-pending');
+  if(!el) return;
+  const pend = destroyPendingWaste();
+  const L = v => (Math.round((v||0)*1000)/1000).toFixed(3);
+  if(!pend.length){ el.innerHTML = '<div style="font-size:12px;color:var(--text3);">No waste pending destruction.</div>'; return; }
+  const vegW = pend.filter(r=>r.type==='Vegetative Waste').reduce((s,r)=>s+(parseFloat(r.weight)||0),0);
+  const dryW = pend.filter(r=>r.type==='Dry Waste').reduce((s,r)=>s+(parseFloat(r.weight)||0),0);
+  let html = '<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:10px;font-family:var(--mono);font-size:12px;">'
+    +'<span>Records: <strong>'+pend.length+'</strong></span>'
+    +'<span style="color:var(--green);">Vegetative: <strong>'+L(vegW)+' kg</strong></span>'
+    +'<span style="color:var(--amber);">Dry: <strong>'+L(dryW)+' kg</strong></span>'
+    +'<span>Total: <strong>'+L(vegW+dryW)+' kg</strong></span></div>';
+  html += '<div style="overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius-sm);background:#fff;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#f5f5f5;">'
+    +['Date','Batch','Room','Type','Sub-Cat','Weight','Plants'].map(h=>'<th style="padding:6px 8px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;border-bottom:1px solid var(--border);">'+h+'</th>').join('')
+    +'</tr></thead><tbody>';
+  pend.forEach(r=>{
+    html += '<tr>'
+      +'<td style="padding:5px 8px;font-family:var(--mono);border-top:1px solid var(--border);white-space:nowrap;">'+(r.date||'—')+'</td>'
+      +'<td style="padding:5px 8px;font-family:var(--mono);border-top:1px solid var(--border);">'+(r.batch||'—')+'</td>'
+      +'<td style="padding:5px 8px;border-top:1px solid var(--border);">'+(r.room||'—')+'</td>'
+      +'<td style="padding:5px 8px;border-top:1px solid var(--border);">'+(r.type||'—')+'</td>'
+      +'<td style="padding:5px 8px;border-top:1px solid var(--border);">'+(r.subtype||'—')+'</td>'
+      +'<td style="padding:5px 8px;font-family:var(--mono);text-align:right;border-top:1px solid var(--border);">'+L(parseFloat(r.weight)||0)+'</td>'
+      +'<td style="padding:5px 8px;font-family:var(--mono);text-align:right;border-top:1px solid var(--border);">'+(r.plants||0)+'</td>'
+      +'</tr>';
+  });
+  html += '</tbody></table></div>';
+  el.innerHTML = html;
+}
+function destroySetSigMode(mode){
+  destroySigMode = (mode==='type') ? 'type' : 'draw';
+  const canvas = document.getElementById('destroy-sig-canvas');
+  const typed = document.getElementById('destroy-sig-typed');
+  const bDraw = document.getElementById('destroy-sig-mode-draw');
+  const bType = document.getElementById('destroy-sig-mode-type');
+  if(canvas) canvas.style.display = destroySigMode==='draw' ? '' : 'none';
+  if(typed) typed.style.display = destroySigMode==='type' ? '' : 'none';
+  if(bDraw) bDraw.style.background = destroySigMode==='draw' ? 'var(--green-pale)' : 'var(--bg2)';
+  if(bType) bType.style.background = destroySigMode==='type' ? 'var(--green-pale)' : 'var(--bg2)';
+}
+function destroyClearSig(){
+  const canvas = document.getElementById('destroy-sig-canvas');
+  if(canvas){ const ctx=canvas.getContext('2d'); ctx.clearRect(0,0,canvas.width,canvas.height); }
+  _destroySigPad.hasInk = false;
+  const typed = document.getElementById('destroy-sig-typed'); if(typed) typed.value='';
+}
+function destroyInitSigPad(){
+  const canvas = document.getElementById('destroy-sig-canvas');
+  if(!canvas || _destroySigPad.bound) return;
+  _destroySigPad.bound = true;
+  const ctx = canvas.getContext('2d');
+  ctx.lineWidth = 2; ctx.lineCap='round'; ctx.strokeStyle='#111';
+  const pos = (e)=>{
+    const rect = canvas.getBoundingClientRect();
+    const t = (e.touches && e.touches[0]) ? e.touches[0] : e;
+    return { x:(t.clientX-rect.left)*(canvas.width/rect.width), y:(t.clientY-rect.top)*(canvas.height/rect.height) };
+  };
+  const start = (e)=>{ e.preventDefault(); _destroySigPad.drawing=true; _destroySigPad.last=pos(e); };
+  const move = (e)=>{ if(!_destroySigPad.drawing) return; e.preventDefault(); const p=pos(e); ctx.beginPath(); ctx.moveTo(_destroySigPad.last.x,_destroySigPad.last.y); ctx.lineTo(p.x,p.y); ctx.stroke(); _destroySigPad.last=p; _destroySigPad.hasInk=true; };
+  const end = ()=>{ _destroySigPad.drawing=false; };
+  canvas.addEventListener('mousedown',start); canvas.addEventListener('mousemove',move); window.addEventListener('mouseup',end);
+  canvas.addEventListener('touchstart',start,{passive:false}); canvas.addEventListener('touchmove',move,{passive:false}); canvas.addEventListener('touchend',end);
+}
+function destroyGetSignature(){
+  if(destroySigMode==='type'){ return (((document.getElementById('destroy-sig-typed')||{}).value)||'').trim(); }
+  if(_destroySigPad.hasInk){
+    const canvas = document.getElementById('destroy-sig-canvas');
+    try { return canvas.toDataURL('image/png'); } catch(_){ return ''; }
+  }
+  return '';
+}
+function destroyBuildFields(rec){
+  const f = {
+    'Date': rec.date, 'Employee': rec.employee||undefined, 'Method': rec.method||undefined,
+    'Address': rec.address||undefined, 'Witness': rec.witness||undefined, 'Attestation': !!rec.attest,
+    'Signature': rec.sig||undefined, 'Covered Waste': JSON.stringify(rec.coveredKeys||[]),
+    'Veg Weight (kg)': rec.vegWeight, 'Dry Weight (kg)': rec.dryWeight,
+    'Batch IDs': (rec.batches||[]).join(', ')||undefined, 'Notes': rec.notes||undefined
+  };
+  Object.keys(f).forEach(k=>{ if(f[k]===undefined||f[k]===null||f[k]==='') delete f[k]; });
+  return f;
+}
+async function destroySave(){
+  const date = (document.getElementById('destroy-date')||{}).value || '';
+  const employee = (document.getElementById('destroy-employee')||{}).value || '';
+  const method = ((document.getElementById('destroy-method')||{}).value||'').trim();
+  const witness = ((document.getElementById('destroy-witness')||{}).value||'').trim();
+  const address = ((document.getElementById('destroy-address')||{}).value||'').trim();
+  const notes = ((document.getElementById('destroy-notes')||{}).value||'').trim();
+  const attest = !!(document.getElementById('destroy-attest')||{}).checked;
+  const sig = destroyGetSignature();
+  if(!date){ toast('Please set the destruction date.'); return; }
+  if(!employee){ toast('Please select the employee.'); return; }
+  if(!witness){ toast('Please enter the witness name.'); return; }
+  if(!attest){ toast('Please check the attestation box.'); return; }
+  if(!sig){ toast('Please provide a signature (draw or type).'); return; }
+  const pend = destroyPendingWaste();
+  if(!pend.length){ toast('There is no pending waste to destroy.'); return; }
+  const vegWeight = Math.round(pend.filter(r=>r.type==='Vegetative Waste').reduce((s,r)=>s+(parseFloat(r.weight)||0),0)*1000)/1000;
+  const dryWeight = Math.round(pend.filter(r=>r.type==='Dry Waste').reduce((s,r)=>s+(parseFloat(r.weight)||0),0)*1000)/1000;
+  const batches = [...new Set(pend.map(r=>r.batch).filter(Boolean))].sort();
+  const coveredKeys = pend.map(r=>NAT_KEY_FN.waste(r));
+  if(!confirm('Record destruction of '+pend.length+' waste record(s) across '+batches.length+' batch(es)?\nVegetative: '+vegWeight.toFixed(3)+' kg · Dry: '+dryWeight.toFixed(3)+' kg.')) return;
+  const rec = { id: Date.now(), date, employee, method, witness, address, attest, sig, coveredKeys, batches, vegWeight, dryWeight, notes, synced:false };
+  destroyRecs.unshift(rec);
+  lsSet('gp-destroy', destroyRecs);
+  updatePendingBadge();
+  toast('Destruction recorded — '+pend.length+' records.');
+  ['destroy-method','destroy-notes'].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=''; });
+  const at=document.getElementById('destroy-attest'); if(at) at.checked=false;
+  destroyClearSig();
+  destroyRenderPending();
+  destroyRenderHistory();
+  if(cfg.destroyTbl && cfg.token && cfg.base){
+    setSyncPill('ing','Syncing...');
+    try{
+      const _dRes = await atPost(cfg.destroyTbl, destroyBuildFields(rec));
+      rec.synced = true; if(_dRes && _dRes.id) rec.airtableId = _dRes.id;
+      lsSet('gp-destroy', destroyRecs); setSyncPill('ok','Synced'); updatePendingBadge();
+    }catch(e){ setSyncPill('err','Sync failed'); toast('Saved locally - Airtable: '+(e.message||'sync failed'),5000); }
+  } else {
+    toast('Saved locally — set the Destruction Log Table ID in Settings to sync.',4500);
+  }
+  setTimeout(()=>{ if(confirm('Print the Destruction Log + Attestation now?')) destroyPrint(rec.id); }, 300);
+}
+function destroyRenderHistory(){
+  const el = document.getElementById('destroy-history');
+  if(!el) return;
+  const recs = destroyRecs.slice().sort((a,b)=> (b.date||'').localeCompare(a.date||'') || (b.id||0)-(a.id||0));
+  if(!recs.length){ el.innerHTML = '<div style="font-size:12px;color:var(--text3);">No destructions recorded yet.</div>'; return; }
+  let html = '<div style="overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius-sm);background:#fff;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#f5f5f5;">'
+    +['Date','Employee','Batches','Veg (kg)','Dry (kg)','Records','Actions'].map(h=>'<th style="padding:6px 8px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;border-bottom:1px solid var(--border);">'+h+'</th>').join('')
+    +'</tr></thead><tbody>';
+  recs.forEach(r=>{
+    const _dIdArg = "'" + String(r.id).replace(/\\/g,'\\\\').replace(/'/g,"\\'") + "'";
+    html += '<tr>'
+      +'<td style="padding:5px 8px;font-family:var(--mono);border-top:1px solid var(--border);white-space:nowrap;">'+(r.date||'—')+'</td>'
+      +'<td style="padding:5px 8px;border-top:1px solid var(--border);">'+(r.employee||'—')+'</td>'
+      +'<td style="padding:5px 8px;font-family:var(--mono);font-size:11px;border-top:1px solid var(--border);">'+((r.batches||[]).join(', ')||'—')+'</td>'
+      +'<td style="padding:5px 8px;font-family:var(--mono);text-align:right;border-top:1px solid var(--border);">'+(parseFloat(r.vegWeight)||0).toFixed(3)+'</td>'
+      +'<td style="padding:5px 8px;font-family:var(--mono);text-align:right;border-top:1px solid var(--border);">'+(parseFloat(r.dryWeight)||0).toFixed(3)+'</td>'
+      +'<td style="padding:5px 8px;font-family:var(--mono);text-align:right;border-top:1px solid var(--border);">'+((r.coveredKeys||[]).length)+'</td>'
+      +'<td style="padding:5px 8px;white-space:nowrap;border-top:1px solid var(--border);">'
+        +'<button type="button" onclick="destroyPrint('+_dIdArg+')" style="font-size:11px;padding:3px 8px;margin-right:4px;border:1px solid var(--border);background:var(--bg2);border-radius:var(--radius-sm);cursor:pointer;color:var(--text2);">Print</button>'
+        +'<button type="button" onclick="destroyDelete('+_dIdArg+')" style="font-size:11px;padding:3px 8px;border:1px solid var(--red);background:var(--red-pale);border-radius:var(--radius-sm);cursor:pointer;color:var(--red);">Delete</button>'
+      +'</td></tr>';
+  });
+  html += '</tbody></table></div>';
+  el.innerHTML = html;
+}
+async function destroyDelete(id){
+  const idx = destroyRecs.findIndex(r => String(r.id) === String(id));
+  if(idx < 0){ toast('Not found.'); return; }
+  const rec = destroyRecs[idx];
+  if(!confirm('Delete this destruction record from '+(rec.date||'')+'? The '+((rec.coveredKeys||[]).length)+' waste record(s) it covered will return to the pending list.')) return;
+  if(rec.airtableId && cfg.destroyTbl && cfg.token && cfg.base){
+    setSyncPill('ing','Deleting...');
+    const ok = await atDelete(cfg.destroyTbl, rec.airtableId);
+    if(!ok){ setSyncPill('err','Delete failed'); toast('Could not delete from Airtable — kept.',5000); return; }
+    setSyncPill('ok','Synced');
+  }
+  destroyRecs.splice(idx,1);
+  lsSet('gp-destroy', destroyRecs);
+  updatePendingBadge();
+  destroyRenderPending();
+  destroyRenderHistory();
+  toast('Destruction record deleted.');
+}
+function destroyPrint(id){
+  const rec = destroyRecs.find(r => String(r.id) === String(id));
+  if(!rec){ toast('Not found.'); return; }
+  const keySet = new Set(rec.coveredKeys||[]);
+  const covered = wasteRecs.filter(w => keySet.has(NAT_KEY_FN.waste(w)));
+  const batches = (rec.batches && rec.batches.length) ? rec.batches : [...new Set(covered.map(w=>w.batch).filter(Boolean))].sort();
+  const L = v => (Math.round((v||0)*1000)/1000).toFixed(3);
+  const sigHtml = (rec.sig||'').slice(0,11)==='data:image/'
+    ? '<img src="'+rec.sig+'" style="height:48px;" />'
+    : '<span style="font-family:\'Brush Script MT\',cursive;font-size:22px;">'+(rec.sig||'')+'</span>';
+  let out = '';
+  batches.forEach(bid => {
+    const recsB = covered.filter(w => w.batch === bid);
+    if(!recsB.length) return;
+    const vegB = recsB.filter(r=>r.type==='Vegetative Waste').reduce((s,r)=>s+(parseFloat(r.weight)||0),0);
+    const dryB = recsB.filter(r=>r.type==='Dry Waste').reduce((s,r)=>s+(parseFloat(r.weight)||0),0);
+    out += '<div class="dpage">';
+    out += '<h2 style="text-align:center;margin:0 0 4px;">Cannabis Destruction Log</h2>';
+    out += '<div style="font-size:11px;color:#555;text-align:center;margin-bottom:10px;">FORM-CU-052-5</div>';
+    out += '<div style="margin-bottom:8px;"><strong>Batch ID:</strong> '+bid+'</div>';
+    out += '<table style="width:100%;border-collapse:collapse;font-size:11px;"><thead><tr>'
+      +['Date Destroyed','Employee','Weight (kg)','Destruction Method','Vegetative Waste','Harvest Trim Waste','Dry Cannabis','Initial'].map(h=>'<th style="border:1px solid #333;padding:4px;background:#eee;">'+h+'</th>').join('')
+      +'</tr></thead><tbody>';
+    recsB.forEach(r=>{
+      const isVeg = r.type==='Vegetative Waste';
+      out += '<tr>'
+        +'<td style="border:1px solid #333;padding:4px;">'+(rec.date||'')+'</td>'
+        +'<td style="border:1px solid #333;padding:4px;">'+(rec.employee||'')+'</td>'
+        +'<td style="border:1px solid #333;padding:4px;text-align:right;">'+L(parseFloat(r.weight)||0)+'</td>'
+        +'<td style="border:1px solid #333;padding:4px;">'+(rec.method||'')+'</td>'
+        +'<td style="border:1px solid #333;padding:4px;text-align:right;">'+(isVeg?L(parseFloat(r.weight)||0):'')+'</td>'
+        +'<td style="border:1px solid #333;padding:4px;"></td>'
+        +'<td style="border:1px solid #333;padding:4px;text-align:right;">'+(!isVeg?L(parseFloat(r.weight)||0):'')+'</td>'
+        +'<td style="border:1px solid #333;padding:4px;"></td>'
+        +'</tr>';
+    });
+    out += '<tr><td colspan="4" style="border:1px solid #333;padding:4px;text-align:right;"><strong>Totals</strong></td>'
+      +'<td style="border:1px solid #333;padding:4px;text-align:right;"><strong>'+L(vegB)+'</strong></td>'
+      +'<td style="border:1px solid #333;padding:4px;"></td>'
+      +'<td style="border:1px solid #333;padding:4px;text-align:right;"><strong>'+L(dryB)+'</strong></td>'
+      +'<td style="border:1px solid #333;padding:4px;"></td></tr>';
+    out += '</tbody></table></div>';
+    out += '<div class="dpage">';
+    out += '<h2 style="text-align:center;margin:0 0 4px;">Destruction Attestation</h2>';
+    out += '<div style="font-size:11px;color:#555;text-align:center;margin-bottom:10px;">FORM-SE-063-3</div>';
+    out += '<div style="margin-bottom:8px;"><strong>Batch ID:</strong> '+bid+'</div>';
+    out += '<p style="font-size:12px;margin:4px 0;">I, the undersigned, attest that:</p>';
+    out += '<p style="font-size:12px;margin:4px 0 12px;">I have witnessed the destruction of the following:</p>';
+    out += '<table style="width:100%;border-collapse:collapse;font-size:11px;"><thead><tr>'
+      +['Date of destruction','Weight (kg)','Address of destruction','Security cleared person and witness','Signature'].map(h=>'<th style="border:1px solid #333;padding:4px;background:#eee;">'+h+'</th>').join('')
+      +'</tr></thead><tbody><tr>'
+      +'<td style="border:1px solid #333;padding:4px;">'+(rec.date||'')+'</td>'
+      +'<td style="border:1px solid #333;padding:4px;text-align:right;">'+L(vegB+dryB)+'</td>'
+      +'<td style="border:1px solid #333;padding:4px;">'+(rec.address||'')+'</td>'
+      +'<td style="border:1px solid #333;padding:4px;">'+(rec.witness||'')+'</td>'
+      +'<td style="border:1px solid #333;padding:4px;text-align:center;">'+sigHtml+'</td>'
+      +'</tr></tbody></table></div>';
+  });
+  const wrap = document.getElementById('destroy-print');
+  if(!wrap){ toast('Print area missing.'); return; }
+  wrap.innerHTML = out;
+  document.body.classList.add('print-destroy');
+  wrap.style.display = '';
+  window.print();
+  setTimeout(()=>{ wrap.style.display='none'; document.body.classList.remove('print-destroy'); }, 800);
+}
 
 
 function renderWasteReport(){
@@ -12560,6 +12916,11 @@ function sectionTable(title, headers, rows){
     + '  body.print-ctls #ctls-report-output,'
     + '  body.print-ctls #ctls-report-output * { visibility: visible !important; }'
     + '  body.print-ctls #ctls-report-output { position: absolute !important; inset: 0 !important; background: #fff !important; padding: 14px !important; max-width: 100% !important; max-height: none !important; overflow: visible !important; }'
+    + '  body.print-destroy * { visibility: hidden !important; }'
+    + '  body.print-destroy #destroy-print,'
+    + '  body.print-destroy #destroy-print * { visibility: visible !important; }'
+    + '  body.print-destroy #destroy-print { position: absolute !important; inset: 0 !important; background: #fff !important; padding: 16px !important; color: #000 !important; }'
+    + '  body.print-destroy #destroy-print .dpage { page-break-after: always; margin-bottom: 24px; }'
     + '  .report-no-print { display: none !important; }'
     + '}';
   document.head.appendChild(style);
