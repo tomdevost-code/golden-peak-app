@@ -14065,7 +14065,20 @@ function ctlsFlowerMetrics(from, to){
   const harvested = txs
     .filter(t => t.txType === 'Harvested')
     .reduce((s,t) => s + (parseInt(t.qty)||0), 0);
-  return { flippedToFlowerThisMonth, alreadyInFlower, destroyedFlower, harvested };
+  // Plants CURRENTLY in flower — a point-in-time count (as of report generation), across all
+  // batches. Non-mom: sum of non-Veg roomDistribution counts. Mom: the Flower cohort bucket.
+  const currentInFlower = batchRecs.reduce((sum, b) => {
+    if(!b || b.type) return sum;
+    if(isMotherBatch(b.batchId)){
+      const c = (typeof ensureMomPhaseCounts === 'function') ? ensureMomPhaseCounts(b) : (b.momPhaseCounts||null);
+      return sum + (c ? (parseInt(c.Flower)||0) : 0);
+    }
+    let n = 0;
+    const dist = b.roomDistribution || {};
+    Object.keys(dist).forEach(rm => { if(rm !== 'Veg') n += (parseInt(dist[rm])||0); });
+    return sum + n;
+  }, 0);
+  return { flippedToFlowerThisMonth, alreadyInFlower, destroyedFlower, harvested, currentInFlower };
 }
 
 // SECTION 4 — Fresh Cannabis (wet) weights
@@ -14211,7 +14224,8 @@ function ctlsGenerateReport(){
     {label:'Flipped to Flower during the month', note:'across all batches', value: v(flower.flippedToFlowerThisMonth, 'plants')},
     {label:'Already in Flower from previous month', note:'snapshot as of '+range.from, value: v(flower.alreadyInFlower, 'plants')},
     {label:'Destroyed/died during flowering', value: v(flower.destroyedFlower, 'plants')},
-    {label:'Harvested / processed', note:'consolidated Harvested tx', value: v(flower.harvested, 'plants')}
+    {label:'Harvested / processed', note:'consolidated Harvested tx', value: v(flower.harvested, 'plants')},
+    {label:'Total plants currently in flower', note:'point-in-time count across all batches, as of report generation', value: v(flower.currentInFlower, 'plants')}
   ]);
 
   // Section 4 — Fresh Cannabis (wet)
