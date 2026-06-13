@@ -215,7 +215,7 @@ tr:last-child td { border-bottom: none; }
                 <option>Flower 5</option><option>Veg</option>
               </select>
             </div>
-            <div class="field"><label>Entry date</label><input type="date" id="ec-date" readonly style="background:var(--bg2);color:var(--text3);cursor:default;" /></div>
+            <div class="field"><label>Entry date</label><input type="date" id="ec-date" onchange="ecBadge(); var _ecb=(document.getElementById('ec-batch')||{}).value; if(_ecb && typeof ecRenderRecent==='function') ecRenderRecent(_ecb.trim());" /></div>
           </div>
           <!-- Lifecycle dates: managed on the Summary page; shown here as read-only context -->
           <input type="hidden" id="ec-hydration" />
@@ -8062,7 +8062,7 @@ buildECEvents();buildROSamples();loadAll();installMomsFilterButtons();populateBa
 startAutoSync();
 renderPullStatus();
 // Keep entry dates updated to today on each page load
-setInterval(()=>{const t=localDate();document.getElementById('ec-date').value=t;document.getElementById('ro-date').value=t;},60000);
+setInterval(()=>{const t=localDate();document.getElementById('ro-date').value=t;},60000);
 
 // ── WASTE LOG ─────────────────────────────────────────────────────────────────
 
