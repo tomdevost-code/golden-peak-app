@@ -1361,6 +1361,7 @@ tr:last-child td { border-bottom: none; }
           <div class="field" style="margin-bottom:10px;"><label>Notes</label>
             <textarea id="destroy-notes" rows="2" style="width:100%;font-size:14px;font-family:var(--sans);border-radius:var(--radius-sm);border:1px solid var(--border);padding:10px;background:var(--card);color:var(--text);outline:none;" placeholder="Optional"></textarea>
           </div>
+          <div class="field" style="margin-bottom:10px;"><label>Destroyed weights — adjust for drying loss</label><div id="destroy-adjust"></div></div>
           <div style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;background:var(--bg2);margin-bottom:10px;">
             <label style="display:flex;align-items:flex-start;gap:8px;font-size:12px;color:var(--text2);cursor:pointer;">
               <input type="checkbox" id="destroy-attest" style="margin-top:2px;" />
@@ -2595,6 +2596,8 @@ const REMOTE_MAPPERS = {
     const f = rec.fields || {};
     let coveredKeys = [];
     try { if(f['Covered Waste']){ const p = JSON.parse(f['Covered Waste']); if(Array.isArray(p)) coveredKeys = p; } } catch(_){}
+    let adjust = [];
+    try { if(f['Adjustments']){ const p = JSON.parse(f['Adjustments']); if(Array.isArray(p)) adjust = p; } } catch(_){}
     const batches = (f['Batch IDs']||'').toString().split(',').map(s=>s.trim()).filter(Boolean);
     return {
       id: 'ds_'+rec.id,
@@ -2607,9 +2610,13 @@ const REMOTE_MAPPERS = {
       attest: !!f['Attestation'],
       sig: f['Signature']||'',
       coveredKeys,
+      adjust,
       batches,
       vegWeight: f['Veg Weight (kg)'] != null ? parseFloat(f['Veg Weight (kg)']) : 0,
       dryWeight: f['Dry Weight (kg)'] != null ? parseFloat(f['Dry Weight (kg)']) : 0,
+      dryingLoss: f['Drying Loss (kg)'] != null ? parseFloat(f['Drying Loss (kg)']) : 0,
+      vegRecorded: adjust.reduce((s,a)=>s+(parseFloat(a.vegRecorded)||0),0),
+      dryRecorded: adjust.reduce((s,a)=>s+(parseFloat(a.dryRecorded)||0),0),
       notes: f['Notes']||'',
       synced: true
     };
@@ -8592,7 +8599,44 @@ function destroyEnter(){
   destroyInitSigPad();
   destroySetSigMode(destroySigMode);
   destroyRenderPending();
+  destroyRenderAdjust();
   destroyRenderHistory();
+}
+// Aggregate pending waste by batch into recorded Vegetative / Dry totals.
+function destroyAggregatePendingByBatch(){
+  const m = {};
+  destroyPendingWaste().forEach(w => {
+    const b = w.batch || '(no batch)';
+    if(!m[b]) m[b] = { batch:b, vegRec:0, dryRec:0 };
+    if(w.type === 'Vegetative Waste') m[b].vegRec += (parseFloat(w.weight)||0);
+    else if(w.type === 'Dry Waste') m[b].dryRec += (parseFloat(w.weight)||0);
+  });
+  return Object.values(m).sort((a,b)=>a.batch.localeCompare(b.batch));
+}
+// Per-batch grid: recorded veg/dry (read-only) + editable ACTUAL destroyed weights. The difference
+// is recorded as drying loss. Inputs default to the recorded weights.
+function destroyRenderAdjust(){
+  const el = document.getElementById('destroy-adjust');
+  if(!el) return;
+  const rows = destroyAggregatePendingByBatch();
+  if(!rows.length){ el.innerHTML = '<div style="font-size:11px;color:var(--text3);">No pending waste to destroy.</div>'; return; }
+  const L = v => (Math.round((v||0)*1000)/1000).toFixed(3);
+  let html = '<div style="font-size:10px;color:var(--text3);margin-bottom:6px;line-height:1.4;">Enter the ACTUAL weight destroyed for each batch (defaults to the recorded weight). Recorded − actual is logged as drying loss.</div>';
+  html += '<div style="overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius-sm);background:#fff;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#f5f5f5;">'
+    +['Batch','Veg rec.','Veg actual','Dry rec.','Dry actual'].map(h=>'<th style="padding:6px 6px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;border-bottom:1px solid var(--border);">'+h+'</th>').join('')
+    +'</tr></thead><tbody>';
+  rows.forEach(r=>{
+    const ba = (r.batch||'').replace(/"/g,'&quot;');
+    html += '<tr>'
+      +'<td style="padding:5px 6px;font-family:var(--mono);border-top:1px solid var(--border);white-space:nowrap;">'+r.batch+'</td>'
+      +'<td style="padding:5px 6px;font-family:var(--mono);text-align:right;border-top:1px solid var(--border);color:var(--text3);">'+L(r.vegRec)+'</td>'
+      +'<td style="padding:3px 6px;border-top:1px solid var(--border);"><input type="number" step="0.001" min="0" class="destroy-vegact" data-batch="'+ba+'" value="'+L(r.vegRec)+'" style="width:88px;font-size:12px;font-family:var(--mono);padding:4px;border:1px solid var(--border);border-radius:var(--radius-sm);" onwheel="this.blur()" /></td>'
+      +'<td style="padding:5px 6px;font-family:var(--mono);text-align:right;border-top:1px solid var(--border);color:var(--text3);">'+L(r.dryRec)+'</td>'
+      +'<td style="padding:3px 6px;border-top:1px solid var(--border);"><input type="number" step="0.001" min="0" class="destroy-dryact" data-batch="'+ba+'" value="'+L(r.dryRec)+'" style="width:88px;font-size:12px;font-family:var(--mono);padding:4px;border:1px solid var(--border);border-radius:var(--radius-sm);" onwheel="this.blur()" /></td>'
+      +'</tr>';
+  });
+  html += '</tbody></table></div>';
+  el.innerHTML = html;
 }
 function destroyCoveredKeySet(){
   const s = new Set();
@@ -8682,6 +8726,7 @@ function destroyBuildFields(rec){
     'Address': rec.address||undefined, 'Witness': rec.witness||undefined, 'Attestation': !!rec.attest,
     'Signature': rec.sig||undefined, 'Covered Waste': JSON.stringify(rec.coveredKeys||[]),
     'Veg Weight (kg)': rec.vegWeight, 'Dry Weight (kg)': rec.dryWeight,
+    'Drying Loss (kg)': rec.dryingLoss, 'Adjustments': JSON.stringify(rec.adjust||[]),
     'Batch IDs': (rec.batches||[]).join(', ')||undefined, 'Notes': rec.notes||undefined
   };
   Object.keys(f).forEach(k=>{ if(f[k]===undefined||f[k]===null||f[k]==='') delete f[k]; });
@@ -8703,12 +8748,26 @@ async function destroySave(){
   if(!sig){ toast('Please provide a signature (draw or type).'); return; }
   const pend = destroyPendingWaste();
   if(!pend.length){ toast('There is no pending waste to destroy.'); return; }
-  const vegWeight = Math.round(pend.filter(r=>r.type==='Vegetative Waste').reduce((s,r)=>s+(parseFloat(r.weight)||0),0)*1000)/1000;
-  const dryWeight = Math.round(pend.filter(r=>r.type==='Dry Waste').reduce((s,r)=>s+(parseFloat(r.weight)||0),0)*1000)/1000;
   const batches = [...new Set(pend.map(r=>r.batch).filter(Boolean))].sort();
   const coveredKeys = pend.map(r=>NAT_KEY_FN.waste(r));
-  if(!confirm('Record destruction of '+pend.length+' waste record(s) across '+batches.length+' batch(es)?\nVegetative: '+vegWeight.toFixed(3)+' kg · Dry: '+dryWeight.toFixed(3)+' kg.')) return;
-  const rec = { id: Date.now(), date, employee, method, witness, address, attest, sig, coveredKeys, batches, vegWeight, dryWeight, notes, synced:false };
+  // Per-batch ACTUAL destroyed weights from the adjustment grid (default = recorded). Recorded −
+  // actual = drying loss. vegWeight/dryWeight on the record are the ACTUAL destroyed totals.
+  const r3 = v => Math.round((v||0)*1000)/1000;
+  const vegActMap={}, dryActMap={};
+  document.querySelectorAll('.destroy-vegact').forEach(i=>{ vegActMap[i.dataset.batch]=parseFloat(i.value); });
+  document.querySelectorAll('.destroy-dryact').forEach(i=>{ dryActMap[i.dataset.batch]=parseFloat(i.value); });
+  const adjust = destroyAggregatePendingByBatch().map(a=>{
+    let va = vegActMap[a.batch]; if(isNaN(va)||va<0) va = a.vegRec;
+    let da = dryActMap[a.batch]; if(isNaN(da)||da<0) da = a.dryRec;
+    return { batch:a.batch, vegRecorded:r3(a.vegRec), dryRecorded:r3(a.dryRec), vegActual:r3(va), dryActual:r3(da) };
+  });
+  const vegRecorded = r3(adjust.reduce((s,a)=>s+a.vegRecorded,0));
+  const dryRecorded = r3(adjust.reduce((s,a)=>s+a.dryRecorded,0));
+  const vegWeight = r3(adjust.reduce((s,a)=>s+a.vegActual,0));
+  const dryWeight = r3(adjust.reduce((s,a)=>s+a.dryActual,0));
+  const dryingLoss = r3((vegRecorded+dryRecorded)-(vegWeight+dryWeight));
+  if(!confirm('Record destruction of '+pend.length+' waste record(s) across '+batches.length+' batch(es)?\nActual destroyed — Vegetative: '+vegWeight.toFixed(3)+' kg · Dry: '+dryWeight.toFixed(3)+' kg.\nDrying loss: '+dryingLoss.toFixed(3)+' kg.')) return;
+  const rec = { id: Date.now(), date, employee, method, witness, address, attest, sig, coveredKeys, batches, adjust, vegRecorded, dryRecorded, vegWeight, dryWeight, dryingLoss, notes, synced:false };
   destroyRecs.unshift(rec);
   lsSet('gp-destroy', destroyRecs);
   updatePendingBadge();
@@ -8717,6 +8776,7 @@ async function destroySave(){
   const at=document.getElementById('destroy-attest'); if(at) at.checked=false;
   destroyClearSig();
   destroyRenderPending();
+  destroyRenderAdjust();
   destroyRenderHistory();
   if(cfg.destroyTbl && cfg.token && cfg.base){
     setSyncPill('ing','Syncing...');
@@ -8787,32 +8847,28 @@ function destroyPrint(id){
   batches.forEach(bid => {
     const recsB = covered.filter(w => w.batch === bid);
     if(!recsB.length) return;
-    const vegB = recsB.filter(r=>r.type==='Vegetative Waste').reduce((s,r)=>s+(parseFloat(r.weight)||0),0);
-    const dryB = recsB.filter(r=>r.type==='Dry Waste').reduce((s,r)=>s+(parseFloat(r.weight)||0),0);
-    // Destruction Log block for this batch (flows with others; won't split mid-block)
+    const adj = (rec.adjust||[]).find(a=>a.batch===bid);
+    const vegRec = recsB.filter(r=>r.type==='Vegetative Waste').reduce((s,r)=>s+(parseFloat(r.weight)||0),0);
+    const dryRec = recsB.filter(r=>r.type==='Dry Waste').reduce((s,r)=>s+(parseFloat(r.weight)||0),0);
+    const vegB = adj ? (parseFloat(adj.vegActual)||0) : vegRec;   // actual destroyed (post drying loss)
+    const dryB = adj ? (parseFloat(adj.dryActual)||0) : dryRec;
+    const lossB = (vegRec+dryRec) - (vegB+dryB);
+    // Destruction Log block — one summary row per batch using ACTUAL destroyed weights.
     let lb = '<div class="dblock"><div style="margin:0 0 6px;"><strong>Batch ID:</strong> '+bid+'</div>';
     lb += '<table style="width:100%;border-collapse:collapse;font-size:11px;"><thead><tr>'
       +['Date Destroyed','Employee','Weight (kg)','Destruction Method','Vegetative Waste','Harvest Trim Waste','Dry Cannabis','Initial'].map(h=>'<th style="border:1px solid #333;padding:4px;background:#eee;">'+h+'</th>').join('')
-      +'</tr></thead><tbody>';
-    recsB.forEach(r=>{
-      const isVeg = r.type==='Vegetative Waste';
-      lb += '<tr>'
-        +'<td style="border:1px solid #333;padding:4px;">'+(rec.date||'')+'</td>'
-        +'<td style="border:1px solid #333;padding:4px;">'+(rec.employee||'')+'</td>'
-        +'<td style="border:1px solid #333;padding:4px;text-align:right;">'+L(parseFloat(r.weight)||0)+'</td>'
-        +'<td style="border:1px solid #333;padding:4px;">'+(rec.method||'')+'</td>'
-        +'<td style="border:1px solid #333;padding:4px;text-align:right;">'+(isVeg?L(parseFloat(r.weight)||0):'')+'</td>'
-        +'<td style="border:1px solid #333;padding:4px;"></td>'
-        +'<td style="border:1px solid #333;padding:4px;text-align:right;">'+(!isVeg?L(parseFloat(r.weight)||0):'')+'</td>'
-        +'<td style="border:1px solid #333;padding:4px;"></td>'
-        +'</tr>';
-    });
-    lb += '<tr><td colspan="4" style="border:1px solid #333;padding:4px;text-align:right;"><strong>Totals</strong></td>'
-      +'<td style="border:1px solid #333;padding:4px;text-align:right;"><strong>'+L(vegB)+'</strong></td>'
+      +'</tr></thead><tbody><tr>'
+      +'<td style="border:1px solid #333;padding:4px;">'+(rec.date||'')+'</td>'
+      +'<td style="border:1px solid #333;padding:4px;">'+(rec.employee||'')+'</td>'
+      +'<td style="border:1px solid #333;padding:4px;text-align:right;">'+L(vegB+dryB)+'</td>'
+      +'<td style="border:1px solid #333;padding:4px;">'+(rec.method||'')+'</td>'
+      +'<td style="border:1px solid #333;padding:4px;text-align:right;">'+L(vegB)+'</td>'
       +'<td style="border:1px solid #333;padding:4px;"></td>'
-      +'<td style="border:1px solid #333;padding:4px;text-align:right;"><strong>'+L(dryB)+'</strong></td>'
-      +'<td style="border:1px solid #333;padding:4px;"></td></tr>';
-    lb += '</tbody></table></div>';
+      +'<td style="border:1px solid #333;padding:4px;text-align:right;">'+L(dryB)+'</td>'
+      +'<td style="border:1px solid #333;padding:4px;"></td>'
+      +'</tr></tbody></table>';
+    lb += '<div style="font-size:10px;color:#555;margin-top:4px;">Recorded (wet): '+L(vegRec+dryRec)+' kg · Drying loss: '+L(lossB)+' kg</div>';
+    lb += '</div>';
     logsHtml += lb;
     // Attestation block for this batch
     let ab = '<div class="dblock"><div style="margin:0 0 6px;"><strong>Batch ID:</strong> '+bid+'</div>';
@@ -14177,6 +14233,22 @@ function ctlsGenerateReport(){
     {label:'Weight of cannabis destroyed (Dry Waste)', value: v(dry.dryWasteWeight, 'kg')},
     {label:'Loss on drying (cross-ref)', value: v(dry.lossOnDrying, 'kg')}
   ]);
+
+  // Section 6 — Waste Destruction (drying loss). Drying loss = recorded (wet) weight at waste
+  // entry minus the actual weight destroyed, summed over destruction events dated in the month.
+  {
+    const dEvents = destroyRecs.filter(d => d.date && d.date >= from && d.date < to);
+    const r3c = x => Math.round((x||0)*1000)/1000;
+    const totVeg = r3c(dEvents.reduce((s,d)=>s+(parseFloat(d.vegWeight)||0),0));
+    const totDry = r3c(dEvents.reduce((s,d)=>s+(parseFloat(d.dryWeight)||0),0));
+    const totLoss = r3c(dEvents.reduce((s,d)=>s+(parseFloat(d.dryingLoss)||0),0));
+    html += _ctlsBlock('6. Waste Destruction', [
+      {label:'Destruction events in the month', value: v(dEvents.length, 'events')},
+      {label:'Vegetative waste destroyed (actual)', note:'actual weight destroyed, after drying loss', value: v(totVeg, 'kg')},
+      {label:'Dry cannabis destroyed (actual)', note:'actual weight destroyed, after drying loss', value: v(totDry, 'kg')},
+      {label:'Drying loss (recorded − actual)', note:'weight lost between waste entry and destruction', value: v(totLoss, 'kg')}
+    ]);
+  }
 
   // Gaps footer
   if(gaps.length){
