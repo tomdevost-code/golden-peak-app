@@ -8783,22 +8783,20 @@ function destroyPrint(id){
   const sigHtml = (rec.sig||'').slice(0,11)==='data:image/'
     ? '<img src="'+rec.sig+'" style="height:48px;" />'
     : '<span style="font-family:\'Brush Script MT\',cursive;font-size:22px;">'+(rec.sig||'')+'</span>';
-  let out = '';
+  let logsHtml = '', attsHtml = '';
   batches.forEach(bid => {
     const recsB = covered.filter(w => w.batch === bid);
     if(!recsB.length) return;
     const vegB = recsB.filter(r=>r.type==='Vegetative Waste').reduce((s,r)=>s+(parseFloat(r.weight)||0),0);
     const dryB = recsB.filter(r=>r.type==='Dry Waste').reduce((s,r)=>s+(parseFloat(r.weight)||0),0);
-    out += '<div class="dpage">';
-    out += '<h2 style="text-align:center;margin:0 0 4px;">Cannabis Destruction Log</h2>';
-    out += '<div style="font-size:11px;color:#555;text-align:center;margin-bottom:10px;">FORM-CU-052-5</div>';
-    out += '<div style="margin-bottom:8px;"><strong>Batch ID:</strong> '+bid+'</div>';
-    out += '<table style="width:100%;border-collapse:collapse;font-size:11px;"><thead><tr>'
+    // Destruction Log block for this batch (flows with others; won't split mid-block)
+    let lb = '<div class="dblock"><div style="margin:0 0 6px;"><strong>Batch ID:</strong> '+bid+'</div>';
+    lb += '<table style="width:100%;border-collapse:collapse;font-size:11px;"><thead><tr>'
       +['Date Destroyed','Employee','Weight (kg)','Destruction Method','Vegetative Waste','Harvest Trim Waste','Dry Cannabis','Initial'].map(h=>'<th style="border:1px solid #333;padding:4px;background:#eee;">'+h+'</th>').join('')
       +'</tr></thead><tbody>';
     recsB.forEach(r=>{
       const isVeg = r.type==='Vegetative Waste';
-      out += '<tr>'
+      lb += '<tr>'
         +'<td style="border:1px solid #333;padding:4px;">'+(rec.date||'')+'</td>'
         +'<td style="border:1px solid #333;padding:4px;">'+(rec.employee||'')+'</td>'
         +'<td style="border:1px solid #333;padding:4px;text-align:right;">'+L(parseFloat(r.weight)||0)+'</td>'
@@ -8809,19 +8807,16 @@ function destroyPrint(id){
         +'<td style="border:1px solid #333;padding:4px;"></td>'
         +'</tr>';
     });
-    out += '<tr><td colspan="4" style="border:1px solid #333;padding:4px;text-align:right;"><strong>Totals</strong></td>'
+    lb += '<tr><td colspan="4" style="border:1px solid #333;padding:4px;text-align:right;"><strong>Totals</strong></td>'
       +'<td style="border:1px solid #333;padding:4px;text-align:right;"><strong>'+L(vegB)+'</strong></td>'
       +'<td style="border:1px solid #333;padding:4px;"></td>'
       +'<td style="border:1px solid #333;padding:4px;text-align:right;"><strong>'+L(dryB)+'</strong></td>'
       +'<td style="border:1px solid #333;padding:4px;"></td></tr>';
-    out += '</tbody></table></div>';
-    out += '<div class="dpage">';
-    out += '<h2 style="text-align:center;margin:0 0 4px;">Destruction Attestation</h2>';
-    out += '<div style="font-size:11px;color:#555;text-align:center;margin-bottom:10px;">FORM-SE-063-3</div>';
-    out += '<div style="margin-bottom:8px;"><strong>Batch ID:</strong> '+bid+'</div>';
-    out += '<p style="font-size:12px;margin:4px 0;">I, the undersigned, attest that:</p>';
-    out += '<p style="font-size:12px;margin:4px 0 12px;">I have witnessed the destruction of the following:</p>';
-    out += '<table style="width:100%;border-collapse:collapse;font-size:11px;"><thead><tr>'
+    lb += '</tbody></table></div>';
+    logsHtml += lb;
+    // Attestation block for this batch
+    let ab = '<div class="dblock"><div style="margin:0 0 6px;"><strong>Batch ID:</strong> '+bid+'</div>';
+    ab += '<table style="width:100%;border-collapse:collapse;font-size:11px;"><thead><tr>'
       +['Date of destruction','Weight (kg)','Address of destruction','Security cleared person and witness','Signature'].map(h=>'<th style="border:1px solid #333;padding:4px;background:#eee;">'+h+'</th>').join('')
       +'</tr></thead><tbody><tr>'
       +'<td style="border:1px solid #333;padding:4px;">'+(rec.date||'')+'</td>'
@@ -8830,7 +8825,20 @@ function destroyPrint(id){
       +'<td style="border:1px solid #333;padding:4px;">'+(rec.witness||'')+'</td>'
       +'<td style="border:1px solid #333;padding:4px;text-align:center;">'+sigHtml+'</td>'
       +'</tr></tbody></table></div>';
+    attsHtml += ab;
   });
+  let out = '';
+  out += '<div class="dsection">';
+  out += '<h2 style="text-align:center;margin:0 0 4px;">Cannabis Destruction Log</h2>';
+  out += '<div style="font-size:11px;color:#555;text-align:center;margin-bottom:12px;">FORM-CU-052-5</div>';
+  out += logsHtml;
+  out += '</div>';
+  out += '<div class="dsection dbreak">';
+  out += '<h2 style="text-align:center;margin:0 0 4px;">Destruction Attestation</h2>';
+  out += '<div style="font-size:11px;color:#555;text-align:center;margin-bottom:8px;">FORM-SE-063-3</div>';
+  out += '<p style="font-size:12px;margin:4px 0 12px;">I, the undersigned, attest that I have witnessed the destruction of the following:</p>';
+  out += attsHtml;
+  out += '</div>';
   const wrap = document.getElementById('destroy-print');
   if(!wrap){ toast('Print area missing.'); return; }
   wrap.innerHTML = out;
@@ -12916,7 +12924,8 @@ function sectionTable(title, headers, rows){
     + '  body.print-destroy #destroy-print,'
     + '  body.print-destroy #destroy-print * { visibility: visible !important; }'
     + '  body.print-destroy #destroy-print { position: absolute !important; inset: 0 !important; background: #fff !important; padding: 16px !important; color: #000 !important; }'
-    + '  body.print-destroy #destroy-print .dpage { page-break-after: always; margin-bottom: 24px; }'
+    + '  body.print-destroy #destroy-print .dblock { page-break-inside: avoid; margin-bottom: 22px; }'
+    + '  body.print-destroy #destroy-print .dbreak { page-break-before: always; }'
     + '  .report-no-print { display: none !important; }'
     + '}';
   document.head.appendChild(style);
