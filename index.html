@@ -8852,7 +8852,8 @@ function destroyPrint(id){
     const dryRec = recsB.filter(r=>r.type==='Dry Waste').reduce((s,r)=>s+(parseFloat(r.weight)||0),0);
     const vegB = adj ? (parseFloat(adj.vegActual)||0) : vegRec;   // actual destroyed (post drying loss)
     const dryB = adj ? (parseFloat(adj.dryActual)||0) : dryRec;
-    const lossB = (vegRec+dryRec) - (vegB+dryB);
+    const vegLossB = vegRec - vegB;
+    const dryLossB = dryRec - dryB;
     // Destruction Log block — one summary row per batch using ACTUAL destroyed weights.
     let lb = '<div class="dblock"><div style="margin:0 0 6px;"><strong>Batch ID:</strong> '+bid+'</div>';
     lb += '<table style="width:100%;border-collapse:collapse;font-size:11px;"><thead><tr>'
@@ -8867,7 +8868,7 @@ function destroyPrint(id){
       +'<td style="border:1px solid #333;padding:4px;text-align:right;">'+L(dryB)+'</td>'
       +'<td style="border:1px solid #333;padding:4px;"></td>'
       +'</tr></tbody></table>';
-    lb += '<div style="font-size:10px;color:#555;margin-top:4px;">Recorded (wet): '+L(vegRec+dryRec)+' kg · Drying loss: '+L(lossB)+' kg</div>';
+    lb += '<div style="font-size:10px;color:#555;margin-top:4px;">Recorded (wet) — Veg: '+L(vegRec)+' kg, Dry: '+L(dryRec)+' kg &nbsp;·&nbsp; Drying loss — Veg: '+L(vegLossB)+' kg, Dry: '+L(dryLossB)+' kg</div>';
     lb += '</div>';
     logsHtml += lb;
     // Attestation block for this batch
@@ -14241,12 +14242,14 @@ function ctlsGenerateReport(){
     const r3c = x => Math.round((x||0)*1000)/1000;
     const totVeg = r3c(dEvents.reduce((s,d)=>s+(parseFloat(d.vegWeight)||0),0));
     const totDry = r3c(dEvents.reduce((s,d)=>s+(parseFloat(d.dryWeight)||0),0));
-    const totLoss = r3c(dEvents.reduce((s,d)=>s+(parseFloat(d.dryingLoss)||0),0));
+    const vegLoss = r3c(dEvents.reduce((s,d)=>s+((parseFloat(d.vegRecorded)||0)-(parseFloat(d.vegWeight)||0)),0));
+    const dryLoss = r3c(dEvents.reduce((s,d)=>s+((parseFloat(d.dryRecorded)||0)-(parseFloat(d.dryWeight)||0)),0));
     html += _ctlsBlock('6. Waste Destruction', [
       {label:'Destruction events in the month', value: v(dEvents.length, 'events')},
       {label:'Vegetative waste destroyed (actual)', note:'actual weight destroyed, after drying loss', value: v(totVeg, 'kg')},
       {label:'Dry cannabis destroyed (actual)', note:'actual weight destroyed, after drying loss', value: v(totDry, 'kg')},
-      {label:'Drying loss (recorded − actual)', note:'weight lost between waste entry and destruction', value: v(totLoss, 'kg')}
+      {label:'Vegetative drying loss (recorded − actual)', note:'veg weight lost between waste entry and destruction', value: v(vegLoss, 'kg')},
+      {label:'Dry drying loss (recorded − actual)', note:'dry weight lost between waste entry and destruction', value: v(dryLoss, 'kg')}
     ]);
   }
 
