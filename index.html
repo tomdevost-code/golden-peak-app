@@ -8052,17 +8052,13 @@ function localDate(){const d=new Date();return d.getFullYear()+'-'+String(d.getM
 const today=localDate();
 document.getElementById('ec-date').value=today;
 document.getElementById('ro-date').value=today;
-document.getElementById('ro-date').readOnly=true;
-document.getElementById('ro-date').style.background='var(--bg2)';
-document.getElementById('ro-date').style.color='var(--text3)';
-document.getElementById('ro-date').style.cursor='default';
+// Runoff date is grower-editable (defaults to today) — no readonly lock.
 buildECEvents();buildROSamples();loadAll();installMomsFilterButtons();populateBatchDropdowns();setVegMin();applyCascadeLocks();updatePendingBadge();ecSeqUnlock();wasteSeqUnlock();summaryPopulateBatches();initSections();document.getElementById('waste-date').textContent=new Date().toISOString().split('T')[0];
 // Kick off auto-sync (60s polling) if Airtable is configured. Idempotent —
 // also re-invoked from saveSettings() so a fresh token starts the timer.
 startAutoSync();
 renderPullStatus();
 // Keep entry dates updated to today on each page load
-setInterval(()=>{const t=localDate();document.getElementById('ro-date').value=t;},60000);
 
 // ── WASTE LOG ─────────────────────────────────────────────────────────────────
 
