@@ -10062,8 +10062,9 @@ function renderBatchLog(){
   }
   const today = localDate();
   // Compact 4-column table: Batch ID, Cultivar, Plant Phase, Current Day
-  let html = '<div style="background:#fff;border:1px solid var(--border);border-radius:var(--radius-sm);overflow-x:auto;">';
-  html += '<table style="width:100%;border-collapse:collapse;font-size:13px;">';
+  let html = '<div style="background:#fff;border:1px solid var(--border);border-radius:var(--radius-sm);">';
+  html += '<table style="width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed;word-break:break-word;">';
+  html += '<colgroup><col style="width:22%"><col style="width:20%"><col style="width:26%"><col style="width:17%"><col style="width:15%"></colgroup>';
   // Sortable column headers. Active column shows a ▲/▼ indicator; inactive columns show a dim ⇅.
   // Clicking a header toggles direction if it's already active, otherwise switches to that column ascending.
   function _hdr(label, col, extraStyle){
@@ -10071,7 +10072,7 @@ function renderBatchLog(){
     const _arrow = _active
       ? '<span style="margin-left:4px;color:var(--green);">' + (_sortState.dir === 'desc' ? '▼' : '▲') + '</span>'
       : '<span style="margin-left:4px;color:var(--text3);opacity:0.5;">⇅</span>';
-    const _base = 'padding:8px 10px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);cursor:pointer;user-select:none;';
+    const _base = 'padding:7px 5px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);cursor:pointer;user-select:none;';
     return '<th onclick="setBatchTableSort(\''+col+'\')" style="'+_base+(extraStyle||'')+'" title="Click to sort">'+label+_arrow+'</th>';
   }
   html += '<thead><tr style="background:#f5f5f5;">'+
@@ -10114,11 +10115,11 @@ function renderBatchLog(){
     // it still has unallocated plants. Dash when the batch has no rooms (post-Packaged).
     const roomsLabel = (typeof formatBatchRoomsForDisplay === 'function') ? formatBatchRoomsForDisplay(b) : ((b.rooms && b.rooms.length) ? b.rooms.join(', ') : '—');
     html += '<tr'+rowStyle+'>'+
-      '<td style="padding:8px 10px;font-family:var(--mono);font-weight:700;color:'+(rowIsClosed?'var(--text3)':'var(--green)')+';">'+b.batchId+closedTag+'</td>'+
-      '<td style="padding:8px 10px;border-left:1px solid var(--border);">'+(b.cultivar || '—')+'</td>'+
-      '<td style="padding:8px 10px;border-left:1px solid var(--border);color:var(--text2);">'+phase+qtyChip+'</td>'+
-      '<td style="padding:8px 10px;border-left:1px solid var(--border);color:var(--text2);font-family:var(--mono);font-size:12px;">'+roomsLabel+'</td>'+
-      '<td style="padding:8px 10px;border-left:1px solid var(--border);font-family:var(--mono);font-weight:600;">'+dayLabel+'</td>'+
+      '<td style="padding:7px 6px;font-family:var(--mono);font-weight:700;color:'+(rowIsClosed?'var(--text3)':'var(--green)')+';">'+b.batchId+closedTag+'</td>'+
+      '<td style="padding:7px 6px;border-left:1px solid var(--border);">'+(b.cultivar || '—')+'</td>'+
+      '<td style="padding:7px 6px;border-left:1px solid var(--border);color:var(--text2);">'+phase+qtyChip+'</td>'+
+      '<td style="padding:7px 6px;border-left:1px solid var(--border);color:var(--text2);font-family:var(--mono);font-size:11px;">'+roomsLabel+'</td>'+
+      '<td style="padding:7px 6px;border-left:1px solid var(--border);font-family:var(--mono);font-weight:600;">'+dayLabel+'</td>'+
     '</tr>';
   });
   html += '</tbody></table></div>';
