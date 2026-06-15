@@ -6862,9 +6862,24 @@ async function flowSave(){
     toast('Saved locally — set the Flow Meter Table ID in Settings to sync.',4500);
   }
 }
+// Collapse exact-duplicate flow readings (same batch/date/time/room/reading/grower/notes),
+// keeping the synced copy. Self-heals dupes that slipped in from double-saves or re-sync.
+function flowDedupeLocal(){
+  const IGNORE = { id:1, airtableId:1, synced:1 };
+  const sig = r => { if(!r||typeof r!=='object') return ''; const o={}; Object.keys(r).sort().forEach(k=>{ if(!IGNORE[k]) o[k]=r[k]; }); try{ return JSON.stringify(o); }catch(_){ return ''; } };
+  const seen = {}; const keep = [];
+  flowRecs.forEach(r => {
+    const k = sig(r);
+    if(!k){ keep.push(r); return; }
+    if(seen[k] === undefined){ seen[k] = keep.length; keep.push(r); }
+    else { const cur = keep[seen[k]]; if((r.airtableId && !cur.airtableId) || (r.synced && !cur.synced)) keep[seen[k]] = r; }
+  });
+  if(keep.length !== flowRecs.length){ flowRecs.length = 0; Array.prototype.push.apply(flowRecs, keep); lsSet('gp-flow', flowRecs); if(typeof updatePendingBadge==='function') updatePendingBadge(); }
+}
 function flowRenderRecent(){
   const wrap = document.getElementById('flow-recent');
   if(!wrap) return;
+  flowDedupeLocal();
   const batch = (document.getElementById('flow-batch-select')||{}).value || '';
   if(!batch){ wrap.innerHTML=''; return; }
   const recs = flowRecs.filter(r => r.batch === batch)
@@ -10049,7 +10064,13 @@ function renderBatchLog(){
     if(fType === 'regular' && isMotherBatch(b.batchId)) return false;
     if(fType === 'mother' && !isMotherBatch(b.batchId)) return false;
     return true;
-  }).sort(_cmp);
+  }).sort(function(a,c){
+    // Group order: Mother batches first, then Seeds (S-) batches, then regular. Within each
+    // group, fall back to the active column sort.
+    const fr = x => isMotherBatch(x.batchId) ? 0 : ((typeof isSeedsBatchId==='function' && isSeedsBatchId(x.batchId)) ? 1 : 2);
+    const d = fr(a) - fr(c);
+    return d !== 0 ? d : _cmp(a,c);
+  });
   if(!active.length){
     const filtered = (fId || fCultivar || fPhase || fType);
     const emptyMsg = filtered
@@ -10082,7 +10103,15 @@ function renderBatchLog(){
     _hdr('Rooms',       'rooms',    'border-left:1px solid var(--border);')+
     _hdr('Current Day', 'day',      'border-left:1px solid var(--border);')+
   '</tr></thead><tbody>';
+  let _lastFam = null;
+  const _famName = x => isMotherBatch(x.batchId) ? 'Mother Batches' : ((typeof isSeedsBatchId==='function' && isSeedsBatchId(x.batchId)) ? 'Seeds (S) Batches' : 'Regular Batches');
   active.forEach(b => {
+    // Group header row whenever the batch family changes (moms → S → regular).
+    const _fam = _famName(b);
+    if(_fam !== _lastFam){
+      _lastFam = _fam;
+      html += '<tr><td colspan="5" style="padding:6px 8px;background:var(--green-pale);color:var(--green);font-family:var(--mono);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;border-top:1px solid var(--border);">'+_fam+'</td></tr>';
+    }
     // Display phase reuses the same helper as Batch Mgmt — covers Sold override and Drying/Flower mix.
     const phase = (typeof getDisplayPhase === 'function') ? getDisplayPhase(b) : (b.plantPhase || '—');
     // Current Day label — uses the same shared helper as the Batch Management page so the
