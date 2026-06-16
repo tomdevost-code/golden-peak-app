@@ -14355,7 +14355,7 @@ function seedInvRenderList(){
   const wrap = document.getElementById('seed-inv-list');
   const tot  = document.getElementById('seed-inv-total');
   if(!wrap) return;
-  const recs = seedInvRecs.slice().sort((a,b) => (a.strain||'').localeCompare(b.strain||''));
+  const recs = seedInvRecs.slice().sort((a,b) => (a.lotNumber||'').localeCompare(b.lotNumber||'', undefined, {numeric:true, sensitivity:'base'}));
   const totalSeeds = recs.reduce((s,r) => s + (parseInt(r.qtyOnHand)||0), 0);
   const totalStrains = recs.filter(r => (parseInt(r.qtyOnHand)||0) > 0).length;
   if(tot) tot.textContent = recs.length ? (totalSeeds+' seeds · '+totalStrains+' strain'+(totalStrains===1?'':'s')+' available') : '';
