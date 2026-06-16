@@ -8646,13 +8646,25 @@ function destroyRenderAdjust(){
     html += '<tr>'
       +'<td style="padding:5px 6px;font-family:var(--mono);border-top:1px solid var(--border);white-space:nowrap;">'+r.batch+'</td>'
       +'<td style="padding:5px 6px;font-family:var(--mono);text-align:right;border-top:1px solid var(--border);color:var(--text3);">'+L(r.vegRec)+'</td>'
-      +'<td style="padding:3px 6px;border-top:1px solid var(--border);"><input type="number" step="0.001" min="0" class="destroy-vegact" data-batch="'+ba+'" value="'+L(r.vegRec)+'" style="width:88px;font-size:12px;font-family:var(--mono);padding:4px;border:1px solid var(--border);border-radius:var(--radius-sm);" onwheel="this.blur()" /></td>'
+      +'<td style="padding:3px 6px;border-top:1px solid var(--border);"><input type="number" step="0.001" min="0" max="'+L(r.vegRec)+'" class="destroy-vegact" data-batch="'+ba+'" data-rec="'+L(r.vegRec)+'" value="'+L(r.vegRec)+'" style="width:88px;font-size:12px;font-family:var(--mono);padding:4px;border:1px solid var(--border);border-radius:var(--radius-sm);" oninput="destroyAdjustCheck(this)" onwheel="this.blur()" /></td>'
       +'<td style="padding:5px 6px;font-family:var(--mono);text-align:right;border-top:1px solid var(--border);color:var(--text3);">'+L(r.dryRec)+'</td>'
-      +'<td style="padding:3px 6px;border-top:1px solid var(--border);"><input type="number" step="0.001" min="0" class="destroy-dryact" data-batch="'+ba+'" value="'+L(r.dryRec)+'" style="width:88px;font-size:12px;font-family:var(--mono);padding:4px;border:1px solid var(--border);border-radius:var(--radius-sm);" onwheel="this.blur()" /></td>'
+      +'<td style="padding:3px 6px;border-top:1px solid var(--border);"><input type="number" step="0.001" min="0" max="'+L(r.dryRec)+'" class="destroy-dryact" data-batch="'+ba+'" data-rec="'+L(r.dryRec)+'" value="'+L(r.dryRec)+'" style="width:88px;font-size:12px;font-family:var(--mono);padding:4px;border:1px solid var(--border);border-radius:var(--radius-sm);" oninput="destroyAdjustCheck(this)" onwheel="this.blur()" /></td>'
       +'</tr>';
   });
   html += '</tbody></table></div>';
+  html += '<div id="destroy-adjust-warn" style="display:none;font-size:11px;color:var(--red);margin-top:6px;font-weight:600;">Actual destroyed weight cannot exceed the recorded waste weight.</div>';
   el.innerHTML = html;
+}
+function destroyAdjustCheck(input){
+  const rec = parseFloat(input.dataset.rec);
+  const val = parseFloat(input.value);
+  const over = !isNaN(val) && !isNaN(rec) && val > rec;
+  input.style.border = over ? '2px solid var(--red)' : '1px solid var(--border)';
+  input.style.background = over ? 'var(--red-pale)' : '';
+  const anyOver = !![].slice.call(document.querySelectorAll('.destroy-vegact,.destroy-dryact'))
+    .find(i => { const r=parseFloat(i.dataset.rec), v=parseFloat(i.value); return !isNaN(v)&&!isNaN(r)&&v>r; });
+  const warn = document.getElementById('destroy-adjust-warn');
+  if(warn) warn.style.display = anyOver ? 'block' : 'none';
 }
 function destroyCoveredKeySet(){
   const s = new Set();
@@ -8777,6 +8789,14 @@ async function destroySave(){
     let da = dryActMap[a.batch]; if(isNaN(da)||da<0) da = a.dryRec;
     return { batch:a.batch, vegRecorded:r3(a.vegRec), dryRecorded:r3(a.dryRec), vegActual:r3(va), dryActual:r3(da) };
   });
+  // Drying loss can never be negative: the ACTUAL destroyed weight must not exceed the RECORDED
+  // waste weight for either category, on any batch.
+  const bad = [];
+  adjust.forEach(a=>{
+    if(a.vegActual > a.vegRecorded) bad.push(a.batch+' — Vegetative actual ('+a.vegActual.toFixed(3)+') exceeds recorded ('+a.vegRecorded.toFixed(3)+')');
+    if(a.dryActual > a.dryRecorded) bad.push(a.batch+' — Dry actual ('+a.dryActual.toFixed(3)+') exceeds recorded ('+a.dryRecorded.toFixed(3)+')');
+  });
+  if(bad.length){ toast('Actual destroyed weight cannot exceed recorded waste weight:\n• '+bad.join('\n• ')); return; }
   const vegRecorded = r3(adjust.reduce((s,a)=>s+a.vegRecorded,0));
   const dryRecorded = r3(adjust.reduce((s,a)=>s+a.dryRecorded,0));
   const vegWeight = r3(adjust.reduce((s,a)=>s+a.vegActual,0));
