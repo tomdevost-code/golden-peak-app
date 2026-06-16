@@ -36,6 +36,7 @@ html { font-size: 16px; }
 .day-pill { font-size: 14px !important; }
 html, body { height: 100%; background-color: var(--bg); background-image: url('bg.jpg'); background-repeat: no-repeat; background-attachment: fixed; background-position: center; background-size: cover; font-family: var(--sans); color: var(--text); }
 .shell { display: flex; flex-direction: column; min-height: 100vh; max-width: 820px; margin: 0 auto; }
+@media (min-width: 1000px){ .shell { max-width: 1120px; } }
 .topbar { background: var(--card); border-bottom: 1px solid var(--border); padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
 .topbar-brand { display: flex; align-items: center; gap: 10px; }
 .leaf { width: 28px; height: 28px; background: var(--green); border-radius: 50% 50% 50% 0; display: flex; align-items: center; justify-content: center; }
@@ -10084,8 +10085,8 @@ function renderBatchLog(){
   const today = localDate();
   // Compact 4-column table: Batch ID, Cultivar, Plant Phase, Current Day
   let html = '<div style="background:#fff;border:1px solid var(--border);border-radius:var(--radius-sm);">';
-  html += '<table style="width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed;word-break:break-word;">';
-  html += '<colgroup><col style="width:22%"><col style="width:20%"><col style="width:26%"><col style="width:17%"><col style="width:15%"></colgroup>';
+  html += '<table style="width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed;">';
+  html += '<colgroup><col style="width:16%"><col style="width:18%"><col style="width:23%"><col style="width:28%"><col style="width:15%"></colgroup>';
   // Sortable column headers. Active column shows a ▲/▼ indicator; inactive columns show a dim ⇅.
   // Clicking a header toggles direction if it's already active, otherwise switches to that column ascending.
   function _hdr(label, col, extraStyle){
@@ -10144,11 +10145,11 @@ function renderBatchLog(){
     // it still has unallocated plants. Dash when the batch has no rooms (post-Packaged).
     const roomsLabel = (typeof formatBatchRoomsForDisplay === 'function') ? formatBatchRoomsForDisplay(b) : ((b.rooms && b.rooms.length) ? b.rooms.join(', ') : '—');
     html += '<tr'+rowStyle+'>'+
-      '<td style="padding:7px 6px;font-family:var(--mono);font-weight:700;color:'+(rowIsClosed?'var(--text3)':'var(--green)')+';">'+b.batchId+closedTag+'</td>'+
-      '<td style="padding:7px 6px;border-left:1px solid var(--border);">'+(b.cultivar || '—')+'</td>'+
-      '<td style="padding:7px 6px;border-left:1px solid var(--border);color:var(--text2);">'+phase+qtyChip+'</td>'+
-      '<td style="padding:7px 6px;border-left:1px solid var(--border);color:var(--text2);font-family:var(--mono);font-size:11px;">'+roomsLabel+'</td>'+
-      '<td style="padding:7px 6px;border-left:1px solid var(--border);font-family:var(--mono);font-weight:600;">'+dayLabel+'</td>'+
+      '<td style="padding:7px 6px;font-family:var(--mono);font-weight:700;overflow-wrap:anywhere;color:'+(rowIsClosed?'var(--text3)':'var(--green)')+';">'+b.batchId+closedTag+'</td>'+
+      '<td style="padding:7px 6px;border-left:1px solid var(--border);overflow-wrap:anywhere;">'+(b.cultivar || '—')+'</td>'+
+      '<td style="padding:7px 6px;border-left:1px solid var(--border);color:var(--text2);overflow-wrap:anywhere;">'+phase+qtyChip+'</td>'+
+      '<td style="padding:7px 6px;border-left:1px solid var(--border);color:var(--text2);font-family:var(--mono);font-size:11px;overflow-wrap:anywhere;">'+roomsLabel+'</td>'+
+      '<td style="padding:7px 6px;border-left:1px solid var(--border);font-family:var(--mono);font-weight:600;overflow-wrap:anywhere;">'+dayLabel+'</td>'+
     '</tr>';
   });
   html += '</tbody></table></div>';
