@@ -6691,6 +6691,23 @@ function ecRenderRecent(batch /*, room — ignored: filters by batch only */){
   });
   if(countEl) countEl.textContent = '('+rows.length+' day'+(rows.length===1?'':'s')+')';
   const avg = arr => arr.length ? (arr.reduce((s,v)=>s+v,0)/arr.length) : null;
+  // Flow readings now live in their own log (flowRecs). Match them onto each watering-history row
+  // by batch + date + room and show the meter value here, instead of a separate readings card.
+  // The meter is zeroed per batch and climbs, so when more than one reading exists for the same
+  // date+room we display the LATEST (by time then id) — not a sum (the values are cumulative).
+  const _flowByKey = {};
+  flowRecs.filter(f => f.batch && batch && f.batch.trim().toLowerCase() === batch.trim().toLowerCase())
+    .forEach(f => {
+      if(f.reading == null || isNaN(parseFloat(f.reading))) return;
+      const k = (f.date||'') + '|' + (f.room||'—');
+      const cur = _flowByKey[k];
+      if(!cur) _flowByKey[k] = f;
+      else {
+        const an = (f.time||'') + '|' + String(f.id||0), bn = (cur.time||'') + '|' + String(cur.id||0);
+        if(an > bn) _flowByKey[k] = f;
+      }
+    });
+  const _flowShown = {}; // show the value once per date+room (a Feed and Flush share one meter reading)
   // Render as a real table with bordered cells so EC / pH / ml are visually distinguished.
   el.style.padding='0';
   el.style.textAlign='left';
@@ -6702,6 +6719,7 @@ function ecRenderRecent(batch /*, room — ignored: filters by batch only */){
     '<th style="padding:6px 10px;text-align:center;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);white-space:nowrap;">EC</th>'+
     '<th style="padding:6px 10px;text-align:center;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);white-space:nowrap;">pH</th>'+
     '<th style="padding:6px 10px;text-align:center;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);white-space:nowrap;">ml</th>'+
+    '<th style="padding:6px 10px;text-align:center;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);white-space:nowrap;">Flow (L)</th>'+
   '</tr></thead><tbody>';
   rows.forEach(g => {
     const c = WTYPE_COLORS[g.wtype] || {bg:'var(--bg2)',fg:'var(--text2)'};
@@ -6710,8 +6728,21 @@ function ecRenderRecent(batch /*, room — ignored: filters by batch only */){
     const ecStr = ecAvg != null ? ecAvg.toFixed(2) : '—';
     const phStr = phAvg != null ? phAvg.toFixed(2) : '—';
     const mlStr = g.hasMl ? g.mlSum.toFixed(0) : '—';
-    const flowStr = g.hasFlow ? g.flowSum.toFixed(2) : '—';
     const countBadge = g.count > 1 ? ' <span style="color:var(--text3);font-family:var(--mono);font-size:10px;">'+g.count+'×</span>' : '';
+    // Flow cell — pull from the matched flow log entry; show value + inline edit/delete once per
+    // date+room. Subsequent rows for the same date+room leave the cell blank to avoid duplication.
+    const _fk = (g.date||'') + '|' + (g.room||'—');
+    let flowCell = '<span style="color:var(--text3);">—</span>';
+    if(!_flowShown[_fk]){
+      const _fr = _flowByKey[_fk];
+      if(_fr){
+        _flowShown[_fk] = true;
+        const _fId = "'" + String(_fr.id).replace(/\\/g,'\\\\').replace(/'/g,"\\'") + "'";
+        flowCell = '<span style="font-weight:600;">'+parseFloat(_fr.reading).toFixed(2)+'</span>'+
+          ' <button type="button" title="Edit reading" onclick="flowEditStart('+_fId+')" style="font-size:10px;padding:1px 5px;margin-left:3px;border:1px solid var(--border);background:var(--bg2);border-radius:var(--radius-sm);cursor:pointer;color:var(--text2);">✎</button>'+
+          '<button type="button" title="Delete reading" onclick="flowDelete('+_fId+')" style="font-size:10px;padding:1px 5px;margin-left:2px;border:1px solid var(--red);background:var(--red-pale);border-radius:var(--radius-sm);cursor:pointer;color:var(--red);">✕</button>';
+      }
+    }
     html += '<tr>'+
       '<td style="padding:6px 10px;font-family:var(--mono);border-top:1px solid var(--border);white-space:nowrap;">'+(g.date||'—')+'</td>'+
       '<td style="padding:6px 10px;border-top:1px solid var(--border);border-left:1px solid var(--border);">'+
@@ -6724,6 +6755,7 @@ function ecRenderRecent(batch /*, room — ignored: filters by batch only */){
       '<td style="padding:6px 10px;font-family:var(--mono);text-align:center;border-top:1px solid var(--border);border-left:1px solid var(--border);background:var(--bg2);">'+ecStr+'</td>'+
       '<td style="padding:6px 10px;font-family:var(--mono);text-align:center;border-top:1px solid var(--border);border-left:1px solid var(--border);background:var(--bg2);">'+phStr+'</td>'+
       '<td style="padding:6px 10px;font-family:var(--mono);text-align:center;border-top:1px solid var(--border);border-left:1px solid var(--border);background:var(--bg2);">'+mlStr+'</td>'+
+      '<td style="padding:6px 10px;font-family:var(--mono);text-align:center;border-top:1px solid var(--border);border-left:1px solid var(--border);background:var(--bg2);white-space:nowrap;">'+flowCell+'</td>'+
     '</tr>';
   });
   html += '</tbody></table></div>';
@@ -6912,38 +6944,14 @@ function flowDedupeLocal(){
   if(keep.length !== flowRecs.length){ flowRecs.length = 0; Array.prototype.push.apply(flowRecs, keep); lsSet('gp-flow', flowRecs); if(typeof updatePendingBadge==='function') updatePendingBadge(); }
 }
 function flowRenderRecent(){
-  const wrap = document.getElementById('flow-recent');
-  if(!wrap) return;
+  // Flow readings are no longer shown in a separate list — the value now appears inline on the
+  // EC waterings-history table (matched by batch + date + room), with edit/delete there. This
+  // function still self-heals duplicates and refreshes that history whenever a reading changes.
   flowDedupeLocal();
-  const batch = (document.getElementById('flow-batch-select')||{}).value || '';
-  if(!batch){ wrap.innerHTML=''; return; }
-  const recs = flowRecs.filter(r => r.batch === batch)
-    .sort((a,b)=> (b.date||'').localeCompare(a.date||'') || (b.time||'').localeCompare(a.time||'') || (b.id||0)-(a.id||0))
-    .slice(0,15);
-  if(!recs.length){ wrap.innerHTML = '<div style="font-size:11px;color:var(--text3);">No flow readings yet for '+batch+'.</div>'; return; }
-  let html = '<div style="font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;margin-bottom:6px;">Recent flow readings — '+batch+'</div>';
-  html += '<div style="border:1px solid var(--border);border-radius:var(--radius-sm);background:#fff;overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#f5f5f5;">'+
-    '<th style="padding:6px 8px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Date</th>'+
-    '<th style="padding:6px 8px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;border-left:1px solid var(--border);">Time</th>'+
-    '<th style="padding:6px 8px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;border-left:1px solid var(--border);">Room</th>'+
-    '<th style="padding:6px 8px;text-align:right;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;border-left:1px solid var(--border);">Reading (L)</th>'+
-    '<th style="padding:6px 8px;text-align:center;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;border-left:1px solid var(--border);">Actions</th>'+
-  '</tr></thead><tbody>';
-  recs.forEach(r => {
-    const _fIdArg = "'" + String(r.id).replace(/\\/g,'\\\\').replace(/'/g,"\\'") + "'";
-    html += '<tr>'+
-      '<td style="padding:5px 8px;font-family:var(--mono);border-top:1px solid var(--border);white-space:nowrap;">'+(r.date||'—')+'</td>'+
-      '<td style="padding:5px 8px;font-family:var(--mono);border-top:1px solid var(--border);border-left:1px solid var(--border);">'+(r.time||'—')+'</td>'+
-      '<td style="padding:5px 8px;border-top:1px solid var(--border);border-left:1px solid var(--border);">'+(r.room||'—')+'</td>'+
-      '<td style="padding:5px 8px;font-family:var(--mono);text-align:right;border-top:1px solid var(--border);border-left:1px solid var(--border);">'+((r.reading!=null&&!isNaN(parseFloat(r.reading)))?parseFloat(r.reading).toFixed(3):'—')+'</td>'+
-      '<td style="padding:5px 8px;text-align:center;white-space:nowrap;border-top:1px solid var(--border);border-left:1px solid var(--border);">'+
-        '<button type="button" onclick="flowEditStart('+_fIdArg+')" style="font-size:11px;padding:3px 8px;margin-right:4px;border:1px solid var(--border);background:var(--bg2);border-radius:var(--radius-sm);cursor:pointer;color:var(--text2);">Edit</button>'+
-        '<button type="button" onclick="flowDelete('+_fIdArg+')" style="font-size:11px;padding:3px 8px;border:1px solid var(--red);background:var(--red-pale);border-radius:var(--radius-sm);cursor:pointer;color:var(--red);">Delete</button>'+
-      '</td>'+
-    '</tr>';
-  });
-  html += '</tbody></table></div>';
-  wrap.innerHTML = html;
+  const wrap = document.getElementById('flow-recent');
+  if(wrap) wrap.innerHTML = '';
+  const ecBatch = (document.getElementById('ec-batch-select')||{}).value || '';
+  if(ecBatch && typeof ecRenderRecent === 'function') ecRenderRecent(ecBatch);
 }
 function flowEditCancel(){
   flowEditId = null;
