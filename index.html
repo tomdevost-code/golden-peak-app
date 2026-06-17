@@ -1183,6 +1183,34 @@ tr:last-child td { border-bottom: none; }
           </div>
           <div style="font-size:11px;color:var(--text3);font-family:var(--mono);text-align:right;margin-bottom:12px;">Total: <span id="mom-count-total" style="color:var(--text);font-weight:700;">0</span></div>
 
+          <!-- Correct distribution: directly set per-phase + per-Flower-room counts. This is the
+               manual fix for a wrong distribution (the Advance Cohort form below only moves plants
+               forward). The allocated total must equal the batch's current plant count. -->
+          <div style="padding-top:10px;border-top:1px dashed var(--border);margin-bottom:4px;">
+            <button type="button" id="summary-mom-dist-btn" onclick="summaryMomDistToggle()" style="font-size:11px;font-family:var(--mono);background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:5px 10px;color:var(--text2);cursor:pointer;">✎ Correct distribution</button>
+            <div id="summary-mom-dist-editor" style="display:none;margin-top:10px;">
+              <div style="font-size:10px;color:var(--text3);line-height:1.45;margin-bottom:8px;">Set how this mom's plants are split across phases and Flower rooms (Tent counts as a Flower room). The allocated total must equal the batch's current plant count.</div>
+              <div class="g2" style="margin-bottom:8px;">
+                <div class="field"><label style="font-size:11px;">Clones</label><input type="number" id="summary-mom-dist-clones" min="0" step="1" value="0" oninput="summaryMomDistRecalc()" onwheel="this.blur()" style="font-size:14px;font-family:var(--mono);font-weight:700;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;outline:none;width:100%;text-align:center;" /></div>
+                <div class="field"><label style="font-size:11px;">Veg</label><input type="number" id="summary-mom-dist-veg" min="0" step="1" value="0" oninput="summaryMomDistRecalc()" onwheel="this.blur()" style="font-size:14px;font-family:var(--mono);font-weight:700;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;outline:none;width:100%;text-align:center;" /></div>
+              </div>
+              <div class="field" style="margin-bottom:8px;">
+                <label style="font-size:11px;">Flower — by room</label>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:4px;">
+                  <div><div style="font-size:9px;color:var(--text3);font-family:var(--mono);text-align:center;">F1</div><input type="number" data-room="Flower 1" min="0" step="1" value="0" oninput="summaryMomDistRecalc()" onwheel="this.blur()" style="font-size:13px;font-family:var(--mono);font-weight:700;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:5px 4px;outline:none;width:100%;text-align:center;" /></div>
+                  <div><div style="font-size:9px;color:var(--text3);font-family:var(--mono);text-align:center;">F2</div><input type="number" data-room="Flower 2" min="0" step="1" value="0" oninput="summaryMomDistRecalc()" onwheel="this.blur()" style="font-size:13px;font-family:var(--mono);font-weight:700;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:5px 4px;outline:none;width:100%;text-align:center;" /></div>
+                  <div><div style="font-size:9px;color:var(--text3);font-family:var(--mono);text-align:center;">F3</div><input type="number" data-room="Flower 3" min="0" step="1" value="0" oninput="summaryMomDistRecalc()" onwheel="this.blur()" style="font-size:13px;font-family:var(--mono);font-weight:700;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:5px 4px;outline:none;width:100%;text-align:center;" /></div>
+                  <div><div style="font-size:9px;color:var(--text3);font-family:var(--mono);text-align:center;">F4</div><input type="number" data-room="Flower 4" min="0" step="1" value="0" oninput="summaryMomDistRecalc()" onwheel="this.blur()" style="font-size:13px;font-family:var(--mono);font-weight:700;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:5px 4px;outline:none;width:100%;text-align:center;" /></div>
+                  <div><div style="font-size:9px;color:var(--text3);font-family:var(--mono);text-align:center;">F5</div><input type="number" data-room="Flower 5" min="0" step="1" value="0" oninput="summaryMomDistRecalc()" onwheel="this.blur()" style="font-size:13px;font-family:var(--mono);font-weight:700;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:5px 4px;outline:none;width:100%;text-align:center;" /></div>
+                  <div><div style="font-size:9px;color:var(--text3);font-family:var(--mono);text-align:center;">Tent</div><input type="number" data-room="Tent" min="0" step="1" value="0" oninput="summaryMomDistRecalc()" onwheel="this.blur()" style="font-size:13px;font-family:var(--mono);font-weight:700;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:5px 4px;outline:none;width:100%;text-align:center;" /></div>
+                </div>
+              </div>
+              <div class="field" style="margin-bottom:8px;width:50%;"><label style="font-size:11px;">Drying</label><input type="number" id="summary-mom-dist-drying" min="0" step="1" value="0" oninput="summaryMomDistRecalc()" onwheel="this.blur()" style="font-size:14px;font-family:var(--mono);font-weight:700;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;outline:none;width:100%;text-align:center;" /></div>
+              <div id="summary-mom-dist-hint" style="font-size:11px;font-family:var(--mono);margin-bottom:8px;"></div>
+              <button class="btn-save" onclick="summaryMomDistSave()">Save Distribution</button>
+            </div>
+          </div>
+
           <!-- Advance Cohort form -->
           <div style="padding-top:10px;border-top:1px dashed var(--border);">
             <div style="font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">Advance a cohort</div>
@@ -10612,6 +10640,12 @@ function summaryRefreshMomPhase(batchId){
     return;
   }
   card.style.display = '';
+  // Collapse the distribution-correction editor whenever the card re-renders (e.g. a different
+  // batch was selected) so it never shows stale values from the previously-selected batch.
+  const _distEd = document.getElementById('summary-mom-dist-editor');
+  if(_distEd) _distEd.style.display = 'none';
+  const _distBtn = document.getElementById('summary-mom-dist-btn');
+  if(_distBtn) _distBtn.textContent = '✎ Correct distribution';
   // Self-heal any stale over-allocation BEFORE hydrating the inputs, so a batch whose plant
   // count dropped below its stored purpose distribution doesn't trip the over-allocation guard
   // on every render (which is what produced the spurious "over-allocated" toast on navigation).
@@ -10646,6 +10680,106 @@ function summaryRefreshMomPhase(batchId){
       + opts.map(p => '<option value="'+p+'"'+(p===prev?' selected':'')+'>'+p+' ('+(c[p]||0)+')</option>').join('');
   }
   momAdvanceFromChanged();
+}
+
+// ─── Mom distribution correction editor (Summary page) ──────────────────────────────────────
+// Lets the grower directly set a mom's per-phase + per-Flower-room plant counts to fix a wrong
+// distribution. The Advance Cohort form only moves plants forward, so without this there was no
+// way to correct e.g. "2 in Tent, 1 in Veg". Writes momPhaseCounts, roomDistribution, rooms, and
+// the headline plantPhase, then re-reconciles purpose counts and upserts to Airtable.
+function summaryMomDistToggle(){
+  const ed = document.getElementById('summary-mom-dist-editor');
+  const btn = document.getElementById('summary-mom-dist-btn');
+  if(!ed) return;
+  const show = ed.style.display === 'none';
+  ed.style.display = show ? 'block' : 'none';
+  if(btn) btn.textContent = show ? '✕ Cancel' : '✎ Correct distribution';
+  if(show) summaryMomDistPopulate();
+}
+function summaryMomDistPopulate(){
+  const bid = (document.getElementById('summary-batch-select')||{}).value || '';
+  const b = batchRecs.find(r => r.batchId === bid && !r.type);
+  if(!b || !isMotherBatch(bid)) return;
+  const c = ensureMomPhaseCounts(b);
+  const rd = b.roomDistribution || {};
+  const set = (id,v)=>{ const e=document.getElementById(id); if(e) e.value = parseInt(v)||0; };
+  set('summary-mom-dist-clones', c.Clones);
+  set('summary-mom-dist-veg',    c.Veg);
+  set('summary-mom-dist-drying', c.Drying);
+  document.querySelectorAll('#summary-mom-dist-editor input[data-room]').forEach(inp=>{
+    inp.value = parseInt(rd[inp.getAttribute('data-room')]||0)||0;
+  });
+  summaryMomDistRecalc();
+}
+function summaryMomDistRecalc(){
+  const bid = (document.getElementById('summary-batch-select')||{}).value || '';
+  const total = calcBatchQty(bid);
+  const v = id => parseInt((document.getElementById(id)||{}).value||'0')||0;
+  let flower = 0;
+  document.querySelectorAll('#summary-mom-dist-editor input[data-room]').forEach(inp=>{ flower += parseInt(inp.value||'0')||0; });
+  const sum = v('summary-mom-dist-clones')+v('summary-mom-dist-veg')+flower+v('summary-mom-dist-drying');
+  const hint = document.getElementById('summary-mom-dist-hint');
+  if(hint){
+    const ok = sum === total;
+    hint.style.color = ok ? 'var(--green)' : 'var(--red)';
+    hint.textContent = 'Allocated '+sum+' / '+total+' plant'+(total===1?'':'s')+(ok?' ✓' : ' — must equal '+total+' to save');
+  }
+}
+async function summaryMomDistSave(){
+  const bid = (document.getElementById('summary-batch-select')||{}).value || '';
+  const idx = batchRecs.findIndex(r => r.batchId === bid && !r.type);
+  if(idx < 0 || !isMotherBatch(bid)){ toast('Select a mother batch first.'); return; }
+  const total = calcBatchQty(bid);
+  const v = id => parseInt((document.getElementById(id)||{}).value||'0')||0;
+  const clones = v('summary-mom-dist-clones');
+  const veg    = v('summary-mom-dist-veg');
+  const drying = v('summary-mom-dist-drying');
+  const flw = {}; let flower = 0;
+  document.querySelectorAll('#summary-mom-dist-editor input[data-room]').forEach(inp=>{
+    const r = inp.getAttribute('data-room'); const n = parseInt(inp.value||'0')||0;
+    if(n>0) flw[r]=n; flower += n;
+  });
+  const sum = clones+veg+flower+drying;
+  if(sum !== total){ toast('Distribution totals '+sum+' but the batch has '+total+' plant'+(total===1?'':'s')+'. Adjust so they match.', 6000); return; }
+  const b = batchRecs[idx];
+  b.momPhaseCounts = { 'Clones':clones, 'Veg':veg, 'Flower':flower, 'Drying':drying };
+  // Headline phase = most advanced bucket holding plants.
+  let headline = 'Clones';
+  if(drying>0) headline = 'Drying'; else if(flower>0) headline = 'Flower'; else if(veg>0) headline = 'Veg';
+  b.plantPhase = headline;
+  // Rooms: Veg if any Clones/Veg plants, plus each Flower room used. roomDistribution holds the
+  // Flower-room breakdown only (Veg/Clones/Drying plants aren't pinned to a flower room).
+  const rooms = [];
+  if((clones+veg) > 0) rooms.push('Veg');
+  Object.keys(flw).forEach(r => { if(!rooms.includes(r)) rooms.push(r); });
+  b.rooms = rooms;
+  b.roomDistribution = { ...flw };
+  // Trim purpose counts if they now exceed the (unchanged) total — defensive; total didn't change
+  // here, but keeps the two distributions consistent.
+  reconcileMomPurposeCounts(b);
+  b.synced = false;
+  lsSet('gp-batch', batchRecs);
+  if(typeof updatePendingBadge === 'function') updatePendingBadge();
+  toast('Distribution updated for '+bid+'.');
+  // Re-render the card + dependent views, then sync.
+  summaryRefreshMomPhase(bid);
+  if(typeof summaryBatchChanged === 'function') summaryBatchChanged();
+  if(cfg.batchTbl && cfg.token && cfg.base){
+    setSyncPill('ing','Syncing...');
+    try{
+      const _res = await atUpsert(cfg.batchTbl, buildBatchFields(b), ['Batch ID']);
+      b.synced = true;
+      const _id = _res && _res.records && _res.records[0] && _res.records[0].id;
+      if(_id) b.airtableId = _id;
+      lsSet('gp-batch', batchRecs);
+      setSyncPill('ok','Synced');
+      updatePendingBadge();
+    }catch(e){
+      b.synced = false; lsSet('gp-batch', batchRecs);
+      setSyncPill('err','Sync error'); updatePendingBadge();
+      toast('Saved locally — Airtable: '+(e.message||'sync failed'), 5000);
+    }
+  }
 }
 
 function momAdvanceFromChanged(){
