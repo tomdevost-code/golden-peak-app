@@ -12570,7 +12570,9 @@ function summaryRenderHistory(batchId){
   //   • Live-plant Sold txs (Sale Stage = Clone) DEBIT plant count — running qty drops by the qty.
   //   • Phase Advance txs (mother cohorts) move plants between phase buckets,
   //     but the total batch plant count is unchanged — running qty unchanged.
-  const sorted = [...txs].reverse(); // oldest first
+  // Oldest-first by date for the running-balance walk (stable sort keeps insertion order on
+  // same-date ties). The final .reverse() below flips the displayed rows to newest-on-top.
+  const sorted = [...txs].sort((a,b)=> (a.date||'').localeCompare(b.date||''));
   let running = 0;
   const withQty = sorted.map(t=>{
     if(t.txType==='Phase Advance'){ return {...t, runningQty: running}; }
