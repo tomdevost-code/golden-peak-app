@@ -3936,6 +3936,17 @@ function reconcileAllPackagedBatches(){
     }
   });
   if(momFixed) console.log('[reconcile] rebalanced '+momFixed+' mom cohort bucket(s)');
+  // Boot-time mom PURPOSE reconciliation. If a mom's momPurposeCounts sum exceeds its actual
+  // plant count (plants left via Sold/Moved/sync without the purpose counts being trimmed), the
+  // stale distribution would trip the over-allocation guard on the Summary page and could wrongly
+  // gate Flower-advance via momHasFloweringCapacity. Trim the excess junior-first so the
+  // distribution always reflects reality. Idempotent.
+  let purposeFixed = 0;
+  batchRecs.forEach(b => {
+    if(!b || b.type || !isMotherBatch(b.batchId)) return;
+    if(reconcileMomPurposeCounts(b)) purposeFixed++;
+  });
+  if(purposeFixed) console.log('[reconcile] trimmed '+purposeFixed+' over-allocated mom purpose distribution(s)');
 }
 function buildBatchFields(rec){
   const f={
@@ -10464,6 +10475,23 @@ function momPurposeSubtractJunior(batchRec, qty){
   lsSet('gp-batch', batchRecs);
   return rem === 0;
 }
+// Heals stale over-allocation: if the sum of momPurposeCounts exceeds the batch's actual
+// plant count (plants that left via Sold/Moved-to-Moms/sync merges without the purpose counts
+// being trimmed), subtract the excess junior-first so the distribution can never claim more
+// plants than the batch actually has. Bookkeeping only — does NOT flip synced (the counts are
+// a local-only field). Returns true if it changed anything.
+function reconcileMomPurposeCounts(batchRec){
+  const c = ensureMomPurposeCounts(batchRec);
+  if(!c) return false;
+  const total = calcBatchQty(batchRec.batchId);
+  const sum = (parseInt(c['Clone Donor'])||0) + (parseInt(c['Genetic Preservation'])||0)
+            + (parseInt(c['Pheno Hunt'])||0) + (parseInt(c['Seed Production'])||0);
+  if(sum > total){
+    momPurposeSubtractJunior(batchRec, sum - total);
+    return true;
+  }
+  return false;
+}
 // Increment Clone Donor count on a mom. Used when plants arrive at a mom without an explicit
 // purpose designation — most commonly a Produced/Received tx or the destination side of a
 // Moved-to-Moms tx. New arrivals default to Clone Donor; user can re-designate later.
@@ -10584,6 +10612,10 @@ function summaryRefreshMomPhase(batchId){
     return;
   }
   card.style.display = '';
+  // Self-heal any stale over-allocation BEFORE hydrating the inputs, so a batch whose plant
+  // count dropped below its stored purpose distribution doesn't trip the over-allocation guard
+  // on every render (which is what produced the spurious "over-allocated" toast on navigation).
+  reconcileMomPurposeCounts(b);
   // Mom Purpose Counts: hydrate the four count inputs from the batch record. Legacy
   // single-value `momPurpose` is migrated by ensureMomPurposeCounts (entire qty → that purpose).
   const _pCounts = ensureMomPurposeCounts(b);
