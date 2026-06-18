@@ -13135,17 +13135,39 @@ function renderBatchReport(batchId){
 
   // EC log
   if(ecs.length){
-    const rows = ecs.map(r => [
-      r.date||'—',
-      r.room||'—',
-      r.grower||'—',
-      r.wtype||'—',
-      (r.dripEc != null ? (Math.round(r.dripEc*100)/100).toFixed(2) : '—'),
-      (r.dripPh != null ? (Math.round(r.dripPh*100)/100).toFixed(2) : '—'),
-      r.totalML != null ? String(Math.round(r.totalML)) : '—',
-      r.flow != null ? String(Math.round(r.flow)) : '—',
-      r.notes||''
-    ]);
+    // Flow readings now live in the separate flow log (flowRecs), not on EC entries — so match
+    // them onto each EC row by date + room. Show the value once per date+room (a Feed and a Flush
+    // on the same day share one meter reading); when more than one reading exists, take the latest.
+    // Falls back to a legacy flow value stored on the EC entry itself for pre-flow-log batches.
+    const _ecFlow = {};
+    flowRecs.filter(f => f.batch === batchId && f.reading != null && !isNaN(parseFloat(f.reading)))
+      .forEach(f => {
+        const k = (f.date||'')+'|'+(f.room||'—');
+        const cur = _ecFlow[k];
+        if(!cur) _ecFlow[k] = f;
+        else { const an=(f.time||'')+'|'+String(f.id||0), bn=(cur.time||'')+'|'+String(cur.id||0); if(an>bn) _ecFlow[k]=f; }
+      });
+    const _flowShown = {};
+    const rows = ecs.map(r => {
+      const _k = (r.date||'')+'|'+(r.room||'—');
+      let _flowStr = '—';
+      if(!_flowShown[_k]){
+        const _fr = _ecFlow[_k];
+        if(_fr){ _flowShown[_k] = true; _flowStr = String(Math.round(parseFloat(_fr.reading))); }
+        else if(r.flow != null && !isNaN(parseFloat(r.flow))){ _flowStr = String(Math.round(r.flow)); }
+      }
+      return [
+        r.date||'—',
+        r.room||'—',
+        r.grower||'—',
+        r.wtype||'—',
+        (r.dripEc != null ? (Math.round(r.dripEc*100)/100).toFixed(2) : '—'),
+        (r.dripPh != null ? (Math.round(r.dripPh*100)/100).toFixed(2) : '—'),
+        r.totalML != null ? String(Math.round(r.totalML)) : '—',
+        _flowStr,
+        r.notes||''
+      ];
+    });
     s += sectionTable('EC Log ('+ecs.length+')', ['Date','Room','Grower','Watering Type','Avg EC','Avg pH','Total ml','Flow L','Notes'], rows);
   }
 
