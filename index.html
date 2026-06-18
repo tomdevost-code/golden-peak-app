@@ -5880,9 +5880,14 @@ function ecCopyPrevious(){
   // Watering type — only set it if it's a currently-allowed option in the dropdown.
   const wEl = document.getElementById('ec-wtype');
   let wtypeSet = false;
-  if(wEl && prev.wtype && Array.from(wEl.options).some(o => o.value === prev.wtype)){
-    wEl.value = prev.wtype; wtypeSet = true;
-    if(typeof wEl.onchange === 'function') wEl.onchange();
+  if(wEl){
+    if(prev.wtype && Array.from(wEl.options).some(o => o.value === prev.wtype)){
+      wEl.value = prev.wtype; wtypeSet = true;
+    }
+    // The watering-type <select> obeys the sequential-unlock `disabled` state, but the event chips
+    // don't — so after copying it could look like only events are editable. Force-enable the select
+    // so the grower can change the type too. (Save still validates the type against the room/phase.)
+    seqEnable('ec-wtype');
   }
   // ml/plant events.
   const evs = Array.isArray(prev.events) ? prev.events : [];
