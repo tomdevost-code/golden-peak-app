@@ -6745,18 +6745,25 @@ function ecRenderRecent(batch /*, room — ignored: filters by batch only */){
   const _flowShown = {}; // show the value once per date+room (a Feed and Flush share one meter reading)
   // Edit/delete is restricted to the current entry date only — older flow readings are display-only.
   const _flowEditableDate = (document.getElementById('ec-date')||{}).value || localDate();
+  // Show only the latest 3 days at full height; older days scroll. Height is approximated from the
+  // number of rows belonging to the 3 most recent distinct dates (rows are already date-desc sorted).
+  const _distinctDates = [];
+  rows.forEach(g => { if(g.date && _distinctDates.indexOf(g.date) < 0) _distinctDates.push(g.date); });
+  const _rowsToShow = rows.filter(g => _distinctDates.slice(0,3).indexOf(g.date) >= 0).length;
+  const _scrollStyle = (_distinctDates.length > 3) ? 'max-height:'+(34 + _rowsToShow*34)+'px;overflow-y:auto;' : '';
   // Render as a real table with bordered cells so EC / pH / ml are visually distinguished.
   el.style.padding='0';
   el.style.textAlign='left';
-  let html = '<div style="border:1px solid var(--border);border-radius:var(--radius-sm);background:#fff;overflow-x:auto;">';
+  let html = '<div style="border:1px solid var(--border);border-radius:var(--radius-sm);background:#fff;overflow-x:auto;'+_scrollStyle+'">';
   html += '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
+  const _thSticky = 'position:sticky;top:0;z-index:1;background:#f5f5f5;';
   html += '<thead><tr style="background:#f5f5f5;">'+
-    '<th style="padding:6px 10px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);white-space:nowrap;">Date</th>'+
-    '<th style="padding:6px 10px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);white-space:nowrap;">Type / Room(s)</th>'+
-    '<th style="padding:6px 10px;text-align:center;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);white-space:nowrap;">EC</th>'+
-    '<th style="padding:6px 10px;text-align:center;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);white-space:nowrap;">pH</th>'+
-    '<th style="padding:6px 10px;text-align:center;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);white-space:nowrap;">ml</th>'+
-    '<th style="padding:6px 10px;text-align:center;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);white-space:nowrap;">Flow (L)</th>'+
+    '<th style="'+_thSticky+'padding:6px 10px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);white-space:nowrap;">Date</th>'+
+    '<th style="'+_thSticky+'padding:6px 10px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);white-space:nowrap;">Type / Room(s)</th>'+
+    '<th style="'+_thSticky+'padding:6px 10px;text-align:center;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);white-space:nowrap;">EC</th>'+
+    '<th style="'+_thSticky+'padding:6px 10px;text-align:center;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);white-space:nowrap;">pH</th>'+
+    '<th style="'+_thSticky+'padding:6px 10px;text-align:center;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);white-space:nowrap;">ml</th>'+
+    '<th style="'+_thSticky+'padding:6px 10px;text-align:center;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);white-space:nowrap;">Flow (L)</th>'+
   '</tr></thead><tbody>';
   rows.forEach(g => {
     const c = WTYPE_COLORS[g.wtype] || {bg:'var(--bg2)',fg:'var(--text2)'};
