@@ -6708,6 +6708,8 @@ function ecRenderRecent(batch /*, room — ignored: filters by batch only */){
       }
     });
   const _flowShown = {}; // show the value once per date+room (a Feed and Flush share one meter reading)
+  // Edit/delete is restricted to the current entry date only — older flow readings are display-only.
+  const _flowEditableDate = (document.getElementById('ec-date')||{}).value || localDate();
   // Render as a real table with bordered cells so EC / pH / ml are visually distinguished.
   el.style.padding='0';
   el.style.textAlign='left';
@@ -6738,9 +6740,12 @@ function ecRenderRecent(batch /*, room — ignored: filters by batch only */){
       if(_fr){
         _flowShown[_fk] = true;
         const _fId = "'" + String(_fr.id).replace(/\\/g,'\\\\').replace(/'/g,"\\'") + "'";
+        const _fEditable = (_fr.date || '') === _flowEditableDate;
         flowCell = '<span style="font-weight:600;">'+parseFloat(_fr.reading).toFixed(2)+'</span>'+
-          ' <button type="button" title="Edit reading" onclick="flowEditStart('+_fId+')" style="font-size:10px;padding:1px 5px;margin-left:3px;border:1px solid var(--border);background:var(--bg2);border-radius:var(--radius-sm);cursor:pointer;color:var(--text2);">✎</button>'+
-          '<button type="button" title="Delete reading" onclick="flowDelete('+_fId+')" style="font-size:10px;padding:1px 5px;margin-left:2px;border:1px solid var(--red);background:var(--red-pale);border-radius:var(--radius-sm);cursor:pointer;color:var(--red);">✕</button>';
+          (_fEditable
+            ? ' <button type="button" title="Edit reading" onclick="flowEditStart('+_fId+')" style="font-size:10px;padding:1px 5px;margin-left:3px;border:1px solid var(--border);background:var(--bg2);border-radius:var(--radius-sm);cursor:pointer;color:var(--text2);">✎</button>'+
+              '<button type="button" title="Delete reading" onclick="flowDelete('+_fId+')" style="font-size:10px;padding:1px 5px;margin-left:2px;border:1px solid var(--red);background:var(--red-pale);border-radius:var(--radius-sm);cursor:pointer;color:var(--red);">✕</button>'
+            : '');
       }
     }
     html += '<tr>'+
