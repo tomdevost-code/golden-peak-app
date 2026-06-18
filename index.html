@@ -2900,12 +2900,6 @@ function mergeRemote(localArr, remoteRecs, mapper, ctx, table, lsKey){
       if(natUnlinked[k] === undefined) natUnlinked[k] = i;
     });
   }
-  // Running set of natural keys already represented locally — seeded from the rows present at the
-  // start of the pass, then extended with each row we add DURING the pass. The add path consults
-  // this so a second remote row sharing a key (an Airtable-side duplicate) is never appended a
-  // second time. Without this, two duplicate rows pulled in the same pass both got added, which
-  // is what doubled plant counts (464 → 928). Mirrors the existing natAll duplicate-skip rule.
-  const _seenNatKeys = new Set(natFn ? Object.keys(natAll) : []);
   let skippedDupes = 0;
   let added = 0, updated = 0, conflicts = 0, repaired = 0, linked = 0;
   remoteRecs.forEach(rrec => {
@@ -2951,7 +2945,6 @@ function mergeRemote(localArr, remoteRecs, mapper, ctx, table, lsKey){
            remote: {batchId: mapped.batchId, batch: mapped.batch, date: mapped.date, txType: mapped.txType}});
         delete localArr[idx].airtableId;
         localArr.unshift(mapped);
-        { const _rk = natFn ? natFn(mapped) : ''; if(_rk) _seenNatKeys.add(_rk); }
         added++; repaired++;
         return;
       }
@@ -3056,16 +3049,7 @@ function mergeRemote(localArr, remoteRecs, mapper, ctx, table, lsKey){
         updated++;
       }
     } else {
-      // Source-side duplicate guard: if this natural key is already represented locally (present
-      // at the start of the pass OR added earlier in this same pass), the incoming remote row is
-      // an Airtable-side duplicate — skip it instead of appending a second local copy.
-      const _ak = natFn ? natFn(mapped) : '';
-      if(_ak && _seenNatKeys.has(_ak)){
-        skippedDupes++;
-        return;
-      }
       localArr.unshift(mapped);
-      if(_ak) _seenNatKeys.add(_ak);
       added++;
     }
   });
@@ -12881,7 +12865,7 @@ function summaryRenderHistory(batchId){
   }
   let html = '<div style="overflow-x:auto;background:#fff;border-radius:var(--radius-sm);border:1px solid var(--border);">';
   html += '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
-  html += '<thead><tr style="background:#f5f5f5;"><th style="padding:6px 8px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Date</th><th style="padding:6px 8px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Type</th><th style="padding:6px 8px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Phase</th><th style="padding:6px 8px;text-align:right;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Qty</th><th style="padding:6px 8px;text-align:right;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Balance</th><th style="padding:6px 8px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Notes</th></tr></thead>';
+  html += '<thead><tr style="background:#f5f5f5;"><th style="padding:6px 8px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Date</th><th style="padding:6px 8px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Type</th><th style="padding:6px 8px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Phase</th><th style="padding:6px 8px;text-align:right;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Qty</th><th style="padding:6px 8px;text-align:right;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Balance</th><th style="padding:6px 8px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Notes</th><th style="padding:6px 8px;text-align:center;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Action</th></tr></thead>';
   html += '<tbody>'+withQty.map(t=>{
     // "Credit" tx types — ADD plants to the batch's running balance. Both Produced/Received
     // and Seeds Germinated increase the count for the destination batch (Seeds Germinated
@@ -12920,6 +12904,7 @@ function summaryRenderHistory(batchId){
     // distribution ("Veg (19) / Flower (4)") on every row. Falls back to the per-tx phase
     // stamp for non-moms and for single-phase moms.
     const _phaseCell = _momPhaseLabel || (t.plantPhase || '—');
+    const _txIdArg = "'" + String(t.id).replace(/\\/g,'\\\\').replace(/'/g,"\\'") + "'";
     return '<tr style="border-bottom:1px solid var(--bg2);">'+
       '<td style="padding:6px 8px;font-family:var(--mono);">'+t.date+'</td>'+
       '<td style="padding:6px 8px;"><span style="font-size:11px;background:'+typePillBg+';border-radius:20px;padding:2px 8px;color:'+typePillColor+';font-weight:'+(isPhase?'600':'400')+';">'+t.txType+'</span></td>'+
@@ -12927,10 +12912,42 @@ function summaryRenderHistory(batchId){
       '<td style="padding:6px 8px;text-align:right;font-family:var(--mono);font-weight:700;color:'+qtyColor+';">'+qtyDisplay+'</td>'+
       '<td style="padding:6px 8px;text-align:right;font-family:var(--mono);font-weight:600;">'+t.runningQty+'</td>'+
       '<td style="padding:6px 8px;font-size:11px;color:var(--text3);max-width:120px;white-space:normal;">'+(t.notes||'')+'</td>'+
+      '<td style="padding:6px 8px;text-align:center;white-space:nowrap;"><button type="button" onclick="summaryTxDelete('+_txIdArg+')" title="Delete this transaction" style="font-size:11px;padding:3px 8px;border:1px solid var(--red);background:var(--red-pale);border-radius:var(--radius-sm);cursor:pointer;color:var(--red);">Delete</button></td>'+
       '</tr>';
   }).join('')+'</tbody>';
   html += '</table></div>';
   container.innerHTML = html;
+}
+
+// Delete a single batch transaction (manual correction — e.g. removing a duplicate that the
+// append-only sync created). The batch plant count is derived from the transaction history, so
+// removing a row recomputes the count automatically: deleting a Destroyed/Harvested restores its
+// plants; deleting a Produced/Received removes them. Phase/room state on the batch record is left
+// as-is (use Manage Batch to adjust those if needed). Removes from Airtable too when synced.
+async function summaryTxDelete(id){
+  const idx = batchTxRecs.findIndex(t => String(t.id) === String(id));
+  if(idx < 0){ toast('Transaction not found.'); return; }
+  const tx = batchTxRecs[idx];
+  const _q = parseInt(tx.qty)||0;
+  let _impact = '';
+  if(tx.txType==='Produced/Received' || tx.txType==='Seeds Germinated') _impact = '\n\nThis will remove '+_q+' plant(s) from the batch count.';
+  else if(tx.txType==='Destroyed' || tx.txType==='Harvested') _impact = '\n\nThis will restore '+_q+' plant(s) to the batch count.';
+  else if(tx.txType==='Sold' && (tx.saleStage||'')==='Clone') _impact = '\n\nThis will restore '+_q+' sold plant(s) to the batch count.';
+  if(!confirm('Delete this "'+tx.txType+'" transaction'+(tx.date?' from '+tx.date:'')+'?'+_impact+'\n\nThis cannot be undone.')) return;
+  if(tx.airtableId && cfg.batchtxTbl && cfg.token && cfg.base){
+    setSyncPill('ing','Deleting...');
+    const ok = await atDelete(cfg.batchtxTbl, tx.airtableId);
+    if(!ok){ setSyncPill('err','Delete failed'); toast('Could not delete from Airtable — transaction kept. Try again when online.',5000); return; }
+    setSyncPill('ok','Synced');
+  }
+  batchTxRecs.splice(idx, 1);
+  lsSet('gp-batchtx', batchTxRecs);
+  updatePendingBadge();
+  toast('Transaction deleted.');
+  // Refresh the count chip, phase display, history table, and the Batches list.
+  if(typeof summaryBatchChanged === 'function') summaryBatchChanged();
+  if(typeof populateBatchDropdowns === 'function') populateBatchDropdowns();
+  if(typeof renderBatchLog === 'function') renderBatchLog();
 }
 
 // ─── PER-BATCH REPORT (v1) ───────────────────────────────────────────────────
