@@ -258,6 +258,7 @@ tr:last-child td { border-bottom: none; }
       <div class="section">
         <div class="section-label">Watering</div>
         <div class="card">
+          <button type="button" onclick="ecCopyPrevious()" style="width:100%;margin-bottom:12px;font-size:12px;font-family:var(--mono);background:var(--bg2);border:1px dashed var(--border);border-radius:var(--radius-sm);padding:7px 10px;color:var(--text2);cursor:pointer;">⧉ Copy previous day's watering</button>
           <!-- Type + Flow -->
           <div class="g2" style="margin-bottom:12px;">
             <div class="field"><label>Watering type</label>
@@ -5860,6 +5861,40 @@ function ecTotalML(){
   }
   const tot = document.getElementById('ec-total-ml');
   if(tot) tot.textContent = any ? t.toFixed(0) : '-';
+}
+// Copy the previous day's watering (type + ml/plant events) into the form so the grower can save
+// as-is or tweak. "Previous" = the most recent EC entry for this batch+room on a date before the
+// current form date. Only fills the form — the normal Save validation still applies.
+function ecCopyPrevious(){
+  const batch = ((document.getElementById('ec-batch')||{}).value
+              || (document.getElementById('ec-batch-select')||{}).value || '').trim();
+  if(!batch){ toast('Select a batch first.'); return; }
+  const room = (document.getElementById('ec-room')||{}).value || '';
+  const curDate = (document.getElementById('ec-date')||{}).value || localDate();
+  let cands = ecRecs.filter(r => r.batch && r.batch.trim().toLowerCase() === batch.toLowerCase() && (r.date||'') < curDate);
+  if(room) cands = cands.filter(r => (r.room||'') === room);
+  if(!cands.length){ toast('No previous '+(room?room+' ':'')+'watering found to copy.', 4000); return; }
+  // Latest date, then latest entry on that date.
+  cands.sort((a,b)=> (b.date||'').localeCompare(a.date||'') || (b.id||0)-(a.id||0));
+  const prev = cands[0];
+  // Watering type — only set it if it's a currently-allowed option in the dropdown.
+  const wEl = document.getElementById('ec-wtype');
+  let wtypeSet = false;
+  if(wEl && prev.wtype && Array.from(wEl.options).some(o => o.value === prev.wtype)){
+    wEl.value = prev.wtype; wtypeSet = true;
+    if(typeof wEl.onchange === 'function') wEl.onchange();
+  }
+  // ml/plant events.
+  const evs = Array.isArray(prev.events) ? prev.events : [];
+  for(let i=1;i<=8;i++){
+    const el = document.getElementById('ec-evt-'+i);
+    if(!el) continue;
+    const v = parseFloat(evs[i-1]);
+    el.value = (!isNaN(v) && v > 0) ? String(v) : '';
+  }
+  ecRenderEvents();
+  toast('Copied '+(prev.wtype||'watering')+' from '+prev.date+(room?' ('+room+')':'')+
+        (wtypeSet?'':' — watering type not available here, set it manually')+' — edit or save.', 5000);
 }
 function ecRenderEvents(){
   // Read all values, compact them so empty slots are at the end. Render filled slots as chips,
