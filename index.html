@@ -2900,6 +2900,12 @@ function mergeRemote(localArr, remoteRecs, mapper, ctx, table, lsKey){
       if(natUnlinked[k] === undefined) natUnlinked[k] = i;
     });
   }
+  // Running set of natural keys already represented locally — seeded from the rows present at the
+  // start of the pass, then extended with each row we add DURING the pass. The add path consults
+  // this so a second remote row sharing a key (an Airtable-side duplicate) is never appended a
+  // second time. Without this, two duplicate rows pulled in the same pass both got added, which
+  // is what doubled plant counts (464 → 928). Mirrors the existing natAll duplicate-skip rule.
+  const _seenNatKeys = new Set(natFn ? Object.keys(natAll) : []);
   let skippedDupes = 0;
   let added = 0, updated = 0, conflicts = 0, repaired = 0, linked = 0;
   remoteRecs.forEach(rrec => {
@@ -2945,6 +2951,7 @@ function mergeRemote(localArr, remoteRecs, mapper, ctx, table, lsKey){
            remote: {batchId: mapped.batchId, batch: mapped.batch, date: mapped.date, txType: mapped.txType}});
         delete localArr[idx].airtableId;
         localArr.unshift(mapped);
+        { const _rk = natFn ? natFn(mapped) : ''; if(_rk) _seenNatKeys.add(_rk); }
         added++; repaired++;
         return;
       }
@@ -3049,7 +3056,16 @@ function mergeRemote(localArr, remoteRecs, mapper, ctx, table, lsKey){
         updated++;
       }
     } else {
+      // Source-side duplicate guard: if this natural key is already represented locally (present
+      // at the start of the pass OR added earlier in this same pass), the incoming remote row is
+      // an Airtable-side duplicate — skip it instead of appending a second local copy.
+      const _ak = natFn ? natFn(mapped) : '';
+      if(_ak && _seenNatKeys.has(_ak)){
+        skippedDupes++;
+        return;
+      }
       localArr.unshift(mapped);
+      if(_ak) _seenNatKeys.add(_ak);
       added++;
     }
   });
