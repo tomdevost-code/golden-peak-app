@@ -6276,16 +6276,61 @@ function roRenderSummary(batch){
     });
     html += '</tbody></table></div></div>';
   }
+  // Per-entry breakdown with expandable per-plant (S1..S8) EC/pH detail. Visible in the summary
+  // section with just a batch selected (no room needed), covering every room for the batch.
+  const _entries = recs.slice().sort((a,b)=> (b.date||'').localeCompare(a.date||'') || (b.id||0)-(a.id||0));
+  if(_entries.length){
+    html += '<div style="margin-top:10px;padding-top:8px;border-top:1px dashed var(--border);">'+
+      '<div style="font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">By Entry — tap a row to see EC/pH per plant</div>'+
+      '<div style="overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius-sm);background:#fff;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#f5f5f5;">'+
+        ['Date','Room','Avg EC','Avg pH','Var','Samples'].map((h,i)=>'<th style="padding:6px 8px;text-align:'+(i<2?'left':'center')+';font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;'+(i?'border-left:1px solid var(--border);':'')+'">'+h+'</th>').join('')+
+      '</tr></thead><tbody>';
+    _entries.forEach(r => {
+      const _sid = 'sum_' + String(r.id).replace(/[^A-Za-z0-9_-]/g,'_');
+      const _ec = (r.avgEC != null && !isNaN(parseFloat(r.avgEC))) ? parseFloat(r.avgEC).toFixed(2) : '—';
+      const _ph = (r.avgPH != null && !isNaN(parseFloat(r.avgPH))) ? parseFloat(r.avgPH).toFixed(2) : '—';
+      const _var = (r.variance != null && !isNaN(parseFloat(r.variance))) ? parseFloat(r.variance).toFixed(2) : '—';
+      const _alert = (r.variance != null && !isNaN(parseFloat(r.variance)) && parseFloat(r.variance) > 1.0);
+      const _cnt = Array.isArray(r.samples) ? r.samples.filter(s => s && (s.ec || s.ph)).length : 0;
+      html += '<tr style="border-top:1px solid var(--border);">'+
+        '<td style="padding:6px 8px;font-family:var(--mono);white-space:nowrap;">'+(r.date||'—')+(_alert?' <span title="Variance >1.0" style="color:var(--red);font-size:10px;">⚠</span>':'')+'</td>'+
+        '<td style="padding:6px 8px;border-left:1px solid var(--border);">'+(r.room||'—')+'</td>'+
+        '<td style="padding:6px 8px;text-align:center;font-family:var(--mono);border-left:1px solid var(--border);">'+_ec+'</td>'+
+        '<td style="padding:6px 8px;text-align:center;font-family:var(--mono);border-left:1px solid var(--border);">'+_ph+'</td>'+
+        '<td style="padding:6px 8px;text-align:center;font-family:var(--mono);border-left:1px solid var(--border);'+(_alert?'color:var(--red);font-weight:700;':'')+'">'+_var+'</td>'+
+        '<td style="padding:6px 8px;text-align:center;border-left:1px solid var(--border);"><button type="button" onclick="roToggleSamples(\''+_sid+'\')" title="Show EC/pH per plant" style="font-size:11px;font-family:var(--mono);background:none;border:none;cursor:pointer;color:var(--green);font-weight:600;padding:0;">'+_cnt+'/8 <span id="ro-sc-caret-'+_sid+'">▸</span></button></td>'+
+      '</tr>'+
+      '<tr id="ro-samples-'+_sid+'" style="display:none;"><td colspan="6" style="padding:0;border-top:1px solid var(--border);background:var(--bg2);">'+roSampleDetailHTML(r.samples)+'</td></tr>';
+    });
+    html += '</tbody></table></div></div>';
+  }
   card.innerHTML = html;
 }
 function roToggleSamples(sid){
-  // Show/hide the per-plant (S1..S8) EC/pH detail row under a runoff history entry.
+  // Show/hide the per-plant (S1..S8) EC/pH detail row under a runoff entry. Works for both the
+  // history table and the Runoff Summary table — callers pass a unique sid so element ids differ.
   const row = document.getElementById('ro-samples-'+sid);
   const caret = document.getElementById('ro-sc-caret-'+sid);
   if(!row) return;
   const show = row.style.display === 'none';
   row.style.display = show ? '' : 'none';
   if(caret) caret.textContent = show ? '▾' : '▸';
+}
+// Builds the per-plant (S1..S8) EC/pH detail grid for one runoff record. Out-of-range pH cells
+// (outside RO_PH_LO..RO_PH_HI) are flagged red. Shared by the history + summary tables.
+function roSampleDetailHTML(samples){
+  const _s = Array.isArray(samples) ? samples : [];
+  const _cell = v => (v!=null && v!=='' && !isNaN(parseFloat(v))) ? parseFloat(v).toFixed(2) : '—';
+  let d = '<div style="overflow-x:auto;padding:8px 10px;"><table style="border-collapse:collapse;font-size:11px;font-family:var(--mono);width:100%;">';
+  d += '<thead><tr><th style="padding:4px 6px;text-align:left;color:var(--text3);font-size:9px;text-transform:uppercase;border-bottom:1px solid var(--border);">Plant</th>';
+  for(let i=1;i<=8;i++) d += '<th style="padding:4px 6px;text-align:center;color:var(--text3);font-size:9px;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">S'+i+'</th>';
+  d += '</tr></thead><tbody>';
+  d += '<tr><td style="padding:4px 6px;color:var(--green);font-weight:600;">EC</td>';
+  for(let i=0;i<8;i++){ const s=_s[i]||{}; d += '<td style="padding:4px 6px;text-align:center;border-left:1px solid var(--border);">'+_cell(s.ec)+'</td>'; }
+  d += '</tr><tr><td style="padding:4px 6px;color:var(--green);font-weight:600;">pH</td>';
+  for(let i=0;i<8;i++){ const s=_s[i]||{}; const _phv=parseFloat(s.ph); const _bad=!isNaN(_phv)&&(_phv<RO_PH_LO||_phv>RO_PH_HI); d += '<td style="padding:4px 6px;text-align:center;border-left:1px solid var(--border);'+(_bad?'color:var(--red);font-weight:700;':'')+'">'+_cell(s.ph)+'</td>'; }
+  d += '</tr></tbody></table></div>';
+  return d;
 }
 function roRoomChanged(){
   // ro-room dropdown change handler: keeps the room colour strip in sync AND refreshes the history.
@@ -6352,18 +6397,8 @@ function roRenderHistory(batch, room){
       : 'padding:6px 10px;font-family:var(--mono);text-align:center;border-top:1px solid var(--border);border-left:1px solid var(--border);background:var(--bg2);';
     const _roIdArg = "'" + String(r.id).replace(/\\/g,'\\\\').replace(/'/g,"\\'") + "'";
     const _roSafe = String(r.id).replace(/[^A-Za-z0-9_-]/g,'_');
-    // Build the per-sample (per-plant) detail: S1..S8 EC and pH, revealed by toggling the count cell.
-    const _samples = Array.isArray(r.samples) ? r.samples : [];
-    let _det = '<div style="overflow-x:auto;padding:8px 10px;"><table style="border-collapse:collapse;font-size:11px;font-family:var(--mono);width:100%;">';
-    _det += '<thead><tr><th style="padding:4px 6px;text-align:left;color:var(--text3);font-size:9px;text-transform:uppercase;border-bottom:1px solid var(--border);">Plant</th>';
-    for(let i=1;i<=8;i++) _det += '<th style="padding:4px 6px;text-align:center;color:var(--text3);font-size:9px;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">S'+i+'</th>';
-    _det += '</tr></thead><tbody>';
-    const _cell = v => (v!=null && v!=='' && !isNaN(parseFloat(v))) ? parseFloat(v).toFixed(2) : '—';
-    _det += '<tr><td style="padding:4px 6px;color:var(--green);font-weight:600;">EC</td>';
-    for(let i=0;i<8;i++){ const s=_samples[i]||{}; _det += '<td style="padding:4px 6px;text-align:center;border-left:1px solid var(--border);">'+_cell(s.ec)+'</td>'; }
-    _det += '</tr><tr><td style="padding:4px 6px;color:var(--green);font-weight:600;">pH</td>';
-    for(let i=0;i<8;i++){ const s=_samples[i]||{}; const _phv=parseFloat(s.ph); const _bad=!isNaN(_phv)&&(_phv<RO_PH_LO||_phv>RO_PH_HI); _det += '<td style="padding:4px 6px;text-align:center;border-left:1px solid var(--border);'+(_bad?'color:var(--red);font-weight:700;':'')+'">'+_cell(s.ph)+'</td>'; }
-    _det += '</tr></tbody></table></div>';
+    // Per-plant (S1..S8) EC/pH detail, revealed by toggling the count cell.
+    const _det = roSampleDetailHTML(r.samples);
     html += '<tr>'+
       '<td style="padding:6px 10px;font-family:var(--mono);border-top:1px solid var(--border);white-space:nowrap;">'+(r.date||'—')+(alert?' <span title="Variance >1.0 alert" style="color:var(--red);font-size:10px;">⚠</span>':'')+'</td>'+
       '<td style="padding:6px 10px;font-family:var(--mono);text-align:center;border-top:1px solid var(--border);border-left:1px solid var(--border);background:var(--bg2);">'+ec+'</td>'+
