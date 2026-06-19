@@ -8063,7 +8063,9 @@ async function syncPending(){
   const pendingSanTool=sanToolRecs.filter(r=>!r.synced);
   const pendingSanEdits=sanEditsRecs.filter(r=>!r.synced);
   const pendingSeedInv=seedInvRecs.filter(r=>!r.synced);
-  const total=pendingEC.length+pendingRO.length+pendingWaste.length+pendingBatch.length+pendingBatchTx.length+pendingHarvest.length+pendingPostDry.length+pendingBio.length+pendingPest.length+pendingSanClean.length+pendingSanTool.length+pendingSanEdits.length+pendingSeedInv.length;
+  const pendingFlow=flowRecs.filter(r=>!r.synced);
+  const pendingDestroy=destroyRecs.filter(r=>!r.synced);
+  const total=pendingEC.length+pendingRO.length+pendingWaste.length+pendingBatch.length+pendingBatchTx.length+pendingHarvest.length+pendingPostDry.length+pendingBio.length+pendingPest.length+pendingSanClean.length+pendingSanTool.length+pendingSanEdits.length+pendingSeedInv.length+pendingFlow.length+pendingDestroy.length;
   if(!total){st.style.display='block';st.style.background='var(--green-pale)';st.style.color='var(--green)';st.textContent='No pending records - everything is synced.';updatePendingBadge();return;}
   st.style.display='block';st.style.background='var(--bg2)';st.style.color='var(--text2)';st.textContent='Syncing '+total+' record(s)...';
   btn.disabled=true;setSyncPill('ing','Syncing...');
@@ -8228,6 +8230,28 @@ async function syncPending(){
       }catch(e){fail++;lastErr=e.message;}
     }
     lsSet('gp-seedinv',seedInvRecs);
+  }
+  if(cfg.flowTbl){
+    for(const r of pendingFlow){
+      try{
+        const f = { 'Batch ID': r.batch?[r.batch]:undefined, 'Date': r.date, 'Time': r.time||undefined, 'Room': r.room, 'Grower': r.grower, 'Flow Reading': r.reading, 'Notes': r.notes||undefined };
+        Object.keys(f).forEach(k=>{ if(f[k]===undefined||f[k]===null||f[k]==='') delete f[k]; });
+        if(r.airtableId){ await atUpdateById(cfg.flowTbl, r.airtableId, f); }
+        else { const _fr = await atPost(cfg.flowTbl, f); if(_fr && _fr.id) r.airtableId = _fr.id; }
+        r.synced=true;ok++;
+      }catch(e){fail++;lastErr='Flow: '+e.message;}
+    }
+    lsSet('gp-flow',flowRecs);
+  }
+  if(cfg.destroyTbl){
+    for(const r of pendingDestroy){
+      try{
+        if(r.airtableId){ await atUpdateById(cfg.destroyTbl, r.airtableId, destroyBuildFields(r)); }
+        else { const _dr = await atPost(cfg.destroyTbl, destroyBuildFields(r)); if(_dr && _dr.id) r.airtableId = _dr.id; }
+        r.synced=true;ok++;
+      }catch(e){fail++;lastErr='Destruction: '+e.message;}
+    }
+    lsSet('gp-destroy',destroyRecs);
   }
   updatePendingBadge();
   btn.disabled=false;
