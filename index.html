@@ -258,7 +258,7 @@ tr:last-child td { border-bottom: none; }
       <div class="section">
         <div class="section-label">Watering</div>
         <div class="card">
-          <button type="button" onclick="ecCopyPrevious()" style="width:100%;margin-bottom:12px;font-size:12px;font-family:var(--mono);background:var(--bg2);border:1px dashed var(--border);border-radius:var(--radius-sm);padding:7px 10px;color:var(--text2);cursor:pointer;">⧉ Copy previous day's watering</button>
+          <button type="button" id="ec-copy-prev-btn" onclick="ecCopyPrevious()" disabled style="width:100%;margin-bottom:12px;font-size:12px;font-family:var(--mono);background:var(--bg2);border:1px dashed var(--border);border-radius:var(--radius-sm);padding:7px 10px;color:var(--text3);cursor:not-allowed;opacity:0.6;">⧉ Copy previous day's watering</button>
           <!-- Type + Flow -->
           <div class="g2" style="margin-bottom:12px;">
             <div class="field"><label>Watering type</label>
@@ -5876,10 +5876,12 @@ function ecCopyPrevious(){
               || (document.getElementById('ec-batch-select')||{}).value || '').trim();
   if(!batch){ toast('Select a batch first.'); return; }
   const room = (document.getElementById('ec-room')||{}).value || '';
+  if(!room){ toast('Select a room first — the copy is specific to the selected room.', 4000); return; }
   const curDate = (document.getElementById('ec-date')||{}).value || localDate();
-  let cands = ecRecs.filter(r => r.batch && r.batch.trim().toLowerCase() === batch.toLowerCase() && (r.date||'') < curDate);
-  if(room) cands = cands.filter(r => (r.room||'') === room);
-  if(!cands.length){ toast('No previous '+(room?room+' ':'')+'watering found to copy.', 4000); return; }
+  // Room-specific: only consider prior entries for this exact batch + room.
+  let cands = ecRecs.filter(r => r.batch && r.batch.trim().toLowerCase() === batch.toLowerCase()
+                              && (r.room||'') === room && (r.date||'') < curDate);
+  if(!cands.length){ toast('No previous watering found for '+room+' to copy.', 4000); return; }
   // Latest date, then latest entry on that date.
   cands.sort((a,b)=> (b.date||'').localeCompare(a.date||'') || (b.id||0)-(a.id||0));
   const prev = cands[0];
@@ -6676,6 +6678,7 @@ function ecSeqUnlock(){
     seqDisable('ec-hydration','Select a batch first');
     seqDisable('ec-wtype','Select a batch first');
     ['ec-notes','ec-flow'].forEach(id=>seqDisable(id,'Select a batch first'));
+    seqDisable('ec-copy-prev-btn');
     applyCascadeLocks();
     return;
   }
@@ -6686,6 +6689,7 @@ function ecSeqUnlock(){
     seqDisable('ec-hydration','Select a grower next');
     seqDisable('ec-wtype','Select a grower next');
     ['ec-notes','ec-flow'].forEach(id=>seqDisable(id,'Select a grower next'));
+    seqDisable('ec-copy-prev-btn');
     applyCascadeLocks();
     return;
   }
@@ -6698,11 +6702,14 @@ function ecSeqUnlock(){
   if(effectiveRoom){
     seqEnable('ec-hydration');seqEnable('ec-wtype');
     ['ec-notes','ec-flow'].forEach(id=>seqEnable(id));
+    seqEnable('ec-copy-prev-btn');
+    { const _cp=document.getElementById('ec-copy-prev-btn'); if(_cp){ _cp.style.background='var(--bg2)'; _cp.style.color='var(--text2)'; _cp.style.cursor='pointer'; _cp.style.opacity=''; } }
     document.querySelectorAll('.ec-drip-ec,.ec-drip-ph,.ec-evt-input').forEach(el=>{el.disabled=false;el.style.opacity='';el.style.background='';el.style.color='';el.style.cursor='';});
     applyCascadeLocks();
   } else {
     seqDisable('ec-hydration','Select a room first');
     ['ec-notes','ec-flow'].forEach(id=>seqDisable(id,'Select a room first'));
+    seqDisable('ec-copy-prev-btn');
     applyCascadeLocks();
   }
 }
