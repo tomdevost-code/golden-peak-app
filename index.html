@@ -9089,14 +9089,13 @@ function destroyPrint(id){
     // Destruction Log block — one summary row per batch using ACTUAL destroyed weights.
     let lb = '<div class="dblock"><div style="margin:0 0 6px;"><strong>Batch ID:</strong> '+bid+'</div>';
     lb += '<table style="width:100%;border-collapse:collapse;font-size:11px;"><thead><tr>'
-      +['Date Destroyed','Employee','Weight (kg)','Destruction Method','Vegetative Waste','Harvest Trim Waste','Dry Cannabis','Initial'].map(h=>'<th style="border:1px solid #333;padding:4px;background:#eee;">'+h+'</th>').join('')
+      +['Date Destroyed','Employee','Weight (kg)','Destruction Method','Vegetative Waste','Dry Cannabis Waste','Initial'].map(h=>'<th style="border:1px solid #333;padding:4px;background:#eee;">'+h+'</th>').join('')
       +'</tr></thead><tbody><tr>'
       +'<td style="border:1px solid #333;padding:4px;">'+(rec.date||'')+'</td>'
       +'<td style="border:1px solid #333;padding:4px;">'+(rec.employee||'')+'</td>'
       +'<td style="border:1px solid #333;padding:4px;text-align:right;">'+L(vegB+dryB)+'</td>'
       +'<td style="border:1px solid #333;padding:4px;">'+(rec.method||'')+'</td>'
       +'<td style="border:1px solid #333;padding:4px;text-align:right;">'+L(vegB)+'</td>'
-      +'<td style="border:1px solid #333;padding:4px;"></td>'
       +'<td style="border:1px solid #333;padding:4px;text-align:right;">'+L(dryB)+'</td>'
       +'<td style="border:1px solid #333;padding:4px;"></td>'
       +'</tr></tbody></table>';
@@ -9111,7 +9110,7 @@ function destroyPrint(id){
       +'<td style="border:1px solid #333;padding:4px;">'+(rec.date||'')+'</td>'
       +'<td style="border:1px solid #333;padding:4px;text-align:right;">'+L(vegB+dryB)+'</td>'
       +'<td style="border:1px solid #333;padding:4px;">'+(rec.address||'')+'</td>'
-      +'<td style="border:1px solid #333;padding:4px;">'+(rec.witness||'')+'</td>'
+      +'<td style="border:1px solid #333;padding:4px;">'+(rec.witness||'')+(rec.employee?'<br>'+rec.employee:'')+'</td>'
       +'<td style="border:1px solid #333;padding:4px;text-align:center;">'+sigHtml+'</td>'
       +'</tr></tbody></table></div>';
     attsHtml += ab;
