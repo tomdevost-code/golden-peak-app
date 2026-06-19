@@ -3167,6 +3167,9 @@ async function pullFromAirtable(opts){
     });
     const ctx = { batchIdByRecId };
     const summary = {};
+    // TEMP: time the merge (remove once the freeze is diagnosed).
+    const _mergeStart = performance.now();
+    try { console.log('[pull] remote row counts:', JSON.stringify({batch:batches.length,ec:ecs.length,ro:ros.length,waste:ws.length,batchtx:txs.length,harvest:hs.length,postdry:pds.length,bio:bs.length,pest:ps.length,flow:fls.length,destroy:dss.length})); } catch(_){}
     summary.batch   = mergeRemote(batchRecs,   batches, REMOTE_MAPPERS.batch,   ctx, 'batch',   'gp-batch');
     // After batch merge, run dedupe in case a remote arrived that links to a
     // previously-unlinked local row (the natural-key fallback in mergeRemote
@@ -3189,6 +3192,9 @@ async function pullFromAirtable(opts){
     summary.sanedits = mergeRemoteSanEdits(sed);
     // Seed Inventory — custom merge similar to sanedits since it's keyed on Strain.
     summary.seedinv = mergeRemoteSeedInv(siv);
+    // TEMP: report merge duration + per-table added/updated/skipped (remove after diagnosis).
+    try { console.log('[pull] merge took '+Math.round(performance.now()-_mergeStart)+' ms; per-table:',
+      JSON.stringify(Object.fromEntries(Object.entries(summary).map(([k,v])=>[k,(v.added||0)+'add/'+(v.updated||0)+'upd'+(v.skippedDupes?('/'+v.skippedDupes+'dup'):'')+(v.conflicts?('/'+v.conflicts+'conf'):'')])))); } catch(_){}
     // Sweep the conflict queue — drop any entries whose local row no longer
     // matches the remote (could happen if mergeRemote just repaired a stale
     // airtableId link, or if the local was deleted out from under us).
@@ -8230,7 +8236,28 @@ const today=localDate();
 document.getElementById('ec-date').value=today;
 document.getElementById('ro-date').value=today;
 // Runoff date is grower-editable (defaults to today) — no readonly lock.
-buildECEvents();buildROSamples();loadAll();installMomsFilterButtons();populateBatchDropdowns();setVegMin();applyCascadeLocks();updatePendingBadge();ecSeqUnlock();wasteSeqUnlock();summaryPopulateBatches();initSections();document.getElementById('waste-date').textContent=new Date().toISOString().split('T')[0];
+// ── TEMP BOOT INSTRUMENTATION (remove once the freeze is diagnosed) ──────────────
+// Times each synchronous boot step and logs record counts, so a plain refresh prints
+// exactly which step eats the 30-45s freeze. Open DevTools → Console to read it.
+(function _bootTimed(){
+  const _t0 = performance.now();
+  const _bp = (name, fn) => { const s = performance.now(); try{ fn(); } finally { const d = Math.round(performance.now()-s); if(d >= 1) console.log('[boot] '+name+': '+d+' ms'); } };
+  _bp('buildECEvents', buildECEvents);
+  _bp('buildROSamples', buildROSamples);
+  _bp('loadAll', loadAll);
+  try { console.log('[boot] record counts:', JSON.stringify({ec:ecRecs.length,ro:roRecs.length,waste:wasteRecs.length,batch:batchRecs.length,batchtx:batchTxRecs.length,harvest:harvestRecs.length,postdry:postDryRecs.length,bio:bioRecs.length,pest:pestRecs.length,sanclean:sanCleanRecs.length,santool:sanToolRecs.length,flow:flowRecs.length,destroy:destroyRecs.length})); } catch(_){}
+  _bp('installMomsFilterButtons', installMomsFilterButtons);
+  _bp('populateBatchDropdowns', populateBatchDropdowns);
+  _bp('setVegMin', setVegMin);
+  _bp('applyCascadeLocks', applyCascadeLocks);
+  _bp('updatePendingBadge', updatePendingBadge);
+  _bp('ecSeqUnlock', ecSeqUnlock);
+  _bp('wasteSeqUnlock', wasteSeqUnlock);
+  _bp('summaryPopulateBatches', summaryPopulateBatches);
+  _bp('initSections', initSections);
+  console.log('[boot] total synchronous boot: '+Math.round(performance.now()-_t0)+' ms');
+})();
+document.getElementById('waste-date').textContent=new Date().toISOString().split('T')[0];
 // Kick off auto-sync (60s polling) if Airtable is configured. Idempotent —
 // also re-invoked from saveSettings() so a fresh token starts the timer.
 startAutoSync();
