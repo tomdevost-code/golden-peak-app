@@ -3228,6 +3228,13 @@ async function pullFromAirtable(opts){
     try { if(typeof updatePendingBadge==='function') updatePendingBadge(); }catch(_){}
     try { if(typeof renderPullStatus==='function') renderPullStatus(); }catch(_){}
     try { renderConflictBanner(); }catch(_){}
+    // Refresh the Destruction page (history + pending + adjust) so records pulled from Airtable
+    // show up without needing to navigate away and back. Same for the Flow log + Waste table.
+    try { if(typeof destroyRenderHistory==='function') destroyRenderHistory(); }catch(_){}
+    try { if(typeof destroyRenderPending==='function') destroyRenderPending(); }catch(_){}
+    try { if(typeof destroyRenderAdjust==='function') destroyRenderAdjust(); }catch(_){}
+    try { if(typeof flowRenderRecent==='function') flowRenderRecent(); }catch(_){}
+    try { if(typeof renderWaste==='function') renderWaste(); }catch(_){}
     if(opts.manual){
       if(totalConflicts){
         toast(totalConflicts+' conflict(s) — review at top of page', 5000);
@@ -9064,8 +9071,7 @@ function destroyRenderHistory(){
       +'<td style="padding:5px 8px;font-family:var(--mono);text-align:right;border-top:1px solid var(--border);">'+(parseFloat(r.dryWeight)||0).toFixed(3)+'</td>'
       +'<td style="padding:5px 8px;font-family:var(--mono);text-align:right;border-top:1px solid var(--border);">'+((r.coveredKeys||[]).length)+'</td>'
       +'<td style="padding:5px 8px;white-space:nowrap;border-top:1px solid var(--border);">'
-        +'<button type="button" onclick="destroyPrint('+_dIdArg+')" style="font-size:11px;padding:3px 8px;margin-right:4px;border:1px solid var(--border);background:var(--bg2);border-radius:var(--radius-sm);cursor:pointer;color:var(--text2);">Print</button>'
-        +'<button type="button" onclick="destroyDelete('+_dIdArg+')" style="font-size:11px;padding:3px 8px;border:1px solid var(--red);background:var(--red-pale);border-radius:var(--radius-sm);cursor:pointer;color:var(--red);">Delete</button>'
+        +'<button type="button" onclick="destroyPrint('+_dIdArg+')" style="font-size:11px;padding:3px 8px;border:1px solid var(--border);background:var(--bg2);border-radius:var(--radius-sm);cursor:pointer;color:var(--text2);">Print</button>'
       +'</td></tr>';
   });
   html += '</tbody></table></div>';
