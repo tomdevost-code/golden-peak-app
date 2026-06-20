@@ -1421,6 +1421,17 @@ tr:last-child td { border-bottom: none; }
         <div class="section-label">Destruction History</div>
         <div class="card"><div id="destroy-history"></div></div>
       </div>
+      <div class="section">
+        <div class="section-label">Drying Loss Report</div>
+        <div class="card">
+          <div style="font-size:11px;color:var(--text3);line-height:1.45;margin-bottom:10px;">Each destruction event with the waste records it covered — recorded weight vs. actual weight destroyed, so you can verify the drying loss.</div>
+          <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+            <button type="button" class="btn-secondary" onclick="destroyLossRender()" style="flex:1;min-width:140px;">Show / Refresh</button>
+            <button type="button" class="btn-secondary" onclick="destroyLossExportCSV()" style="flex:1;min-width:140px;">Export CSV</button>
+          </div>
+          <div id="destroy-loss-report"></div>
+        </div>
+      </div>
       <div id="destroy-print" style="display:none;"></div>
     </div>
 
@@ -8844,6 +8855,7 @@ function destroyEnter(){
   destroyRenderPending();
   destroyRenderAdjust();
   destroyRenderHistory();
+  destroyLossRender();
 }
 // Aggregate pending waste by batch into recorded Vegetative / Dry totals.
 function destroyAggregatePendingByBatch(){
@@ -9076,6 +9088,88 @@ function destroyRenderHistory(){
   });
   html += '</tbody></table></div>';
   el.innerHTML = html;
+}
+// Drying Loss Report: for each destruction event, list the waste records it covered and compare
+// recorded weight vs actual weight destroyed (per batch), so drying loss can be verified by hand.
+function destroyLossRender(){
+  const el = document.getElementById('destroy-loss-report');
+  if(!el) return;
+  const L = v => (Math.round((v||0)*1000)/1000).toFixed(3);
+  const events = destroyRecs.slice().sort((a,b)=> (b.date||'').localeCompare(a.date||'') || (b.id||0)-(a.id||0));
+  if(!events.length){ el.innerHTML = '<div style="font-size:12px;color:var(--text3);">No destruction events yet.</div>'; return; }
+  let html = '';
+  events.forEach(rec=>{
+    const keySet = new Set(rec.coveredKeys||[]);
+    const covered = wasteRecs.filter(w => keySet.has(NAT_KEY_FN.waste(w)))
+      .sort((a,b)=> (a.batch||'').localeCompare(b.batch||'') || (a.date||'').localeCompare(b.date||''));
+    const adjByBatch = {}; (rec.adjust||[]).forEach(a=>{ adjByBatch[a.batch]=a; });
+    html += '<div style="border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:14px;overflow:hidden;">';
+    html += '<div style="background:var(--green-pale);color:var(--green);padding:6px 10px;font-family:var(--mono);font-size:12px;font-weight:700;">'+(rec.date||'—')+' · '+(rec.employee||'—')+(rec.batches&&rec.batches.length?' · '+rec.batches.join(', '):'')+'</div>';
+    html += '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:11px;"><thead><tr style="background:#f5f5f5;">'
+      + ['Waste Date','Batch','Room','Type','Sub-Category','Recorded (kg)','Plants'].map((h,i)=>'<th style="padding:5px 6px;text-align:'+(i>=5?'right':'left')+';font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;border-bottom:1px solid var(--border);">'+h+'</th>').join('')
+      + '</tr></thead><tbody>';
+    if(!covered.length){
+      html += '<tr><td colspan="7" style="padding:6px;color:var(--text3);font-style:italic;">No waste records found for this event (they may have been edited or deleted).</td></tr>';
+    } else {
+      covered.forEach(w=>{
+        html += '<tr>'
+          +'<td style="padding:4px 6px;font-family:var(--mono);border-top:1px solid var(--border);">'+(w.date||'—')+'</td>'
+          +'<td style="padding:4px 6px;font-family:var(--mono);border-top:1px solid var(--border);">'+(w.batch||'—')+'</td>'
+          +'<td style="padding:4px 6px;border-top:1px solid var(--border);">'+(w.room||'—')+'</td>'
+          +'<td style="padding:4px 6px;border-top:1px solid var(--border);">'+(w.type||'—')+'</td>'
+          +'<td style="padding:4px 6px;border-top:1px solid var(--border);">'+(w.subtype||'—')+'</td>'
+          +'<td style="padding:4px 6px;font-family:var(--mono);text-align:right;border-top:1px solid var(--border);">'+L(parseFloat(w.weight)||0)+'</td>'
+          +'<td style="padding:4px 6px;font-family:var(--mono);text-align:right;border-top:1px solid var(--border);">'+(w.plants||0)+'</td>'
+          +'</tr>';
+      });
+    }
+    html += '</tbody></table></div>';
+    const batches = (rec.batches && rec.batches.length) ? rec.batches : [...new Set(covered.map(w=>w.batch).filter(Boolean))].sort();
+    html += '<div style="overflow-x:auto;border-top:2px solid var(--border);"><table style="width:100%;border-collapse:collapse;font-size:11px;"><thead><tr style="background:var(--bg2);">'
+      + ['Batch','Veg Rec.','Veg Destr.','Veg Loss','Dry Rec.','Dry Destr.','Dry Loss'].map((h,i)=>'<th style="padding:5px 6px;text-align:'+(i?'right':'left')+';font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;border-bottom:1px solid var(--border);">'+h+'</th>').join('')
+      + '</tr></thead><tbody>';
+    let tVR=0,tVA=0,tDR=0,tDA=0;
+    batches.forEach(bid=>{
+      const wb = covered.filter(w=>w.batch===bid);
+      const vegRec = wb.filter(w=>w.type==='Vegetative Waste').reduce((s,w)=>s+(parseFloat(w.weight)||0),0);
+      const dryRec = wb.filter(w=>w.type==='Dry Waste').reduce((s,w)=>s+(parseFloat(w.weight)||0),0);
+      const adj = adjByBatch[bid];
+      const vegAct = adj ? (parseFloat(adj.vegActual)||0) : vegRec;
+      const dryAct = adj ? (parseFloat(adj.dryActual)||0) : dryRec;
+      tVR+=vegRec;tVA+=vegAct;tDR+=dryRec;tDA+=dryAct;
+      const cell = (v,amber)=>'<td style="padding:4px 6px;font-family:var(--mono);text-align:right;border-top:1px solid var(--border);'+(amber?'color:var(--amber);':'')+'">'+L(v)+'</td>';
+      html += '<tr><td style="padding:4px 6px;font-family:var(--mono);border-top:1px solid var(--border);">'+bid+'</td>'
+        +cell(vegRec)+cell(vegAct)+cell(vegRec-vegAct,true)+cell(dryRec)+cell(dryAct)+cell(dryRec-dryAct,true)+'</tr>';
+    });
+    const tcell = (v,amber)=>'<td style="padding:4px 6px;font-family:var(--mono);text-align:right;border-top:1px solid var(--border);font-weight:700;'+(amber?'color:var(--amber);':'')+'">'+L(v)+'</td>';
+    html += '<tr style="background:var(--bg2);"><td style="padding:4px 6px;font-family:var(--mono);border-top:1px solid var(--border);font-weight:700;">Total</td>'
+      +tcell(tVR)+tcell(tVA)+tcell(tVR-tVA,true)+tcell(tDR)+tcell(tDA)+tcell(tDR-tDA,true)+'</tr>';
+    html += '</tbody></table></div></div>';
+  });
+  el.innerHTML = html;
+}
+function destroyLossExportCSV(){
+  if(!destroyRecs.length){ toast('No destruction events to export.'); return; }
+  const q = v => '"'+String(v==null?'':v).replace(/"/g,'""')+'"';
+  const L = v => (Math.round((v||0)*1000)/1000).toFixed(3);
+  const rows = [['Destruction Date','Employee','Batch ID','Waste Date','Room','Waste Type','Sub-Category','Recorded Weight (kg)','Plants','Batch Veg Recorded (kg)','Batch Veg Destroyed (kg)','Batch Veg Drying Loss (kg)','Batch Dry Recorded (kg)','Batch Dry Destroyed (kg)','Batch Dry Drying Loss (kg)'].map(q)];
+  const events = destroyRecs.slice().sort((a,b)=> (b.date||'').localeCompare(a.date||''));
+  events.forEach(rec=>{
+    const keySet = new Set(rec.coveredKeys||[]);
+    const covered = wasteRecs.filter(w => keySet.has(NAT_KEY_FN.waste(w)));
+    const adjByBatch = {}; (rec.adjust||[]).forEach(a=>{ adjByBatch[a.batch]=a; });
+    const agg = {};
+    covered.forEach(w=>{ const b=w.batch||''; if(!agg[b]) agg[b]={vegRec:0,dryRec:0}; if(w.type==='Vegetative Waste') agg[b].vegRec+=parseFloat(w.weight)||0; else if(w.type==='Dry Waste') agg[b].dryRec+=parseFloat(w.weight)||0; });
+    covered.sort((a,b)=> (a.batch||'').localeCompare(b.batch||'') || (a.date||'').localeCompare(b.date||''));
+    covered.forEach(w=>{
+      const b=w.batch||''; const a=agg[b]||{vegRec:0,dryRec:0}; const adj=adjByBatch[b];
+      const vegAct = adj?(parseFloat(adj.vegActual)||0):a.vegRec;
+      const dryAct = adj?(parseFloat(adj.dryActual)||0):a.dryRec;
+      rows.push([rec.date||'',rec.employee||'',b,w.date||'',w.room||'',w.type||'',w.subtype||'',L(parseFloat(w.weight)||0),(w.plants||0),L(a.vegRec),L(vegAct),L(a.vegRec-vegAct),L(a.dryRec),L(dryAct),L(a.dryRec-dryAct)].map(q));
+    });
+  });
+  if(rows.length<=1){ toast('No covered waste records to export.'); return; }
+  dlCSV(rows,'Drying_Loss_Report_GoldenPeak.csv');
 }
 async function destroyDelete(id){
   const idx = destroyRecs.findIndex(r => String(r.id) === String(id));
