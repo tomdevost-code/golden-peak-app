@@ -3227,7 +3227,9 @@ async function pullFromAirtable(opts){
         const _fdRow = (fdt||[]).find(r => ((r.fields||{})['Key']||'') === 'FlowerDayMilestones') || (fdt||[])[0];
         if(_fdRow){
           const _parsed = JSON.parse(((_fdRow.fields||{})['Milestones']) || '{}');
-          if(_parsed && typeof _parsed === 'object' && !Array.isArray(_parsed)){
+          // Only adopt a NON-empty remote list. Ignoring an empty {} prevents a blank Airtable row
+          // from wiping the local milestones (the bug that left both sides empty).
+          if(_parsed && typeof _parsed === 'object' && !Array.isArray(_parsed) && Object.keys(_parsed).length){
             FLOWER_DAY_TASKS = _parsed;
             lsSet('gp-fdtasks', FLOWER_DAY_TASKS);
             if(typeof fdRenderMilestones === 'function') fdRenderMilestones();
