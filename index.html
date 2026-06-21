@@ -1426,7 +1426,7 @@ tr:last-child td { border-bottom: none; }
         <div class="card">
           <div style="font-size:11px;color:var(--text3);line-height:1.45;margin-bottom:10px;">Each destruction event with the waste records it covered — recorded weight vs. actual weight destroyed, so you can verify the drying loss.</div>
           <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
-            <button type="button" class="btn-secondary" onclick="destroyLossRender()" style="flex:1;min-width:140px;">Show / Refresh</button>
+            <button type="button" class="btn-secondary" onclick="destroyLossToggle()" style="flex:1;min-width:140px;">Show / Hide</button>
             <button type="button" class="btn-secondary" onclick="destroyLossExportCSV()" style="flex:1;min-width:140px;">Export CSV</button>
           </div>
           <div id="destroy-loss-report"></div>
@@ -9147,6 +9147,18 @@ function destroyLossRender(){
     html += '</tbody></table></div></div>';
   });
   el.innerHTML = html;
+}
+// Toggle the Drying Loss Report: if it's currently shown, hide it; if hidden (or empty), render
+// it fresh and show it.
+function destroyLossToggle(){
+  const el = document.getElementById('destroy-loss-report');
+  if(!el) return;
+  if(el.style.display === 'none' || !el.innerHTML.trim()){
+    el.style.display = '';
+    destroyLossRender();
+  } else {
+    el.style.display = 'none';
+  }
 }
 function destroyLossExportCSV(){
   if(!destroyRecs.length){ toast('No destruction events to export.'); return; }
