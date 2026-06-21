@@ -1787,6 +1787,7 @@ tr:last-child td { border-bottom: none; }
         <div class="sfield"><label>Seed Inventory Table ID <span style="font-size:10px;color:var(--text3);font-weight:400;">(Cultivation — seed strains)</span></label><input type="text" id="s-seedinv" placeholder="tblXXXXXXXXXXXXXX" /></div>
         <div class="sfield"><label>Flow Meter Table ID <span style="font-size:10px;color:var(--text3);font-weight:400;">(Cultivation — flow meter readings)</span></label><input type="text" id="s-flow" placeholder="tblXXXXXXXXXXXXXX" /></div>
         <div class="sfield"><label>Destruction Log Table ID <span style="font-size:10px;color:var(--text3);font-weight:400;">(Cultivation — waste destruction events)</span></label><input type="text" id="s-destroy" placeholder="tblXXXXXXXXXXXXXX" /></div>
+        <div class="sfield"><label>Flower Day Milestones Table ID <span style="font-size:10px;color:var(--text3);font-weight:400;">(Cultivation — shared milestone list)</span></label><input type="text" id="s-fdtasks" placeholder="tblXXXXXXXXXXXXXX" /></div>
         <button class="btn-save" onclick="saveSettings()">Save and Test Connection</button>
         <div class="conn-status" id="conn-status"></div>
         <div style="margin-top:14px;padding-top:12px;border-top:1px dashed var(--border);">
@@ -2045,7 +2046,10 @@ tr:last-child td { border-bottom: none; }
 <script>
 const EC_LO=2.2,EC_HI=2.3,PH_EC_LO=6.2,PH_EC_HI=6.3;
 const RO_PH_LO=6.0,RO_PH_HI=6.5,RO_VAR_LO=0.3,RO_VAR_HI=0.5,RO_VAR_ALERT=1.0;
-let ecRecs=[],roRecs=[],wasteRecs=[],batchRecs=[],batchTxRecs=[],harvestRecs=[],postDryRecs=[],bioRecs=[],pestRecs=[],sanCleanRecs=[],sanToolRecs=[],sanEditsRecs=[],seedInvRecs=[],flowRecs=[],destroyRecs=[],cfg={token:'',base:'',ecTbl:'',roTbl:'',wasteTbl:'',batchTbl:'',batchtxTbl:'',harvestTbl:'',postDryTbl:'',bioTbl:'',pestTbl:'',sanCleanTbl:'',sanToolTbl:'',sanEditsTbl:'',seedInvTbl:'',flowTbl:'',destroyTbl:''};
+let ecRecs=[],roRecs=[],wasteRecs=[],batchRecs=[],batchTxRecs=[],harvestRecs=[],postDryRecs=[],bioRecs=[],pestRecs=[],sanCleanRecs=[],sanToolRecs=[],sanEditsRecs=[],seedInvRecs=[],flowRecs=[],destroyRecs=[],cfg={token:'',base:'',ecTbl:'',roTbl:'',wasteTbl:'',batchTbl:'',batchtxTbl:'',harvestTbl:'',postDryTbl:'',bioTbl:'',pestTbl:'',sanCleanTbl:'',sanToolTbl:'',sanEditsTbl:'',seedInvTbl:'',flowTbl:'',destroyTbl:'',fdTasksTbl:''};
+// Dirty flag for the flower-day milestones single-row config sync. Declared up here (not next to
+// FLOWER_DAY_TASKS lower down) so updatePendingBadge can read it during boot without a TDZ error.
+let fdTasksDirty=false;
 
 // ── SANITATION ──────────────────────────────────────────────────────────────
 // Section toggle: 'cultivation' or 'sanitation'. Drives which pages are visible and which
@@ -2154,7 +2158,7 @@ function sanGetTasks(template, phase){
 
 function lsGet(k){try{return JSON.parse(localStorage.getItem(k)||'null');}catch(e){return null;}}
 function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
-function loadAll(){ecRecs=lsGet('gp-ec')||[];roRecs=lsGet('gp-ro')||[];wasteRecs=lsGet('gp-waste')||[];batchRecs=lsGet('gp-batch')||[];batchTxRecs=lsGet('gp-batchtx')||[];harvestRecs=lsGet('gp-harvest')||[];postDryRecs=lsGet('gp-postdry')||[];bioRecs=lsGet('gp-bio')||[];pestRecs=lsGet('gp-pest')||[];sanCleanRecs=lsGet('gp-sanclean')||[];sanToolRecs=lsGet('gp-santool')||[];sanEditsRecs=lsGet('gp-sanedits')||[];seedInvRecs=lsGet('gp-seedinv')||[];flowRecs=lsGet('gp-flow')||[];destroyRecs=lsGet('gp-destroy')||[];migrateSanTaskEditsToRecs();wasteRecs.forEach(r=>{if(r.type==='Vegetative waste')r.type='Vegetative Waste';});lsSet('gp-waste',wasteRecs);const s=lsGet('gp-cfg');if(s){cfg=s;applySettings();}dedupeBatchRecs();backfillHarvestedTxs();reconcileAllPackagedBatches();}
+function loadAll(){ecRecs=lsGet('gp-ec')||[];roRecs=lsGet('gp-ro')||[];wasteRecs=lsGet('gp-waste')||[];batchRecs=lsGet('gp-batch')||[];batchTxRecs=lsGet('gp-batchtx')||[];harvestRecs=lsGet('gp-harvest')||[];postDryRecs=lsGet('gp-postdry')||[];bioRecs=lsGet('gp-bio')||[];pestRecs=lsGet('gp-pest')||[];sanCleanRecs=lsGet('gp-sanclean')||[];sanToolRecs=lsGet('gp-santool')||[];sanEditsRecs=lsGet('gp-sanedits')||[];seedInvRecs=lsGet('gp-seedinv')||[];flowRecs=lsGet('gp-flow')||[];destroyRecs=lsGet('gp-destroy')||[];try{fdTasksDirty=!!lsGet('gp-fdtasks-dirty');}catch(_){}migrateSanTaskEditsToRecs();wasteRecs.forEach(r=>{if(r.type==='Vegetative waste')r.type='Vegetative Waste';});lsSet('gp-waste',wasteRecs);const s=lsGet('gp-cfg');if(s){cfg=s;applySettings();}dedupeBatchRecs();backfillHarvestedTxs();reconcileAllPackagedBatches();}
 
 // One-time migration of the previous gp-san-task-edits localStorage shape into the new
 // synced sanEditsRecs array. Runs on every boot but only does work the first time.
@@ -3163,7 +3167,7 @@ async function pullFromAirtable(opts){
   isPulling = true;
   if(opts.manual) setSyncPill('ing','Syncing…');
   try {
-    const [batches, ecs, ros, ws, txs, hs, pds, bs, ps, scs, sts, sed, siv, fls, dss] = await Promise.all([
+    const [batches, ecs, ros, ws, txs, hs, pds, bs, ps, scs, sts, sed, siv, fls, dss, fdt] = await Promise.all([
       atFetchAll(cfg.batchTbl),
       atFetchAll(cfg.ecTbl),
       atFetchAll(cfg.roTbl),
@@ -3178,7 +3182,8 @@ async function pullFromAirtable(opts){
       atFetchAll(cfg.sanEditsTbl),
       atFetchAll(cfg.seedInvTbl),
       atFetchAll(cfg.flowTbl),
-      atFetchAll(cfg.destroyTbl)
+      atFetchAll(cfg.destroyTbl),
+      atFetchAll(cfg.fdTasksTbl)
     ]);
     // Resolve linked-record refs by building recordId→Batch-ID-string lookup
     const batchIdByRecId = {};
@@ -3213,6 +3218,22 @@ async function pullFromAirtable(opts){
     summary.sanedits = mergeRemoteSanEdits(sed);
     // Seed Inventory — custom merge similar to sanedits since it's keyed on Strain.
     summary.seedinv = mergeRemoteSeedInv(siv);
+    // Flower-day milestones — a single JSON row (Key='FlowerDayMilestones'). Remote overwrites the
+    // local list ONLY when we have no unsynced local edits (fdTasksDirty); otherwise local wins and
+    // will be pushed. Last-write-wins, which is fine for a small shared config.
+    try {
+      if(!fdTasksDirty){
+        const _fdRow = (fdt||[]).find(r => ((r.fields||{})['Key']||'') === 'FlowerDayMilestones') || (fdt||[])[0];
+        if(_fdRow){
+          const _parsed = JSON.parse(((_fdRow.fields||{})['Milestones']) || '{}');
+          if(_parsed && typeof _parsed === 'object' && !Array.isArray(_parsed)){
+            FLOWER_DAY_TASKS = _parsed;
+            lsSet('gp-fdtasks', FLOWER_DAY_TASKS);
+            if(typeof fdRenderMilestones === 'function') fdRenderMilestones();
+          }
+        }
+      }
+    } catch(_){}
     // TEMP: report merge duration + per-table added/updated/skipped (remove after diagnosis).
     try { console.log('[pull] merge took '+Math.round(performance.now()-_mergeStart)+' ms; per-table:',
       JSON.stringify(Object.fromEntries(Object.entries(summary).map(([k,v])=>[k,(v.added||0)+'add/'+(v.updated||0)+'upd'+(v.skippedDupes?('/'+v.skippedDupes+'dup'):'')+(v.conflicts?('/'+v.conflicts+'conf'):'')])))); } catch(_){}
@@ -7517,7 +7538,7 @@ function roClear(){for(let i=1;i<=8;i++){document.getElementById('ro-ec-'+i).val
 
 // Pending badge
 function updatePendingBadge(){
-  const n=(ecRecs.filter(r=>!r.synced).length)+(roRecs.filter(r=>!r.synced).length)+(wasteRecs.filter(r=>!r.synced).length)+(batchRecs.filter(r=>!r.synced).length)+(batchTxRecs.filter(r=>!r.synced).length)+(harvestRecs.filter(r=>!r.synced).length)+(postDryRecs.filter(r=>!r.synced).length)+(bioRecs.filter(r=>!r.synced).length)+(pestRecs.filter(r=>!r.synced).length)+(sanCleanRecs.filter(r=>!r.synced).length)+(sanToolRecs.filter(r=>!r.synced).length)+(sanEditsRecs.filter(r=>!r.synced).length)+(seedInvRecs.filter(r=>!r.synced).length)+(flowRecs.filter(r=>!r.synced).length)+(destroyRecs.filter(r=>!r.synced).length);
+  const n=(ecRecs.filter(r=>!r.synced).length)+(roRecs.filter(r=>!r.synced).length)+(wasteRecs.filter(r=>!r.synced).length)+(batchRecs.filter(r=>!r.synced).length)+(batchTxRecs.filter(r=>!r.synced).length)+(harvestRecs.filter(r=>!r.synced).length)+(postDryRecs.filter(r=>!r.synced).length)+(bioRecs.filter(r=>!r.synced).length)+(pestRecs.filter(r=>!r.synced).length)+(sanCleanRecs.filter(r=>!r.synced).length)+(sanToolRecs.filter(r=>!r.synced).length)+(sanEditsRecs.filter(r=>!r.synced).length)+(seedInvRecs.filter(r=>!r.synced).length)+(flowRecs.filter(r=>!r.synced).length)+(destroyRecs.filter(r=>!r.synced).length)+(fdTasksDirty?1:0);
   // Update the Settings badge — Settings only appears in the Cultivation bottom nav now.
   const b=document.getElementById('pending-badge');
   if(b){ if(n>0){b.textContent=n;b.style.display='block';}else{b.style.display='none';} }
@@ -8093,7 +8114,7 @@ async function syncPending(){
   const pendingSeedInv=seedInvRecs.filter(r=>!r.synced);
   const pendingFlow=flowRecs.filter(r=>!r.synced);
   const pendingDestroy=destroyRecs.filter(r=>!r.synced);
-  const total=pendingEC.length+pendingRO.length+pendingWaste.length+pendingBatch.length+pendingBatchTx.length+pendingHarvest.length+pendingPostDry.length+pendingBio.length+pendingPest.length+pendingSanClean.length+pendingSanTool.length+pendingSanEdits.length+pendingSeedInv.length+pendingFlow.length+pendingDestroy.length;
+  const total=pendingEC.length+pendingRO.length+pendingWaste.length+pendingBatch.length+pendingBatchTx.length+pendingHarvest.length+pendingPostDry.length+pendingBio.length+pendingPest.length+pendingSanClean.length+pendingSanTool.length+pendingSanEdits.length+pendingSeedInv.length+pendingFlow.length+pendingDestroy.length+(fdTasksDirty?1:0);
   if(!total){st.style.display='block';st.style.background='var(--green-pale)';st.style.color='var(--green)';st.textContent='No pending records - everything is synced.';updatePendingBadge();return;}
   st.style.display='block';st.style.background='var(--bg2)';st.style.color='var(--text2)';st.textContent='Syncing '+total+' record(s)...';
   btn.disabled=true;setSyncPill('ing','Syncing...');
@@ -8281,14 +8302,20 @@ async function syncPending(){
     }
     lsSet('gp-destroy',destroyRecs);
   }
+  if(fdTasksDirty && cfg.fdTasksTbl){
+    try{
+      await atUpsert(cfg.fdTasksTbl, { 'Key':'FlowerDayMilestones', 'Milestones': JSON.stringify(FLOWER_DAY_TASKS) }, ['Key']);
+      fdTasksDirty=false; lsSet('gp-fdtasks-dirty', false); ok++;
+    }catch(e){fail++;lastErr='Milestones: '+e.message;}
+  }
   updatePendingBadge();
   btn.disabled=false;
   if(fail===0){setSyncPill('ok','Synced');st.style.background='var(--green-pale)';st.style.color='var(--green)';st.textContent='Done! '+ok+' record(s) synced to Airtable.';}
   else if(ok>0){setSyncPill('err','Partial sync');st.style.background='var(--amber-pale)';st.style.color='var(--amber)';st.textContent=ok+' synced, '+fail+' failed. Check connection and retry.';}
   else{setSyncPill('err','Sync failed');st.style.background='var(--red-pale)';st.style.color='var(--red)';st.textContent='Sync failed: '+(lastErr||'Check your Airtable connection.');}
 }
-function applySettings(){document.getElementById('s-token').value=cfg.token||'';document.getElementById('s-base').value=cfg.base||'';document.getElementById('s-ec').value=cfg.ecTbl||'';document.getElementById('s-ro').value=cfg.roTbl||'';document.getElementById('s-waste').value=cfg.wasteTbl||'';document.getElementById('s-batch').value=cfg.batchTbl||'';document.getElementById('s-batchtx').value=cfg.batchtxTbl||'';const sh=document.getElementById('s-harvest'); if(sh) sh.value=cfg.harvestTbl||'';const spd=document.getElementById('s-postdry'); if(spd) spd.value=cfg.postDryTbl||'';const sbio=document.getElementById('s-bio'); if(sbio) sbio.value=cfg.bioTbl||'';const spest=document.getElementById('s-pest'); if(spest) spest.value=cfg.pestTbl||'';const ssc=document.getElementById('s-sanclean'); if(ssc) ssc.value=cfg.sanCleanTbl||'';const sst=document.getElementById('s-santool'); if(sst) sst.value=cfg.sanToolTbl||'';const sse=document.getElementById('s-sanedits'); if(sse) sse.value=cfg.sanEditsTbl||'';const ssi=document.getElementById('s-seedinv'); if(ssi) ssi.value=cfg.seedInvTbl||'';const sfl=document.getElementById('s-flow'); if(sfl) sfl.value=cfg.flowTbl||'';const sde=document.getElementById('s-destroy'); if(sde) sde.value=cfg.destroyTbl||'';setSyncPill(atReady()?'ok':'off',atReady()?'Airtable connected':'Not configured');}
-async function saveSettings(){cfg={token:document.getElementById('s-token').value.trim(),base:document.getElementById('s-base').value.trim(),ecTbl:document.getElementById('s-ec').value.trim(),roTbl:document.getElementById('s-ro').value.trim(),wasteTbl:document.getElementById('s-waste').value.trim(),batchTbl:document.getElementById('s-batch').value.trim(),batchtxTbl:document.getElementById('s-batchtx').value.trim(),harvestTbl:(document.getElementById('s-harvest')?.value||'').trim(),postDryTbl:(document.getElementById('s-postdry')?.value||'').trim(),bioTbl:(document.getElementById('s-bio')?.value||'').trim(),pestTbl:(document.getElementById('s-pest')?.value||'').trim(),sanCleanTbl:(document.getElementById('s-sanclean')?.value||'').trim(),sanToolTbl:(document.getElementById('s-santool')?.value||'').trim(),sanEditsTbl:(document.getElementById('s-sanedits')?.value||'').trim(),seedInvTbl:(document.getElementById('s-seedinv')?.value||'').trim(),flowTbl:(document.getElementById('s-flow')?.value||'').trim(),destroyTbl:(document.getElementById('s-destroy')?.value||'').trim()};const st=document.getElementById('conn-status');st.style.display='block';st.style.background='var(--bg2)';st.style.color='var(--text2)';st.textContent='Testing connection...';if(!atReady()){st.textContent='Please fill in all fields.';st.style.background='var(--amber-pale)';st.style.color='var(--amber)';return;}try{const r=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+cfg.ecTbl+'?maxRecords=1',{headers:{'Authorization':'Bearer '+cfg.token}});if(r.ok){lsSet('gp-cfg',cfg);applySettings();st.textContent='Connected! Credentials saved.';st.style.background='var(--green-pale)';st.style.color='var(--green)';startAutoSync();}else{st.textContent='Failed ('+r.status+'). Check your credentials.';st.style.background='var(--red-pale)';st.style.color='var(--red)';}}catch(e){st.textContent='Could not reach Airtable. Check internet connection.';st.style.background='var(--red-pale)';st.style.color='var(--red)';}}
+function applySettings(){document.getElementById('s-token').value=cfg.token||'';document.getElementById('s-base').value=cfg.base||'';document.getElementById('s-ec').value=cfg.ecTbl||'';document.getElementById('s-ro').value=cfg.roTbl||'';document.getElementById('s-waste').value=cfg.wasteTbl||'';document.getElementById('s-batch').value=cfg.batchTbl||'';document.getElementById('s-batchtx').value=cfg.batchtxTbl||'';const sh=document.getElementById('s-harvest'); if(sh) sh.value=cfg.harvestTbl||'';const spd=document.getElementById('s-postdry'); if(spd) spd.value=cfg.postDryTbl||'';const sbio=document.getElementById('s-bio'); if(sbio) sbio.value=cfg.bioTbl||'';const spest=document.getElementById('s-pest'); if(spest) spest.value=cfg.pestTbl||'';const ssc=document.getElementById('s-sanclean'); if(ssc) ssc.value=cfg.sanCleanTbl||'';const sst=document.getElementById('s-santool'); if(sst) sst.value=cfg.sanToolTbl||'';const sse=document.getElementById('s-sanedits'); if(sse) sse.value=cfg.sanEditsTbl||'';const ssi=document.getElementById('s-seedinv'); if(ssi) ssi.value=cfg.seedInvTbl||'';const sfl=document.getElementById('s-flow'); if(sfl) sfl.value=cfg.flowTbl||'';const sde=document.getElementById('s-destroy'); if(sde) sde.value=cfg.destroyTbl||'';const sfd=document.getElementById('s-fdtasks'); if(sfd) sfd.value=cfg.fdTasksTbl||'';setSyncPill(atReady()?'ok':'off',atReady()?'Airtable connected':'Not configured');}
+async function saveSettings(){cfg={token:document.getElementById('s-token').value.trim(),base:document.getElementById('s-base').value.trim(),ecTbl:document.getElementById('s-ec').value.trim(),roTbl:document.getElementById('s-ro').value.trim(),wasteTbl:document.getElementById('s-waste').value.trim(),batchTbl:document.getElementById('s-batch').value.trim(),batchtxTbl:document.getElementById('s-batchtx').value.trim(),harvestTbl:(document.getElementById('s-harvest')?.value||'').trim(),postDryTbl:(document.getElementById('s-postdry')?.value||'').trim(),bioTbl:(document.getElementById('s-bio')?.value||'').trim(),pestTbl:(document.getElementById('s-pest')?.value||'').trim(),sanCleanTbl:(document.getElementById('s-sanclean')?.value||'').trim(),sanToolTbl:(document.getElementById('s-santool')?.value||'').trim(),sanEditsTbl:(document.getElementById('s-sanedits')?.value||'').trim(),seedInvTbl:(document.getElementById('s-seedinv')?.value||'').trim(),flowTbl:(document.getElementById('s-flow')?.value||'').trim(),destroyTbl:(document.getElementById('s-destroy')?.value||'').trim(),fdTasksTbl:(document.getElementById('s-fdtasks')?.value||'').trim()};const st=document.getElementById('conn-status');st.style.display='block';st.style.background='var(--bg2)';st.style.color='var(--text2)';st.textContent='Testing connection...';if(!atReady()){st.textContent='Please fill in all fields.';st.style.background='var(--amber-pale)';st.style.color='var(--amber)';return;}try{const r=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+cfg.ecTbl+'?maxRecords=1',{headers:{'Authorization':'Bearer '+cfg.token}});if(r.ok){lsSet('gp-cfg',cfg);applySettings();st.textContent='Connected! Credentials saved.';st.style.background='var(--green-pale)';st.style.color='var(--green)';startAutoSync();}else{st.textContent='Failed ('+r.status+'). Check your credentials.';st.style.background='var(--red-pale)';st.style.color='var(--red)';}}catch(e){st.textContent='Could not reach Airtable. Check internet connection.';st.style.background='var(--red-pale)';st.style.color='var(--red)';}}
 
 function localDate(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 const today=localDate();
@@ -10690,6 +10717,30 @@ let FLOWER_DAY_TASKS = (function(){
   return JSON.parse(JSON.stringify(FLOWER_DAY_TASKS_DEFAULT));
 })();
 function fdPersistMilestones(){ try { lsSet('gp-fdtasks', FLOWER_DAY_TASKS); } catch(_){} }
+// Push the whole milestone list to Airtable as a single upserted row (Key='FlowerDayMilestones').
+// Marks dirty up front so the change is tracked even if the push fails (Sync Pending will retry).
+async function fdSyncMilestones(){
+  fdTasksDirty = true;
+  try { lsSet('gp-fdtasks-dirty', true); } catch(_){}
+  if(typeof updatePendingBadge === 'function') updatePendingBadge();
+  if(!(cfg.fdTasksTbl && cfg.token && cfg.base)){
+    toast('Saved on this device. Set the Flower Day Milestones Table ID in Settings to sync.', 4500);
+    return false;
+  }
+  if(typeof setSyncPill === 'function') setSyncPill('ing','Syncing...');
+  try {
+    await atUpsert(cfg.fdTasksTbl, { 'Key':'FlowerDayMilestones', 'Milestones': JSON.stringify(FLOWER_DAY_TASKS) }, ['Key']);
+    fdTasksDirty = false;
+    try { lsSet('gp-fdtasks-dirty', false); } catch(_){}
+    if(typeof setSyncPill === 'function') setSyncPill('ok','Synced');
+    if(typeof updatePendingBadge === 'function') updatePendingBadge();
+    return true;
+  } catch(e){
+    if(typeof setSyncPill === 'function') setSyncPill('err','Sync failed');
+    toast('Saved locally — Airtable: '+(e.message||'sync failed'), 5000);
+    return false;
+  }
+}
 function fdRenderMilestones(){
   const el = document.getElementById('fd-milestone-list');
   if(!el) return;
@@ -10727,6 +10778,7 @@ function fdSaveMilestone(){
   const dEl=document.getElementById('fd-day'); if(dEl) dEl.value='';
   const tEl=document.getElementById('fd-tasks'); if(tEl) tEl.value='';
   toast('Milestone for F-'+day+' saved.');
+  fdSyncMilestones();
   try { const bid=(document.getElementById('summary-batch-select')||{}).value; if(bid && typeof summaryRenderFlowerAlerts==='function') summaryRenderFlowerAlerts(bid); } catch(_){}
 }
 function fdDeleteMilestone(d){
@@ -10735,6 +10787,7 @@ function fdDeleteMilestone(d){
   fdPersistMilestones();
   fdRenderMilestones();
   toast('Milestone F-'+d+' deleted.');
+  fdSyncMilestones();
   try { const bid=(document.getElementById('summary-batch-select')||{}).value; if(bid && typeof summaryRenderFlowerAlerts==='function') summaryRenderFlowerAlerts(bid); } catch(_){}
 }
 function fdResetMilestones(){
@@ -10743,6 +10796,7 @@ function fdResetMilestones(){
   fdPersistMilestones();
   fdRenderMilestones();
   toast('Milestones reset to defaults.');
+  fdSyncMilestones();
 }
 fdRenderMilestones();
 
