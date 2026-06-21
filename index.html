@@ -1808,6 +1808,16 @@ tr:last-child td { border-bottom: none; }
         <button class="btn-save" onclick="clearAllLocalData()" style="margin-top:8px;background:#7B0000;">Clear All Local Data</button>
       </div>
       <div class="settings-card">
+        <h3>Flower-day milestones</h3>
+        <p style="font-size:12px;color:var(--text2);line-height:1.5;margin:0 0 10px;">Tasks that appear as alerts on the Batch Management page when a flowering batch reaches each flower day (F-Day = days since Flower Start). Saved on this device.</p>
+        <div id="fd-milestone-list" style="margin-bottom:12px;"></div>
+        <div class="sfield"><label>Flower Day</label><input type="number" id="fd-day" min="1" step="1" placeholder="e.g. 21" /></div>
+        <div class="sfield"><label>Tasks (one per line)</label><textarea id="fd-tasks" rows="3" placeholder="Deleaf&#10;Install Trellis" style="width:100%;font-size:14px;font-family:var(--sans);border-radius:var(--radius-sm);border:1px solid var(--border);padding:10px;background:var(--card);color:var(--text);outline:none;"></textarea></div>
+        <button class="btn-save" onclick="fdSaveMilestone()">Save Milestone</button>
+        <button class="btn-save" onclick="fdResetMilestones()" style="margin-top:8px;background:var(--amber);color:#3B2A00;">Reset to Defaults</button>
+        <div style="font-size:11px;color:var(--text3);margin-top:8px;">Adding a Flower Day that already exists replaces its task list.</div>
+      </div>
+      <div class="settings-card">
         <h3>How to get your credentials</h3>
         <ol class="step-ol">
           <li>Go to airtable.com/create/tokens while logged in</li>
@@ -10661,7 +10671,7 @@ function applyDeliveredLock(b){
 // Tasks that growers need to perform on specific Flower days (F-day = days
 // since batchRec.flowerStart, inclusive of that first day). The Batch
 // Management page renders alerts based on the selected batch's current F-day.
-const FLOWER_DAY_TASKS = {
+const FLOWER_DAY_TASKS_DEFAULT = {
   7:  ['First Prune'],
   21: ['Deleaf', 'Install Trellis', 'Change spectrum to Summer'],
   23: ['Lower RH to 63%'],
@@ -10673,6 +10683,68 @@ const FLOWER_DAY_TASKS = {
   53: ['Lower CO2 to 900ppm'],
   57: ['Deleaf for harvest and remove sachets']
 };
+// Editable copy — loaded from localStorage (gp-fdtasks) so growers can add/modify milestones on
+// the Settings page; falls back to the defaults above. Per-device (not synced to Airtable).
+let FLOWER_DAY_TASKS = (function(){
+  try { const _s = lsGet('gp-fdtasks'); if(_s && typeof _s==='object' && !Array.isArray(_s) && Object.keys(_s).length) return _s; } catch(_){}
+  return JSON.parse(JSON.stringify(FLOWER_DAY_TASKS_DEFAULT));
+})();
+function fdPersistMilestones(){ try { lsSet('gp-fdtasks', FLOWER_DAY_TASKS); } catch(_){} }
+function fdRenderMilestones(){
+  const el = document.getElementById('fd-milestone-list');
+  if(!el) return;
+  const _esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+  const days = Object.keys(FLOWER_DAY_TASKS).map(Number).filter(n=>!isNaN(n)).sort((a,b)=>a-b);
+  if(!days.length){ el.innerHTML = '<div style="font-size:12px;color:var(--text3);">No milestones yet — add one below.</div>'; return; }
+  let html = '<div style="overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius-sm);background:#fff;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#f5f5f5;">'
+    + ['F-Day','Tasks','Actions'].map(h=>'<th style="padding:6px 8px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;border-bottom:1px solid var(--border);">'+h+'</th>').join('')
+    + '</tr></thead><tbody>';
+  days.forEach(d=>{
+    const tasks = FLOWER_DAY_TASKS[d] || [];
+    html += '<tr>'
+      +'<td style="padding:6px 8px;font-family:var(--mono);font-weight:700;color:var(--green);border-top:1px solid var(--border);white-space:nowrap;">F-'+d+'</td>'
+      +'<td style="padding:6px 8px;border-top:1px solid var(--border);">'+tasks.map(_esc).join('<br>')+'</td>'
+      +'<td style="padding:6px 8px;white-space:nowrap;border-top:1px solid var(--border);">'
+        +'<button type="button" onclick="fdEditMilestone('+d+')" style="font-size:11px;padding:3px 8px;margin-right:4px;border:1px solid var(--border);background:var(--bg2);border-radius:var(--radius-sm);cursor:pointer;color:var(--text2);">Edit</button>'
+        +'<button type="button" onclick="fdDeleteMilestone('+d+')" style="font-size:11px;padding:3px 8px;border:1px solid var(--red);background:var(--red-pale);border-radius:var(--radius-sm);cursor:pointer;color:var(--red);">Delete</button>'
+      +'</td></tr>';
+  });
+  html += '</tbody></table></div>';
+  el.innerHTML = html;
+}
+function fdEditMilestone(d){
+  const dayEl = document.getElementById('fd-day'); if(dayEl) dayEl.value = d;
+  const tEl = document.getElementById('fd-tasks'); if(tEl){ tEl.value = (FLOWER_DAY_TASKS[d]||[]).join('\n'); if(tEl.scrollIntoView) tEl.scrollIntoView({behavior:'smooth',block:'center'}); }
+}
+function fdSaveMilestone(){
+  const day = parseInt((document.getElementById('fd-day')||{}).value);
+  if(isNaN(day) || day < 1){ toast('Enter a valid flower day (1 or higher).'); return; }
+  const tasks = (((document.getElementById('fd-tasks')||{}).value)||'').split('\n').map(s=>s.trim()).filter(Boolean);
+  if(!tasks.length){ toast('Enter at least one task (one per line).'); return; }
+  FLOWER_DAY_TASKS[day] = tasks;
+  fdPersistMilestones();
+  fdRenderMilestones();
+  const dEl=document.getElementById('fd-day'); if(dEl) dEl.value='';
+  const tEl=document.getElementById('fd-tasks'); if(tEl) tEl.value='';
+  toast('Milestone for F-'+day+' saved.');
+  try { const bid=(document.getElementById('summary-batch-select')||{}).value; if(bid && typeof summaryRenderFlowerAlerts==='function') summaryRenderFlowerAlerts(bid); } catch(_){}
+}
+function fdDeleteMilestone(d){
+  if(!confirm('Delete the F-'+d+' milestone?')) return;
+  delete FLOWER_DAY_TASKS[d];
+  fdPersistMilestones();
+  fdRenderMilestones();
+  toast('Milestone F-'+d+' deleted.');
+  try { const bid=(document.getElementById('summary-batch-select')||{}).value; if(bid && typeof summaryRenderFlowerAlerts==='function') summaryRenderFlowerAlerts(bid); } catch(_){}
+}
+function fdResetMilestones(){
+  if(!confirm('Reset all flower-day milestones to the original defaults? This replaces your current list.')) return;
+  FLOWER_DAY_TASKS = JSON.parse(JSON.stringify(FLOWER_DAY_TASKS_DEFAULT));
+  fdPersistMilestones();
+  fdRenderMilestones();
+  toast('Milestones reset to defaults.');
+}
+fdRenderMilestones();
 
 function summaryRenderFlowerAlerts(batchId){
   // Renders today's required flower-day tasks (amber banner) and the next few
