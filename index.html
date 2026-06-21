@@ -14808,10 +14808,28 @@ function ctlsGenerateReport(){
   {
     const dEvents = destroyRecs.filter(d => d.date && d.date >= from && d.date < to);
     const r3c = x => Math.round((x||0)*1000)/1000;
-    const totVeg = r3c(dEvents.reduce((s,d)=>s+(parseFloat(d.vegWeight)||0),0));
-    const totDry = r3c(dEvents.reduce((s,d)=>s+(parseFloat(d.dryWeight)||0),0));
-    const vegLoss = r3c(dEvents.reduce((s,d)=>s+((parseFloat(d.vegRecorded)||0)-(parseFloat(d.vegWeight)||0)),0));
-    const dryLoss = r3c(dEvents.reduce((s,d)=>s+((parseFloat(d.dryRecorded)||0)-(parseFloat(d.dryWeight)||0)),0));
+    // Recorded (wet) weight is derived from the actual waste records each event covered — the
+    // reliable source — rather than the stored vegRecorded/dryRecorded fields, which can come back
+    // as 0 after an Airtable sync if the per-batch Adjustments data didn't round-trip (that bug
+    // produced a NEGATIVE drying loss). Falls back to the stored value only when the covered waste
+    // records can't be found (e.g. they were later deleted).
+    let totVeg=0, totDry=0, vegRecSum=0, dryRecSum=0;
+    dEvents.forEach(d=>{
+      totVeg += parseFloat(d.vegWeight)||0;
+      totDry += parseFloat(d.dryWeight)||0;
+      const keySet = new Set(d.coveredKeys||[]);
+      const covered = wasteRecs.filter(w => keySet.has(NAT_KEY_FN.waste(w)));
+      if(covered.length){
+        vegRecSum += covered.filter(w=>w.type==='Vegetative Waste').reduce((s,w)=>s+(parseFloat(w.weight)||0),0);
+        dryRecSum += covered.filter(w=>w.type==='Dry Waste').reduce((s,w)=>s+(parseFloat(w.weight)||0),0);
+      } else {
+        vegRecSum += parseFloat(d.vegRecorded)||0;
+        dryRecSum += parseFloat(d.dryRecorded)||0;
+      }
+    });
+    totVeg = r3c(totVeg); totDry = r3c(totDry);
+    const vegLoss = r3c(vegRecSum - totVeg);
+    const dryLoss = r3c(dryRecSum - totDry);
     html += _ctlsBlock('6. Waste Destruction', [
       {label:'Destruction events in the month', value: v(dEvents.length, 'events')},
       {label:'Vegetative waste destroyed (actual)', note:'actual weight destroyed, after drying loss', value: v(totVeg, 'kg')},
