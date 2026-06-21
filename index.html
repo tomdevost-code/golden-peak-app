@@ -1815,8 +1815,9 @@ tr:last-child td { border-bottom: none; }
         <div class="sfield"><label>Flower Day</label><input type="number" id="fd-day" min="1" step="1" placeholder="e.g. 21" /></div>
         <div class="sfield"><label>Tasks (one per line)</label><textarea id="fd-tasks" rows="3" placeholder="Deleaf&#10;Install Trellis" style="width:100%;font-size:14px;font-family:var(--sans);border-radius:var(--radius-sm);border:1px solid var(--border);padding:10px;background:var(--card);color:var(--text);outline:none;"></textarea></div>
         <button class="btn-save" onclick="fdSaveMilestone()">Save Milestone</button>
+        <button class="btn-save" onclick="fdSyncMilestones()" style="margin-top:8px;background:var(--green);">Sync to Airtable</button>
         <button class="btn-save" onclick="fdResetMilestones()" style="margin-top:8px;background:var(--amber);color:#3B2A00;">Reset to Defaults</button>
-        <div style="font-size:11px;color:var(--text3);margin-top:8px;">Adding a Flower Day that already exists replaces its task list.</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:8px;">Adding a Flower Day that already exists replaces its task list. "Sync to Airtable" uploads the current list to the shared Milestones table.</div>
       </div>
       <div class="settings-card">
         <h3>How to get your credentials</h3>
