@@ -13157,20 +13157,36 @@ function renderBatchReport(batchId){
   const fmtKg = v => (v > 0 ? (Math.round(v*1000)/1000).toFixed(3) + ' kg' : '—');
   const fmtN  = v => (v != null && v !== '' ? String(v) : '—');
 
+  // Collapse exact-duplicate records (same content, ignoring id/airtableId/synced) so the report's
+  // log sections don't show the duplicate rows that the append-only Airtable sync can create. This
+  // is display-only — it does NOT modify the underlying data (use Settings → "Clean Up Airtable
+  // Duplicates" to remove them at the source). Full-content matching is safe: distinct entries
+  // differ in at least one field and are kept.
+  const _dedupRecs = arr => {
+    const IGNORE = {id:1, airtableId:1, synced:1};
+    const seen = new Set(); const out = [];
+    arr.forEach(r => {
+      let sig = null;
+      try { const o={}; Object.keys(r).sort().forEach(k=>{ if(!IGNORE[k]) o[k]=r[k]; }); sig = JSON.stringify(o); } catch(_){ sig = null; }
+      if(sig == null){ out.push(r); return; }
+      if(!seen.has(sig)){ seen.add(sig); out.push(r); }
+    });
+    return out;
+  };
   // Gather data
   const txs       = batchTxRecs.filter(t => t.batchId === batchId).sort((a,c) => (a.date||'').localeCompare(c.date||''));
-  const ecs       = ecRecs.filter(r => r.batch === batchId).sort((a,c) => (a.date||'').localeCompare(c.date||''));
-  const ros       = roRecs.filter(r => r.batch === batchId).sort((a,c) => (a.date||'').localeCompare(c.date||''));
-  const wastes    = wasteRecs.filter(r => r.batch === batchId).sort((a,c) => (a.date||'').localeCompare(c.date||''));
-  const harvests  = harvestRecs.filter(r => r.batch === batchId).sort((a,c) => (a.date||'').localeCompare(c.date||''));
-  const postDrys  = postDryRecs.filter(r => r.batch === batchId).sort((a,c) => (a.binNumber||0) - (c.binNumber||0));
-  const bios      = bioRecs.filter(r => r.batch === batchId).sort((a,c) => (a.date||'').localeCompare(c.date||''));
-  const pests     = pestRecs.filter(r => r.batch === batchId).sort((a,c) => (a.date||'').localeCompare(c.date||''));
+  const ecs       = _dedupRecs(ecRecs.filter(r => r.batch === batchId).sort((a,c) => (a.date||'').localeCompare(c.date||'')));
+  const ros       = _dedupRecs(roRecs.filter(r => r.batch === batchId).sort((a,c) => (a.date||'').localeCompare(c.date||'')));
+  const wastes    = _dedupRecs(wasteRecs.filter(r => r.batch === batchId).sort((a,c) => (a.date||'').localeCompare(c.date||'')));
+  const harvests  = _dedupRecs(harvestRecs.filter(r => r.batch === batchId).sort((a,c) => (a.date||'').localeCompare(c.date||'')));
+  const postDrys  = _dedupRecs(postDryRecs.filter(r => r.batch === batchId).sort((a,c) => (a.binNumber||0) - (c.binNumber||0)));
+  const bios      = _dedupRecs(bioRecs.filter(r => r.batch === batchId).sort((a,c) => (a.date||'').localeCompare(c.date||'')));
+  const pests     = _dedupRecs(pestRecs.filter(r => r.batch === batchId).sort((a,c) => (a.date||'').localeCompare(c.date||'')));
   // Case-insensitive match so older records that may have a lowercased or mixed-case batch ID
   // (from legacy entry paths) still show up in the report alongside current UPPERCASE records.
   const _bidLc = (batchId||'').toString().toLowerCase();
-  const cleans    = sanCleanRecs.filter(r => ((r.batch||'').toString().toLowerCase()) === _bidLc).sort((a,c) => (a.date||'').localeCompare(c.date||'') || (a.id||0)-(c.id||0));
-  const toolCleans= sanToolRecs.filter(r => ((r.batch||'').toString().toLowerCase()) === _bidLc).sort((a,c) => (a.date||'').localeCompare(c.date||''));
+  const cleans    = _dedupRecs(sanCleanRecs.filter(r => ((r.batch||'').toString().toLowerCase()) === _bidLc).sort((a,c) => (a.date||'').localeCompare(c.date||'') || (a.id||0)-(c.id||0)));
+  const toolCleans= _dedupRecs(sanToolRecs.filter(r => ((r.batch||'').toString().toLowerCase()) === _bidLc).sort((a,c) => (a.date||'').localeCompare(c.date||'')));
 
   // Totals
   const currentQty = calcBatchQty(batchId);
