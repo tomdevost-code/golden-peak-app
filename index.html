@@ -14565,21 +14565,17 @@ function ctlsSeedsMetrics(from, to){
   // Lots received in the reporting month, split by Acquisition Type. Legacy lots without
   // the field default to Bought (brought in / purchased).
   const lotsInMonth = seedInvRecs.filter(r => _inRange(r.dateReceived, from, to));
-  const bought = lotsInMonth
-    .filter(r => (r.acquisitionType||'Bought') !== 'Produced')
-    .reduce((s,r) => s + (parseInt(r.qtyAcquired)||0), 0);
+  const _boughtLots = lotsInMonth.filter(r => (r.acquisitionType||'Bought') !== 'Produced');
+  const bought = _boughtLots.reduce((s,r) => s + (parseInt(r.qtyAcquired)||0), 0);
   // Produced = breeding-project lots produced on-site (Acquisition Type = Produced).
-  const produced = lotsInMonth
-    .filter(r => (r.acquisitionType||'Bought') === 'Produced')
-    .reduce((s,r) => s + (parseInt(r.qtyAcquired)||0), 0);
+  const _producedLots = lotsInMonth.filter(r => (r.acquisitionType||'Bought') === 'Produced');
+  const produced = _producedLots.reduce((s,r) => s + (parseInt(r.qtyAcquired)||0), 0);
   // Germinated = Seeds Germinated transactions on Seeds-genetics batches in the month.
-  const germinated = txs
-    .filter(t => t.txType === 'Seeds Germinated' && _isSeedsBatch(t.batchId))
-    .reduce((s,t) => s + (parseInt(t.qty)||0), 0);
+  const _germTx = txs.filter(t => t.txType === 'Seeds Germinated' && _isSeedsBatch(t.batchId));
+  const germinated = _germTx.reduce((s,t) => s + (parseInt(t.qty)||0), 0);
   // Not germinated — explicit waste records with Sub-Category = 'Not Germinated' on Seeds batches.
-  const notGerminated = wastes
-    .filter(w => _isSeedsBatch(w.batch) && (w.subtype||'') === 'Not Germinated')
-    .reduce((s,w) => s + (parseInt(w.plants)||0), 0);
+  const _notGermW = wastes.filter(w => _isSeedsBatch(w.batch) && (w.subtype||'') === 'Not Germinated');
+  const notGerminated = _notGermW.reduce((s,w) => s + (parseInt(w.plants)||0), 0);
   // Destroyed-seed tx — only seed-stage destroys count toward the Section 1 "Seeds destroyed"
   // metric. Once a Seeds-genetics batch advances to Veg/Flower/Drying, any plants destroyed
   // there are veg-stage losses, not seeds, and belong in the Veg-stage CTLS sections instead.
@@ -14588,26 +14584,26 @@ function ctlsSeedsMetrics(from, to){
   // batches created before the Germination phase existed). Empty plantPhase also counts —
   // batches that haven't progressed past intake are still in seed handling.
   const SEED_STAGE_PHASES = ['Germination','Seeds','Clones',''];
-  const destroyed = txs
-    .filter(t => t.txType === 'Destroyed' && _isSeedsBatch(t.batchId)
-      && SEED_STAGE_PHASES.includes(t.plantPhase||''))
-    .reduce((s,t) => s + (parseInt(t.qty)||0), 0);
+  const _destTx = txs.filter(t => t.txType === 'Destroyed' && _isSeedsBatch(t.batchId)
+      && SEED_STAGE_PHASES.includes(t.plantPhase||''));
+  const destroyed = _destTx.reduce((s,t) => s + (parseInt(t.qty)||0), 0);
   // Seeds sold — Sold tx on Seeds-genetics batches, EXCLUDING live-plant (Clone) sales.
   // Once a Seeds batch crossed to Veg, its plants are no longer seeds — those Sold txs
   // are tracked in Section 2 (Veg/Clones) instead. This keeps the seed metric scoped to
   // actual seed inventory disposals (dry-seed sales on a Seeds batch — uncommon in
   // practice, but covered for completeness).
-  const sold = txs
-    .filter(t => t.txType === 'Sold' && _isSeedsBatch(t.batchId)
-      && (t.saleStage||'') !== 'Clone')
-    .reduce((s,t) => s + (parseInt(t.qty)||0) + (parseFloat(t.weight)||0), 0);
+  const _soldTx = txs.filter(t => t.txType === 'Sold' && _isSeedsBatch(t.batchId)
+      && (t.saleStage||'') !== 'Clone');
+  const sold = _soldTx.reduce((s,t) => s + (parseInt(t.qty)||0) + (parseFloat(t.weight)||0), 0);
+  const _lotD = r => (r.lotNumber||'lot?')+' — '+(parseInt(r.qtyAcquired)||0)+' seeds'+(r.strain?' ('+r.strain+')':'')+(r.dateReceived?' · '+r.dateReceived:'');
+  const _txD  = t => t.batchId+' — '+(parseInt(t.qty)||0)+(t.date?' · '+t.date:'');
   return {
-    bought: bought || null,
-    produced: produced || null,
-    germinated: germinated || null,
-    notGerminated,
-    sold: sold || null,
-    destroyed
+    bought: bought || null, boughtDetail: _boughtLots.map(_lotD),
+    produced: produced || null, producedDetail: _producedLots.map(_lotD),
+    germinated: germinated || null, germinatedDetail: _germTx.map(_txD),
+    notGerminated, notGerminatedDetail: _notGermW.map(w => w.batch+' — '+(parseInt(w.plants)||0)+' plants'+(w.date?' · '+w.date:'')),
+    sold: sold || null, soldDetail: _soldTx.map(t => t.batchId+' — '+(parseInt(t.qty)||0)+' / '+(parseFloat(t.weight)||0).toFixed(3)+' kg'+(t.date?' · '+t.date:'')),
+    destroyed, destroyedDetail: _destTx.map(_txD)
   };
 }
 
@@ -14675,26 +14671,24 @@ function ctlsVegMetrics(from, to){
   // geneticsSource is 'Clones-External' AND this is the FIRST Produced/Received for that batch
   // (subsequent P/R on the same batch would be cuttings from this batch, not new external imports).
   let broughtInExternal = 0;
+  const _broughtDetail = [];
   batchRecs.forEach(b => {
     if(!b || b.type) return;
     if(!_isExternalCloneBatch(b.batchId)) return;
     const firstPR = batchTxRecs
       .filter(t => t.batchId === b.batchId && t.txType === 'Produced/Received')
       .sort((a,c) => (a.date||'').localeCompare(c.date||'') || (a.id||0)-(c.id||0))[0];
-    if(firstPR && _inRange(firstPR.date, from, to)) broughtInExternal += (parseInt(firstPR.qty)||0);
+    if(firstPR && _inRange(firstPR.date, from, to)){ broughtInExternal += (parseInt(firstPR.qty)||0); _broughtDetail.push(b.batchId+' — '+(parseInt(firstPR.qty)||0)+' plants'+(firstPR.date?' · '+firstPR.date:'')); }
   });
   // Moved to Moms — straight tx count.
-  const movedToMoms = txs
-    .filter(t => t.txType === 'Moved to Moms')
-    .reduce((s,t) => s + (parseInt(t.qty)||0), 0);
+  const _movedTx = txs.filter(t => t.txType === 'Moved to Moms');
+  const movedToMoms = _movedTx.reduce((s,t) => s + (parseInt(t.qty)||0), 0);
   // Destroyed (across all phases — split out flower destroys in Section 3 below).
-  const destroyedAll = txs
-    .filter(t => t.txType === 'Destroyed')
-    .reduce((s,t) => s + (parseInt(t.qty)||0), 0);
+  const _destAllTx = txs.filter(t => t.txType === 'Destroyed');
+  const destroyedAll = _destAllTx.reduce((s,t) => s + (parseInt(t.qty)||0), 0);
   // Destroyed specifically in Veg/Clone/Germination phase — read from the destroy tx's plantPhase.
-  const destroyedVeg = txs
-    .filter(t => t.txType === 'Destroyed' && ['Clones','Veg','Seeds','Germination'].includes(t.plantPhase||''))
-    .reduce((s,t) => s + (parseInt(t.qty)||0), 0);
+  const _destVegTx = txs.filter(t => t.txType === 'Destroyed' && ['Clones','Veg','Seeds','Germination'].includes(t.plantPhase||''));
+  const destroyedVeg = _destVegTx.reduce((s,t) => s + (parseInt(t.qty)||0), 0);
   // Waste records for cross-reference (the destroy txs are auto-created from these).
   const vegWastes = _wastesInRange(from, to).filter(w => (w.type||'') === 'Vegetative Waste');
   const vegWasteCount = vegWastes.length;
@@ -14709,30 +14703,28 @@ function ctlsVegMetrics(from, to){
   // a Seeds-genetics batch that advanced to Veg and then sold live plants belongs here
   // (those plants are no longer seeds, they're Veg/Clone living plants). The Seeds-batch
   // exclusion that used to live here has been removed so cross-origin sales aren't lost.
-  const soldClones = txs
-    .filter(t => t.txType === 'Sold' && (t.saleStage||'') === 'Clone')
-    .reduce((s,t) => s + (parseInt(t.qty)||0), 0);
+  const _soldTx = txs.filter(t => t.txType === 'Sold' && (t.saleStage||'') === 'Clone');
+  const soldClones = _soldTx.reduce((s,t) => s + (parseInt(t.qty)||0), 0);
   // Sent to lab — total plant count across Sent to Lab tx in the month.
-  const sentToLabPlants = txs
-    .filter(t => t.txType === 'Sent to Lab')
-    .reduce((s,t) => s + (parseInt(t.qty)||0), 0);
+  const _labTx = txs.filter(t => t.txType === 'Sent to Lab');
+  const sentToLabPlants = _labTx.reduce((s,t) => s + (parseInt(t.qty)||0), 0);
   // Leaf testing weight — Sent to Lab tx with Material Type=Leaf.
-  const leafTestingWeight = txs
-    .filter(t => t.txType === 'Sent to Lab' && (t.labMaterialType||'') === 'Leaf')
-    .reduce((s,t) => s + (parseFloat(t.weight)||0), 0);
+  const _leafTx = txs.filter(t => t.txType === 'Sent to Lab' && (t.labMaterialType||'') === 'Leaf');
+  const leafTestingWeight = _leafTx.reduce((s,t) => s + (parseFloat(t.weight)||0), 0);
+  const _txQtyD  = t => t.batchId+' — '+(parseInt(t.qty)||0)+' plants'+(t.plantPhase?' ['+t.plantPhase+']':'')+(t.date?' · '+t.date:'');
   return {
     produced,
     producedBreakdown,
-    broughtInExternal,
-    movedToMoms,
-    movedFromMoms: movedToMoms, // every Moved-to-Moms decrements from a source; same count from the other side
-    destroyedVeg,
-    destroyedAll,
-    vegWasteCount,
-    vegWasteWeight: vegWasteWeight || null,
-    sold: soldClones || null,
-    sentToLab: sentToLabPlants || null,
-    leafTestingWeight: leafTestingWeight || null
+    broughtInExternal, broughtInExternalDetail: _broughtDetail,
+    movedToMoms, movedToMomsDetail: _movedTx.map(_txQtyD),
+    movedFromMoms: movedToMoms, movedFromMomsDetail: _movedTx.map(_txQtyD), // same txs, viewed from source side
+    destroyedVeg, destroyedVegDetail: _destVegTx.map(_txQtyD),
+    destroyedAll, destroyedAllDetail: _destAllTx.map(_txQtyD),
+    vegWasteCount, vegWasteCountDetail: vegWastes.map(w => w.batch+' — '+(w.subtype||'')+' '+(parseFloat(w.weight)||0).toFixed(3)+' kg'+(w.date?' · '+w.date:'')),
+    vegWasteWeight: vegWasteWeight || null, vegWasteWeightDetail: vegWastes.map(w => w.batch+' — '+(parseFloat(w.weight)||0).toFixed(3)+' kg ('+(w.subtype||'')+(w.date?', '+w.date:'')+')'),
+    sold: soldClones || null, soldDetail: _soldTx.map(_txQtyD),
+    sentToLab: sentToLabPlants || null, sentToLabDetail: _labTx.map(t => t.batchId+' — '+(parseInt(t.qty)||0)+' plants'+(t.labMaterialType?' ('+t.labMaterialType+')':'')+(t.date?' · '+t.date:'')),
+    leafTestingWeight: leafTestingWeight || null, leafTestingWeightDetail: _leafTx.map(t => t.batchId+' — '+(parseFloat(t.weight)||0).toFixed(3)+' kg'+(t.date?' · '+t.date:''))
   };
 }
 
@@ -14750,6 +14742,7 @@ function ctlsFlowerMetrics(from, to){
   //   • Fallback (no distribution set): total batch qty at flowerStart, summed over BOTH
   //     intake tx types (Produced/Received for clones-genetics and Seeds Germinated for
   //     seeds-genetics) minus seed-stage destroys / moves up to that date.
+  const _flipDetail = [];
   const flippedToFlowerThisMonth = batchRecs.reduce((sum, b) => {
     if(!b || b.type) return sum;
     if(!b.flowerStart || !_inRange(b.flowerStart, from, to)) return sum;
@@ -14784,10 +14777,12 @@ function ctlsFlowerMetrics(from, to){
         && ((t.plantPhase||'') === 'Flower' || /Flower/i.test(t.room||'') || (t.room||'') === 'Tent'))
       .reduce((s,t) => s + (parseInt(t.qty)||0), 0);
     qtyAtFlip += _destroyedInFlowerThisMonth;
+    if(qtyAtFlip > 0) _flipDetail.push(b.batchId+' — '+qtyAtFlip+' plants'+(b.flowerStart?' · flipped '+b.flowerStart:''));
     return sum + qtyAtFlip;
   }, 0);
   // Already in flower from previous month = sum across batches whose flowerStart < from
   // and harvestDate >= from (still flowering at start of month).
+  const _alreadyDetail = [];
   const alreadyInFlower = batchRecs.reduce((sum, b) => {
     if(!b || b.type) return sum;
     if(!b.flowerStart) return sum;
@@ -14803,30 +14798,40 @@ function ctlsFlowerMetrics(from, to){
       if(t.txType === 'Sold' || t.txType === 'Phase Advance' || t.txType === 'Phase Change') return;
       if(t.txType === 'Produced/Received' || t.txType === 'Seeds Germinated') qty += q; else qty -= q;
     });
+    if(qty > 0) _alreadyDetail.push(b.batchId+' — '+Math.max(0,qty)+' plants (flower start '+b.flowerStart+')');
     return sum + Math.max(0, qty);
   }, 0);
   // Destroyed during flower = Destroyed tx where plantPhase=Flower OR room is a flower room.
-  const destroyedFlower = txs
-    .filter(t => t.txType === 'Destroyed' && ((t.plantPhase||'') === 'Flower' || /Flower/i.test(t.room||'') || (t.room||'') === 'Tent'))
-    .reduce((s,t) => s + (parseInt(t.qty)||0), 0);
+  const _destFlowerTx = txs.filter(t => t.txType === 'Destroyed' && ((t.plantPhase||'') === 'Flower' || /Flower/i.test(t.room||'') || (t.room||'') === 'Tent'));
+  const destroyedFlower = _destFlowerTx.reduce((s,t) => s + (parseInt(t.qty)||0), 0);
   // Harvested = sum of Harvested tx qty in the month.
-  const harvested = txs
-    .filter(t => t.txType === 'Harvested')
-    .reduce((s,t) => s + (parseInt(t.qty)||0), 0);
+  const _harvTx = txs.filter(t => t.txType === 'Harvested');
+  const harvested = _harvTx.reduce((s,t) => s + (parseInt(t.qty)||0), 0);
   // Plants CURRENTLY in flower — a point-in-time count (as of report generation), across all
   // batches. Non-mom: sum of non-Veg roomDistribution counts. Mom: the Flower cohort bucket.
+  const _currentDetail = [];
   const currentInFlower = batchRecs.reduce((sum, b) => {
     if(!b || b.type) return sum;
     if(isMotherBatch(b.batchId)){
       const c = (typeof ensureMomPhaseCounts === 'function') ? ensureMomPhaseCounts(b) : (b.momPhaseCounts||null);
-      return sum + (c ? (parseInt(c.Flower)||0) : 0);
+      const fn = c ? (parseInt(c.Flower)||0) : 0;
+      if(fn > 0) _currentDetail.push(b.batchId+' — '+fn+' plants (mom Flower cohort)');
+      return sum + fn;
     }
     let n = 0;
     const dist = b.roomDistribution || {};
     Object.keys(dist).forEach(rm => { if(rm !== 'Veg') n += (parseInt(dist[rm])||0); });
+    if(n > 0) _currentDetail.push(b.batchId+' — '+n+' plants ('+Object.keys(dist).filter(rm=>rm!=='Veg'&&(parseInt(dist[rm])||0)>0).map(rm=>rm+' '+dist[rm]).join(', ')+')');
     return sum + n;
   }, 0);
-  return { flippedToFlowerThisMonth, alreadyInFlower, destroyedFlower, harvested, currentInFlower };
+  const _txQtyD = t => t.batchId+' — '+(parseInt(t.qty)||0)+' plants'+(t.room?' ['+t.room+']':'')+(t.date?' · '+t.date:'');
+  return {
+    flippedToFlowerThisMonth, flippedDetail:_flipDetail,
+    alreadyInFlower, alreadyDetail:_alreadyDetail,
+    destroyedFlower, destroyedFlowerDetail:_destFlowerTx.map(_txQtyD),
+    harvested, harvestedDetail:_harvTx.map(_txQtyD),
+    currentInFlower, currentDetail:_currentDetail
+  };
 }
 
 // SECTION 4 — Fresh Cannabis (wet) weights
@@ -14838,27 +14843,32 @@ function ctlsFreshMetrics(from, to){
   // Defaults missing-sampleType records (older data) to 'Sold' so totals stay correct.
   const postDrys = _postDrysInRange(from, to);
   const postDryTotal     = postDrys.reduce((s,p) => s + (parseFloat(p.netWeight)||0), 0);
-  const postDrySold      = postDrys.filter(p => (p.sampleType||'Sold') === 'Sold').reduce((s,p) => s + (parseFloat(p.netWeight)||0), 0);
-  const postDryRetention = postDrys.filter(p => (p.sampleType||'') === 'Retention').reduce((s,p) => s + (parseFloat(p.netWeight)||0), 0);
-  const postDryCOA       = postDrys.filter(p => (p.sampleType||'') === 'COA').reduce((s,p) => s + (parseFloat(p.netWeight)||0), 0);
-  const postDryTesting   = postDrys.filter(p => (p.sampleType||'') === 'Testing').reduce((s,p) => s + (parseFloat(p.netWeight)||0), 0);
+  const _pdSold      = postDrys.filter(p => (p.sampleType||'Sold') === 'Sold');
+  const _pdRetention = postDrys.filter(p => (p.sampleType||'') === 'Retention');
+  const _pdCOA       = postDrys.filter(p => (p.sampleType||'') === 'COA');
+  const _pdTesting   = postDrys.filter(p => (p.sampleType||'') === 'Testing');
+  const postDrySold      = _pdSold.reduce((s,p) => s + (parseFloat(p.netWeight)||0), 0);
+  const postDryRetention = _pdRetention.reduce((s,p) => s + (parseFloat(p.netWeight)||0), 0);
+  const postDryCOA       = _pdCOA.reduce((s,p) => s + (parseFloat(p.netWeight)||0), 0);
+  const postDryTesting   = _pdTesting.reduce((s,p) => s + (parseFloat(p.netWeight)||0), 0);
   const postDrySampleTotal = postDryRetention + postDryCOA + postDryTesting;
   // Loss on drying — difference between wet and post-dry. Negative-or-positive depending on data.
   const lossOnDrying = (wetTotal && postDryTotal) ? (wetTotal - postDryTotal) : null;
   // Fresh sold to processor — Sold tx in the month with Sale Stage = Fresh.
-  const soldFreshToProcessor = _txsInRange(from, to)
-    .filter(t => t.txType === 'Sold' && (t.saleStage||'') === 'Fresh')
-    .reduce((s,t) => s + (parseFloat(t.weight)||0), 0);
+  const _freshTx = _txsInRange(from, to).filter(t => t.txType === 'Sold' && (t.saleStage||'') === 'Fresh');
+  const soldFreshToProcessor = _freshTx.reduce((s,t) => s + (parseFloat(t.weight)||0), 0);
+  const _harvD = h => h.batch+' — '+(parseFloat(h.netWeight)||0).toFixed(3)+' kg'+(h.room?' ['+h.room+']':'')+(h.date?' · '+h.date:'');
+  const _pdD   = p => p.batch+' — '+(parseFloat(p.netWeight)||0).toFixed(3)+' kg (container '+(p.binNumber||'?')+(p.date?', '+p.date:'')+')';
   return {
-    wetTotal,
-    postDryTotal,
-    postDrySold,
-    postDryRetention,
-    postDryCOA,
-    postDryTesting,
+    wetTotal, wetTotalDetail: harvests.map(_harvD),
+    postDryTotal, postDryTotalDetail: postDrys.map(p => _pdD(p)+' ['+(p.sampleType||'Sold')+']'),
+    postDrySold, postDrySoldDetail: _pdSold.map(_pdD),
+    postDryRetention, postDryRetentionDetail: _pdRetention.map(_pdD),
+    postDryCOA, postDryCOADetail: _pdCOA.map(_pdD),
+    postDryTesting, postDryTestingDetail: _pdTesting.map(_pdD),
     postDrySampleTotal,
-    lossOnDrying,
-    soldFreshToProcessor: soldFreshToProcessor || null
+    lossOnDrying, lossOnDryingDetail: (wetTotal && postDryTotal) ? ['Wet harvest: '+wetTotal.toFixed(3)+' kg', 'Post-dry total: '+postDryTotal.toFixed(3)+' kg', 'Loss = '+(wetTotal-postDryTotal).toFixed(3)+' kg'] : [],
+    soldFreshToProcessor: soldFreshToProcessor || null, soldFreshToProcessorDetail: _freshTx.map(t => t.batchId+' — '+(parseFloat(t.weight)||0).toFixed(3)+' kg'+(t.date?' · '+t.date:''))
   };
 }
 
@@ -14866,40 +14876,59 @@ function ctlsFreshMetrics(from, to){
 function ctlsDryMetrics(from, to){
   const txs = _txsInRange(from, to);
   // Bill of lading / Quantity Sold = sum of weight on Sold tx WHERE Sale Stage = Dry (or empty for backward compat).
-  const soldWeight = txs
-    .filter(t => t.txType === 'Sold' && (!t.saleStage || t.saleStage === 'Dry'))
-    .reduce((s,t) => s + (parseFloat(t.weight)||0), 0);
+  const _soldTx = txs.filter(t => t.txType === 'Sold' && (!t.saleStage || t.saleStage === 'Dry'));
+  const soldWeight = _soldTx.reduce((s,t) => s + (parseFloat(t.weight)||0), 0);
   // Dry Waste = sum of Weight (kg) on Waste records where Waste Type = Dry Waste in the month.
-  const dryWasteWeight = _wastesInRange(from, to)
-    .filter(w => (w.type||'') === 'Dry Waste')
-    .reduce((s,w) => s + (parseFloat(w.weight)||0), 0);
+  const _dryW = _wastesInRange(from, to).filter(w => (w.type||'') === 'Dry Waste');
+  const dryWasteWeight = _dryW.reduce((s,w) => s + (parseFloat(w.weight)||0), 0);
   // Processor sample weight — Sent to Lab tx where Destination = Processor and Material = Dry Flower.
-  const processorSampleWeight = txs
-    .filter(t => t.txType === 'Sent to Lab' && (t.labDestType||'') === 'Processor' && (t.labMaterialType||'') === 'Dry Flower')
-    .reduce((s,t) => s + (parseFloat(t.weight)||0), 0);
+  const _procTx = txs.filter(t => t.txType === 'Sent to Lab' && (t.labDestType||'') === 'Processor' && (t.labMaterialType||'') === 'Dry Flower');
+  const processorSampleWeight = _procTx.reduce((s,t) => s + (parseFloat(t.weight)||0), 0);
   // Cross-ref fresh section for sample weights + loss on drying.
   const fresh = ctlsFreshMetrics(from, to);
+  const _wD = t => t.batchId+' — '+(parseFloat(t.weight)||0).toFixed(3)+' kg'+(t.date?' · '+t.date:'');
   return {
-    retentionSampleWeight: fresh.postDryRetention,                  // from post-dry Sample Type
-    testingSampleWeight:   fresh.postDryCOA + fresh.postDryTesting, // COA + Testing roll up to "testing samples"
-    processorSampleWeight: processorSampleWeight || null,
-    soldWeight,
-    dryWasteWeight,
-    lossOnDrying: fresh.lossOnDrying
+    retentionSampleWeight: fresh.postDryRetention, retentionSampleWeightDetail: fresh.postDryRetentionDetail,
+    testingSampleWeight:   fresh.postDryCOA + fresh.postDryTesting, testingSampleWeightDetail: (fresh.postDryCOADetail||[]).concat(fresh.postDryTestingDetail||[]),
+    processorSampleWeight: processorSampleWeight || null, processorSampleWeightDetail: _procTx.map(_wD),
+    soldWeight, soldWeightDetail: _soldTx.map(_wD),
+    dryWasteWeight, dryWasteWeightDetail: _dryW.map(w => w.batch+' — '+(parseFloat(w.weight)||0).toFixed(3)+' kg'+(w.room?' ['+w.room+']':'')+(w.date?' · '+w.date:'')),
+    lossOnDrying: fresh.lossOnDrying, lossOnDryingDetail: fresh.lossOnDryingDetail
   };
 }
 
 // Build a single-section block: title + a 2-column key/value table.
+let _ctlsDetailSeq = 0;
+function ctlsToggleDetail(id){
+  const row = document.getElementById(id);
+  const c = document.getElementById(id+'_c');
+  if(!row) return;
+  const show = row.style.display === 'none';
+  row.style.display = show ? '' : 'none';
+  if(c) c.textContent = show ? '▾' : '▸';
+}
 function _ctlsBlock(title, rows){
   let html = '<div style="border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:14px;background:#fff;">';
   html += '<div style="font-size:12px;font-weight:700;color:var(--green);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:10px;border-bottom:1px solid var(--border);padding-bottom:6px;">'+title+'</div>';
   html += '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
   rows.forEach(r => {
     const isGap = r.value === '—' && r.gap;
-    html += '<tr style="border-top:1px solid var(--bg2);">'
-         +    '<td style="padding:6px 8px;color:var(--text2);width:65%;">'+r.label+(r.note?' <span style="font-size:10px;color:var(--text3);">'+r.note+'</span>':'')+'</td>'
+    const hasDetail = Array.isArray(r.detail) && r.detail.length;
+    const rid = 'ctlsd_'+(_ctlsDetailSeq++);
+    const caret = hasDetail ? '<span id="'+rid+'_c" style="color:var(--text3);font-size:10px;margin-right:5px;display:inline-block;width:8px;">▸</span>' : '<span style="display:inline-block;width:13px;"></span>';
+    const rowAttr = hasDetail
+      ? ' onclick="ctlsToggleDetail(\''+rid+'\')" style="border-top:1px solid var(--bg2);cursor:pointer;" title="Click to see the records behind this number"'
+      : ' style="border-top:1px solid var(--bg2);"';
+    html += '<tr'+rowAttr+'>'
+         +    '<td style="padding:6px 8px;color:var(--text2);width:65%;">'+caret+r.label+(r.note?' <span style="font-size:10px;color:var(--text3);">'+r.note+'</span>':'')+'</td>'
          +    '<td style="padding:6px 8px;font-family:var(--mono);font-weight:600;color:'+(isGap?'var(--text3)':'var(--text)')+';text-align:right;">'+r.value+(isGap?' <span style="font-size:9px;color:var(--amber);font-weight:400;text-transform:uppercase;">gap</span>':'')+'</td>'
          + '</tr>';
+    if(hasDetail){
+      html += '<tr id="'+rid+'" style="display:none;"><td colspan="2" style="padding:2px 8px 8px 26px;background:var(--bg2);">'
+           +    '<div style="font-size:10px;color:var(--text3);font-family:var(--mono);line-height:1.7;">'
+           +      r.detail.map(d=>'• '+d).join('<br>')
+           +    '</div></td></tr>';
+    }
   });
   html += '</table></div>';
   return html;
@@ -14944,63 +14973,58 @@ function ctlsGenerateReport(){
 
   // Section 1 — Seeds
   html += _ctlsBlock('1. Seeds', [
-    {label:'Bought seeds', note:'lots received this month · Acquisition Type = Brought In / Purchased · sum of Quantity Acquired', value: v(seeds.bought, 'seeds')},
-    {label:'Seeds produced', note:'lots received this month · Acquisition Type = Produced On-Site (breeding) · sum of Quantity Acquired', value: v(seeds.produced, 'seeds')},
-    {label:'Quantity germinated', note:'sum of Seeds Germinated transactions', value: v(seeds.germinated, 'seeds')},
-    {label:'Quantity not germinated', note:'Veg Waste · Sub-Category = Not Germinated', value: v(seeds.notGerminated, 'seeds')},
-    {label:'Seeds sold', value: v(seeds.sold, 'seeds')},
-    {label:'Seeds destroyed (all reasons)', value: v(seeds.destroyed, 'seeds')}
+    {label:'Bought seeds', note:'lots received this month · Acquisition Type = Brought In / Purchased · sum of Quantity Acquired', value: v(seeds.bought, 'seeds'), detail:seeds.boughtDetail},
+    {label:'Seeds produced', note:'lots received this month · Acquisition Type = Produced On-Site (breeding) · sum of Quantity Acquired', value: v(seeds.produced, 'seeds'), detail:seeds.producedDetail},
+    {label:'Quantity germinated', note:'sum of Seeds Germinated transactions', value: v(seeds.germinated, 'seeds'), detail:seeds.germinatedDetail},
+    {label:'Quantity not germinated', note:'Veg Waste · Sub-Category = Not Germinated', value: v(seeds.notGerminated, 'seeds'), detail:seeds.notGerminatedDetail},
+    {label:'Seeds sold', value: v(seeds.sold, 'seeds'), detail:seeds.soldDetail},
+    {label:'Seeds destroyed (all reasons)', value: v(seeds.destroyed, 'seeds'), detail:seeds.destroyedDetail}
   ]);
 
   // Section 2 — Veg & Clones
-  const _prodDetail = (veg.producedBreakdown && veg.producedBreakdown.length)
-    ? '<div style="font-size:10px;color:var(--text3);margin-top:4px;line-height:1.6;font-family:var(--mono);">'
-      + veg.producedBreakdown.map(p => '• '+p.batch+' — '+p.qty+' plant'+(p.qty===1?'':'s')+' ('+p.source+(p.date?', '+p.date:'')+')').join('<br>')
-      + '<br><strong>Total: '+veg.produced+'</strong></div>'
-    : '<div style="font-size:10px;color:var(--text3);margin-top:4px;">No producing transactions this month.</div>';
+  const _prodDetail = (veg.producedBreakdown||[]).map(p => p.batch+' — '+p.qty+' plant'+(p.qty===1?'':'s')+' ('+p.source+(p.date?', '+p.date:'')+')');
   html += _ctlsBlock('2. Veg Plants &amp; Clones', [
-    {label:'Quantity produced (Clones-Internal cuttings + Seeds advanced to Veg + S-batch clones)', value: v(veg.produced, 'plants')},
-    {label:'<span style="color:var(--text3);font-size:11px;">↳ Breakdown</span>'+_prodDetail, value: ''},
-    {label:'Brought in from other producer (Clones-External)', value: v(veg.broughtInExternal, 'plants')},
-    {label:'Moved to Moms', value: v(veg.movedToMoms, 'plants')},
-    {label:'Moved from Moms (= count above, taken from mom source)', value: v(veg.movedFromMoms, 'plants')},
-    {label:'Destroyed in Veg/Clone phase', value: v(veg.destroyedVeg, 'plants')},
-    {label:'Destroyed (all phases — cross-check vs Section 3)', value: v(veg.destroyedAll, 'plants')},
-    {label:'Vegetative Waste records in the month', value: v(veg.vegWasteCount, 'records')},
-    {label:'Vegetative Waste weight', note:'sum of Weight (kg) across all Veg Waste records in the month', value: v(veg.vegWasteWeight, 'kg')},
-    {label:'Sold (clones/Veg)', note:'Sold tx · Sale Stage = Live Plants — includes both Clones-phase and Veg-phase live-plant sales', value: v(veg.sold, 'plants')},
-    {label:'Sent to lab / testing (R&amp;D)', note:'Sent to Lab tx · plant count', value: v(veg.sentToLab, 'plants')},
-    {label:'Weight of leaf material sent to labs', note:'Sent to Lab tx · Material = Leaf', value: v(veg.leafTestingWeight, 'kg')}
+    {label:'Quantity produced (Clones-Internal cuttings + Seeds advanced to Veg + S-batch clones)', value: v(veg.produced, 'plants'), detail:_prodDetail},
+    {label:'Brought in from other producer (Clones-External)', value: v(veg.broughtInExternal, 'plants'), detail:veg.broughtInExternalDetail},
+    {label:'Moved to Moms', value: v(veg.movedToMoms, 'plants'), detail:veg.movedToMomsDetail},
+    {label:'Moved from Moms (= count above, taken from mom source)', value: v(veg.movedFromMoms, 'plants'), detail:veg.movedFromMomsDetail},
+    {label:'Destroyed in Veg/Clone phase', value: v(veg.destroyedVeg, 'plants'), detail:veg.destroyedVegDetail},
+    {label:'Destroyed (all phases — cross-check vs Section 3)', value: v(veg.destroyedAll, 'plants'), detail:veg.destroyedAllDetail},
+    {label:'Vegetative Waste records in the month', value: v(veg.vegWasteCount, 'records'), detail:veg.vegWasteCountDetail},
+    {label:'Vegetative Waste weight', note:'sum of Weight (kg) across all Veg Waste records in the month', value: v(veg.vegWasteWeight, 'kg'), detail:veg.vegWasteWeightDetail},
+    {label:'Sold (clones/Veg)', note:'Sold tx · Sale Stage = Live Plants — includes both Clones-phase and Veg-phase live-plant sales', value: v(veg.sold, 'plants'), detail:veg.soldDetail},
+    {label:'Sent to lab / testing (R&amp;D)', note:'Sent to Lab tx · plant count', value: v(veg.sentToLab, 'plants'), detail:veg.sentToLabDetail},
+    {label:'Weight of leaf material sent to labs', note:'Sent to Lab tx · Material = Leaf', value: v(veg.leafTestingWeight, 'kg'), detail:veg.leafTestingWeightDetail}
   ]);
 
   // Section 3 — Whole Plant (Flower)
   html += _ctlsBlock('3. Whole Cannabis Plants (Flowering)', [
-    {label:'Flipped to Flower during the month', note:'across all batches', value: v(flower.flippedToFlowerThisMonth, 'plants')},
-    {label:'Already in Flower from previous month', note:'snapshot as of '+range.from, value: v(flower.alreadyInFlower, 'plants')},
-    {label:'Destroyed/died during flowering', value: v(flower.destroyedFlower, 'plants')},
-    {label:'Harvested / processed', note:'consolidated Harvested tx', value: v(flower.harvested, 'plants')},
-    {label:'Total plants currently in flower', note:'point-in-time count across all batches, as of report generation', value: v(flower.currentInFlower, 'plants')}
+    {label:'Flipped to Flower during the month', note:'across all batches', value: v(flower.flippedToFlowerThisMonth, 'plants'), detail:flower.flippedDetail},
+    {label:'Already in Flower from previous month', note:'snapshot as of '+range.from, value: v(flower.alreadyInFlower, 'plants'), detail:flower.alreadyDetail},
+    {label:'Destroyed/died during flowering', value: v(flower.destroyedFlower, 'plants'), detail:flower.destroyedFlowerDetail},
+    {label:'Harvested / processed', note:'consolidated Harvested tx', value: v(flower.harvested, 'plants'), detail:flower.harvestedDetail},
+    {label:'Total plants currently in flower', note:'point-in-time count across all batches, as of report generation', value: v(flower.currentInFlower, 'plants'), detail:flower.currentDetail}
   ]);
 
   // Section 4 — Fresh Cannabis (wet)
   html += _ctlsBlock('4. Fresh Cannabis (wet)', [
-    {label:'Total harvested weight (wet)', note:'sum of Harvest Log net weights', value: v(fresh.wetTotal, 'kg')},
-    {label:'Post-drying total weight', note:'all containers, all sample types', value: v(fresh.postDryTotal, 'kg')},
-    {label:'  — Sold inventory weight', note:'containers tagged Sold', value: v(fresh.postDrySold, 'kg')},
-    {label:'  — Retention sample weight', note:'containers tagged Retention', value: v(fresh.postDryRetention, 'kg')},
-    {label:'  — COA sample weight', note:'containers tagged COA', value: v(fresh.postDryCOA, 'kg')},
-    {label:'Loss on drying (wet − post-dry)', value: v(fresh.lossOnDrying, 'kg')},
-    {label:'Fresh cannabis sold to processor', note:'Sold tx · Sale Stage = Fresh', value: v(fresh.soldFreshToProcessor, 'kg')}
+    {label:'Total harvested weight (wet)', note:'sum of Harvest Log net weights', value: v(fresh.wetTotal, 'kg'), detail:fresh.wetTotalDetail},
+    {label:'Post-drying total weight', note:'all containers, all sample types', value: v(fresh.postDryTotal, 'kg'), detail:fresh.postDryTotalDetail},
+    {label:'  — Sold inventory weight', note:'containers tagged Sold', value: v(fresh.postDrySold, 'kg'), detail:fresh.postDrySoldDetail},
+    {label:'  — Retention sample weight', note:'containers tagged Retention', value: v(fresh.postDryRetention, 'kg'), detail:fresh.postDryRetentionDetail},
+    {label:'  — COA sample weight', note:'containers tagged COA', value: v(fresh.postDryCOA, 'kg'), detail:fresh.postDryCOADetail},
+    {label:'Loss on drying (wet − post-dry)', value: v(fresh.lossOnDrying, 'kg'), detail:fresh.lossOnDryingDetail},
+    {label:'Fresh cannabis sold to processor', note:'Sold tx · Sale Stage = Fresh', value: v(fresh.soldFreshToProcessor, 'kg'), detail:fresh.soldFreshToProcessorDetail}
   ]);
 
   // Section 5 — Dry Cannabis (weights)
   html += _ctlsBlock('5. Dry Cannabis (weights)', [
-    {label:'Retention sample weight', note:'from Post-Drying Sample Type = Retention', value: v(dry.retentionSampleWeight, 'kg')},
-    {label:'Weight sent for testing samples', note:'Post-Drying Sample Type = COA', value: v(dry.testingSampleWeight, 'kg')},
-    {label:'Weight of dried flower sent to processor for samples', note:'Sent to Lab · Processor · Dry Flower', value: v(dry.processorSampleWeight, 'kg')},
-    {label:'Bill of lading / Quantity Sold', note:'Sold tx · Sale Stage = Dry', value: v(dry.soldWeight, 'kg')},
-    {label:'Weight of cannabis destroyed (Dry Waste)', value: v(dry.dryWasteWeight, 'kg')},
-    {label:'Loss on drying (cross-ref)', value: v(dry.lossOnDrying, 'kg')}
+    {label:'Retention sample weight', note:'from Post-Drying Sample Type = Retention', value: v(dry.retentionSampleWeight, 'kg'), detail:dry.retentionSampleWeightDetail},
+    {label:'Weight sent for testing samples', note:'Post-Drying Sample Type = COA', value: v(dry.testingSampleWeight, 'kg'), detail:dry.testingSampleWeightDetail},
+    {label:'Weight of dried flower sent to processor for samples', note:'Sent to Lab · Processor · Dry Flower', value: v(dry.processorSampleWeight, 'kg'), detail:dry.processorSampleWeightDetail},
+    {label:'Bill of lading / Quantity Sold', note:'Sold tx · Sale Stage = Dry', value: v(dry.soldWeight, 'kg'), detail:dry.soldWeightDetail},
+    {label:'Weight of cannabis destroyed (Dry Waste)', value: v(dry.dryWasteWeight, 'kg'), detail:dry.dryWasteWeightDetail},
+    {label:'Loss on drying (cross-ref)', value: v(dry.lossOnDrying, 'kg'), detail:dry.lossOnDryingDetail}
   ]);
 
   // Section 6 — Waste Destruction (drying loss). Drying loss = recorded (wet) weight at waste
@@ -15014,28 +15038,37 @@ function ctlsGenerateReport(){
     // produced a NEGATIVE drying loss). Falls back to the stored value only when the covered waste
     // records can't be found (e.g. they were later deleted).
     let totVeg=0, totDry=0, vegRecSum=0, dryRecSum=0;
+    const _evD=[], _vegActD=[], _dryActD=[], _vegLossD=[], _dryLossD=[];
     dEvents.forEach(d=>{
-      totVeg += parseFloat(d.vegWeight)||0;
-      totDry += parseFloat(d.dryWeight)||0;
+      const _ev = (d.date||'')+(d.employee?' · '+d.employee:'')+(d.batches&&d.batches.length?' · '+d.batches.join(', '):'');
+      const vegA = parseFloat(d.vegWeight)||0, dryA = parseFloat(d.dryWeight)||0;
+      totVeg += vegA; totDry += dryA;
       const keySet = new Set(d.coveredKeys||[]);
       const covered = wasteRecs.filter(w => keySet.has(NAT_KEY_FN.waste(w)));
+      let vegR, dryR;
       if(covered.length){
-        vegRecSum += covered.filter(w=>w.type==='Vegetative Waste').reduce((s,w)=>s+(parseFloat(w.weight)||0),0);
-        dryRecSum += covered.filter(w=>w.type==='Dry Waste').reduce((s,w)=>s+(parseFloat(w.weight)||0),0);
+        vegR = covered.filter(w=>w.type==='Vegetative Waste').reduce((s,w)=>s+(parseFloat(w.weight)||0),0);
+        dryR = covered.filter(w=>w.type==='Dry Waste').reduce((s,w)=>s+(parseFloat(w.weight)||0),0);
       } else {
-        vegRecSum += parseFloat(d.vegRecorded)||0;
-        dryRecSum += parseFloat(d.dryRecorded)||0;
+        vegR = parseFloat(d.vegRecorded)||0;
+        dryR = parseFloat(d.dryRecorded)||0;
       }
+      vegRecSum += vegR; dryRecSum += dryR;
+      _evD.push(_ev);
+      _vegActD.push(_ev+' — '+vegA.toFixed(3)+' kg');
+      _dryActD.push(_ev+' — '+dryA.toFixed(3)+' kg');
+      _vegLossD.push(_ev+' — recorded '+vegR.toFixed(3)+' − actual '+vegA.toFixed(3)+' = '+(vegR-vegA).toFixed(3)+' kg');
+      _dryLossD.push(_ev+' — recorded '+dryR.toFixed(3)+' − actual '+dryA.toFixed(3)+' = '+(dryR-dryA).toFixed(3)+' kg');
     });
     totVeg = r3c(totVeg); totDry = r3c(totDry);
     const vegLoss = r3c(vegRecSum - totVeg);
     const dryLoss = r3c(dryRecSum - totDry);
     html += _ctlsBlock('6. Waste Destruction', [
-      {label:'Destruction events in the month', value: v(dEvents.length, 'events')},
-      {label:'Vegetative waste destroyed (actual)', note:'actual weight destroyed, after drying loss', value: v(totVeg, 'kg')},
-      {label:'Dry cannabis destroyed (actual)', note:'actual weight destroyed, after drying loss', value: v(totDry, 'kg')},
-      {label:'Vegetative drying loss (recorded − actual)', note:'veg weight lost between waste entry and destruction', value: v(vegLoss, 'kg')},
-      {label:'Dry drying loss (recorded − actual)', note:'dry weight lost between waste entry and destruction', value: v(dryLoss, 'kg')}
+      {label:'Destruction events in the month', value: v(dEvents.length, 'events'), detail:_evD},
+      {label:'Vegetative waste destroyed (actual)', note:'actual weight destroyed, after drying loss', value: v(totVeg, 'kg'), detail:_vegActD},
+      {label:'Dry cannabis destroyed (actual)', note:'actual weight destroyed, after drying loss', value: v(totDry, 'kg'), detail:_dryActD},
+      {label:'Vegetative drying loss (recorded − actual)', note:'veg weight lost between waste entry and destruction', value: v(vegLoss, 'kg'), detail:_vegLossD},
+      {label:'Dry drying loss (recorded − actual)', note:'dry weight lost between waste entry and destruction', value: v(dryLoss, 'kg'), detail:_dryLossD}
     ]);
   }
 
