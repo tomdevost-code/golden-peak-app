@@ -14642,7 +14642,19 @@ function ctlsVegMetrics(from, to){
       .reduce((s,t) => s + (parseInt(t.qty)||0), 0);
     producedSeedsToVeg += germinatedQty;
   });
-  const produced = producedInternalCuttings + producedSeedsToVeg;
+  //   3) In-batch clones taken FROM Seeds-genetics (S-) batches — the pheno-hunt workflow has the
+  //      grower cut clones from the S-batch plants and log them as Produced/Received on the same
+  //      S-batch (cuttings stay under the same batch ID). These are newly produced clone plants and
+  //      must be counted in the month they were taken. (S-batch intake is a Seeds Germinated tx, so
+  //      every Produced/Received on an S-batch is a clone, never the initial cohort.)
+  const producedSeedsCuttings = txs
+    .filter(t => t.txType === 'Produced/Received'
+      && (() => {
+        const b = batchRecs.find(r => r.batchId === t.batchId && !r.type);
+        return b && (b.geneticsSource||'').toLowerCase() === 'seeds';
+      })())
+    .reduce((s,t) => s + (parseInt(t.qty)||0), 0);
+  const produced = producedInternalCuttings + producedSeedsToVeg + producedSeedsCuttings;
   // "Brought in from other producer" — Produced/Received qty where the destination batch's
   // geneticsSource is 'Clones-External' AND this is the FIRST Produced/Received for that batch
   // (subsequent P/R on the same batch would be cuttings from this batch, not new external imports).
