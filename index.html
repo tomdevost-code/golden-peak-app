@@ -14655,6 +14655,22 @@ function ctlsVegMetrics(from, to){
       })())
     .reduce((s,t) => s + (parseInt(t.qty)||0), 0);
   const produced = producedInternalCuttings + producedSeedsToVeg + producedSeedsCuttings;
+  // Itemized breakdown of everything that fed the "Quantity produced" number, so it can be audited.
+  const producedBreakdown = [];
+  txs.filter(t => t.txType === 'Produced/Received').forEach(t => {
+    const b = batchRecs.find(r => r.batchId === t.batchId && !r.type);
+    const gs = b ? (b.geneticsSource||'').toLowerCase() : '';
+    if(gs === 'clones-internal') producedBreakdown.push({batch:t.batchId, date:t.date||'', qty:parseInt(t.qty)||0, source:'Clones-Internal cutting'});
+    else if(gs === 'seeds') producedBreakdown.push({batch:t.batchId, date:t.date||'', qty:parseInt(t.qty)||0, source:'S-batch clone'});
+  });
+  batchRecs.forEach(b => {
+    if(!b || b.type) return;
+    if((b.geneticsSource||'').toLowerCase() !== 'seeds') return;
+    if(!b.vegStart || !_inRange(b.vegStart, from, to)) return;
+    const germinatedQty = batchTxRecs.filter(t => t.batchId === b.batchId && t.txType === 'Seeds Germinated').reduce((s,t)=>s+(parseInt(t.qty)||0),0);
+    if(germinatedQty > 0) producedBreakdown.push({batch:b.batchId, date:b.vegStart, qty:germinatedQty, source:'Seedlings crossed to Veg'});
+  });
+  producedBreakdown.sort((a,b)=> (a.date||'').localeCompare(b.date||'') || (a.batch||'').localeCompare(b.batch||''));
   // "Brought in from other producer" — Produced/Received qty where the destination batch's
   // geneticsSource is 'Clones-External' AND this is the FIRST Produced/Received for that batch
   // (subsequent P/R on the same batch would be cuttings from this batch, not new external imports).
@@ -14706,6 +14722,7 @@ function ctlsVegMetrics(from, to){
     .reduce((s,t) => s + (parseFloat(t.weight)||0), 0);
   return {
     produced,
+    producedBreakdown,
     broughtInExternal,
     movedToMoms,
     movedFromMoms: movedToMoms, // every Moved-to-Moms decrements from a source; same count from the other side
@@ -14936,8 +14953,14 @@ function ctlsGenerateReport(){
   ]);
 
   // Section 2 — Veg & Clones
+  const _prodDetail = (veg.producedBreakdown && veg.producedBreakdown.length)
+    ? '<div style="font-size:10px;color:var(--text3);margin-top:4px;line-height:1.6;font-family:var(--mono);">'
+      + veg.producedBreakdown.map(p => '• '+p.batch+' — '+p.qty+' plant'+(p.qty===1?'':'s')+' ('+p.source+(p.date?', '+p.date:'')+')').join('<br>')
+      + '<br><strong>Total: '+veg.produced+'</strong></div>'
+    : '<div style="font-size:10px;color:var(--text3);margin-top:4px;">No producing transactions this month.</div>';
   html += _ctlsBlock('2. Veg Plants &amp; Clones', [
-    {label:'Quantity produced (Clones-Internal cuttings + Seeds advanced to Veg)', value: v(veg.produced, 'plants')},
+    {label:'Quantity produced (Clones-Internal cuttings + Seeds advanced to Veg + S-batch clones)', value: v(veg.produced, 'plants')},
+    {label:'<span style="color:var(--text3);font-size:11px;">↳ Breakdown</span>'+_prodDetail, value: ''},
     {label:'Brought in from other producer (Clones-External)', value: v(veg.broughtInExternal, 'plants')},
     {label:'Moved to Moms', value: v(veg.movedToMoms, 'plants')},
     {label:'Moved from Moms (= count above, taken from mom source)', value: v(veg.movedFromMoms, 'plants')},
