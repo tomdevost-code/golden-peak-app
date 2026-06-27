@@ -2161,7 +2161,7 @@ function sanGetTasks(template, phase){
 
 function lsGet(k){try{return JSON.parse(localStorage.getItem(k)||'null');}catch(e){return null;}}
 function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
-function loadAll(){ecRecs=lsGet('gp-ec')||[];roRecs=lsGet('gp-ro')||[];wasteRecs=lsGet('gp-waste')||[];batchRecs=lsGet('gp-batch')||[];batchTxRecs=lsGet('gp-batchtx')||[];harvestRecs=lsGet('gp-harvest')||[];postDryRecs=lsGet('gp-postdry')||[];bioRecs=lsGet('gp-bio')||[];pestRecs=lsGet('gp-pest')||[];sanCleanRecs=lsGet('gp-sanclean')||[];sanToolRecs=lsGet('gp-santool')||[];sanEditsRecs=lsGet('gp-sanedits')||[];seedInvRecs=lsGet('gp-seedinv')||[];flowRecs=lsGet('gp-flow')||[];destroyRecs=lsGet('gp-destroy')||[];try{fdTasksDirty=!!lsGet('gp-fdtasks-dirty');}catch(_){}migrateSanTaskEditsToRecs();wasteRecs.forEach(r=>{if(r.type==='Vegetative waste')r.type='Vegetative Waste';});lsSet('gp-waste',wasteRecs);const s=lsGet('gp-cfg');if(s){cfg=s;applySettings();}dedupeBatchRecs();backfillHarvestedTxs();reconcileAllPackagedBatches();try{cleanLocalDuplicates({exclude:{'gp-batchtx':1}});}catch(_){}}
+function loadAll(){ecRecs=lsGet('gp-ec')||[];roRecs=lsGet('gp-ro')||[];wasteRecs=lsGet('gp-waste')||[];batchRecs=lsGet('gp-batch')||[];batchTxRecs=lsGet('gp-batchtx')||[];harvestRecs=lsGet('gp-harvest')||[];postDryRecs=lsGet('gp-postdry')||[];bioRecs=lsGet('gp-bio')||[];pestRecs=lsGet('gp-pest')||[];sanCleanRecs=lsGet('gp-sanclean')||[];sanToolRecs=lsGet('gp-santool')||[];sanEditsRecs=lsGet('gp-sanedits')||[];seedInvRecs=lsGet('gp-seedinv')||[];flowRecs=lsGet('gp-flow')||[];destroyRecs=lsGet('gp-destroy')||[];try{fdTasksDirty=!!lsGet('gp-fdtasks-dirty');}catch(_){}migrateSanTaskEditsToRecs();wasteRecs.forEach(r=>{if(r.type==='Vegetative waste')r.type='Vegetative Waste';});lsSet('gp-waste',wasteRecs);const s=lsGet('gp-cfg');if(s){cfg=s;applySettings();}dedupeBatchRecs();backfillHarvestedTxs();reconcileAllPackagedBatches();try{cleanLocalDuplicates({batchtxSkipTypes:['Destroyed']});}catch(_){}}
 
 // One-time migration of the previous gp-san-task-edits localStorage shape into the new
 // synced sanEditsRecs array. Runs on every boot but only does work the first time.
@@ -3271,7 +3271,7 @@ async function pullFromAirtable(opts){
     // Self-heal: collapse any exact-duplicate rows the append-only sync re-added on this pull, so
     // duplicates never surface in any view. Batch transactions are excluded (they affect plant
     // counts — use the per-transaction Delete instead) and are handled by the manual cleanup tool.
-    try { cleanLocalDuplicates({exclude:{'gp-batchtx':1}}); }catch(_){}
+    try { cleanLocalDuplicates({batchtxSkipTypes:['Destroyed']}); }catch(_){}
     // Best-effort refresh of any visible views
     try { populateBatchDropdowns(); }catch(_){}
     try { if(typeof renderBatchLog==='function') renderBatchLog(); }catch(_){}
@@ -7895,6 +7895,11 @@ async function _cleanAirtableDupesForTable(tblId, localArr, remoteKeyFn, label){
 function cleanLocalDuplicates(opts){
   opts = opts || {};
   const _exclude = opts.exclude || {};
+  // batchtxSkipTypes: batch-transaction txTypes that must NEVER be auto-collapsed because two
+  // byte-identical entries can legitimately be distinct events (e.g. two Destroyed of the same
+  // qty from different rooms the same day). The automatic pass passes ['Destroyed']; the manual
+  // cleanup passes nothing (collapses everything).
+  const _btSkip = opts.batchtxSkipTypes || [];
   const tbls = [
     { lsKey:'gp-ec',       arr:ecRecs },
     { lsKey:'gp-ro',       arr:roRecs },
@@ -7921,7 +7926,10 @@ function cleanLocalDuplicates(opts){
   let removed = 0;
   tbls.forEach(t => {
     const groups = {};
-    t.arr.forEach((r, i) => { const k = sig(r); if(!k) return; (groups[k] = groups[k] || []).push(i); });
+    t.arr.forEach((r, i) => {
+      if(t.lsKey === 'gp-batchtx' && r && _btSkip.indexOf(r.txType) >= 0) return; // protected from auto-collapse
+      const k = sig(r); if(!k) return; (groups[k] = groups[k] || []).push(i);
+    });
     const drop = new Set();
     Object.values(groups).forEach(idxs => {
       if(idxs.length < 2) return;
