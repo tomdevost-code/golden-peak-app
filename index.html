@@ -8118,6 +8118,13 @@ async function syncPending(){
   if(!atReady()){toast('Configure Airtable connection first.');return;}
   const st=document.getElementById('sync-pending-status');
   const btn=document.getElementById('sync-pending-btn');
+  // IDEMPOTENCY — pull before push. If a record was already committed to Airtable but the app
+  // never saw the response (interrupted POST), the pull links that orphan row to its local record
+  // and marks it synced, so it drops out of the pending list below and we DON'T post it again
+  // (which is what created duplicate rows). Then collapse any exact-duplicate locals.
+  if(st){ st.style.display='block'; st.style.background='var(--bg2)'; st.style.color='var(--text2)'; st.textContent='Checking Airtable first…'; }
+  try { await pullFromAirtable(); } catch(_){}
+  try { cleanLocalDuplicates({batchtxSkipTypes:['Destroyed']}); } catch(_){}
   const pendingEC=ecRecs.filter(r=>!r.synced);
   const pendingRO=roRecs.filter(r=>!r.synced);
   const pendingWaste=wasteRecs.filter(r=>!r.synced);
@@ -8142,9 +8149,8 @@ async function syncPending(){
     try{
       const f={'Date':rec.date,'Room':rec.room,'Grower':rec.grower,'Batch ID':rec.batch?[rec.batch]:undefined,'Watering Type':rec.wtype||undefined,'Drip EC Pen 1':rec.dripEcPens?rec.dripEcPens[0]||undefined:undefined,'Drip EC Pen 2':rec.dripEcPens?rec.dripEcPens[1]||undefined:undefined,'Drip EC Pen 3':rec.dripEcPens?rec.dripEcPens[2]||undefined:undefined,'Drip pH Pen 1':rec.dripPhPens?rec.dripPhPens[0]||undefined:undefined,'Drip pH Pen 2':rec.dripPhPens?rec.dripPhPens[1]||undefined:undefined,'Drip pH Pen 3':rec.dripPhPens?rec.dripPhPens[2]||undefined:undefined,'Event 1 ml/plant':rec.events?rec.events[0]||undefined:undefined,'Event 2 ml/plant':rec.events?rec.events[1]||undefined:undefined,'Event 3 ml/plant':rec.events?rec.events[2]||undefined:undefined,'Event 4 ml/plant':rec.events?rec.events[3]||undefined:undefined,'Event 5 ml/plant':rec.events?rec.events[4]||undefined:undefined,'Event 6 ml/plant':rec.events?rec.events[5]||undefined:undefined,'Event 7 ml/plant':rec.events?rec.events[6]||undefined:undefined,'Event 8 ml/plant':rec.events?rec.events[7]||undefined:undefined,'Flow Meter Reading':rec.flow||undefined,'Notes':rec.notes||undefined};
       Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
-      const ecRes=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+cfg.ecTbl,{method:'POST',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify({fields:f,typecast:true})});
-      if(!ecRes.ok){const err=await ecRes.json();throw new Error('EC '+ecRes.status+': '+(err.error&&err.error.message||JSON.stringify(err)));}
-      try{const _j=await ecRes.json(); if(_j && _j.id) rec.airtableId=_j.id;}catch(_){}
+      if(rec.airtableId){ await atUpdateById(cfg.ecTbl, rec.airtableId, f); }
+      else { const _er=await atPost(cfg.ecTbl, f); if(_er && _er.id) rec.airtableId=_er.id; }
       rec.synced=true;ok++;
     }catch(e){fail++;lastErr=e.message;}
   }
@@ -8154,9 +8160,8 @@ async function syncPending(){
       const f={'Date':rec.date,'Room':rec.room,'Grower':rec.grower,'Batch ID':rec.batch?[rec.batch]:undefined,'Input EC':rec.inputEC||undefined,'EC Variance':rec.variance||undefined,'Notes':rec.notes||undefined};
       rec.samples&&rec.samples.forEach((s,i)=>{if(s.ec)f['S'+(i+1)+' EC']=s.ec;if(s.ph)f['S'+(i+1)+' pH']=s.ph;});
       Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
-      const roRes=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+cfg.roTbl,{method:'POST',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify({fields:f,typecast:true})});
-      if(!roRes.ok){const err=await roRes.json();throw new Error('RO '+roRes.status+': '+(err.error&&err.error.message||JSON.stringify(err)));}
-      try{const _j=await roRes.json(); if(_j && _j.id) rec.airtableId=_j.id;}catch(_){}
+      if(rec.airtableId){ await atUpdateById(cfg.roTbl, rec.airtableId, f); }
+      else { const _rr=await atPost(cfg.roTbl, f); if(_rr && _rr.id) rec.airtableId=_rr.id; }
       rec.synced=true;ok++;
     }catch(e){fail++;lastErr=e.message;}
   }
@@ -8165,9 +8170,8 @@ async function syncPending(){
     try{
       const f={'Date':rec.date,'Grower':rec.grower||undefined,'Batch ID':rec.batch?[rec.batch]:undefined,'Room':rec.room||undefined,'Waste Type':rec.type||rec.wtype||undefined,'Sub-Category':rec.subtype||undefined,'Weight (kg)':rec.weight||undefined,'Plants Destroyed':rec.plants||undefined,'Notes':rec.notes||undefined};
       Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
-      const wRes=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+cfg.wasteTbl,{method:'POST',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify({fields:f,typecast:true})});
-      if(!wRes.ok){const err=await wRes.json();throw new Error('Waste '+wRes.status+': '+(err.error&&err.error.message||JSON.stringify(err)));}
-      try{const _j=await wRes.json(); if(_j && _j.id) rec.airtableId=_j.id;}catch(_){}
+      if(rec.airtableId){ await atUpdateById(cfg.wasteTbl, rec.airtableId, f); }
+      else { const _wr=await atPost(cfg.wasteTbl, f); if(_wr && _wr.id) rec.airtableId=_wr.id; }
       rec.synced=true;ok++;
     }catch(e){fail++;lastErr=e.message;}
   }
@@ -8193,9 +8197,8 @@ async function syncPending(){
         if(running<0)running=0;
         const f={'Batch ID':tx.batchId?[tx.batchId]:undefined,'Date':tx.date,'Transaction Type':tx.txType,'Plant Phase':tx.plantPhase||undefined,'Quantity':tx.qty,'Weight (kg)':tx.weight||undefined,'Current Quantity After':running,'Sale Stage':tx.saleStage||undefined,'Lab Destination Type':tx.labDestType||undefined,'Lab Material Type':tx.labMaterialType||undefined,'Lab Destination Name':tx.labDestName||undefined,'From Phase':tx.fromPhase||undefined,'To Phase':tx.toPhase||undefined,'Room':tx.room||undefined,'Cohort Purpose':tx.cohortPurpose||undefined,'Notes':tx.notes||undefined};
         Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
-        const txRes=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+cfg.batchtxTbl,{method:'POST',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify({fields:f,typecast:true})});
-        if(!txRes.ok){const err=await txRes.json();throw new Error('Tx '+txRes.status+': '+(err.error&&err.error.message||JSON.stringify(err)));}
-        try{const _j=await txRes.json(); if(_j && _j.id) tx.airtableId=_j.id;}catch(_){}
+        if(tx.airtableId){ await atUpdateById(cfg.batchtxTbl, tx.airtableId, f); }
+        else { const _tr=await atPost(cfg.batchtxTbl, f); if(_tr && _tr.id) tx.airtableId=_tr.id; }
         tx.synced=true;ok++;
       }catch(e){fail++;lastErr=e.message;}
     }
@@ -8206,9 +8209,8 @@ async function syncPending(){
       try{
         const f = {'Date':h.date,'Grower':h.grower,'Batch ID':h.batch?[h.batch]:undefined,'Room':h.room,'Bin Number':h.binNumber||undefined,'Tare Weight (kg)':h.tareWeight,'Total Weight (kg)':h.totalWeight,'Net Weight (kg)':h.netWeight,'Notes':h.notes||undefined};
         Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
-        const hRes=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+cfg.harvestTbl,{method:'POST',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify({fields:f,typecast:true})});
-        if(!hRes.ok){const err=await hRes.json();throw new Error('Harvest '+hRes.status+': '+(err.error&&err.error.message||JSON.stringify(err)));}
-        try{const _j=await hRes.json(); if(_j && _j.id) h.airtableId=_j.id;}catch(_){}
+        if(h.airtableId){ await atUpdateById(cfg.harvestTbl, h.airtableId, f); }
+        else { const _hr=await atPost(cfg.harvestTbl, f); if(_hr && _hr.id) h.airtableId=_hr.id; }
         h.synced=true;ok++;
       }catch(e){fail++;lastErr=e.message;}
     }
@@ -8219,9 +8221,8 @@ async function syncPending(){
       try{
         const f = {'Batch ID':p.batch?[p.batch]:undefined,'Container ID':p.binNumber||undefined,'Date':p.date,'Grower':p.grower,'Tare Weight (kg)':p.tareWeight,'Gross Weight (kg)':p.grossWeight,'Net Weight (kg)':p.netWeight,'Type/Size':p.containerType||undefined,'Notes':p.notes||undefined};
         Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
-        const pRes=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+cfg.postDryTbl,{method:'POST',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify({fields:f,typecast:true})});
-        if(!pRes.ok){const err=await pRes.json();throw new Error('PostDry '+pRes.status+': '+(err.error&&err.error.message||JSON.stringify(err)));}
-        try{const _j=await pRes.json(); if(_j && _j.id) p.airtableId=_j.id;}catch(_){}
+        if(p.airtableId){ await atUpdateById(cfg.postDryTbl, p.airtableId, f); }
+        else { const _pr=await atPost(cfg.postDryTbl, f); if(_pr && _pr.id) p.airtableId=_pr.id; }
         p.synced=true;ok++;
       }catch(e){fail++;lastErr=e.message;}
     }
@@ -8232,9 +8233,8 @@ async function syncPending(){
       try{
         const f = {'Date':r.date,'Grower':r.grower,'Batch ID':r.batch?[r.batch]:undefined,'Room':r.room,'Product':r.product||undefined,'Quantity':r.quantity||undefined,'Unit':r.unit||undefined,'Reason':r.reason||undefined};
         Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
-        const bRes=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+cfg.bioTbl,{method:'POST',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify({fields:f,typecast:true})});
-        if(!bRes.ok){const err=await bRes.json();throw new Error('Bio '+bRes.status+': '+(err.error&&err.error.message||JSON.stringify(err)));}
-        try{const _j=await bRes.json(); if(_j && _j.id) r.airtableId=_j.id;}catch(_){}
+        if(r.airtableId){ await atUpdateById(cfg.bioTbl, r.airtableId, f); }
+        else { const _br=await atPost(cfg.bioTbl, f); if(_br && _br.id) r.airtableId=_br.id; }
         r.synced=true;ok++;
       }catch(e){fail++;lastErr=e.message;}
     }
@@ -8245,9 +8245,8 @@ async function syncPending(){
       try{
         const f = {'Date':r.date,'Grower':r.grower,'Batch ID':r.batch?[r.batch]:undefined,'Room':r.room,'Location':r.location||undefined,'Card Number':r.cardNumber||undefined,'Pests Identified':(r.pests&&r.pests.length)?r.pests:undefined,'Quantity':r.quantity||undefined,'Notes':r.notes||undefined};
         Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
-        const pRes=await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+cfg.pestTbl,{method:'POST',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify({fields:f,typecast:true})});
-        if(!pRes.ok){const err=await pRes.json();throw new Error('Pest '+pRes.status+': '+(err.error&&err.error.message||JSON.stringify(err)));}
-        try{const _j=await pRes.json(); if(_j && _j.id) r.airtableId=_j.id;}catch(_){}
+        if(r.airtableId){ await atUpdateById(cfg.pestTbl, r.airtableId, f); }
+        else { const _pr2=await atPost(cfg.pestTbl, f); if(_pr2 && _pr2.id) r.airtableId=_pr2.id; }
         r.synced=true;ok++;
       }catch(e){fail++;lastErr=e.message;}
     }
@@ -8257,9 +8256,8 @@ async function syncPending(){
     for(const r of pendingSanClean){
       try{
         const f = buildSanCleanFields(r);
-        const scRes = await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+cfg.sanCleanTbl,{method:'POST',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify({fields:f,typecast:true})});
-        if(!scRes.ok){const err=await scRes.json();throw new Error('SanClean '+scRes.status+': '+(err.error&&err.error.message||JSON.stringify(err)));}
-        try{const _j=await scRes.json(); if(_j && _j.id) r.airtableId=_j.id;}catch(_){}
+        if(r.airtableId){ await atUpdateById(cfg.sanCleanTbl, r.airtableId, f); }
+        else { const _scr=await atPost(cfg.sanCleanTbl, f); if(_scr && _scr.id) r.airtableId=_scr.id; }
         r.synced=true;ok++;
       }catch(e){fail++;lastErr=e.message;}
     }
@@ -8269,9 +8267,8 @@ async function syncPending(){
     for(const r of pendingSanTool){
       try{
         const f = buildSanToolFields(r);
-        const stRes = await fetch('https://api.airtable.com/v0/'+cfg.base+'/'+cfg.sanToolTbl,{method:'POST',headers:{'Authorization':'Bearer '+cfg.token,'Content-Type':'application/json'},body:JSON.stringify({fields:f,typecast:true})});
-        if(!stRes.ok){const err=await stRes.json();throw new Error('SanTool '+stRes.status+': '+(err.error&&err.error.message||JSON.stringify(err)));}
-        try{const _j=await stRes.json(); if(_j && _j.id) r.airtableId=_j.id;}catch(_){}
+        if(r.airtableId){ await atUpdateById(cfg.sanToolTbl, r.airtableId, f); }
+        else { const _str=await atPost(cfg.sanToolTbl, f); if(_str && _str.id) r.airtableId=_str.id; }
         r.synced=true;ok++;
       }catch(e){fail++;lastErr=e.message;}
     }
@@ -13226,7 +13223,10 @@ function summaryRenderHistory(batchId){
       '<td style="padding:6px 8px;text-align:right;font-family:var(--mono);font-weight:700;color:'+qtyColor+';">'+qtyDisplay+'</td>'+
       '<td style="padding:6px 8px;text-align:right;font-family:var(--mono);font-weight:600;">'+t.runningQty+'</td>'+
       '<td style="padding:6px 8px;font-size:11px;color:var(--text3);max-width:120px;white-space:normal;">'+(t.notes||'')+'</td>'+
-      '<td style="padding:6px 8px;text-align:center;white-space:nowrap;"><button type="button" onclick="summaryTxDelete('+_txIdArg+')" title="Delete this transaction" style="font-size:11px;padding:3px 8px;border:1px solid var(--red);background:var(--red-pale);border-radius:var(--radius-sm);cursor:pointer;color:var(--red);">Delete</button></td>'+
+      '<td style="padding:6px 8px;text-align:center;white-space:nowrap;">'+
+        '<button type="button" onclick="summaryTxMove('+_txIdArg+')" title="Move this transaction to another batch" style="font-size:11px;padding:3px 8px;margin-right:4px;border:1px solid var(--border);background:var(--bg2);border-radius:var(--radius-sm);cursor:pointer;color:var(--text2);">Move</button>'+
+        '<button type="button" onclick="summaryTxDelete('+_txIdArg+')" title="Delete this transaction" style="font-size:11px;padding:3px 8px;border:1px solid var(--red);background:var(--red-pale);border-radius:var(--radius-sm);cursor:pointer;color:var(--red);">Delete</button>'+
+      '</td>'+
       '</tr>';
   }).join('')+'</tbody>';
   html += '</table></div>';
@@ -13238,6 +13238,35 @@ function summaryRenderHistory(batchId){
 // removing a row recomputes the count automatically: deleting a Destroyed/Harvested restores its
 // plants; deleting a Produced/Received removes them. Phase/room state on the batch record is left
 // as-is (use Manage Batch to adjust those if needed). Removes from Airtable too when synced.
+// Reassign a transaction to a different batch — fixes mis-attributed transactions (e.g. a batch
+// backfilled under the wrong ID). Moves the local record's batchId and re-links the Airtable row's
+// Batch ID field. Both the source and destination batch counts recompute from their tx history.
+async function summaryTxMove(id){
+  const idx = batchTxRecs.findIndex(t => String(t.id) === String(id));
+  if(idx < 0){ toast('Transaction not found.'); return; }
+  const tx = batchTxRecs[idx];
+  const dest = ((prompt('Move this "'+tx.txType+'" transaction ('+(tx.date||'')+', qty '+(tx.qty||0)+') from '+tx.batchId+' to which batch ID?', '')||'').trim().toUpperCase());
+  if(!dest) return;
+  if(dest === (tx.batchId||'').toUpperCase()){ toast('It is already on '+dest+'.'); return; }
+  const destRec = batchRecs.find(r => (r.batchId||'').toUpperCase() === dest && !r.type);
+  if(!destRec){ toast('No batch "'+dest+'" exists. Create it on the Batches page first.', 5000); return; }
+  if(!confirm('Move this '+tx.txType+' ('+(tx.qty||0)+') from '+tx.batchId+' to '+destRec.batchId+'?\n\nBoth batch counts will recompute. This cannot be undone (move it back if needed).')) return;
+  tx.batchId = destRec.batchId;
+  tx.synced = false;
+  lsSet('gp-batchtx', batchTxRecs);
+  updatePendingBadge();
+  if(tx.airtableId && cfg.batchtxTbl && cfg.token && cfg.base){
+    setSyncPill('ing','Moving...');
+    try {
+      await atUpdateById(cfg.batchtxTbl, tx.airtableId, { 'Batch ID':[destRec.batchId] });
+      tx.synced = true; lsSet('gp-batchtx', batchTxRecs); setSyncPill('ok','Synced'); updatePendingBadge();
+    } catch(e){ setSyncPill('err','Sync failed'); toast('Moved locally — Airtable: '+(e.message||'sync failed'),5000); }
+  }
+  toast('Moved to '+destRec.batchId+'.');
+  if(typeof summaryBatchChanged === 'function') summaryBatchChanged();
+  if(typeof populateBatchDropdowns === 'function') populateBatchDropdowns();
+  if(typeof renderBatchLog === 'function') renderBatchLog();
+}
 async function summaryTxDelete(id){
   const idx = batchTxRecs.findIndex(t => String(t.id) === String(id));
   if(idx < 0){ toast('Transaction not found.'); return; }
