@@ -1389,7 +1389,8 @@ tr:last-child td { border-bottom: none; }
 
         <!-- Transaction History -->
         <div class="section-label">Transaction History</div>
-        <div id="summary-tx-history" style="margin-bottom:20px;"></div>
+        <div id="summary-tx-history" style="margin-bottom:8px;"></div>
+        <button type="button" class="btn-secondary" onclick="summaryAddCorrectiveTx()" style="width:100%;margin-bottom:20px;font-size:12px;">＋ Add corrective transaction (manual)</button>
       </div>
     </div>
 
@@ -13308,6 +13309,43 @@ function summaryRenderHistory(batchId){
 // removing a row recomputes the count automatically: deleting a Destroyed/Harvested restores its
 // plants; deleting a Produced/Received removes them. Phase/room state on the batch record is left
 // as-is (use Manage Batch to adjust those if needed). Removes from Airtable too when synced.
+// Manually add a corrective transaction — recovers a lost auto-transaction (e.g. a Destroyed that
+// was deleted) or fixes a count, with a chosen date. Creates a real batch transaction (local +
+// Airtable). Destroyed/Harvested debit the count; Produced/Received credits it.
+async function summaryAddCorrectiveTx(){
+  const batchId = (document.getElementById('summary-batch-select')||{}).value || '';
+  if(!batchId){ toast('Select a batch first.'); return; }
+  const ALLOWED = ['Destroyed','Produced/Received','Sold','Harvested'];
+  const type = ((prompt('Corrective transaction for '+batchId+'.\n\nType exactly one of:\n  '+ALLOWED.join(' · '), 'Destroyed')||'').trim());
+  if(!type) return;
+  if(ALLOWED.indexOf(type) < 0){ toast('Type must be one of: '+ALLOWED.join(', '), 6000); return; }
+  const date = ((prompt('Date (YYYY-MM-DD):', localDate())||'').trim());
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){ toast('Date must be in YYYY-MM-DD format.', 5000); return; }
+  const qty = parseInt((prompt('Plant count (quantity):','')||''), 10);
+  if(isNaN(qty) || qty <= 0){ toast('Enter a valid quantity (whole number).'); return; }
+  const _curB = batchRecs.find(r => r.batchId === batchId && !r.type);
+  const phase = ((prompt('Plant phase at the time (Clones / Veg / Flower / Drying):', (_curB && _curB.plantPhase) || 'Veg')||'').trim());
+  const notes = ((prompt('Notes (optional):', 'Manual correction')||'').trim());
+  const _sign = (type==='Produced/Received') ? '+' : '-';
+  if(!confirm('Add a '+type+' of '+_sign+qty+' plant(s) to '+batchId+' on '+date+'?\n\nThe batch count will recompute.')) return;
+  const tx = { id: Date.now()+Math.floor(Math.random()*1000), batchId, date, txType: type, qty, plantPhase: phase||undefined, notes: notes||undefined, synced: false };
+  batchTxRecs.unshift(tx);
+  lsSet('gp-batchtx', batchTxRecs);
+  updatePendingBadge();
+  if(cfg.batchtxTbl && cfg.token && cfg.base){
+    setSyncPill('ing','Syncing...');
+    try {
+      const f = { 'Batch ID':[batchId], 'Date':date, 'Transaction Type':type, 'Plant Phase':phase||undefined, 'Quantity':qty, 'Notes':notes||undefined };
+      Object.keys(f).forEach(k=>{ if(f[k]===undefined||f[k]===null||f[k]==='') delete f[k]; });
+      const _r = await atPost(cfg.batchtxTbl, f); if(_r && _r.id) tx.airtableId = _r.id;
+      tx.synced = true; lsSet('gp-batchtx', batchTxRecs); setSyncPill('ok','Synced'); updatePendingBadge();
+    } catch(e){ setSyncPill('err','Sync failed'); toast('Saved locally — Airtable: '+(e.message||'sync failed'),5000); }
+  }
+  toast(type+' ('+_sign+qty+') added to '+batchId+'.');
+  if(typeof summaryBatchChanged === 'function') summaryBatchChanged();
+  if(typeof populateBatchDropdowns === 'function') populateBatchDropdowns();
+  if(typeof renderBatchLog === 'function') renderBatchLog();
+}
 // Reassign a transaction to a different batch — fixes mis-attributed transactions (e.g. a batch
 // backfilled under the wrong ID). Moves the local record's batchId and re-links the Airtable row's
 // Batch ID field. Both the source and destination batch counts recompute from their tx history.
@@ -13347,7 +13385,12 @@ async function summaryTxDelete(id){
   else if(tx.txType==='Destroyed' || tx.txType==='Harvested') _impact = '\n\nThis will restore '+_q+' plant(s) to the batch count.';
   else if(tx.txType==='Sold' && (tx.saleStage||'')==='Clone') _impact = '\n\nThis will restore '+_q+' sold plant(s) to the batch count.';
   if(!confirm('Delete this "'+tx.txType+'" transaction'+(tx.date?' from '+tx.date:'')+'?'+_impact+'\n\nThis cannot be undone.')) return;
-  if(tx.airtableId && cfg.batchtxTbl && cfg.token && cfg.base){
+  // SAFETY: only delete the Airtable row if no OTHER local record points at the same airtableId.
+  // Two local rows can share an airtableId after a Move (the moved row keeps the original Airtable
+  // record). Deleting that shared row would wipe BOTH batches' copy — which is how a transaction
+  // got lost before. If shared, just drop the local copy and leave the Airtable row for its twin.
+  const _sharesAt = tx.airtableId && batchTxRecs.some((t,i) => i !== idx && t.airtableId === tx.airtableId);
+  if(tx.airtableId && !_sharesAt && cfg.batchtxTbl && cfg.token && cfg.base){
     setSyncPill('ing','Deleting...');
     const ok = await atDelete(cfg.batchtxTbl, tx.airtableId);
     if(!ok){ setSyncPill('err','Delete failed'); toast('Could not delete from Airtable — transaction kept. Try again when online.',5000); return; }
