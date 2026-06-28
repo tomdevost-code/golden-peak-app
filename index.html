@@ -1072,6 +1072,7 @@ tr:last-child td { border-bottom: none; }
               <input type="date" id="summary-flower-start-edit" style="font-size:14px;font-family:var(--mono);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;" />
             </div>
           </div>
+          <button type="button" class="btn-secondary" onclick="summaryReconcileFromHistory()" style="width:100%;margin-bottom:12px;font-size:12px;">⟲ Reconcile phase &amp; dates from transaction history</button>
 
           <!-- Rooms / Plant Distribution (chip + pill layout) -->
           <div class="field" style="margin-bottom:12px;">
@@ -12354,6 +12355,48 @@ function summaryCalcQty(batchId){
   return qty;
 }
 
+// Derive a (non-mother) batch's plant phase and lifecycle dates from its Phase Change transactions.
+// Use this to repair a batch whose stored phase/dates drifted from its (corrected) tx history —
+// e.g. after moving transactions between batches. Sets the dates directly; creates NO new
+// transactions. The editable date fields can fine-tune afterward.
+async function summaryReconcileFromHistory(){
+  const batchId = (document.getElementById('summary-batch-select')||{}).value || '';
+  const idx = batchRecs.findIndex(r => r.batchId === batchId && !r.type);
+  if(idx < 0){ toast('Select a batch first.'); return; }
+  if(isMotherBatch(batchId)){ toast('Reconcile-from-history is for non-mother batches (moms track phases per cohort).', 5000); return; }
+  const PHASE_ORDER = {'Germination':0,'Clones':1,'Veg':2,'Flower':3,'Drying':4,'Packaged':5,'Delivered':6};
+  const pcs = batchTxRecs.filter(t => t.batchId === batchId && t.txType === 'Phase Change');
+  const earliestForPhase = ph => {
+    const dates = pcs.filter(t => (t.plantPhase||'') === ph).map(t => t.date).filter(Boolean).sort();
+    return dates.length ? dates[0] : '';
+  };
+  const vegD = earliestForPhase('Veg');
+  const flwD = earliestForPhase('Flower');
+  const dryD = earliestForPhase('Drying');
+  const pkgD = earliestForPhase('Packaged');
+  const delD = earliestForPhase('Delivered');
+  let maxPh = batchRecs[idx].plantPhase || 'Clones';
+  pcs.forEach(t => { if((PHASE_ORDER[t.plantPhase||''] || 0) > (PHASE_ORDER[maxPh] || 0)) maxPh = t.plantPhase; });
+  if(!pcs.length && !vegD && !flwD){ toast('No Phase Change transactions found for '+batchId+' — nothing to reconcile.', 5000); return; }
+  if(!confirm('Reconcile '+batchId+' from its transaction history?\n\nPhase → '+maxPh
+      +(vegD?'\nVeg Start → '+vegD:'')+(flwD?'\nFlower Start → '+flwD:'')+(dryD?'\nHarvest → '+dryD:'')
+      +'\n\nNo new transactions are created. You can fine-tune the dates after.')) return;
+  batchRecs[idx].plantPhase = maxPh;
+  if(vegD) batchRecs[idx].vegStart = vegD;
+  if(flwD) batchRecs[idx].flowerStart = flwD;
+  if(dryD) batchRecs[idx].harvestDate = dryD;
+  if(pkgD) batchRecs[idx].packagedDate = pkgD;
+  if(delD) batchRecs[idx].deliveredDate = delD;
+  batchRecs[idx].synced = false;
+  lsSet('gp-batch', batchRecs);
+  updatePendingBadge();
+  toast('Lifecycle reconciled from history — fine-tune dates if needed, then Save.');
+  if(typeof summaryBatchChanged === 'function') summaryBatchChanged();
+  if(typeof renderBatchLog === 'function') renderBatchLog();
+  if(cfg.batchTbl && cfg.token && cfg.base){
+    try { const _r = await atUpsert(cfg.batchTbl, buildBatchFields(batchRecs[idx]), ['Batch ID']); batchRecs[idx].synced = true; const _id=_r&&_r.records&&_r.records[0]&&_r.records[0].id; if(_id) batchRecs[idx].airtableId=_id; lsSet('gp-batch', batchRecs); updatePendingBadge(); } catch(_){}
+  }
+}
 async function summaryUpdateBatch(){
   const batchId = document.getElementById('summary-batch-select').value;
   if(!batchId) return;
