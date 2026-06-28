@@ -5005,6 +5005,21 @@ function bioSeqUnlock(){
   if(!room){ fields.forEach(id => lock(id)); return; }
   fields.forEach(id => unlock(id));
 }
+// Data-integrity guard: a Veg-room record can't be added to a batch that's already flowering or
+// past it. Once a (non-mother) batch flips to Flower, its plants have left the Veg room, so a Veg
+// entry is almost always a wrong-batch mistake. Mother batches are exempt — they intentionally hold
+// Veg + Flower cohorts at the same time. Returns true when the record should be BLOCKED.
+function vegRoomBlockedOnFlower(batchId, room){
+  if((room||'') !== 'Veg') return false;
+  if(typeof isMotherBatch === 'function' && isMotherBatch(batchId)) return false;
+  const b = batchRecs.find(r => r.batchId === batchId && !r.type);
+  if(!b) return false;
+  if(!['Flower','Drying','Packaged','Delivered'].includes(b.plantPhase||'')) return false;
+  // Allow if the batch genuinely still has plants in the Veg room (a split Veg/Flower batch);
+  // block when there are none (the record almost certainly belongs to a different, Veg-phase batch).
+  const _vegPlants = (typeof calcRoomPlantCount === 'function') ? calcRoomPlantCount(batchId, 'Veg') : 0;
+  return _vegPlants <= 0;
+}
 async function bioSave(){
   const grower = document.getElementById('bio-grower').value;
   const batch = document.getElementById('bio-batch').value;
@@ -5030,6 +5045,10 @@ async function bioSave(){
   }
   if(_bRec && ['Drying','Packaged','Delivered'].includes(_bRec.plantPhase)){
     toast('Bio Control entries are not allowed after the batch is harvested.',4500);
+    return;
+  }
+  if(vegRoomBlockedOnFlower(batch, room)){
+    toast('Cannot add a Veg-room entry — '+batch+' is in Flower phase. Veg records are only valid before the batch flips to Flower (check you have the right batch).',6500);
     return;
   }
   const unit = (BIO_PRODUCTS[product] && BIO_PRODUCTS[product].unit) || '';
@@ -5402,6 +5421,10 @@ async function pestSave(){
   const _bRec = batchRecs.find(r=>r.batchId===batch && !r.type);
   if(_bRec && _bRec.status === 'Closed'){
     toast('This batch is closed (Status=Closed). No new entries.',3500);
+    return;
+  }
+  if(vegRoomBlockedOnFlower(batch, room)){
+    toast('Cannot add a Veg-room entry — '+batch+' is in Flower phase. Check you have the right batch.',6500);
     return;
   }
   const _pestEditing = pestEditId != null;
@@ -7353,6 +7376,10 @@ async function ecSave(){
     toast('This batch is closed (Status=Closed). No new entries.',3500);
     return;
   }
+  if(vegRoomBlockedOnFlower(batchVal2, document.getElementById('ec-room').value)){
+    toast('Cannot add a Veg-room EC entry — '+batchVal2+' is in Flower phase with no Veg-room plants. Check you have the right batch.',6500);
+    return;
+  }
   // Block EC entries only once the batch is FULLY harvested (qty=0 in Drying, or any Packaged).
   // Multi-day harvest: a batch in Drying with remaining unharvested flower rooms still needs EC logging.
   if(_ecBatchRec){
@@ -8583,6 +8610,10 @@ async function wasteSave(){
   const _wsBatchRec = batchRecs.find(r=>r.batchId===batch && !r.type);
   const _wsPhase = _wsBatchRec ? _wsBatchRec.plantPhase : '';
   const _wsRoomLive = calcRoomPlantCount(batch, room);
+  if(vegRoomBlockedOnFlower(batch, room)){
+    toast('Cannot add a Veg-room waste entry — '+batch+' is in Flower phase with no Veg-room plants. Check you have the right batch.',6500);
+    return;
+  }
   // Drying and Packaged batches record Dry Waste; everything earlier is Vegetative Waste.
   const _wsExpectedType = (_wsPhase === 'Packaged' || _wsPhase === 'Drying') ? 'Dry Waste' : 'Vegetative Waste';
   // Guard: waste type must match what this phase allows
