@@ -1060,6 +1060,19 @@ tr:last-child td { border-bottom: none; }
             <input type="text" id="summary-cultivar" placeholder="Cultivar name" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;" />
           </div>
 
+          <!-- Editable lifecycle dates — these drive the V-day / F-day badge. Normally set
+               automatically by events; editable here to correct a batch's day count. -->
+          <div class="g2" style="margin-bottom:12px;">
+            <div class="field">
+              <label>Veg Start <span style="font-size:10px;color:var(--text3);font-weight:400;">(drives V-day)</span></label>
+              <input type="date" id="summary-veg-start-edit" style="font-size:14px;font-family:var(--mono);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;" />
+            </div>
+            <div class="field">
+              <label>Flower Start <span style="font-size:10px;color:var(--text3);font-weight:400;">(drives F-day)</span></label>
+              <input type="date" id="summary-flower-start-edit" style="font-size:14px;font-family:var(--mono);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;" />
+            </div>
+          </div>
+
           <!-- Rooms / Plant Distribution (chip + pill layout) -->
           <div class="field" style="margin-bottom:12px;">
             <label>Plant Distribution</label>
@@ -10643,6 +10656,8 @@ function summaryBatchChanged(){
   // harvested while Flower 2 is still flowering.
   document.getElementById('si-rooms').textContent = formatBatchRoomsForDisplay(b);
   const _scu=document.getElementById('summary-cultivar'); if(_scu) _scu.value = b.cultivar||'';
+  const _svs=document.getElementById('summary-veg-start-edit'); if(_svs) _svs.value = b.vegStart||'';
+  const _sfs=document.getElementById('summary-flower-start-edit'); if(_sfs) _sfs.value = b.flowerStart||'';
   summaryUpdatePhaseOptions(b.plantPhase||'', _curQty);
   document.getElementById('summary-status').value = b.status||'Open';
   applyPhaseRoomLock();
@@ -12500,6 +12515,10 @@ async function summaryUpdateBatch(){
   batchRecs[idx].hydrationDate = _exHyd;
   batchRecs[idx].vegStart = _autoVeg;
   batchRecs[idx].flowerStart = _autoFlower;
+  // Manual lifecycle-date overrides from the editable Veg Start / Flower Start fields. Applied AFTER
+  // the auto-stamp lines above so a correction sticks (e.g. fixing a wrong V-day / F-day badge).
+  { const _e=document.getElementById('summary-veg-start-edit'); if(_e) batchRecs[idx].vegStart = _e.value || ''; }
+  { const _e=document.getElementById('summary-flower-start-edit'); if(_e) batchRecs[idx].flowerStart = _e.value || ''; }
   batchRecs[idx].harvestDate = _autoHarvest;
   batchRecs[idx].packagedDate = _autoPackaged;
   // Delivered Date is auto-set when phase advances to Delivered (above). No user input.
