@@ -2296,7 +2296,17 @@ async function atUpdateById(tbl,recordId,fields){const body={records:[{id:record
 // array of Airtable record objects {id, createdTime, fields}.
 // Delete a record from Airtable by its airtableId. Returns true on success, false on failure.
 // Used to clean up Airtable-side duplicate transactions.
-async function atDelete(tbl, recordId){
+async function atDelete(tbl, recordId, userInitiated){
+  // DATA-INTEGRITY GUARANTEE: a record may only be deleted from Airtable as the direct result of an
+  // explicit USER action — a Delete button, a user-saved edit, or the user-run "Clean Up Duplicates"
+  // tool. Every legitimate caller passes userInitiated=true. Any caller that does NOT (i.e. an
+  // automatic / background / merge / dedup path) is refused here, so a record can never be removed
+  // from Airtable by the system. The local-only dedup never calls this — it only trims the in-memory
+  // view and leaves Airtable untouched.
+  if(userInitiated !== true){
+    console.warn('[atDelete] BLOCKED — non-user-initiated delete attempt on '+tbl+'/'+recordId+'. Airtable record left intact.');
+    return false;
+  }
   if(!atReady() || !tbl || !recordId) return false;
   try{
     const url = 'https://api.airtable.com/v0/'+cfg.base+'/'+encodeURIComponent(tbl)+'/'+encodeURIComponent(recordId);
@@ -4551,7 +4561,7 @@ async function harvestDelete(id){
   if(!confirm('Delete this harvest bin'+(rec.netWeight!=null?' (net '+rec.netWeight.toFixed(3)+' kg)':'')+'? This cannot be undone.')) return;
   if(rec.airtableId && cfg.harvestTbl && cfg.token && cfg.base){
     setSyncPill('ing','Deleting...');
-    const ok = await atDelete(cfg.harvestTbl, rec.airtableId);
+    const ok = await atDelete(cfg.harvestTbl, rec.airtableId, true);
     if(!ok){ setSyncPill('err','Delete failed'); toast('Could not delete from Airtable — bin kept. Try again when online.',5000); return; }
     setSyncPill('ok','Synced');
   }
@@ -5185,7 +5195,7 @@ async function bioDelete(id){
   // Delete from Airtable FIRST when it's been synced — otherwise the next pull re-adds it.
   if(rec.airtableId && cfg.bioTbl && cfg.token && cfg.base){
     setSyncPill('ing','Deleting...');
-    const ok = await atDelete(cfg.bioTbl, rec.airtableId);
+    const ok = await atDelete(cfg.bioTbl, rec.airtableId, true);
     if(!ok){ setSyncPill('err','Delete failed'); toast('Could not delete from Airtable — entry kept. Try again when online.',5000); return; }
     setSyncPill('ok','Synced');
   }
@@ -5572,7 +5582,7 @@ async function pestDelete(id){
   if(!confirm('Delete this Pest ID entry'+(rec.date?' from '+rec.date:'')+'? This cannot be undone.')) return;
   if(rec.airtableId && cfg.pestTbl && cfg.token && cfg.base){
     setSyncPill('ing','Deleting...');
-    const ok = await atDelete(cfg.pestTbl, rec.airtableId);
+    const ok = await atDelete(cfg.pestTbl, rec.airtableId, true);
     if(!ok){ setSyncPill('err','Delete failed'); toast('Could not delete from Airtable — entry kept. Try again when online.',5000); return; }
     setSyncPill('ok','Synced');
   }
@@ -5801,7 +5811,7 @@ async function postDryDelete(id){
   if(!confirm('Delete this container'+(rec.netWeight!=null?' (net '+rec.netWeight.toFixed(3)+' kg)':'')+'? This cannot be undone.')) return;
   if(rec.airtableId && cfg.postDryTbl && cfg.token && cfg.base){
     setSyncPill('ing','Deleting...');
-    const ok = await atDelete(cfg.postDryTbl, rec.airtableId);
+    const ok = await atDelete(cfg.postDryTbl, rec.airtableId, true);
     if(!ok){ setSyncPill('err','Delete failed'); toast('Could not delete from Airtable — container kept. Try again when online.',5000); return; }
     setSyncPill('ok','Synced');
   }
@@ -6546,7 +6556,7 @@ async function roDelete(id){
   if(!confirm('Delete this Runoff entry'+(rec.date?' from '+rec.date:'')+'? This cannot be undone.')) return;
   if(rec.airtableId && cfg.roTbl && cfg.token && cfg.base){
     setSyncPill('ing','Deleting...');
-    const ok = await atDelete(cfg.roTbl, rec.airtableId);
+    const ok = await atDelete(cfg.roTbl, rec.airtableId, true);
     if(!ok){ setSyncPill('err','Delete failed'); toast('Could not delete from Airtable — entry kept. Try again when online.',5000); return; }
     setSyncPill('ok','Synced');
   }
@@ -7044,7 +7054,7 @@ async function ecDelete(id){
   if(!confirm('Delete this EC entry ('+(rec.wtype||'')+(rec.date?' on '+rec.date:'')+')? This cannot be undone. (It will not change the batch phase or lifecycle dates.)')) return;
   if(rec.airtableId && cfg.ecTbl && cfg.token && cfg.base){
     setSyncPill('ing','Deleting...');
-    const ok = await atDelete(cfg.ecTbl, rec.airtableId);
+    const ok = await atDelete(cfg.ecTbl, rec.airtableId, true);
     if(!ok){ setSyncPill('err','Delete failed'); toast('Could not delete from Airtable — entry kept. Try again when online.',5000); return; }
     setSyncPill('ok','Synced');
   }
@@ -7190,7 +7200,7 @@ async function flowDelete(id){
   if(!confirm('Delete this flow reading'+(rec.date?' from '+rec.date:'')+((rec.reading!=null)?' ('+parseFloat(rec.reading).toFixed(3)+' L)':'')+'? This cannot be undone.')) return;
   if(rec.airtableId && cfg.flowTbl && cfg.token && cfg.base){
     setSyncPill('ing','Deleting...');
-    const ok = await atDelete(cfg.flowTbl, rec.airtableId);
+    const ok = await atDelete(cfg.flowTbl, rec.airtableId, true);
     if(!ok){ setSyncPill('err','Delete failed'); toast('Could not delete from Airtable — reading kept. Try again when online.',5000); return; }
     setSyncPill('ok','Synced');
   }
@@ -7892,7 +7902,7 @@ async function _cleanAirtableDupesForTable(tblId, localArr, remoteKeyFn, label){
   });
   let deleted = 0, failed = 0;
   for(const rr of toDelete){
-    const ok = await atDelete(tblId, rr.id);
+    const ok = await atDelete(tblId, rr.id, true);
     if(ok) deleted++; else failed++;
   }
   return { found: toDelete.length, deleted, failed };
@@ -8060,7 +8070,7 @@ async function cleanAirtableDuplicateTx(){
       if(!keeper) keeper = recs[0];
       for(const rr of recs){
         if(rr.id === keeper.id) continue;
-        const ok = await atDelete(s.tblId, rr.id);
+        const ok = await atDelete(s.tblId, rr.id, true);
         if(ok){ totalDeleted++; deletedIds.push(rr.id); } else totalFailed++;
       }
     }
@@ -8621,7 +8631,7 @@ async function wasteSave(){
     if(_oldIdx >= 0){
       const _old = wasteRecs[_oldIdx];
       const _ob = await wasteReverseDestroyed(_old);
-      if(_old.airtableId && cfg.wasteTbl && cfg.token && cfg.base){ try { await atDelete(cfg.wasteTbl, _old.airtableId); } catch(_){} }
+      if(_old.airtableId && cfg.wasteTbl && cfg.token && cfg.base){ try { await atDelete(cfg.wasteTbl, _old.airtableId, true); } catch(_){} }
       wasteRecs.splice(_oldIdx, 1); lsSet('gp-waste', wasteRecs);
       if(_ob && cfg.batchTbl && cfg.token && cfg.base){ try { await atUpsert(cfg.batchTbl, buildBatchFields(_ob), ['Batch ID']); _ob.synced = true; lsSet('gp-batch', batchRecs); } catch(_){} }
     }
@@ -8818,7 +8828,7 @@ async function wasteReverseDestroyed(rec){
   const idx = wasteFindDestroyedTxIdx(rec);
   if(idx >= 0){
     const tx = batchTxRecs[idx];
-    if(tx.airtableId && cfg.batchtxTbl && cfg.token && cfg.base){ try { await atDelete(cfg.batchtxTbl, tx.airtableId); } catch(_){} }
+    if(tx.airtableId && cfg.batchtxTbl && cfg.token && cfg.base){ try { await atDelete(cfg.batchtxTbl, tx.airtableId, true); } catch(_){} }
     batchTxRecs.splice(idx, 1);
     lsSet('gp-batchtx', batchTxRecs);
   }
@@ -8849,7 +8859,7 @@ async function wasteDelete(id){
       + ' This cannot be undone.')) return;
   if(rec.airtableId && cfg.wasteTbl && cfg.token && cfg.base){
     setSyncPill('ing','Deleting...');
-    const ok = await atDelete(cfg.wasteTbl, rec.airtableId);
+    const ok = await atDelete(cfg.wasteTbl, rec.airtableId, true);
     if(!ok){ setSyncPill('err','Delete failed'); toast('Could not delete from Airtable — entry kept. Try again when online.',5000); return; }
     setSyncPill('ok','Synced');
   }
@@ -9265,7 +9275,7 @@ async function destroyDelete(id){
   if(!confirm('Delete this destruction record from '+(rec.date||'')+'? The '+((rec.coveredKeys||[]).length)+' waste record(s) it covered will return to the pending list.')) return;
   if(rec.airtableId && cfg.destroyTbl && cfg.token && cfg.base){
     setSyncPill('ing','Deleting...');
-    const ok = await atDelete(cfg.destroyTbl, rec.airtableId);
+    const ok = await atDelete(cfg.destroyTbl, rec.airtableId, true);
     if(!ok){ setSyncPill('err','Delete failed'); toast('Could not delete from Airtable — kept.',5000); return; }
     setSyncPill('ok','Synced');
   }
@@ -13422,7 +13432,7 @@ async function summaryTxDelete(id){
   const _sharesAt = tx.airtableId && batchTxRecs.some((t,i) => i !== idx && t.airtableId === tx.airtableId);
   if(tx.airtableId && !_sharesAt && cfg.batchtxTbl && cfg.token && cfg.base){
     setSyncPill('ing','Deleting...');
-    const ok = await atDelete(cfg.batchtxTbl, tx.airtableId);
+    const ok = await atDelete(cfg.batchtxTbl, tx.airtableId, true);
     if(!ok){ setSyncPill('err','Delete failed'); toast('Could not delete from Airtable — transaction kept. Try again when online.',5000); return; }
     setSyncPill('ok','Synced');
   }
@@ -14321,7 +14331,7 @@ async function sanclDelete(id){
   if(!confirm('Delete this cleaning entry ('+(rec.task||'')+(rec.date?' on '+rec.date:'')+')? This cannot be undone.')) return;
   if(rec.airtableId && cfg.sanCleanTbl && cfg.token && cfg.base){
     setSyncPill('ing','Deleting...');
-    const ok = await atDelete(cfg.sanCleanTbl, rec.airtableId);
+    const ok = await atDelete(cfg.sanCleanTbl, rec.airtableId, true);
     if(!ok){ setSyncPill('err','Delete failed'); toast('Could not delete from Airtable — entry kept. Try again when online.',5000); return; }
     setSyncPill('ok','Synced');
   }
@@ -14583,7 +14593,7 @@ async function santoolDelete(id){
   if(!confirm('Delete this tool cleaning entry ('+(rec.tool||'')+(rec.date?' on '+rec.date:'')+')? This cannot be undone.')) return;
   if(rec.airtableId && cfg.sanToolTbl && cfg.token && cfg.base){
     setSyncPill('ing','Deleting...');
-    const ok = await atDelete(cfg.sanToolTbl, rec.airtableId);
+    const ok = await atDelete(cfg.sanToolTbl, rec.airtableId, true);
     if(!ok){ setSyncPill('err','Delete failed'); toast('Could not delete from Airtable — entry kept. Try again when online.',5000); return; }
     setSyncPill('ok','Synced');
   }
@@ -15537,7 +15547,7 @@ async function seedInvDelete(id){
   if(!confirm('Delete "'+rec.strain+'" from seed inventory? Existing batches that referenced this strain stay intact.')) return;
   // Try to delete from Airtable first; even if it fails, remove locally.
   if(rec.airtableId && cfg.seedInvTbl && cfg.token && cfg.base){
-    try { await atDelete(cfg.seedInvTbl, rec.airtableId); } catch(_) {}
+    try { await atDelete(cfg.seedInvTbl, rec.airtableId, true); } catch(_) {}
   }
   seedInvRecs = seedInvRecs.filter(r => r.id !== id);
   lsSet('gp-seedinv', seedInvRecs);
