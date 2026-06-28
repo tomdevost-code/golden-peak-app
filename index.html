@@ -1390,7 +1390,8 @@ tr:last-child td { border-bottom: none; }
         <!-- Transaction History -->
         <div class="section-label">Transaction History</div>
         <div id="summary-tx-history" style="margin-bottom:8px;"></div>
-        <button type="button" class="btn-secondary" onclick="summaryAddCorrectiveTx()" style="width:100%;margin-bottom:20px;font-size:12px;">＋ Add corrective transaction (manual)</button>
+        <button type="button" class="btn-secondary" onclick="summaryAddCorrectiveTx()" style="width:100%;margin-bottom:8px;font-size:12px;">＋ Add corrective transaction (manual)</button>
+        <button type="button" class="btn-secondary" onclick="summaryResyncBatchTx()" style="width:100%;margin-bottom:20px;font-size:12px;">⇪ Re-push this batch's transactions to Airtable</button>
       </div>
     </div>
 
@@ -13309,6 +13310,35 @@ function summaryRenderHistory(batchId){
 // removing a row recomputes the count automatically: deleting a Destroyed/Harvested restores its
 // plants; deleting a Produced/Received removes them. Phase/room state on the batch record is left
 // as-is (use Manage Batch to adjust those if needed). Removes from Airtable too when synced.
+// Re-push ALL of a batch's transactions to Airtable as fresh rows. Use when Airtable is MISSING a
+// batch's transactions (they never synced, or their rows were removed) — clears each local row's
+// airtableId and re-POSTs it linked to this batch. WARNING: if Airtable still has some of them,
+// this creates duplicates (run "Clean Up Airtable Duplicates" after). Intended for the empty case.
+async function summaryResyncBatchTx(){
+  const batchId = (document.getElementById('summary-batch-select')||{}).value || '';
+  if(!batchId){ toast('Select a batch first.'); return; }
+  if(!(cfg.batchtxTbl && cfg.token && cfg.base)){ toast('Airtable not configured.'); return; }
+  const txs = batchTxRecs.filter(t => t.batchId === batchId);
+  if(!txs.length){ toast('No transactions on '+batchId+' to push.'); return; }
+  if(!confirm('Re-push all '+txs.length+' transaction(s) for '+batchId+' to Airtable?\n\nUse this only when Airtable is MISSING this batch\'s transactions. If Airtable already has some, this will create duplicates (you can clean those up after).')) return;
+  txs.forEach(t => { t.airtableId = undefined; t.synced = false; });
+  lsSet('gp-batchtx', batchTxRecs);
+  updatePendingBadge();
+  setSyncPill('ing','Re-pushing...');
+  let ok=0, fail=0, lastErr='';
+  for(const tx of txs){
+    try {
+      const f = { 'Batch ID':[batchId], 'Date':tx.date, 'Transaction Type':tx.txType, 'Plant Phase':tx.plantPhase||undefined, 'Quantity':tx.qty, 'Weight (kg)':tx.weight||undefined, 'Sale Stage':tx.saleStage||undefined, 'Lab Destination Type':tx.labDestType||undefined, 'Lab Material Type':tx.labMaterialType||undefined, 'Lab Destination Name':tx.labDestName||undefined, 'From Phase':tx.fromPhase||undefined, 'To Phase':tx.toPhase||undefined, 'Room':tx.room||undefined, 'Cohort Purpose':tx.cohortPurpose||undefined, 'Notes':tx.notes||undefined };
+      Object.keys(f).forEach(k=>{ if(f[k]===undefined||f[k]===null||f[k]==='') delete f[k]; });
+      const _r = await atPost(cfg.batchtxTbl, f); if(_r && _r.id) tx.airtableId = _r.id;
+      tx.synced = true; ok++;
+    } catch(e){ fail++; lastErr = e.message; }
+  }
+  lsSet('gp-batchtx', batchTxRecs);
+  updatePendingBadge();
+  setSyncPill(fail?'err':'ok', fail?'Re-push errors':'Synced');
+  toast('Re-pushed '+ok+' transaction(s) for '+batchId+(fail?' · '+fail+' failed: '+lastErr:'')+'.', fail?6000:4000);
+}
 // Manually add a corrective transaction — recovers a lost auto-transaction (e.g. a Destroyed that
 // was deleted) or fixes a count, with a chosen date. Creates a real batch transaction (local +
 // Airtable). Destroyed/Harvested debit the count; Produced/Received credits it.
