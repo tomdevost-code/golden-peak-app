@@ -1054,6 +1054,12 @@ tr:last-child td { border-bottom: none; }
         <div class="card" style="margin-bottom:12px;">
           <div class="section-label">Manage Batch</div>
 
+          <!-- Cultivar (editable — e.g. to fill in a missing cultivar name) -->
+          <div class="field" style="margin-bottom:12px;">
+            <label>Cultivar</label>
+            <input type="text" id="summary-cultivar" placeholder="Cultivar name" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;" />
+          </div>
+
           <!-- Rooms / Plant Distribution (chip + pill layout) -->
           <div class="field" style="margin-bottom:12px;">
             <label>Plant Distribution</label>
@@ -10636,6 +10642,7 @@ function summaryBatchChanged(){
   // multi-day harvest state obvious — e.g. "Flower 1 (0), Flower 2 (30)" means Flower 1 has been
   // harvested while Flower 2 is still flowering.
   document.getElementById('si-rooms').textContent = formatBatchRoomsForDisplay(b);
+  const _scu=document.getElementById('summary-cultivar'); if(_scu) _scu.value = b.cultivar||'';
   summaryUpdatePhaseOptions(b.plantPhase||'', _curQty);
   document.getElementById('summary-status').value = b.status||'Open';
   applyPhaseRoomLock();
@@ -12486,6 +12493,7 @@ async function summaryUpdateBatch(){
   } else {
     batchRecs[idx].roomDistribution = roomDistribution;
   }
+  { const _scuV=(document.getElementById('summary-cultivar')||{}).value; if(_scuV!=null) batchRecs[idx].cultivar = _scuV.trim(); }
   batchRecs[idx].plantPhase = plantPhase;
   batchRecs[idx].status = status;
   batchRecs[idx].closedDate = closedDate;
