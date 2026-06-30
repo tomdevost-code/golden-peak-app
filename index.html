@@ -15210,7 +15210,6 @@ function ctlsGenerateReport(){
     {label:'Moved to Moms', value: v(veg.movedToMoms, 'plants'), detail:veg.movedToMomsDetail},
     {label:'Moved from Moms (= count above, taken from mom source)', value: v(veg.movedFromMoms, 'plants'), detail:veg.movedFromMomsDetail},
     {label:'Destroyed in Veg/Clone phase', value: v(veg.destroyedVeg, 'plants'), detail:veg.destroyedVegDetail},
-    {label:'Destroyed (all phases — cross-check vs Section 3)', value: v(veg.destroyedAll, 'plants'), detail:veg.destroyedAllDetail},
     {label:'Vegetative Waste records in the month', value: v(veg.vegWasteCount, 'records'), detail:veg.vegWasteCountDetail},
     {label:'Vegetative Waste weight', note:'sum of Weight (kg) across all Veg Waste records in the month', value: v(veg.vegWasteWeight, 'kg'), detail:veg.vegWasteWeightDetail},
     {label:'Sold (clones/Veg)', note:'Sold tx · Sale Stage = Live Plants — includes both Clones-phase and Veg-phase live-plant sales', value: v(veg.sold, 'plants'), detail:veg.soldDetail},
