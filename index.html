@@ -9247,9 +9247,17 @@ function destroyLossRender(){
     let tVR=0,tVA=0,tDR=0,tDA=0;
     batches.forEach(bid=>{
       const wb = covered.filter(w=>w.batch===bid);
-      const vegRec = wb.filter(w=>w.type==='Vegetative Waste').reduce((s,w)=>s+(parseFloat(w.weight)||0),0);
-      const dryRec = wb.filter(w=>w.type==='Dry Waste').reduce((s,w)=>s+(parseFloat(w.weight)||0),0);
       const adj = adjByBatch[bid];
+      // "Recorded" prefers the live covered-waste weight when those records can still be matched,
+      // but falls back PER BATCH to the value captured on the destruction event (adj.vegRecorded).
+      // A single destruction event covers many batches, so matching can fail for one batch (e.g. its
+      // waste records were later reassigned, which changes their identity key) while succeeding for
+      // others. Without the per-batch fallback that batch read 0 recorded and produced a nonsensical
+      // negative drying loss.
+      const _covVeg = wb.filter(w=>w.type==='Vegetative Waste').reduce((s,w)=>s+(parseFloat(w.weight)||0),0);
+      const _covDry = wb.filter(w=>w.type==='Dry Waste').reduce((s,w)=>s+(parseFloat(w.weight)||0),0);
+      const vegRec = _covVeg > 0 ? _covVeg : (adj ? (parseFloat(adj.vegRecorded)||0) : 0);
+      const dryRec = _covDry > 0 ? _covDry : (adj ? (parseFloat(adj.dryRecorded)||0) : 0);
       const vegAct = adj ? (parseFloat(adj.vegActual)||0) : vegRec;
       const dryAct = adj ? (parseFloat(adj.dryActual)||0) : dryRec;
       tVR+=vegRec;tVA+=vegAct;tDR+=dryRec;tDA+=dryAct;
@@ -9291,9 +9299,11 @@ function destroyLossExportCSV(){
     covered.sort((a,b)=> (a.batch||'').localeCompare(b.batch||'') || (a.date||'').localeCompare(b.date||''));
     covered.forEach(w=>{
       const b=w.batch||''; const a=agg[b]||{vegRec:0,dryRec:0}; const adj=adjByBatch[b];
-      const vegAct = adj?(parseFloat(adj.vegActual)||0):a.vegRec;
-      const dryAct = adj?(parseFloat(adj.dryActual)||0):a.dryRec;
-      rows.push([rec.date||'',rec.employee||'',b,w.date||'',w.room||'',w.type||'',w.subtype||'',L(parseFloat(w.weight)||0),(w.plants||0),L(a.vegRec),L(vegAct),L(a.vegRec-vegAct),L(a.dryRec),L(dryAct),L(a.dryRec-dryAct)].map(q));
+      const vegRec = a.vegRec > 0 ? a.vegRec : (adj ? (parseFloat(adj.vegRecorded)||0) : 0);
+      const dryRec = a.dryRec > 0 ? a.dryRec : (adj ? (parseFloat(adj.dryRecorded)||0) : 0);
+      const vegAct = adj?(parseFloat(adj.vegActual)||0):vegRec;
+      const dryAct = adj?(parseFloat(adj.dryActual)||0):dryRec;
+      rows.push([rec.date||'',rec.employee||'',b,w.date||'',w.room||'',w.type||'',w.subtype||'',L(parseFloat(w.weight)||0),(w.plants||0),L(vegRec),L(vegAct),L(vegRec-vegAct),L(dryRec),L(dryAct),L(dryRec-dryAct)].map(q));
     });
   });
   if(rows.length<=1){ toast('No covered waste records to export.'); return; }
@@ -9332,8 +9342,10 @@ function destroyPrint(id){
     const recsB = covered.filter(w => w.batch === bid);
     if(!recsB.length) return;
     const adj = (rec.adjust||[]).find(a=>a.batch===bid);
-    const vegRec = recsB.filter(r=>r.type==='Vegetative Waste').reduce((s,r)=>s+(parseFloat(r.weight)||0),0);
-    const dryRec = recsB.filter(r=>r.type==='Dry Waste').reduce((s,r)=>s+(parseFloat(r.weight)||0),0);
+    const _cVeg = recsB.filter(r=>r.type==='Vegetative Waste').reduce((s,r)=>s+(parseFloat(r.weight)||0),0);
+    const _cDry = recsB.filter(r=>r.type==='Dry Waste').reduce((s,r)=>s+(parseFloat(r.weight)||0),0);
+    const vegRec = _cVeg > 0 ? _cVeg : (adj ? (parseFloat(adj.vegRecorded)||0) : 0);
+    const dryRec = _cDry > 0 ? _cDry : (adj ? (parseFloat(adj.dryRecorded)||0) : 0);
     const vegB = adj ? (parseFloat(adj.vegActual)||0) : vegRec;   // actual destroyed (post drying loss)
     const dryB = adj ? (parseFloat(adj.dryActual)||0) : dryRec;
     const vegLossB = vegRec - vegB;
@@ -15266,7 +15278,21 @@ function ctlsGenerateReport(){
       const keySet = new Set(d.coveredKeys||[]);
       const covered = wasteRecs.filter(w => keySet.has(NAT_KEY_FN.waste(w)));
       let vegR, dryR;
-      if(covered.length){
+      const _adjArr = d.adjust||[];
+      if(_adjArr.length){
+        // Sum recorded PER BATCH: prefer the live covered-waste weight when those records still
+        // match, else fall back to the value captured on the event for that batch. An all-or-nothing
+        // event-level fallback under-counted recorded weight when SOME batches in the event could no
+        // longer be matched (e.g. reassigned waste records), producing a negative drying loss.
+        vegR = 0; dryR = 0;
+        _adjArr.forEach(a=>{
+          const wb = covered.filter(w=>w.batch===a.batch);
+          const cv = wb.filter(w=>w.type==='Vegetative Waste').reduce((s,w)=>s+(parseFloat(w.weight)||0),0);
+          const cd = wb.filter(w=>w.type==='Dry Waste').reduce((s,w)=>s+(parseFloat(w.weight)||0),0);
+          vegR += cv > 0 ? cv : (parseFloat(a.vegRecorded)||0);
+          dryR += cd > 0 ? cd : (parseFloat(a.dryRecorded)||0);
+        });
+      } else if(covered.length){
         vegR = covered.filter(w=>w.type==='Vegetative Waste').reduce((s,w)=>s+(parseFloat(w.weight)||0),0);
         dryR = covered.filter(w=>w.type==='Dry Waste').reduce((s,w)=>s+(parseFloat(w.weight)||0),0);
       } else {
