@@ -8497,12 +8497,19 @@ function wasteSeqUnlock(){
   //     alive — anything trimmed off them post-harvest is dry-flower material).
   //   • Clones / Veg / Flower → Vegetative Waste (live plants, trim & de-leaf work).
   const _phaseNow = batchRec ? batchRec.plantPhase : '';
-  const _wasteTypeForRoom = (_phaseNow === 'Packaged' || _phaseNow === 'Drying') ? 'Dry Waste' : 'Vegetative Waste';
-  // Filter waste-type dropdown — single option determined by phase.
+  // The Trim Room handles BOTH dried-flower trimmings (Dry Waste) and any leaf/veg material
+  // pulled off plants during trimming (Vegetative Waste), so it offers both types. All other
+  // rooms get the single phase-driven option: Dry Waste post-harvest, Vegetative Waste before.
+  let _wasteTypeOpts;
+  if(room === 'Trim Room'){
+    _wasteTypeOpts = ['Vegetative Waste','Dry Waste'];
+  } else {
+    _wasteTypeOpts = [(_phaseNow === 'Packaged' || _phaseNow === 'Drying') ? 'Dry Waste' : 'Vegetative Waste'];
+  }
   const _wtEl = document.getElementById('waste-type');
   const _wtPrev = _wtEl.value;
-  _wtEl.innerHTML = '<option value="">select type</option><option>'+_wasteTypeForRoom+'</option>';
-  _wtEl.value = (_wtPrev===_wasteTypeForRoom) ? _wasteTypeForRoom : '';
+  _wtEl.innerHTML = '<option value="">select type</option>'+_wasteTypeOpts.map(t=>'<option>'+t+'</option>').join('');
+  _wtEl.value = _wasteTypeOpts.includes(_wtPrev) ? _wtPrev : '';
   enableFields();
   applyRoomColor('waste',room);
   wastePlantsToggle();
@@ -8569,8 +8576,8 @@ function wasteRefreshSubtype(){
   // trim and de-leaf work on drying plants), so Drying-phase records get the
   // same Veg/Flower sub-category list as live Flower rooms.
   let opts = [];
-  if(phase === 'Clones' || phase === 'Germination')     opts = VEG_WASTE_SUBTYPES_CLONES.slice();
-  else if(['Veg','Flower','Drying'].includes(phase))    opts = VEG_WASTE_SUBTYPES_VEGFLOWER.slice();
+  if(phase === 'Clones' || phase === 'Germination')               opts = VEG_WASTE_SUBTYPES_CLONES.slice();
+  else if(['Veg','Flower','Drying','Packaged'].includes(phase))    opts = VEG_WASTE_SUBTYPES_VEGFLOWER.slice();
   else opts = [];
   // "Not Germinated" is only meaningful for Seeds-genetics batches AND only while they're
   // still in the Germination phase (the only phase where individual seeds can fail to sprout).
@@ -8626,9 +8633,10 @@ async function wasteSave(){
     return;
   }
   // Drying and Packaged batches record Dry Waste; everything earlier is Vegetative Waste.
+  // EXCEPTION: the Trim Room accepts BOTH types (dried-flower trim = Dry Waste, leaf/veg material
+  // pulled during trimming = Vegetative Waste), so the phase-type match is skipped for it.
   const _wsExpectedType = (_wsPhase === 'Packaged' || _wsPhase === 'Drying') ? 'Dry Waste' : 'Vegetative Waste';
-  // Guard: waste type must match what this phase allows
-  if(type !== _wsExpectedType){
+  if(room !== 'Trim Room' && type !== _wsExpectedType){
     if(_wsExpectedType === 'Vegetative Waste'){
       toast('This batch is still pre-harvest — record Vegetative Waste, not Dry Waste.',5500);
     } else if(_wsPhase === 'Drying'){
