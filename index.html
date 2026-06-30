@@ -9117,7 +9117,6 @@ async function destroyReassignPending(wasteId, toBatch){
   const from = r.batch||'';
   if(!confirm('Reassign this waste record from '+(from||'(none)')+' to '+toBatch+'?\n\n'+(r.date||'')+' · '+(r.type||'')+' · '+(r.subtype||'')+' · '+(parseFloat(r.weight)||0).toFixed(3)+' kg'+((r.plants||0)?' · '+r.plants+' plants':'')+'\n\nThis also moves its plant-destruction transaction (if any) and re-syncs to Airtable.')) return;
   r.batch = toBatch;
-  r.synced = false;
   // Move the linked auto-created Destroyed tx, if present. Records pulled from Airtable lose the
   // destroyedTxId link, so when it's missing we locate the matching auto-created Destroyed tx by
   // content (same source batch, date, plant count, and the auto-create note).
@@ -9130,15 +9129,37 @@ async function destroyReassignPending(wasteId, toBatch){
       && (parseInt(t.qty)||0) === (parseInt(r.plants)||0) && (t.date||'') === (r.date||'')
       && /Auto-created from Vegetative Waste/.test(t.notes||''));
   }
-  if(tx){ tx.batchId = toBatch; tx.synced = false; }
+  if(tx){ tx.batchId = toBatch; }
+  // Push the new batch DIRECTLY to Airtable now (PATCH the linked Batch ID), then mark synced.
+  // We do NOT route this through syncPending(): that pulls first, and the pull would see the
+  // local batch no longer matching the remote record's old batch, judge the airtableId link as
+  // "stale", and re-append the OLD-batch copy — which is exactly why a reassigned record kept
+  // reappearing on the pending list. Updating the remote up-front keeps both sides in agreement.
+  const _canSync = !!(cfg.token && cfg.base);
+  let _ok = true, _failMsg = '';
+  if(_canSync && r.airtableId && cfg.wasteTbl){
+    try { await atUpdateById(cfg.wasteTbl, r.airtableId, { 'Batch ID':[toBatch] }); r.synced = true; }
+    catch(e){ _ok = false; _failMsg = (e && e.message)||'error'; r.synced = false; }
+  } else {
+    // Local-only record (never synced) — no remote copy to conflict with; a later sync POSTs it.
+    r.synced = false;
+  }
+  if(tx){
+    if(_canSync && tx.airtableId && cfg.batchtxTbl){
+      try { await atUpdateById(cfg.batchtxTbl, tx.airtableId, { 'Batch ID':[toBatch] }); tx.synced = true; }
+      catch(e){ tx.synced = false; }
+    } else {
+      tx.synced = false;
+    }
+  }
   lsSet('gp-waste', wasteRecs);
   lsSet('gp-batchtx', batchTxRecs);
   updatePendingBadge();
   destroyRenderPending();
   try { if(typeof renderWaste==='function') renderWaste(); } catch(_){}
   try { if(typeof summaryRefresh==='function') summaryRefresh(); } catch(_){}
-  toast('Reassigned to '+toBatch+'. Syncing…');
-  if(typeof syncPending==='function') syncPending();
+  if(_ok) toast('Reassigned to '+toBatch+'.');
+  else toast('Reassigned locally, but the Airtable update failed ('+_failMsg+'). It will retry on the next sync.',6000);
 }
 function destroySetSigMode(mode){
   destroySigMode = (mode==='type') ? 'type' : 'draw';
