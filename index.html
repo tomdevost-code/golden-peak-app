@@ -1462,6 +1462,7 @@ tr:last-child td { border-bottom: none; }
           <div style="font-size:11px;color:var(--text3);line-height:1.45;margin-bottom:10px;">Compares each event's stored destroyed weight against the waste records that still exist in the app today. "Phantom" weight comes from waste records that were later deleted or reassigned (e.g. the PB-002/PB-003 cleanup) — it inflates the destruction totals above your live waste data. Read-only; nothing is changed.</div>
           <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
             <button type="button" class="btn-secondary" onclick="destroyReconToggle()" style="flex:1;min-width:140px;">Show / Hide</button>
+            <button type="button" class="btn-secondary" onclick="destroyRestoreMissing()" style="flex:1;min-width:140px;">Restore Missing Records</button>
           </div>
           <div id="destroy-recon-report"></div>
         </div>
@@ -9364,6 +9365,58 @@ function destroyReconRender(){
     +(gPhantom>0.0005?'<div style="margin-top:6px;">The phantom weight is what makes the destruction totals (and CTLS Section 6) read higher than your live Vegetative Waste figure. Batches flagged <b>no records found</b> had all their covered waste records deleted/reassigned after this event was recorded.</div>':'')
     +'</div>';
   el.innerHTML = summary + html;
+}
+// Collect waste records that a destruction event covered but which no longer exist in wasteRecs.
+// Each coveredKey is a reversible natural key: batch|date|room|type|subtype|weight|plants. We parse
+// the orphans (keys with no live match) back into full waste records. Deduped across events.
+function destroyCollectMissing(){
+  const existing = new Set(wasteRecs.map(w => NAT_KEY_FN.waste(w)));
+  const seen = new Set();
+  const out = [];
+  destroyRecs.forEach(ev=>{
+    (ev.coveredKeys||[]).forEach(k=>{
+      if(existing.has(k) || seen.has(k)) return;
+      const parts = String(k).split('|');
+      if(parts.length !== 7) return; // can't safely reconstruct
+      seen.add(k);
+      out.push({ key:k, srcDate:ev.date||'', rec:{
+        batch: parts[0], date: parts[1], room: parts[2], type: parts[3],
+        subtype: parts[4], weight: parseFloat(parts[5])||0, plants: parseInt(parts[6])||0
+      }});
+    });
+  });
+  return out;
+}
+// Restore the deleted waste records covered by past destruction events. They are reconstructed from
+// the stored coveredKeys, marked synced:false so they push to Airtable. Because their keys are
+// already in a destruction event's coveredKeys, they will NOT re-appear as pending to destroy.
+function destroyRestoreMissing(){
+  const miss = destroyCollectMissing();
+  if(!miss.length){ toast('Nothing to restore — live waste data already matches the destruction events.'); return; }
+  const totVeg = miss.reduce((s,m)=> s + (m.rec.type==='Vegetative Waste' ? m.rec.weight : 0), 0);
+  const totDry = miss.reduce((s,m)=> s + (m.rec.type==='Dry Waste' ? m.rec.weight : 0), 0);
+  const byBatch = {}; miss.forEach(m=>{ byBatch[m.rec.batch] = (byBatch[m.rec.batch]||0) + 1; });
+  const summary = Object.keys(byBatch).sort().map(b => b+': '+byBatch[b]).join('\n• ');
+  if(!confirm('Restore '+miss.length+' deleted waste record(s)?\n\n• '+summary+'\n\nVegetative: '+totVeg.toFixed(3)+' kg · Dry: '+totDry.toFixed(3)+' kg\n\nThese were covered by past destruction events, so they will NOT re-appear as pending to destroy. They will sync to Airtable.')) return;
+  let added = 0;
+  miss.forEach(m=>{
+    const r = m.rec;
+    wasteRecs.push({
+      id: Date.now() + Math.floor(Math.random()*100000) + added,
+      date: r.date, grower: '', batch: r.batch, room: r.room,
+      type: r.type, subtype: r.subtype, weight: r.weight, plants: r.plants,
+      notes: 'Restored from destruction event '+m.srcDate+' — record had been deleted',
+      synced: false
+    });
+    added++;
+  });
+  lsSet('gp-waste', wasteRecs);
+  updatePendingBadge();
+  try { if(typeof renderWaste==='function') renderWaste(); } catch(_){}
+  try { destroyReconRender(); } catch(_){}
+  try { if(typeof destroyLossToggle==='function'){ const _le=document.getElementById('destroy-loss-report'); if(_le && _le.style.display!=='none' && _le.innerHTML.trim()) destroyLossRender(); } } catch(_){}
+  toast('Restored '+added+' record(s). Syncing to Airtable…');
+  if(typeof syncPending==='function') syncPending();
 }
 function destroyLossExportCSV(){
   if(!destroyRecs.length){ toast('No destruction events to export.'); return; }
