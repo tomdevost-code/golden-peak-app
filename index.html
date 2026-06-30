@@ -9063,10 +9063,32 @@ function destroyRenderPending(){
     +'<span style="color:var(--green);">Vegetative: <strong>'+L(vegW)+' kg</strong></span>'
     +'<span style="color:var(--amber);">Dry: <strong>'+L(dryW)+' kg</strong></span>'
     +'<span>Total: <strong>'+L(vegW+dryW)+' kg</strong></span></div>';
+  // Diagnosis index: map every already-destroyed record to a BATCH-AGNOSTIC key (everything except
+  // the batch ID). If a pending record matches one of these, it was already destroyed under a
+  // DIFFERENT batch — i.e. it's the same physical waste, just mislabeled to the wrong batch now.
+  const coveredByAgnostic = {};
+  destroyRecs.forEach(d=>{ (d.coveredKeys||[]).forEach(k=>{
+    const parts = String(k).split('|');
+    if(parts.length !== 7) return;
+    const agn = parts.slice(1).join('|');
+    (coveredByAgnostic[agn] = coveredByAgnostic[agn] || new Set()).add(parts[0]);
+  }); });
+  const _agnOf = r => [ (r.date||''),(r.room||'').toString(),(r.type||'').toString(),(r.subtype||'').toString(),(parseFloat(r.weight)||0).toFixed(3),(parseInt(r.plants)||0) ].join('|');
+  let flagged = 0;
   html += '<div style="overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius-sm);background:#fff;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#f5f5f5;">'
-    +['Date','Batch','Room','Type','Sub-Cat','Weight','Plants'].map(h=>'<th style="padding:6px 8px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;border-bottom:1px solid var(--border);">'+h+'</th>').join('')
+    +['Date','Batch','Room','Type','Sub-Cat','Weight','Plants','Diagnosis','Fix'].map(h=>'<th style="padding:6px 8px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;border-bottom:1px solid var(--border);">'+h+'</th>').join('')
     +'</tr></thead><tbody>';
   pend.forEach(r=>{
+    const matches = coveredByAgnostic[_agnOf(r)];
+    const otherBatches = matches ? [...matches].filter(b => (b||'').toUpperCase() !== (r.batch||'').toUpperCase()) : [];
+    let diag, fixBtn='';
+    if(otherBatches.length){
+      flagged++;
+      diag = '<span style="color:var(--amber);font-weight:700;">already destroyed as '+otherBatches.join(', ')+' — mislabeled?</span>';
+      fixBtn = '<button class="btn-secondary" style="padding:3px 8px;font-size:11px;" onclick="destroyReassignPending('+r.id+',\''+otherBatches[0].replace(/'/g,"")+'\')">→ '+otherBatches[0]+'</button>';
+    } else {
+      diag = '<span style="color:var(--text3);">new — awaiting destruction</span>';
+    }
     html += '<tr>'
       +'<td style="padding:5px 8px;font-family:var(--mono);border-top:1px solid var(--border);white-space:nowrap;">'+(r.date||'—')+'</td>'
       +'<td style="padding:5px 8px;font-family:var(--mono);border-top:1px solid var(--border);">'+(r.batch||'—')+'</td>'
@@ -9075,10 +9097,40 @@ function destroyRenderPending(){
       +'<td style="padding:5px 8px;border-top:1px solid var(--border);">'+(r.subtype||'—')+'</td>'
       +'<td style="padding:5px 8px;font-family:var(--mono);text-align:right;border-top:1px solid var(--border);">'+L(parseFloat(r.weight)||0)+'</td>'
       +'<td style="padding:5px 8px;font-family:var(--mono);text-align:right;border-top:1px solid var(--border);">'+(r.plants||0)+'</td>'
+      +'<td style="padding:5px 8px;border-top:1px solid var(--border);font-size:11px;">'+diag+'</td>'
+      +'<td style="padding:5px 8px;border-top:1px solid var(--border);">'+fixBtn+'</td>'
       +'</tr>';
   });
   html += '</tbody></table></div>';
+  if(flagged){
+    html += '<div style="margin-top:8px;font-size:11px;color:#3B2A00;background:var(--amber-pale);border:1px solid var(--amber);border-radius:6px;padding:8px 10px;line-height:1.5;">'
+      + flagged+' record(s) match waste already destroyed under a different batch — they look mislabeled. Click the <b>Fix</b> button to reassign each to the batch it was destroyed under; once the batch matches, the record drops off this pending list (it was already destroyed). Reassigning also moves any auto-created plant-destruction transaction and re-syncs to Airtable.</div>';
+  }
   el.innerHTML = html;
+}
+// Reassign a pending (mislabeled) waste record to the batch it was actually destroyed under. Moves
+// the record's batch, its auto-created Destroyed tx (if any), and re-syncs both linked Batch ID
+// fields to Airtable. User-initiated only.
+async function destroyReassignPending(wasteId, toBatch){
+  const r = wasteRecs.find(w => String(w.id) === String(wasteId));
+  if(!r){ toast('Record not found.'); return; }
+  const from = r.batch||'';
+  if(!confirm('Reassign this waste record from '+(from||'(none)')+' to '+toBatch+'?\n\n'+(r.date||'')+' · '+(r.type||'')+' · '+(r.subtype||'')+' · '+(parseFloat(r.weight)||0).toFixed(3)+' kg'+((r.plants||0)?' · '+r.plants+' plants':'')+'\n\nThis also moves its plant-destruction transaction (if any) and re-syncs to Airtable.')) return;
+  r.batch = toBatch;
+  r.synced = false;
+  // Move the linked auto-created Destroyed tx, if present.
+  if(r.destroyedTxId != null){
+    const tx = batchTxRecs.find(t => t && String(t.id) === String(r.destroyedTxId));
+    if(tx){ tx.batchId = toBatch; tx.synced = false; }
+  }
+  lsSet('gp-waste', wasteRecs);
+  lsSet('gp-batchtx', batchTxRecs);
+  updatePendingBadge();
+  destroyRenderPending();
+  try { if(typeof renderWaste==='function') renderWaste(); } catch(_){}
+  try { if(typeof summaryRefresh==='function') summaryRefresh(); } catch(_){}
+  toast('Reassigned to '+toBatch+'. Syncing…');
+  if(typeof syncPending==='function') syncPending();
 }
 function destroySetSigMode(mode){
   destroySigMode = (mode==='type') ? 'type' : 'draw';
