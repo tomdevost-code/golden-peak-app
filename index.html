@@ -9085,7 +9085,7 @@ function destroyRenderPending(){
     if(otherBatches.length){
       flagged++;
       diag = '<span style="color:var(--amber);font-weight:700;">already destroyed as '+otherBatches.join(', ')+' — mislabeled?</span>';
-      fixBtn = '<button class="btn-secondary" style="padding:3px 8px;font-size:11px;" onclick="destroyReassignPending('+r.id+',\''+otherBatches[0].replace(/'/g,"")+'\')">→ '+otherBatches[0]+'</button>';
+      fixBtn = '<button class="btn-secondary" style="padding:3px 8px;font-size:11px;" onclick="destroyReassignPending(\''+String(r.id).replace(/'/g,"")+'\',\''+otherBatches[0].replace(/'/g,"")+'\')">→ '+otherBatches[0]+'</button>';
     } else {
       diag = '<span style="color:var(--text3);">new — awaiting destruction</span>';
     }
@@ -9118,11 +9118,19 @@ async function destroyReassignPending(wasteId, toBatch){
   if(!confirm('Reassign this waste record from '+(from||'(none)')+' to '+toBatch+'?\n\n'+(r.date||'')+' · '+(r.type||'')+' · '+(r.subtype||'')+' · '+(parseFloat(r.weight)||0).toFixed(3)+' kg'+((r.plants||0)?' · '+r.plants+' plants':'')+'\n\nThis also moves its plant-destruction transaction (if any) and re-syncs to Airtable.')) return;
   r.batch = toBatch;
   r.synced = false;
-  // Move the linked auto-created Destroyed tx, if present.
+  // Move the linked auto-created Destroyed tx, if present. Records pulled from Airtable lose the
+  // destroyedTxId link, so when it's missing we locate the matching auto-created Destroyed tx by
+  // content (same source batch, date, plant count, and the auto-create note).
+  let tx = null;
   if(r.destroyedTxId != null){
-    const tx = batchTxRecs.find(t => t && String(t.id) === String(r.destroyedTxId));
-    if(tx){ tx.batchId = toBatch; tx.synced = false; }
+    tx = batchTxRecs.find(t => t && String(t.id) === String(r.destroyedTxId));
   }
+  if(!tx && (parseInt(r.plants)||0) > 0){
+    tx = batchTxRecs.find(t => t && (t.batchId||'') === from && t.txType === 'Destroyed'
+      && (parseInt(t.qty)||0) === (parseInt(r.plants)||0) && (t.date||'') === (r.date||'')
+      && /Auto-created from Vegetative Waste/.test(t.notes||''));
+  }
+  if(tx){ tx.batchId = toBatch; tx.synced = false; }
   lsSet('gp-waste', wasteRecs);
   lsSet('gp-batchtx', batchTxRecs);
   updatePendingBadge();
