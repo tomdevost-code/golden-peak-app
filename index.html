@@ -7828,10 +7828,16 @@ const NAT_KEY_FN_REMOTE = {
   harvest(rrec){
     const f = rrec.fields || {};
     const linkId = Array.isArray(f['Batch ID']) ? f['Batch ID'][0] : '';
+    // Include date + all three weights so two genuinely different bins are never grouped as
+    // duplicates just because they share a batch, room, and bin number.
     return [
       (linkId||'').toString(),
+      (f['Date']||'').toString(),
       (f['Room']||'').toString(),
-      (parseInt(f['Bin Number'])||0)
+      (parseInt(f['Bin Number'])||0),
+      (parseFloat(f['Tare Weight (kg)'])||0).toFixed(3),
+      (parseFloat(f['Total Weight (kg)'])||0).toFixed(3),
+      (parseFloat(f['Net Weight (kg)'])||0).toFixed(3)
     ].join('|');
   },
   postdry(rrec){
@@ -7930,13 +7936,31 @@ async function _cleanAirtableDupesForTable(tblId, localArr, remoteKeyFn, label){
     if(!groups[k]) groups[k] = [];
     groups[k].push(rrec);
   });
+  // SAFETY: only ever delete records that are byte-identical in CONTENT to the one we keep. A
+  // true duplicate (from a double-save) has identical fields; records that merely share the
+  // coarse natural key but differ in ANY data field — e.g. two harvest bins with the same bin
+  // number but different weights — are DISTINCT and must be preserved. Without this, the harvest
+  // key (batch|room|bin, no weights/date) would mass-delete real weight records.
+  const _contentSig = rr => {
+    try {
+      const f = rr.fields || {};
+      const o = {};
+      Object.keys(f).sort().forEach(key => { o[key] = f[key]; });
+      return JSON.stringify(o);
+    } catch(_) { return 'sig_'+rr.id; }
+  };
   const toDelete = [];
   Object.entries(groups).forEach(([k, recs]) => {
     if(recs.length < 2) return;
-    let keeper = recs.find(rr => localByAirtableId[rr.id]);
-    if(!keeper) keeper = recs[0];
-    recs.forEach(rr => { if(rr.id !== keeper.id) toDelete.push(rr); });
-    console.log('[clean-air-dupes]', label, 'group ('+recs.length+'):', k, 'keeping', keeper.id, 'deleting', recs.filter(r => r.id !== keeper.id).map(r => r.id));
+    // Sub-group the natural-key group by exact content; collapse only true content-duplicates.
+    const bySig = {};
+    recs.forEach(rr => { const s = _contentSig(rr); (bySig[s] = bySig[s] || []).push(rr); });
+    Object.values(bySig).forEach(subset => {
+      if(subset.length < 2) return;
+      let keeper = subset.find(rr => localByAirtableId[rr.id]) || subset[0];
+      subset.forEach(rr => { if(rr.id !== keeper.id) toDelete.push(rr); });
+      console.log('[clean-air-dupes]', label, 'identical group ('+subset.length+'):', k, 'keep', keeper.id, 'delete', subset.filter(r => r.id !== keeper.id).map(r => r.id));
+    });
   });
   let deleted = 0, failed = 0;
   for(const rr of toDelete){
