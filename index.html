@@ -9675,7 +9675,20 @@ function destroyPrint(id){
       +'<td style="border:1px solid #333;padding:4px;text-align:right;">'+L(dryB)+'</td>'
       +'<td style="border:1px solid #333;padding:4px;"></td>'
       +'</tr></tbody></table>';
-    lb += '<div style="font-size:10px;color:#555;margin-top:4px;">Recorded (wet) — Veg: '+L(vegRec)+' kg, Dry: '+L(dryRec)+' kg &nbsp;·&nbsp; Drying loss — Veg: '+L(vegLossB)+' kg, Dry: '+L(dryLossB)+' kg</div>';
+    // Per-batch weight reconciliation: total waste recorded, total actually destroyed, and the
+    // difference (drying loss) — one row for Vegetative, one for Dry.
+    lb += '<table style="width:100%;border-collapse:collapse;font-size:10px;margin-top:6px;"><thead><tr>'
+      + ['','Total Waste (recorded)','Total at Destruction','Difference (drying loss)'].map((h,i)=>'<th style="border:1px solid #333;padding:4px;background:#f4f4f4;text-align:'+(i===0?'left':'right')+';">'+h+'</th>').join('')
+      + '</tr></thead><tbody>'
+      + '<tr><td style="border:1px solid #333;padding:4px;font-weight:bold;">Vegetative Waste</td>'
+        + '<td style="border:1px solid #333;padding:4px;text-align:right;">'+L(vegRec)+' kg</td>'
+        + '<td style="border:1px solid #333;padding:4px;text-align:right;">'+L(vegB)+' kg</td>'
+        + '<td style="border:1px solid #333;padding:4px;text-align:right;">'+L(vegLossB)+' kg</td></tr>'
+      + '<tr><td style="border:1px solid #333;padding:4px;font-weight:bold;">Dry Cannabis</td>'
+        + '<td style="border:1px solid #333;padding:4px;text-align:right;">'+L(dryRec)+' kg</td>'
+        + '<td style="border:1px solid #333;padding:4px;text-align:right;">'+L(dryB)+' kg</td>'
+        + '<td style="border:1px solid #333;padding:4px;text-align:right;">'+L(dryLossB)+' kg</td></tr>'
+      + '</tbody></table>';
     lb += '</div>';
     logsHtml += lb;
     // Attestation block for this batch
