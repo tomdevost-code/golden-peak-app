@@ -1838,6 +1838,7 @@ tr:last-child td { border-bottom: none; }
         <button class="btn-save" onclick="dedupeBatchTxLocal()" style="margin-top:8px;background:var(--amber);color:#3B2A00;">Clean Up Duplicate Transactions (Local)</button>
         <button class="btn-save" onclick="cleanAirtableDuplicateTx()" style="margin-top:8px;background:#7B0000;">Clean Up Airtable Duplicates</button>
         <div class="conn-status" id="clean-air-dupes-status"></div>
+        <div id="clean-air-dupes-preview" style="display:none;"></div>
         <button class="btn-save" onclick="diagnoseBatchTx()" style="margin-top:8px;background:var(--blue);">Diagnose Transactions (Console)</button>
         <div class="conn-status" id="dedupe-tx-status"></div>
         <button class="btn-save" onclick="clearPendingRecords()" style="margin-top:8px;background:var(--red);">Clear Pending Records</button>
@@ -8075,12 +8076,16 @@ async function cleanAirtableDuplicateTx(){
     { label:'Destruction Log',    tblId:cfg.destroyTbl, localArr:destroyRecs,  remoteKeyFn:NAT_KEY_FN_REMOTE.destroy,  lsKey:'gp-destroy' }
   ];
   setStatus('Scanning Airtable for duplicates across '+tables.length+' tables...', 'var(--text2)');
-  // First pass: scan everything to find the total count.
+  // First pass: scan everything and compute the EXACT list of records that would be deleted. We
+  // group by the (coarse) natural key, then only mark records that are byte-identical in content
+  // to the keeper — never records that merely share the key (see _cleanAirtableDupesForTable). The
+  // count shown to the user therefore equals what will actually be removed, and we can preview it.
+  const _sig = rr => { try { const f = rr.fields||{}; const o={}; Object.keys(f).sort().forEach(k=>{o[k]=f[k];}); return JSON.stringify(o); } catch(_){ return 'sig_'+rr.id; } };
   const scan = [];
   let totalDupes = 0;
   for(const t of tables){
     if(!t.tblId){
-      scan.push({...t, found:0, skipped:true});
+      scan.push({...t, found:0, toDelete:[], skipped:true});
       continue;
     }
     try {
@@ -8089,11 +8094,21 @@ async function cleanAirtableDuplicateTx(){
       t.localArr.forEach(r => { if(r && r.airtableId) localByAt[r.airtableId] = r; });
       const groups = {};
       remote.forEach(rr => { const k = t.remoteKeyFn(rr); if(!k) return; (groups[k] = groups[k]||[]).push(rr); });
-      const groupedDupes = Object.values(groups).reduce((s, recs) => s + Math.max(0, recs.length - 1), 0);
-      scan.push({...t, remote, localByAt, groups, found: groupedDupes});
-      totalDupes += groupedDupes;
+      const toDelete = [];
+      Object.values(groups).forEach(recs => {
+        if(recs.length < 2) return;
+        const bySig = {};
+        recs.forEach(rr => { const s = _sig(rr); (bySig[s] = bySig[s]||[]).push(rr); });
+        Object.values(bySig).forEach(subset => {
+          if(subset.length < 2) return;
+          const keeper = subset.find(rr => localByAt[rr.id]) || subset[0];
+          subset.forEach(rr => { if(rr.id !== keeper.id) toDelete.push(rr); });
+        });
+      });
+      scan.push({...t, remote, localByAt, toDelete, found: toDelete.length});
+      totalDupes += toDelete.length;
     } catch(e){
-      scan.push({...t, found:0, error:e.message});
+      scan.push({...t, found:0, toDelete:[], error:e.message});
       console.error('[clean-air-dupes] '+t.label+' scan failed:', e);
     }
   }
@@ -8114,30 +8129,80 @@ async function cleanAirtableDuplicateTx(){
     }
     return;
   }
-  // Build a per-table summary for the confirm.
-  const summary = scan.filter(s => s.found > 0).map(s => '  • '+s.label+': '+s.found).join('\n');
-  if(!confirm('Found '+totalDupes+' duplicate record(s) in Airtable:\n\n'+summary+'\n\nDelete them from Airtable? This cannot be undone.')){
-    setStatus('Cancelled. '+totalDupes+' Airtable duplicate(s) detected but not deleted.', 'var(--amber)');
-    return;
+  // Instead of deleting immediately, render a PREVIEW listing every record that would be removed,
+  // and store the scan so the user can review it and then confirm. Nothing is deleted here.
+  _airDupePendingScan = scan;
+  setStatus(totalDupes+' true duplicate(s) found — review the list below before removing.', 'var(--amber)');
+  const prev = document.getElementById('clean-air-dupes-preview');
+  if(prev){
+    // Resolve a linked Batch ID (a Batch Log record id) back to the readable batch code.
+    const _batchOf = rr => {
+      const f = rr.fields||{};
+      const link = Array.isArray(f['Batch ID']) ? f['Batch ID'][0] : (f['Batch ID']||'');
+      if(!link) return '—';
+      const b = batchRecs.find(x => x.airtableId === link);
+      return b ? b.batchId : String(link);
+    };
+    // Compact, human-readable detail of the remaining scalar fields (skips the linked Batch ID).
+    const _detailOf = rr => {
+      const f = rr.fields||{};
+      const bits = [];
+      Object.keys(f).forEach(k => { if(k==='Batch ID') return; const v=f[k]; if(v==null||v===''||Array.isArray(v)) return; bits.push(k+': '+v); });
+      return bits.join(' · ');
+    };
+    let rows = '';
+    scan.filter(s => s.found > 0).forEach(s => {
+      s.toDelete.forEach(rr => {
+        rows += '<tr>'
+          +'<td style="padding:4px 6px;border-top:1px solid var(--border);font-family:var(--mono);white-space:nowrap;">'+s.label+'</td>'
+          +'<td style="padding:4px 6px;border-top:1px solid var(--border);font-family:var(--mono);">'+_batchOf(rr)+'</td>'
+          +'<td style="padding:4px 6px;border-top:1px solid var(--border);font-size:11px;">'+(_detailOf(rr)||'—')+'</td>'
+          +'<td style="padding:4px 6px;border-top:1px solid var(--border);font-family:var(--mono);font-size:10px;color:var(--text3);">'+rr.id+'</td>'
+          +'</tr>';
+      });
+    });
+    const perTable = scan.filter(s => s.found > 0).map(s => s.label+': '+s.found).join(' · ');
+    prev.style.display = '';
+    prev.innerHTML =
+      '<div style="margin-top:10px;border:1px solid var(--amber);border-radius:8px;overflow:hidden;">'
+      + '<div style="background:var(--amber-pale);color:#3B2A00;padding:8px 10px;font-family:var(--mono);font-size:12px;font-weight:700;">Review — '+totalDupes+' record(s) to delete ('+perTable+')</div>'
+      + '<div style="font-size:11px;color:var(--text2);padding:8px 10px;line-height:1.5;">Each row below is a <b>byte-for-byte identical copy</b> of another record that will be kept. Only these exact duplicates will be removed from Airtable — nothing else. Review, then confirm.</div>'
+      + '<div style="max-height:320px;overflow:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#f5f5f5;position:sticky;top:0;">'
+      + ['Table','Batch','Record detail','Airtable ID'].map(h=>'<th style="padding:5px 6px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;border-bottom:1px solid var(--border);">'+h+'</th>').join('')
+      + '</tr></thead><tbody>'+rows+'</tbody></table></div>'
+      + '<div style="display:flex;gap:8px;padding:10px;flex-wrap:wrap;">'
+      + '<button class="btn-save" style="background:#7B0000;flex:1;min-width:160px;" onclick="cleanAirtableDupesApply()">Delete these '+totalDupes+' record(s)</button>'
+      + '<button class="btn-secondary" style="flex:1;min-width:120px;" onclick="cleanAirtableDupesCancel()">Cancel</button>'
+      + '</div></div>';
   }
-  // Second pass: actually delete.
+}
+let _airDupePendingScan = null;
+function cleanAirtableDupesCancel(){
+  _airDupePendingScan = null;
+  const prev = document.getElementById('clean-air-dupes-preview');
+  if(prev){ prev.style.display = 'none'; prev.innerHTML = ''; }
+  const el = document.getElementById('clean-air-dupes-status');
+  if(el){ el.textContent = 'Cancelled — nothing deleted.'; el.style.color = 'var(--text2)'; }
+}
+// Second step — actually delete the records the preview listed. Only runs on the stored scan;
+// deletes exactly the toDelete records (byte-identical duplicates) computed during the preview.
+async function cleanAirtableDupesApply(){
+  const scan = _airDupePendingScan;
+  if(!scan){ toast('Run the scan first.'); return; }
+  const prev = document.getElementById('clean-air-dupes-preview');
+  if(prev){ prev.style.display = 'none'; prev.innerHTML = ''; }
+  const el = document.getElementById('clean-air-dupes-status');
+  const setStatus = (msg, color) => { if(el){ el.textContent = msg; el.style.color = color || 'var(--text2)'; } };
+  const totalDupes = scan.reduce((s, x) => s + ((x.toDelete&&x.toDelete.length)||0), 0);
   setStatus('Deleting '+totalDupes+' duplicate(s) from Airtable...', 'var(--text2)');
   let totalDeleted = 0, totalFailed = 0, localPruned = 0;
   for(const s of scan){
-    if(!s.groups || s.found === 0) continue;
+    if(!s.toDelete || !s.toDelete.length) continue;
     const deletedIds = [];
-    for(const recs of Object.values(s.groups)){
-      if(recs.length < 2) continue;
-      let keeper = recs.find(rr => s.localByAt[rr.id]);
-      if(!keeper) keeper = recs[0];
-      for(const rr of recs){
-        if(rr.id === keeper.id) continue;
-        const ok = await atDelete(s.tblId, rr.id, true);
-        if(ok){ totalDeleted++; deletedIds.push(rr.id); } else totalFailed++;
-      }
+    for(const rr of s.toDelete){
+      const ok = await atDelete(s.tblId, rr.id, true);
+      if(ok){ totalDeleted++; deletedIds.push(rr.id); } else totalFailed++;
     }
-    // Prune the local rows that pointed at the Airtable rows we just deleted, so the
-    // duplicates disappear from the app right away (the normal pull never deletes locals).
     if(deletedIds.length && s.localArr && s.lsKey){
       const delSet = new Set(deletedIds);
       for(let i = s.localArr.length - 1; i >= 0; i--){
@@ -8147,11 +8212,11 @@ async function cleanAirtableDuplicateTx(){
       lsSet(s.lsKey, s.localArr);
     }
   }
+  _airDupePendingScan = null;
   const _localDeduped = cleanLocalDuplicates();
   localPruned += _localDeduped;
   setStatus('Deleted '+totalDeleted+' duplicate(s) from Airtable'+(localPruned?' and removed '+localPruned+' local copy(ies)':'')+'.'+(totalFailed?' '+totalFailed+' delete(s) failed.':''), totalFailed ? 'var(--amber)' : 'var(--green)');
   toast('Cleaned '+totalDeleted+' Airtable duplicate(s)' + (totalFailed ? ' ('+totalFailed+' failed)' : '') + '.', 5000);
-  // Refresh local from Airtable now that the duplicates are gone, then refresh visible views.
   pullFromAirtable({manual:true});
   try { if(typeof renderWaste==='function') renderWaste(); }catch(_){}
   try { if(typeof renderWasteReport==='function') renderWasteReport(); }catch(_){}
@@ -11430,6 +11495,26 @@ function summaryRefreshMomPhase(batchId){
   });
   const totalEl = document.getElementById('mom-count-total');
   if(totalEl) totalEl.textContent = momPhaseTotal(b).toString();
+  // Lost-intake detector: if the transaction-derived count is LESS than the stored per-phase
+  // distribution total, this mom's intake transactions went missing (e.g. deleted by an older
+  // coarse-key dedup). Surface a one-click corrective-intake restore so the count can be fixed.
+  {
+    const _txQty = (typeof calcBatchQty === 'function') ? calcBatchQty(b.batchId) : 0;
+    const _distTotal = momPhaseTotal(b);
+    let warn = document.getElementById('summary-mom-intake-warn');
+    if(_distTotal > _txQty){
+      if(!warn){ warn = document.createElement('div'); warn.id = 'summary-mom-intake-warn'; card.appendChild(warn); }
+      const _missing = _distTotal - _txQty;
+      warn.style.display = '';
+      warn.innerHTML = '<div style="margin-top:10px;border:1px solid var(--amber);background:var(--amber-pale);border-radius:8px;padding:10px 12px;font-size:12px;line-height:1.5;color:#3B2A00;">'
+        + '<b>Plant-count mismatch.</b> The saved distribution shows <b>'+_distTotal+'</b> plant'+(_distTotal===1?'':'s')+', but the transaction history only accounts for <b>'+_txQty+'</b> — the intake transaction(s) appear to have been lost.'
+        + '<div style="margin-top:8px;"><button class="btn-secondary" style="padding:4px 10px;font-size:12px;" onclick="summaryRestoreMomIntake(\''+b.batchId.replace(/'/g,'')+'\')">Restore '+_missing+' missing intake plant'+(_missing===1?'':'s')+'</button></div>'
+        + '</div>';
+    } else if(warn){
+      warn.style.display = 'none';
+      warn.innerHTML = '';
+    }
+  }
   // Rebuild From dropdown: only phases with >0 plants.
   const fromSel = document.getElementById('mom-advance-from');
   if(fromSel){
@@ -11439,6 +11524,45 @@ function summaryRefreshMomPhase(batchId){
       + opts.map(p => '<option value="'+p+'"'+(p===prev?' selected':'')+'>'+p+' ('+(c[p]||0)+')</option>').join('');
   }
   momAdvanceFromChanged();
+}
+
+// Restore a mother batch's lost intake. Adds a single corrective Produced/Received transaction so
+// the transaction-derived count (calcBatchQty) matches the plants the mom actually has. The saved
+// per-phase distribution (momPhaseCounts) is preserved — only the missing intake credit is added.
+// User-initiated; syncs the new transaction to Airtable.
+async function summaryRestoreMomIntake(batchId){
+  const b = batchRecs.find(r => r.batchId === batchId && !r.type);
+  if(!b || !isMotherBatch(batchId)){ toast('Mother batch not found.'); return; }
+  const txQty = (typeof calcBatchQty === 'function') ? calcBatchQty(batchId) : 0;
+  const distTotal = momPhaseTotal(b);
+  const inp = prompt('How many plants does '+batchId+' physically have right now?\n\nSaved distribution: '+distTotal+' · counted from transactions: '+txQty+'.\nA corrective "Produced/Received" will be added for the difference so the count is right.', String(distTotal));
+  if(inp === null) return;
+  const target = parseInt(inp);
+  if(isNaN(target) || target < 0){ toast('Enter a valid number.'); return; }
+  const missing = target - txQty;
+  if(missing <= 0){ toast('Nothing to add — the transaction count is already '+txQty+'.'); return; }
+  const date = b.cloneDate || b.vegStart || b.createdDate || (typeof localDate==='function'?localDate():'');
+  const _phase = b.plantPhase || 'Veg';
+  const tx = {
+    id: Date.now() + Math.floor(Math.random()*1000),
+    batchId, date, txType: 'Produced/Received', qty: missing,
+    plantPhase: _phase, currentQtyBefore: txQty,
+    notes: 'Corrective intake — restored plant count after transaction loss',
+    synced: false
+  };
+  batchTxRecs.push(tx);
+  lsSet('gp-batchtx', batchTxRecs);
+  if(cfg.token && cfg.base && cfg.batchtxTbl){
+    try {
+      const f = { 'Batch ID':[batchId], 'Date':date, 'Transaction Type':'Produced/Received', 'Quantity':missing, 'Plant Phase':_phase, 'Notes':tx.notes };
+      const r = await atPost(cfg.batchtxTbl, f);
+      if(r && r.id){ tx.airtableId = r.id; tx.synced = true; lsSet('gp-batchtx', batchTxRecs); }
+    } catch(e){ console.error('[restore mom intake] Airtable push failed', e); toast('Added locally; Airtable push failed — will retry on next sync.',5000); }
+  }
+  toast('Restored '+missing+' plant'+(missing===1?'':'s')+' to '+batchId+'.');
+  summaryRefreshMomPhase(batchId);
+  try { if(typeof summaryBatchChanged==='function') summaryBatchChanged(); } catch(_){}
+  try { if(typeof renderBatchLog==='function') renderBatchLog(); } catch(_){}
 }
 
 // ─── Mom distribution correction editor (Summary page) ──────────────────────────────────────
