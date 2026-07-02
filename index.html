@@ -8261,6 +8261,9 @@ async function diagnoseAirtableVsLocal(){
     });
   });
   const totalExtra = Object.values(byBatch).reduce((s,g)=>s+g.extra.length,0);
+  // Store the extra remote records so the removal step acts on exactly what's shown.
+  _airCompareExtras = [];
+  Object.keys(byBatch).forEach(b=>{ byBatch[b].extra.forEach(rr=>_airCompareExtras.push(rr)); });
   if(!el) return;
   if(!totalExtra){
     el.innerHTML = '<div style="margin-top:8px;border:1px solid var(--green);background:var(--green-pale);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--green);">This laptop already accounts for every Airtable transaction ('+remote.length+' total). No extras — a fresh pull here would match.</div>';
@@ -8268,10 +8271,31 @@ async function diagnoseAirtableVsLocal(){
   }
   el.innerHTML = '<div style="margin-top:8px;border:1px solid var(--amber);border-radius:8px;overflow:hidden;">'
     + '<div style="background:var(--amber-pale);color:#3B2A00;padding:8px 10px;font-family:var(--mono);font-size:12px;font-weight:700;">'+totalExtra+' Airtable transaction(s) not on this laptop</div>'
-    + '<div style="font-size:11px;color:var(--text2);padding:8px 10px;line-height:1.5;">These records exist in Airtable but this (correct) laptop does not link to them — it treats them as duplicates and skips them, which is why it shows the right counts. A laptop that clears local data and pulls fresh ingests these too, inflating its counts. Review; if they are indeed stray/duplicate, we can remove them from Airtable so every laptop converges.</div>'
+    + '<div style="font-size:11px;color:var(--text2);padding:8px 10px;line-height:1.5;">These records exist in Airtable but this (correct) laptop does not link to them — it treats them as duplicates and skips them, which is why it shows the right counts. A laptop that clears local data and pulls fresh ingests these too, inflating its counts. Review; if they are indeed stray/duplicate, remove them from Airtable so every laptop converges.</div>'
     + '<div style="max-height:320px;overflow:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#f5f5f5;position:sticky;top:0;">'
     + ['Batch (local qty)','Date','Type','Qty','Notes','Airtable ID'].map(h=>'<th style="padding:5px 6px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;border-bottom:1px solid var(--border);">'+h+'</th>').join('')
-    + '</tr></thead><tbody>'+rows.join('')+'</tbody></table></div></div>';
+    + '</tr></thead><tbody>'+rows.join('')+'</tbody></table>'
+    + '<div style="display:flex;gap:8px;padding:10px;flex-wrap:wrap;">'
+    + '<button class="btn-save" style="background:#7B0000;flex:1;min-width:200px;" onclick="removeAirtableCompareExtras()">Remove these '+totalExtra+' from Airtable</button>'
+    + '</div></div>';
+}
+let _airCompareExtras = null;
+// Delete the "extra on Airtable" transactions surfaced by diagnoseAirtableVsLocal(). These are
+// records this (correct) laptop does not link to — stray/orphan transactions. User-initiated; a
+// confirm lists the count first. After deletion, other laptops that clear+pull will converge.
+async function removeAirtableCompareExtras(){
+  const extras = _airCompareExtras || [];
+  if(!extras.length){ toast('Nothing to remove — run the compare first.'); return; }
+  if(!confirm('Delete '+extras.length+' stray transaction(s) from Airtable?\n\nThese are records this laptop does not use (orphaned/duplicate). This cannot be undone.\n\nThe records were listed above for review.')) return;
+  const el = document.getElementById('air-compare-report');
+  let ok=0, fail=0;
+  for(const rr of extras){
+    const done = await atDelete(cfg.batchtxTbl, rr.id, true);
+    if(done) ok++; else fail++;
+  }
+  _airCompareExtras = null;
+  if(el){ el.innerHTML = '<div style="margin-top:8px;border:1px solid '+(fail?'var(--amber)':'var(--green)')+';background:'+(fail?'var(--amber-pale)':'var(--green-pale)')+';border-radius:8px;padding:10px 12px;font-size:12px;color:'+(fail?'#3B2A00':'var(--green)')+';">Removed '+ok+' stray transaction(s) from Airtable'+(fail?' ('+fail+' failed)':'')+'. Other laptops can now clear local data and pull fresh to converge.</div>'; }
+  toast('Removed '+ok+' stray transaction(s)'+(fail?' ('+fail+' failed)':'')+'.', 5000);
 }
 
 // Diagnostic-only — log every batch transaction grouped by batch so we can SEE what's
