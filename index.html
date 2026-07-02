@@ -8237,7 +8237,20 @@ async function diagnoseAirtableVsLocal(){
   let remote;
   try { remote = await atFetchAll(cfg.batchtxTbl); }
   catch(e){ if(el) el.innerHTML='<div style="color:var(--red);padding:8px;">Fetch failed: '+(e&&e.message||e)+'</div>'; return; }
-  const batchOf = rr => { const f=rr.fields||{}; const link=Array.isArray(f['Batch ID'])?f['Batch ID'][0]:''; const b=batchRecs.find(x=>x.airtableId===link); return b?b.batchId:(link||'(unknown)'); };
+  // Also fetch the Airtable Batch Log so we can resolve a transaction's linked batch even when this
+  // laptop doesn't hold that batch record — which happens when Airtable has a DUPLICATE batch record
+  // (same Batch ID, different record id). That lets us show "PB-002 (duplicate batch record)" instead
+  // of a bare "(unknown)", proving the stray transactions belong to a phantom copy, not the real one.
+  const batchMapRemote = {};
+  try { const rbatches = await atFetchAll(cfg.batchTbl); rbatches.forEach(br=>{ const bid=(br.fields&&br.fields['Batch ID'])||''; if(bid) batchMapRemote[br.id]=bid; }); } catch(_){}
+  const batchOf = rr => {
+    const f=rr.fields||{}; const link=Array.isArray(f['Batch ID'])?f['Batch ID'][0]:'';
+    if(!link) return '(no batch link)';
+    const b=batchRecs.find(x=>x.airtableId===link);
+    if(b) return b.batchId;
+    const remoteName = batchMapRemote[link];
+    return remoteName ? (remoteName+' — duplicate batch record') : '(unknown batch record)';
+  };
   const localAt = new Set(batchTxRecs.map(t=>t.airtableId).filter(Boolean));
   const L = v => (Math.round((v||0)*1000)/1000);
   // Group remote by batch; flag the ones not linked locally.
