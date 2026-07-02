@@ -1843,6 +1843,8 @@ tr:last-child td { border-bottom: none; }
         <div id="air-compare-report" style="display:none;"></div>
         <button class="btn-save" onclick="diagnoseDuplicateBatchRecords()" style="margin-top:8px;background:var(--blue);">Find Duplicate Batch Records</button>
         <div id="dup-batch-report" style="display:none;"></div>
+        <button class="btn-save" onclick="dataHealthCheck()" style="margin-top:8px;background:var(--green);">Run Data Health Check</button>
+        <div id="data-health-report" style="display:none;"></div>
         <button class="btn-save" onclick="diagnoseBatchTx()" style="margin-top:8px;background:var(--blue);">Diagnose Transactions (Console)</button>
         <div class="conn-status" id="dedupe-tx-status"></div>
         <button class="btn-save" onclick="clearPendingRecords()" style="margin-top:8px;background:var(--red);">Clear Pending Records</button>
@@ -8386,6 +8388,71 @@ async function removeDuplicateBatchRecords(){
   _dupBatchToRemove = null;
   if(el){ el.innerHTML = '<div style="margin-top:8px;border:1px solid '+(fail?'var(--amber)':'var(--green)')+';background:'+(fail?'var(--amber-pale)':'var(--green-pale)')+';border-radius:8px;padding:10px 12px;font-size:12px;color:'+(fail?'#3B2A00':'var(--green)')+';">Removed '+ok+' duplicate batch record(s)'+(fail?' ('+fail+' failed)':'')+'. Now: Sync Pending here, then clear + pull on the other laptop.</div>'; }
   toast('Removed '+ok+' duplicate batch record(s)'+(fail?' ('+fail+' failed)':'')+'.', 5000);
+}
+
+// Read-only consolidated health check. Bundles the structural checks — Airtable transaction extras,
+// duplicate batch records, mother distribution vs count, negative balances, and local duplicate rows
+// — into one green/amber report. It CANNOT verify counts against physical reality (only the grower
+// can), but it catches the structural problems that caused the sync drift. Changes nothing.
+async function dataHealthCheck(){
+  const el = document.getElementById('data-health-report');
+  if(el){ el.style.display=''; el.innerHTML='<div style="padding:8px;color:var(--text2);font-size:12px;">Running checks…</div>'; }
+  const checks = []; // {level:'ok'|'warn'|'err', label, detail}
+  const atOk = (typeof atReady==='function') && atReady();
+  // 1. Airtable transactions this laptop doesn't link to (strays a fresh pull would ingest).
+  if(atOk){
+    try {
+      const remote = await atFetchAll(cfg.batchtxTbl);
+      const localAt = new Set(batchTxRecs.map(t=>t.airtableId).filter(Boolean));
+      const extras = remote.filter(rr => !localAt.has(rr.id)).length;
+      checks.push(extras ? {level:'warn', label:'Airtable transactions not on this laptop', detail: extras+' stray record(s) — use "Compare This Laptop to Airtable"'} : {level:'ok', label:'Airtable transactions', detail:'all '+remote.length+' accounted for'});
+    } catch(e){ checks.push({level:'err', label:'Transaction compare failed', detail:(e&&e.message)||''}); }
+    // 2. Duplicate batch records (same Batch ID under two record ids).
+    try {
+      const rbatches = await atFetchAll(cfg.batchTbl);
+      const byId = {};
+      rbatches.forEach(br=>{ const bid=((br.fields&&br.fields['Batch ID'])||'').toString().trim().toUpperCase(); if(bid)(byId[bid]=byId[bid]||[]).push(br); });
+      const dups = Object.keys(byId).filter(k=>byId[k].length>1);
+      checks.push(dups.length ? {level:'warn', label:'Duplicate batch records in Airtable', detail: dups.join(', ')+' — use "Find Duplicate Batch Records"'} : {level:'ok', label:'Batch records', detail: rbatches.length+' unique, no duplicates'});
+    } catch(e){ checks.push({level:'err', label:'Batch-record check failed', detail:(e&&e.message)||''}); }
+  } else {
+    checks.push({level:'warn', label:'Airtable not configured', detail:'transaction & batch-record checks skipped'});
+  }
+  // 3. Mother distribution total vs transaction-derived count.
+  const momMismatch = [];
+  batchRecs.filter(b=>b && !b.type && isMotherBatch(b.batchId) && !b.closedDate).forEach(b=>{
+    const tx = (typeof calcBatchQty==='function') ? calcBatchQty(b.batchId) : 0;
+    const dist = (typeof momPhaseTotal==='function') ? momPhaseTotal(b) : tx;
+    if(dist !== tx) momMismatch.push(b.batchId+' (dist '+dist+' ≠ count '+tx+')');
+  });
+  checks.push(momMismatch.length ? {level:'warn', label:'Mother distribution ≠ count', detail: momMismatch.join(', ')+' — fix with Edit Qty / Correct distribution'} : {level:'ok', label:'Mother distributions', detail:'all match their counts'});
+  // 4. Negative plant counts (impossible — indicates a lost intake or a phantom destroy).
+  const neg = batchRecs.filter(b=>b && !b.type && !b.closedDate).map(b=>({id:b.batchId, q:(typeof calcBatchQty==='function')?calcBatchQty(b.batchId):0})).filter(x=>x.q<0);
+  checks.push(neg.length ? {level:'err', label:'Negative plant counts', detail: neg.map(x=>x.id+' ('+x.q+')').join(', ')} : {level:'ok', label:'Plant counts', detail:'none negative'});
+  // 5. Local byte-identical duplicate rows (dry count — nothing removed). Destroyed txns are skipped
+  //    because two identical destroys can legitimately be distinct events.
+  const IGNORE = { id:1, airtableId:1, synced:1, sourceWasteId:1, destroyedTxId:1 };
+  const sig = r => { if(!r||typeof r!=='object') return ''; const o={}; Object.keys(r).sort().forEach(k=>{ if(IGNORE[k])return; o[k]=r[k]; }); try{return JSON.stringify(o);}catch(_){return '';} };
+  let localDupes = 0;
+  [['ec',ecRecs],['ro',roRecs],['waste',wasteRecs],['batchtx',batchTxRecs],['harvest',harvestRecs],['postdry',postDryRecs],['bio',bioRecs],['pest',pestRecs],['flow',flowRecs]].forEach(([name,arr])=>{
+    if(!Array.isArray(arr)) return; const seen={};
+    arr.forEach(r=>{ if(name==='batchtx' && r && r.txType==='Destroyed') return; const k=sig(r); if(!k)return; if(seen[k]) localDupes++; else seen[k]=1; });
+  });
+  checks.push(localDupes ? {level:'warn', label:'Local duplicate rows', detail: localDupes+' identical row(s) — run "Clean Up Airtable Duplicates" (with preview)'} : {level:'ok', label:'Local rows', detail:'no identical duplicates'});
+  // Render
+  if(!el) return;
+  const worst = checks.some(c=>c.level==='err') ? 'err' : (checks.some(c=>c.level==='warn') ? 'warn' : 'ok');
+  const hdrColor = worst==='err' ? 'var(--red)' : (worst==='warn' ? 'var(--amber)' : 'var(--green)');
+  const hdrBg = worst==='err' ? 'var(--red-pale)' : (worst==='warn' ? 'var(--amber-pale)' : 'var(--green-pale)');
+  const hdrText = worst==='ok' ? 'All structural checks passed' : (worst==='err' ? 'Problems found — see red items' : 'A few things to review');
+  const dot = lvl => '<span style="display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px;vertical-align:middle;background:'+(lvl==='ok'?'var(--green)':(lvl==='warn'?'var(--amber)':'var(--red)'))+';"></span>';
+  el.innerHTML = '<div style="margin-top:8px;border:1px solid '+hdrColor+';border-radius:8px;overflow:hidden;">'
+    + '<div style="background:'+hdrBg+';color:'+(worst==='warn'?'#3B2A00':hdrColor)+';padding:8px 10px;font-family:var(--mono);font-size:12px;font-weight:700;">'+hdrText+'</div>'
+    + '<div style="padding:6px 10px;">'
+    + checks.map(c=>'<div style="padding:5px 0;border-bottom:1px solid var(--bg2);font-size:12px;">'+dot(c.level)+'<b>'+c.label+'</b> — <span style="color:var(--text2);">'+c.detail+'</span></div>').join('')
+    + '</div>'
+    + '<div style="font-size:11px;color:var(--text3);padding:8px 10px;line-height:1.5;border-top:1px solid var(--border);">This checks structure only. It can\'t confirm a batch\'s count matches the plants on the floor — that\'s still a physical count. Green here means nothing is internally broken or drifting.</div>'
+    + '</div>';
 }
 
 // Diagnostic-only — log every batch transaction grouped by batch so we can SEE what's
