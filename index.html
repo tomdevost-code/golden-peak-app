@@ -11680,13 +11680,15 @@ function summaryRefreshMomPhase(batchId){
     const _txQty = (typeof calcBatchQty === 'function') ? calcBatchQty(b.batchId) : 0;
     const _distTotal = momPhaseTotal(b);
     let warn = document.getElementById('summary-mom-intake-warn');
-    if(_distTotal > _txQty){
+    if(_distTotal !== _txQty){
       if(!warn){ warn = document.createElement('div'); warn.id = 'summary-mom-intake-warn'; card.appendChild(warn); }
-      const _missing = _distTotal - _txQty;
       warn.style.display = '';
+      // Informational only — do NOT auto-add transactions. A mismatch can mean EITHER the saved
+      // distribution is stale (too high) OR a transaction quantity is wrong. Which one is correct is
+      // a judgement only the grower can make, so point to the two safe tools rather than guessing.
       warn.innerHTML = '<div style="margin-top:10px;border:1px solid var(--amber);background:var(--amber-pale);border-radius:8px;padding:10px 12px;font-size:12px;line-height:1.5;color:#3B2A00;">'
-        + '<b>Plant-count mismatch.</b> The saved distribution shows <b>'+_distTotal+'</b> plant'+(_distTotal===1?'':'s')+', but the transaction history only accounts for <b>'+_txQty+'</b> — the intake transaction(s) appear to have been lost.'
-        + '<div style="margin-top:8px;"><button class="btn-secondary" style="padding:4px 10px;font-size:12px;" onclick="summaryRestoreMomIntake(\''+b.batchId.replace(/'/g,'')+'\')">Restore '+_missing+' missing intake plant'+(_missing===1?'':'s')+'</button></div>'
+        + '<b>Plant-count mismatch.</b> The saved distribution totals <b>'+_distTotal+'</b>, but the transaction history gives <b>'+_txQty+'</b>. '
+        + 'To fix: if a <b>transaction quantity</b> is wrong, use <b>Edit Qty</b> in the Transaction History below; if the <b>distribution</b> is stale, use <b>✎ Correct distribution</b> on this card. Do not add plants unless a real intake is genuinely missing.'
         + '</div>';
     } else if(warn){
       warn.style.display = 'none';
@@ -13898,6 +13900,7 @@ function summaryRenderHistory(batchId){
       '<td style="padding:6px 8px;text-align:right;font-family:var(--mono);font-weight:600;">'+t.runningQty+'</td>'+
       '<td style="padding:6px 8px;font-size:11px;color:var(--text3);max-width:120px;white-space:normal;">'+(t.notes||'')+'</td>'+
       '<td style="padding:6px 8px;text-align:center;white-space:nowrap;">'+
+        '<button type="button" onclick="summaryTxEditQty('+_txIdArg+')" title="Correct the quantity on this transaction" style="font-size:11px;padding:3px 8px;margin-right:4px;border:1px solid var(--border);background:var(--bg2);border-radius:var(--radius-sm);cursor:pointer;color:var(--text2);">Edit Qty</button>'+
         '<button type="button" onclick="summaryTxMove('+_txIdArg+')" title="Move this transaction to another batch" style="font-size:11px;padding:3px 8px;margin-right:4px;border:1px solid var(--border);background:var(--bg2);border-radius:var(--radius-sm);cursor:pointer;color:var(--text2);">Move</button>'+
         '<button type="button" onclick="summaryTxDelete('+_txIdArg+')" title="Delete this transaction" style="font-size:11px;padding:3px 8px;border:1px solid var(--red);background:var(--red-pale);border-radius:var(--radius-sm);cursor:pointer;color:var(--red);">Delete</button>'+
       '</td>'+
@@ -14006,6 +14009,35 @@ async function summaryTxMove(id){
   if(typeof summaryBatchChanged === 'function') summaryBatchChanged();
   if(typeof populateBatchDropdowns === 'function') populateBatchDropdowns();
   if(typeof renderBatchLog === 'function') renderBatchLog();
+}
+// Correct the quantity on a single transaction (manual fix — e.g. a backfill intake entered with
+// the wrong plant count). The batch count is derived from transaction history, so changing the qty
+// re-derives the count. Updates Airtable's Quantity field when the row is synced. For mother batches
+// the per-phase distribution (momPhaseCounts) is a separate local field — after correcting the count
+// use "Correct distribution" on the Phase Distribution card to align the Veg/Flower split.
+async function summaryTxEditQty(id){
+  const idx = batchTxRecs.findIndex(t => String(t.id) === String(id));
+  if(idx < 0){ toast('Transaction not found.'); return; }
+  const t = batchTxRecs[idx];
+  if(t.txType === 'Phase Change' || t.txType === 'Phase Advance'){
+    toast('Phase-change rows have no plant quantity to edit.'); return;
+  }
+  const cur = parseInt(t.qty)||0;
+  const inp = prompt('Correct the quantity for this "'+t.txType+'" transaction'+(t.date?' ('+t.date+')':'')+'.\n\nCurrent quantity: '+cur+'\nEnter the corrected quantity:', String(cur));
+  if(inp === null) return;
+  const newQty = parseInt(inp);
+  if(isNaN(newQty) || newQty < 0){ toast('Enter a valid quantity (0 or more).'); return; }
+  if(newQty === cur){ toast('No change.'); return; }
+  t.qty = newQty;
+  t.synced = false;
+  lsSet('gp-batchtx', batchTxRecs);
+  if(cfg.token && cfg.base && cfg.batchtxTbl && t.airtableId){
+    try { await atUpdateById(cfg.batchtxTbl, t.airtableId, { 'Quantity': newQty }); t.synced = true; lsSet('gp-batchtx', batchTxRecs); }
+    catch(e){ console.error('[summaryTxEditQty] Airtable push failed', e); toast('Updated locally; Airtable push failed — will retry on next sync.',5000); }
+  }
+  toast('Quantity corrected to '+newQty+'.');
+  try { if(typeof summaryBatchChanged==='function') summaryBatchChanged(); } catch(_){}
+  try { if(typeof renderBatchLog==='function') renderBatchLog(); } catch(_){}
 }
 async function summaryTxDelete(id){
   const idx = batchTxRecs.findIndex(t => String(t.id) === String(id));
