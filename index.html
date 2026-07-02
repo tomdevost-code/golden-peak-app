@@ -1841,6 +1841,8 @@ tr:last-child td { border-bottom: none; }
         <div id="clean-air-dupes-preview" style="display:none;"></div>
         <button class="btn-save" onclick="diagnoseAirtableVsLocal()" style="margin-top:8px;background:var(--blue);">Compare This Laptop to Airtable (Transactions)</button>
         <div id="air-compare-report" style="display:none;"></div>
+        <button class="btn-save" onclick="diagnoseDuplicateBatchRecords()" style="margin-top:8px;background:var(--blue);">Find Duplicate Batch Records</button>
+        <div id="dup-batch-report" style="display:none;"></div>
         <button class="btn-save" onclick="diagnoseBatchTx()" style="margin-top:8px;background:var(--blue);">Diagnose Transactions (Console)</button>
         <div class="conn-status" id="dedupe-tx-status"></div>
         <button class="btn-save" onclick="clearPendingRecords()" style="margin-top:8px;background:var(--red);">Clear Pending Records</button>
@@ -8309,6 +8311,81 @@ async function removeAirtableCompareExtras(){
   _airCompareExtras = null;
   if(el){ el.innerHTML = '<div style="margin-top:8px;border:1px solid '+(fail?'var(--amber)':'var(--green)')+';background:'+(fail?'var(--amber-pale)':'var(--green-pale)')+';border-radius:8px;padding:10px 12px;font-size:12px;color:'+(fail?'#3B2A00':'var(--green)')+';">Removed '+ok+' stray transaction(s) from Airtable'+(fail?' ('+fail+' failed)':'')+'. Other laptops can now clear local data and pull fresh to converge.</div>'; }
   toast('Removed '+ok+' stray transaction(s)'+(fail?' ('+fail+' failed)':'')+'.', 5000);
+}
+
+// Read-only detector for DUPLICATE Batch Log records in Airtable (same Batch ID stored under two
+// different record ids). The Batch Log is supposed to be upserted by Batch ID, so a second copy is
+// always a sync artifact. The keeper is the record THIS laptop links to (its local airtableId); any
+// other copy of that Batch ID is a phantom to remove. Changes nothing until you confirm.
+let _dupBatchToRemove = null;
+async function diagnoseDuplicateBatchRecords(){
+  if(!atReady()){ toast('Configure Airtable first.'); return; }
+  const el = document.getElementById('dup-batch-report');
+  if(el){ el.style.display=''; el.innerHTML='<div style="font-size:12px;color:var(--text2);padding:8px;">Fetching Airtable batch records…</div>'; }
+  let remote;
+  try { remote = await atFetchAll(cfg.batchTbl); }
+  catch(e){ if(el) el.innerHTML='<div style="color:var(--red);padding:8px;">Fetch failed: '+(e&&e.message||e)+'</div>'; return; }
+  const localAt = new Set(batchRecs.map(b=>b.airtableId).filter(Boolean));
+  const byId = {};
+  remote.forEach(br=>{ const bid=((br.fields&&br.fields['Batch ID'])||'').toString().trim().toUpperCase(); if(!bid) return; (byId[bid]=byId[bid]||[]).push(br); });
+  const toRemove = [];   // phantom copies we can safely delete (keeper is the linked one)
+  const ambiguous = [];  // duplicate Batch IDs where NONE is linked locally — needs manual review
+  Object.keys(byId).forEach(bid=>{
+    const recs = byId[bid];
+    if(recs.length < 2) return;
+    const linked = recs.filter(r=>localAt.has(r.id));
+    if(linked.length === 1){
+      const keeper = linked[0];
+      recs.forEach(r=>{ if(r.id !== keeper.id) toRemove.push({bid, rec:r, keeperId:keeper.id}); });
+    } else {
+      ambiguous.push({bid, recs, linkedCount:linked.length});
+    }
+  });
+  _dupBatchToRemove = toRemove;
+  if(!el) return;
+  if(!toRemove.length && !ambiguous.length){
+    el.innerHTML = '<div style="margin-top:8px;border:1px solid var(--green);background:var(--green-pale);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--green);">No duplicate batch records in Airtable ('+remote.length+' total). Clean.</div>';
+    return;
+  }
+  const _fields = br => { const f=br.fields||{}; return ['Plant Phase','Status','Created Date','Rooms'].map(k=>f[k]?k+': '+f[k]:'').filter(Boolean).join(' · '); };
+  let rows = '';
+  toRemove.forEach(t=>{
+    rows += '<tr>'
+      +'<td style="padding:4px 6px;border-top:1px solid var(--border);font-family:var(--mono);">'+t.bid+'</td>'
+      +'<td style="padding:4px 6px;border-top:1px solid var(--border);font-size:11px;">'+(_fields(t.rec)||'—')+'</td>'
+      +'<td style="padding:4px 6px;border-top:1px solid var(--border);font-family:var(--mono);font-size:10px;color:var(--text3);">'+t.rec.id+'</td>'
+      +'<td style="padding:4px 6px;border-top:1px solid var(--border);font-family:var(--mono);font-size:10px;color:var(--green);">keep '+t.keeperId+'</td>'
+      +'</tr>';
+  });
+  let ambHtml = '';
+  if(ambiguous.length){
+    ambHtml = '<div style="font-size:11px;color:#7B0000;padding:8px 10px;line-height:1.5;border-top:1px solid var(--border);">'
+      + ambiguous.length+' duplicate Batch ID(s) where this laptop links to NONE of the copies — not auto-removable, needs manual review: '
+      + ambiguous.map(a=>a.bid+' ('+a.recs.length+' copies)').join(', ') + '. Tell me and we\'ll pick the keeper together.</div>';
+  }
+  el.innerHTML = '<div style="margin-top:8px;border:1px solid var(--amber);border-radius:8px;overflow:hidden;">'
+    + '<div style="background:var(--amber-pale);color:#3B2A00;padding:8px 10px;font-family:var(--mono);font-size:12px;font-weight:700;">'+toRemove.length+' duplicate batch record(s) to remove'+(ambiguous.length?' · '+ambiguous.length+' need review':'')+'</div>'
+    + '<div style="font-size:11px;color:var(--text2);padding:8px 10px;line-height:1.5;">Each row is a second copy of a Batch ID that this laptop already holds under a different record id. The copy this laptop uses is kept (green); the phantom is removed. Remove its stray transactions first (Compare tool above) so nothing is left dangling.</div>'
+    + (rows ? '<div style="max-height:280px;overflow:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#f5f5f5;position:sticky;top:0;">'
+      + ['Batch','Phantom record fields','Remove ID','Keeper'].map(h=>'<th style="padding:5px 6px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;border-bottom:1px solid var(--border);">'+h+'</th>').join('')
+      + '</tr></thead><tbody>'+rows+'</tbody></table></div>' : '')
+    + ambHtml
+    + (toRemove.length ? '<div style="display:flex;gap:8px;padding:10px;flex-wrap:wrap;"><button class="btn-save" style="background:#7B0000;flex:1;min-width:200px;" onclick="removeDuplicateBatchRecords()">Remove '+toRemove.length+' duplicate batch record(s)</button></div>' : '')
+    + '</div>';
+}
+async function removeDuplicateBatchRecords(){
+  const list = _dupBatchToRemove || [];
+  if(!list.length){ toast('Nothing to remove — run the scan first.'); return; }
+  if(!confirm('Delete '+list.length+' duplicate batch record(s) from Airtable?\n\nThe copy this laptop uses for each Batch ID is kept. This cannot be undone.\n\nMake sure you already removed their stray transactions (Compare tool).')) return;
+  const el = document.getElementById('dup-batch-report');
+  let ok=0, fail=0;
+  for(const t of list){
+    const done = await atDelete(cfg.batchTbl, t.rec.id, true);
+    if(done) ok++; else fail++;
+  }
+  _dupBatchToRemove = null;
+  if(el){ el.innerHTML = '<div style="margin-top:8px;border:1px solid '+(fail?'var(--amber)':'var(--green)')+';background:'+(fail?'var(--amber-pale)':'var(--green-pale)')+';border-radius:8px;padding:10px 12px;font-size:12px;color:'+(fail?'#3B2A00':'var(--green)')+';">Removed '+ok+' duplicate batch record(s)'+(fail?' ('+fail+' failed)':'')+'. Now: Sync Pending here, then clear + pull on the other laptop.</div>'; }
+  toast('Removed '+ok+' duplicate batch record(s)'+(fail?' ('+fail+' failed)':'')+'.', 5000);
 }
 
 // Diagnostic-only — log every batch transaction grouped by batch so we can SEE what's
