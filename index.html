@@ -9018,8 +9018,22 @@ async function wasteSave(){
     let qtyBefore=0;
     batchTxRecs.filter(t=>t.batchId===rec.batch).forEach(t=>{const q=parseInt(t.qty)||0;if(t.txType==='Produced/Received'||t.txType==='Seeds Germinated')qtyBefore+=q;else qtyBefore-=q;});
     if(qtyBefore<0)qtyBefore=0;
-    const _dtPhase = _wsBatchRec ? (_wsBatchRec.plantPhase||'') : '';
-    destroyedTx={id:Date.now()+1,batchId:rec.batch,date:rec.date,txType:'Destroyed',qty:rec.plants,notes:'Auto-created from Vegetative Waste record',currentQtyBefore:qtyBefore,plantPhase:_dtPhase,sourceWasteId:rec.id,synced:false};
+    // Stamp the destroy phase from the ROOM the plants were in, not the batch's headline phase.
+    // This matters for multi-phase mothers whose headline is 'Flower' but whose Veg-room clones are
+    // being culled — under the old headline-based logic those veg culls were wrongly counted as
+    // Flower destroys in CTLS Section 3 instead of Veg/Clone destroys in Section 2.
+    const _hdln = _wsBatchRec ? (_wsBatchRec.plantPhase||'') : '';
+    const _flowerRooms = ['Flower 1','Flower 2','Flower 3','Flower 4','Flower 5','Tent'];
+    let _dtPhase;
+    if(rec.room === 'Veg'){
+      // Veg-room plants are Veg/Clone-phase even when the batch headline is further along.
+      _dtPhase = (_hdln === 'Clones' || _hdln === 'Germination') ? _hdln : 'Veg';
+    } else if(_flowerRooms.includes(rec.room)){
+      _dtPhase = 'Flower';
+    } else {
+      _dtPhase = _hdln;
+    }
+    destroyedTx={id:Date.now()+1,batchId:rec.batch,date:rec.date,txType:'Destroyed',qty:rec.plants,notes:'Auto-created from Vegetative Waste record',currentQtyBefore:qtyBefore,plantPhase:_dtPhase,room:rec.room,sourceWasteId:rec.id,synced:false};
     rec.destroyedTxId=destroyedTx.id;
     batchTxRecs.unshift(destroyedTx);lsSet('gp-batchtx',batchTxRecs);lsSet('gp-waste',wasteRecs);
     // Decrement the per-room plant distribution for the room these plants came from
@@ -13968,6 +13982,7 @@ function summaryRenderHistory(batchId){
       '<td style="padding:6px 8px;font-size:11px;color:var(--text3);max-width:120px;white-space:normal;">'+(t.notes||'')+'</td>'+
       '<td style="padding:6px 8px;text-align:center;white-space:nowrap;">'+
         '<button type="button" onclick="summaryTxEditQty('+_txIdArg+')" title="Correct the quantity on this transaction" style="font-size:11px;padding:3px 8px;margin-right:4px;border:1px solid var(--border);background:var(--bg2);border-radius:var(--radius-sm);cursor:pointer;color:var(--text2);">Edit Qty</button>'+
+        '<button type="button" onclick="summaryTxEditPhase('+_txIdArg+')" title="Correct which phase this transaction counts in (Veg/Clone vs Flower for CTLS)" style="font-size:11px;padding:3px 8px;margin-right:4px;border:1px solid var(--border);background:var(--bg2);border-radius:var(--radius-sm);cursor:pointer;color:var(--text2);">Phase</button>'+
         '<button type="button" onclick="summaryTxMove('+_txIdArg+')" title="Move this transaction to another batch" style="font-size:11px;padding:3px 8px;margin-right:4px;border:1px solid var(--border);background:var(--bg2);border-radius:var(--radius-sm);cursor:pointer;color:var(--text2);">Move</button>'+
         '<button type="button" onclick="summaryTxDelete('+_txIdArg+')" title="Delete this transaction" style="font-size:11px;padding:3px 8px;border:1px solid var(--red);background:var(--red-pale);border-radius:var(--radius-sm);cursor:pointer;color:var(--red);">Delete</button>'+
       '</td>'+
@@ -14103,6 +14118,32 @@ async function summaryTxEditQty(id){
     catch(e){ console.error('[summaryTxEditQty] Airtable push failed', e); toast('Updated locally; Airtable push failed — will retry on next sync.',5000); }
   }
   toast('Quantity corrected to '+newQty+'.');
+  try { if(typeof summaryBatchChanged==='function') summaryBatchChanged(); } catch(_){}
+  try { if(typeof renderBatchLog==='function') renderBatchLog(); } catch(_){}
+}
+// Correct the plant phase stamped on a transaction. This controls which CTLS section it counts in —
+// e.g. a mother's veg-clone cull auto-tagged 'Flower' (from the headline phase) can be re-tagged
+// 'Veg' so it lands in Section 2 (Destroyed in Veg/Clone) instead of Section 3 (Destroyed in Flower).
+// Does NOT change the plant count — only the classification. Syncs to Airtable.
+async function summaryTxEditPhase(id){
+  const idx = batchTxRecs.findIndex(t => String(t.id) === String(id));
+  if(idx < 0){ toast('Transaction not found.'); return; }
+  const t = batchTxRecs[idx];
+  const _valid = ['Clones','Germination','Veg','Flower','Drying','Packaged','Delivered'];
+  const cur = t.plantPhase || '';
+  const inp = prompt('Correct the plant phase for this "'+t.txType+'" transaction'+(t.date?' ('+t.date+')':'')+'.\n\nThis sets which CTLS section it counts in (Veg/Clone vs Flower) — it does NOT change the plant count.\nOne of: '+_valid.join(', ')+'\n\nCurrent: '+(cur||'(none)'), cur||'Veg');
+  if(inp === null) return;
+  const match = _valid.find(p => p.toLowerCase() === (inp||'').trim().toLowerCase());
+  if(!match){ toast('Enter one of: '+_valid.join(', ')); return; }
+  if(match === cur){ toast('No change.'); return; }
+  t.plantPhase = match;
+  t.synced = false;
+  lsSet('gp-batchtx', batchTxRecs);
+  if(cfg.token && cfg.base && cfg.batchtxTbl && t.airtableId){
+    try { await atUpdateById(cfg.batchtxTbl, t.airtableId, { 'Plant Phase': match }); t.synced = true; lsSet('gp-batchtx', batchTxRecs); }
+    catch(e){ console.error('[summaryTxEditPhase] Airtable push failed', e); toast('Updated locally; Airtable push failed — will retry on next sync.',5000); }
+  }
+  toast('Phase corrected to '+match+'.');
   try { if(typeof summaryBatchChanged==='function') summaryBatchChanged(); } catch(_){}
   try { if(typeof renderBatchLog==='function') renderBatchLog(); } catch(_){}
 }
