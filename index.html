@@ -14717,14 +14717,19 @@ async function sanclSyncOneEdit(rec){
   } catch(e){ /* leave synced:false for Sync Pending retry */ }
 }
 // Build the Airtable field payload for one Sanitation Task Edits record.
+// IMPORTANT: the three edit fields are ALWAYS sent — as an empty string when their array/object is
+// empty — rather than omitted. Omitting an empty field leaves the OLD value in Airtable, so removing
+// the last custom task (Added → []) never cleared the column, and the next pull re-added the task.
+// Sending '' explicitly blanks the column so the removal sticks. Only Template (the merge key) is
+// dropped if somehow missing, which should never happen.
 function buildSanEditsFields(rec){
   const f = {
     'Template': rec.template || undefined,
-    'Removed':  (rec.removed && rec.removed.length) ? JSON.stringify(rec.removed) : undefined,
-    'Renamed':  (rec.renamed && Object.keys(rec.renamed).length) ? JSON.stringify(rec.renamed) : undefined,
-    'Added':    (rec.added && rec.added.length) ? JSON.stringify(rec.added) : undefined
+    'Removed':  (rec.removed && rec.removed.length) ? JSON.stringify(rec.removed) : '',
+    'Renamed':  (rec.renamed && Object.keys(rec.renamed).length) ? JSON.stringify(rec.renamed) : '',
+    'Added':    (rec.added && rec.added.length) ? JSON.stringify(rec.added) : ''
   };
-  Object.keys(f).forEach(k => { if(f[k] === undefined || f[k] === null || f[k] === '') delete f[k]; });
+  if(f['Template'] === undefined) delete f['Template'];
   return f;
 }
 
