@@ -505,7 +505,7 @@ tr:last-child td { border-bottom: none; }
               </select>
             </div>
             <div class="field"><label>Date</label>
-              <div id="waste-date" style="font-family:var(--mono);font-size:14px;padding:9px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text3);pointer-events:none;user-select:none;"></div>
+              <input type="date" id="waste-date" style="font-family:var(--mono);font-size:14px;padding:9px 10px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);width:100%;box-sizing:border-box;" />
             </div>
           </div>
         </div>
@@ -8750,7 +8750,7 @@ document.getElementById('ro-date').value=today;
   _bp('initSections', initSections);
   console.log('[boot] total synchronous boot: '+Math.round(performance.now()-_t0)+' ms');
 })();
-document.getElementById('waste-date').textContent=new Date().toISOString().split('T')[0];
+document.getElementById('waste-date').value=new Date().toISOString().split('T')[0];
 // Kick off auto-sync (60s polling) if Airtable is configured. Idempotent —
 // also re-invoked from saveSettings() so a fresh token starts the timer.
 startAutoSync();
@@ -8930,7 +8930,7 @@ function wasteRefreshSubtype(){
 }
 async function wasteSave(){
   const grower=document.getElementById('waste-grower').value;
-  const date=document.getElementById('waste-date').textContent.trim();
+  const date=(document.getElementById('waste-date').value||'').trim();
   const batch=document.getElementById('waste-batch-select').value;
   const room=document.getElementById('waste-room').value;
   const type=document.getElementById('waste-type').value;
@@ -9131,7 +9131,7 @@ function wasteClear(){
   document.getElementById('waste-weight').value='';
   document.getElementById('waste-plants').value='';document.getElementById('waste-plants').disabled=true;document.getElementById('waste-plants').style.background='var(--bg2)';document.getElementById('waste-plants').style.color='var(--text3)';document.getElementById('waste-plants').style.cursor='not-allowed';
   document.getElementById('waste-notes').value='';
-  document.getElementById('waste-date').textContent=new Date().toISOString().split('T')[0];
+  document.getElementById('waste-date').value=new Date().toISOString().split('T')[0];
   document.getElementById('waste-room-strip').style.display='none';
   wasteSeqUnlock();
 }
@@ -9302,7 +9302,7 @@ function wasteEditStart(id){
   const wEl = document.getElementById('waste-weight'); if(wEl){ wEl.disabled=false; wEl.style.background=''; wEl.style.color=''; wEl.style.cursor=''; wEl.value = (rec.weight != null ? rec.weight : ''); }
   const pEl = document.getElementById('waste-plants'); if(pEl && (parseInt(rec.plants)||0) > 0){ pEl.disabled=false; pEl.style.background=''; pEl.style.color=''; pEl.style.cursor=''; pEl.value = rec.plants; }
   const nEl = document.getElementById('waste-notes'); if(nEl){ nEl.disabled=false; nEl.style.background=''; nEl.style.color=''; nEl.style.cursor=''; nEl.value = rec.notes || ''; }
-  const dEl = document.getElementById('waste-date'); if(dEl && rec.date) dEl.textContent = rec.date;
+  const dEl = document.getElementById('waste-date'); if(dEl && rec.date) dEl.value = rec.date;
   const btn = document.getElementById('waste-btn'); if(btn) btn.textContent = 'Update Waste Record';
   toast('Editing waste from '+(rec.date||'')+' — change values and press Update.',4000);
   if(btn && btn.scrollIntoView) btn.scrollIntoView({behavior:'smooth',block:'center'});
