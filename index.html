@@ -1844,6 +1844,8 @@ tr:last-child td { border-bottom: none; }
         <div id="air-compare-report" style="display:none;"></div>
         <button class="btn-save" onclick="diagnoseDuplicateBatchRecords()" style="margin-top:8px;background:var(--blue);">Find Duplicate Batch Records</button>
         <div id="dup-batch-report" style="display:none;"></div>
+        <button class="btn-save" onclick="diagnoseDuplicateDestroyRecords()" style="margin-top:8px;background:var(--blue);">Find Duplicate Destruction Records</button>
+        <div id="dup-destroy-report" style="display:none;"></div>
         <button class="btn-save" onclick="dataHealthCheck()" style="margin-top:8px;background:var(--green);">Run Data Health Check</button>
         <div id="data-health-report" style="display:none;"></div>
         <button class="btn-save" onclick="diagnoseBatchTx()" style="margin-top:8px;background:var(--blue);">Diagnose Transactions (Console)</button>
@@ -8389,6 +8391,73 @@ async function removeDuplicateBatchRecords(){
   _dupBatchToRemove = null;
   if(el){ el.innerHTML = '<div style="margin-top:8px;border:1px solid '+(fail?'var(--amber)':'var(--green)')+';background:'+(fail?'var(--amber-pale)':'var(--green-pale)')+';border-radius:8px;padding:10px 12px;font-size:12px;color:'+(fail?'#3B2A00':'var(--green)')+';">Removed '+ok+' duplicate batch record(s)'+(fail?' ('+fail+' failed)':'')+'. Now: Sync Pending here, then clear + pull on the other laptop.</div>'; }
   toast('Removed '+ok+' duplicate batch record(s)'+(fail?' ('+fail+' failed)':'')+'.', 5000);
+}
+
+// Detect DUPLICATE destruction records in Airtable — two rows sharing the same date + employee +
+// witness (the app's natural key for a destruction event). A duplicate is a sync artifact, and when
+// one copy has fewer covered-waste keys than the other, a fresh-pull laptop can keep the emptier copy
+// and think already-destroyed waste is still pending. The keeper is the copy with the MOST covered
+// keys (the real one); the emptier copies are offered for removal. Read-only until you confirm.
+let _dupDestroyToRemove = null;
+async function diagnoseDuplicateDestroyRecords(){
+  if(!atReady()){ toast('Configure Airtable first.'); return; }
+  const el = document.getElementById('dup-destroy-report');
+  if(el){ el.style.display=''; el.innerHTML='<div style="font-size:12px;color:var(--text2);padding:8px;">Fetching Airtable destruction records…</div>'; }
+  let remote;
+  try { remote = await atFetchAll(cfg.destroyTbl); }
+  catch(e){ if(el) el.innerHTML='<div style="color:var(--red);padding:8px;">Fetch failed: '+(e&&e.message||e)+'</div>'; return; }
+  const coveredN = f => { try { const p = JSON.parse((f&&f['Covered Waste'])||'[]'); return Array.isArray(p) ? p.length : 0; } catch(_) { return 0; } };
+  const byKey = {};
+  remote.forEach(rr=>{ const f=rr.fields||{}; const k=[(f['Date']||''),(f['Employee']||''),(f['Witness']||'')].join('|'); (byKey[k]=byKey[k]||[]).push(rr); });
+  const toRemove = [];
+  Object.keys(byKey).forEach(k=>{
+    const recs = byKey[k];
+    if(recs.length < 2) return;
+    let keeper = recs[0], keeperN = coveredN(recs[0].fields);
+    recs.forEach(rr=>{ const n=coveredN(rr.fields); if(n>keeperN){ keeper=rr; keeperN=n; } });
+    recs.forEach(rr=>{ if(rr.id !== keeper.id) toRemove.push({key:k, rec:rr, n:coveredN(rr.fields), keeperId:keeper.id, keeperN}); });
+  });
+  _dupDestroyToRemove = toRemove;
+  if(!el) return;
+  if(!toRemove.length){
+    el.innerHTML = '<div style="margin-top:8px;border:1px solid var(--green);background:var(--green-pale);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--green);">No duplicate destruction records in Airtable ('+remote.length+' total). Clean.</div>';
+    return;
+  }
+  let rows = '';
+  toRemove.forEach(t=>{
+    const f=t.rec.fields||{};
+    rows += '<tr>'
+      +'<td style="padding:4px 6px;border-top:1px solid var(--border);font-family:var(--mono);">'+((f['Date']||'')+' · '+(f['Employee']||''))+'</td>'
+      +'<td style="padding:4px 6px;border-top:1px solid var(--border);font-family:var(--mono);text-align:right;'+(t.n===0?'color:var(--red);font-weight:700;':'')+'">'+t.n+'</td>'
+      +'<td style="padding:4px 6px;border-top:1px solid var(--border);font-family:var(--mono);text-align:right;color:var(--green);">'+t.keeperN+'</td>'
+      +'<td style="padding:4px 6px;border-top:1px solid var(--border);font-family:var(--mono);font-size:10px;color:var(--text3);">'+t.rec.id+'</td>'
+      +'</tr>';
+  });
+  el.innerHTML = '<div style="margin-top:8px;border:1px solid var(--amber);border-radius:8px;overflow:hidden;">'
+    + '<div style="background:var(--amber-pale);color:#3B2A00;padding:8px 10px;font-family:var(--mono);font-size:12px;font-weight:700;">'+toRemove.length+' duplicate destruction record(s) to remove</div>'
+    + '<div style="font-size:11px;color:var(--text2);padding:8px 10px;line-height:1.5;">Each row is a duplicate of a destruction event (same date/employee/witness). The kept copy has the covered-waste count shown in green; the copy below has fewer (0 = empty). Removing the emptier copy lets every laptop keep the complete one.</div>'
+    + '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#f5f5f5;">'
+    + ['Event','Covered keys (this copy)','Keeper has','Remove ID'].map((h,i)=>'<th style="padding:5px 6px;text-align:'+(i===0?'left':(i===3?'left':'right'))+';font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;border-bottom:1px solid var(--border);">'+h+'</th>').join('')
+    + '</tr></thead><tbody>'+rows+'</tbody></table></div>'
+    + '<div style="display:flex;gap:8px;padding:10px;flex-wrap:wrap;"><button class="btn-save" style="background:#7B0000;flex:1;min-width:200px;" onclick="removeDuplicateDestroyRecords()">Remove '+toRemove.length+' duplicate destruction record(s)</button></div>'
+    + '</div>';
+}
+async function removeDuplicateDestroyRecords(){
+  const list = _dupDestroyToRemove || [];
+  if(!list.length){ toast('Nothing to remove — run the scan first.'); return; }
+  if(!confirm('Delete '+list.length+' duplicate destruction record(s) from Airtable?\n\nThe copy with the most covered-waste keys is kept for each event. This cannot be undone.')) return;
+  const el = document.getElementById('dup-destroy-report');
+  let ok=0, fail=0;
+  for(const t of list){
+    const done = await atDelete(cfg.destroyTbl, t.rec.id, true);
+    if(done){ ok++; const li = destroyRecs.findIndex(d=>d && d.airtableId===t.rec.id); if(li>=0){ destroyRecs.splice(li,1); } } else fail++;
+  }
+  lsSet('gp-destroy', destroyRecs);
+  _dupDestroyToRemove = null;
+  try { if(typeof destroyRenderPending==='function') destroyRenderPending(); } catch(_){}
+  try { if(typeof destroyRenderHistory==='function') destroyRenderHistory(); } catch(_){}
+  if(el){ el.innerHTML = '<div style="margin-top:8px;border:1px solid '+(fail?'var(--amber)':'var(--green)')+';background:'+(fail?'var(--amber-pale)':'var(--green-pale)')+';border-radius:8px;padding:10px 12px;font-size:12px;color:'+(fail?'#3B2A00':'var(--green)')+';">Removed '+ok+' duplicate destruction record(s)'+(fail?' ('+fail+' failed)':'')+'. Now clear + pull on the other laptop; it will keep the complete event and those records drop off pending.</div>'; }
+  toast('Removed '+ok+' duplicate destruction record(s)'+(fail?' ('+fail+' failed)':'')+'.', 5000);
 }
 
 // Read-only consolidated health check. Bundles the structural checks — Airtable transaction extras,
