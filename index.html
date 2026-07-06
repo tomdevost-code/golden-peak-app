@@ -7710,8 +7710,8 @@ function clearAllLocalData(){
   if(!confirm('⚠ RESET LOCAL DATA\n\nThis will permanently delete all locally-stored records: batches, transactions, EC/Runoff/Waste/Harvest/Post-Drying/Bio/Pest/Cleaning logs, seed inventory, and pending sync queue.\n\nAirtable credentials (Settings) will be preserved.\n\nIMPORTANT: Other devices (laptops, phones) using this app still have their own local copies. If you intend to start fresh in production, clear the data on every device — otherwise the un-cleared local data will be re-pushed to Airtable on the next sync.\n\nContinue?')) return;
   const _typed = prompt('Type RESET (in capital letters) to confirm. Anything else cancels.');
   if(_typed !== 'RESET'){ toast('Reset cancelled — no data changed.', 4000); return; }
-  ecRecs=[];roRecs=[];wasteRecs=[];batchRecs=[];batchTxRecs=[];harvestRecs=[];postDryRecs=[];bioRecs=[];pestRecs=[];sanCleanRecs=[];sanToolRecs=[];sanEditsRecs=[];seedInvRecs=[];
-  lsSet('gp-ec',[]);lsSet('gp-ro',[]);lsSet('gp-waste',[]);lsSet('gp-batch',[]);lsSet('gp-batchtx',[]);lsSet('gp-harvest',[]);lsSet('gp-postdry',[]);lsSet('gp-bio',[]);lsSet('gp-pest',[]);lsSet('gp-sanclean',[]);lsSet('gp-santool',[]);lsSet('gp-sanedits',[]);lsSet('gp-seedinv',[]);
+  ecRecs=[];roRecs=[];wasteRecs=[];batchRecs=[];batchTxRecs=[];harvestRecs=[];postDryRecs=[];bioRecs=[];pestRecs=[];sanCleanRecs=[];sanToolRecs=[];sanEditsRecs=[];seedInvRecs=[];flowRecs=[];destroyRecs=[];
+  lsSet('gp-ec',[]);lsSet('gp-ro',[]);lsSet('gp-waste',[]);lsSet('gp-batch',[]);lsSet('gp-batchtx',[]);lsSet('gp-harvest',[]);lsSet('gp-postdry',[]);lsSet('gp-bio',[]);lsSet('gp-pest',[]);lsSet('gp-sanclean',[]);lsSet('gp-santool',[]);lsSet('gp-sanedits',[]);lsSet('gp-seedinv',[]);lsSet('gp-flow',[]);lsSet('gp-destroy',[]);
   // Also nuke legacy storage keys that would otherwise re-seed records on the next boot:
   //   gp-san-task-edits — pre-sync sanitation template overrides (migrated into gp-sanedits on boot)
   //   gp-batch-mov      — pre-tx-model batch movement entries (no longer used)
@@ -7721,6 +7721,9 @@ function clearAllLocalData(){
   populateBatchDropdowns();renderEC();renderRO();
   ecClear();roClear();
   summaryPopulateBatches();
+  try { if(typeof destroyRenderPending==='function') destroyRenderPending(); } catch(_){}
+  try { if(typeof destroyRenderHistory==='function') destroyRenderHistory(); } catch(_){}
+  try { if(typeof flowRenderRecent==='function') flowRenderRecent(); } catch(_){}
   updatePendingBadge();
   toast('All local data cleared. Credentials preserved. Ready for production data.', 5500);
 }
