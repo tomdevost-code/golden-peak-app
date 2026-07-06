@@ -1463,6 +1463,7 @@ tr:last-child td { border-bottom: none; }
           <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
             <button type="button" class="btn-secondary" onclick="destroyReconToggle()" style="flex:1;min-width:140px;">Show / Hide</button>
             <button type="button" class="btn-secondary" onclick="destroyRestoreMissing()" style="flex:1;min-width:140px;">Restore Missing Records</button>
+            <button type="button" class="btn-secondary" onclick="destroyKeyAudit()" style="flex:1;min-width:140px;">Audit Coverage Keys</button>
           </div>
           <div id="destroy-recon-report"></div>
         </div>
@@ -9789,6 +9790,61 @@ function destroyReconRender(){
     +(gPhantom>0.0005?'<div style="margin-top:6px;">The phantom weight is what makes the destruction totals (and CTLS Section 6) read higher than your live Vegetative Waste figure. Batches flagged <b>no records found</b> had all their covered waste records deleted/reassigned after this event was recorded.</div>':'')
     +'</div>';
   el.innerHTML = summary + html;
+}
+// Coverage-key audit. For every destruction event's covered-waste key that does NOT match a live
+// waste record, find live waste records with the same batch+date and show the two keys byte-for-byte,
+// pinpointing the first differing character (with char codes, so invisible differences like a stray
+// space vs non-breaking space are exposed). Run this on the laptop where records wrongly show pending.
+function destroyKeyAudit(){
+  const el = document.getElementById('destroy-recon-report');
+  if(!el) return;
+  el.style.display = '';
+  const liveByKey = new Map();
+  wasteRecs.forEach(w => liveByKey.set(NAT_KEY_FN.waste(w), w));
+  const rows = [];
+  destroyRecs.forEach(ev=>{
+    (ev.coveredKeys||[]).forEach(k=>{
+      if(liveByKey.has(k)) return; // covered key matches a live record — fine
+      const parts = String(k).split('|');
+      const kb = (parts[0]||'').toUpperCase(), kd = parts[1]||'';
+      const cands = wasteRecs.filter(w => (w.batch||'').toString().toUpperCase()===kb && (w.date||'')===kd);
+      if(!cands.length){ rows.push({ev:ev.date||'', covered:k, live:null, diff:-1}); return; }
+      cands.forEach(w=>{
+        const lk = NAT_KEY_FN.waste(w);
+        let d=-1; const L=Math.max(k.length,lk.length);
+        for(let i=0;i<L;i++){ if(k.charCodeAt(i)!==lk.charCodeAt(i)){ d=i; break; } }
+        rows.push({ev:ev.date||'', covered:k, live:lk, diff:d});
+      });
+    });
+  });
+  const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  if(!rows.length){
+    el.innerHTML = '<div style="margin-top:8px;border:1px solid var(--green);background:var(--green-pale);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--green);">Every covered-waste key matches a live waste record. No coverage mismatches on this laptop — its pending list is correct.</div>';
+    return;
+  }
+  let html = '<div style="margin-top:8px;border:1px solid var(--amber);border-radius:8px;overflow:hidden;">'
+    + '<div style="background:var(--amber-pale);color:#3B2A00;padding:8px 10px;font-family:var(--mono);font-size:12px;font-weight:700;">'+rows.length+' covered-waste key(s) with no matching live record</div>'
+    + '<div style="font-size:11px;color:var(--text2);padding:8px 10px;line-height:1.5;">Each event stored these keys when the destruction happened, but no current waste record produces the same key — so those records resurface as pending. The first differing character is flagged below.</div>'
+    + '<div style="max-height:360px;overflow:auto;padding:6px 10px;">';
+  rows.forEach(r=>{
+    html += '<div style="border-top:1px solid var(--border);padding:8px 0;font-size:11px;font-family:var(--mono);">';
+    html += '<div style="color:var(--text3);">event '+esc(r.ev)+'</div>';
+    html += '<div>covered: '+esc(r.covered)+'</div>';
+    if(r.live === null){
+      html += '<div style="color:var(--red);">live:    (no live waste record exists for this batch + date)</div>';
+    } else {
+      html += '<div>live:&nbsp;&nbsp;&nbsp;&nbsp;'+esc(r.live)+'</div>';
+      if(r.diff >= 0){
+        const cc = r.covered.charCodeAt(r.diff), lc = r.live.charCodeAt(r.diff);
+        html += '<div style="color:var(--red);">first diff at position '+r.diff+': covered '+(isNaN(cc)?'(end)':'&ldquo;'+esc(r.covered[r.diff]||'')+'&rdquo; code '+cc)+' vs live '+(isNaN(lc)?'(end)':'&ldquo;'+esc(r.live[r.diff]||'')+'&rdquo; code '+lc)+'</div>';
+      } else {
+        html += '<div style="color:var(--amber);">strings look identical but did not match the live-key index — possible duplicate live record</div>';
+      }
+    }
+    html += '</div>';
+  });
+  html += '</div></div>';
+  el.innerHTML = html;
 }
 // Collect waste records that a destruction event covered but which no longer exist in wasteRecs.
 // Each coveredKey is a reversible natural key: batch|date|room|type|subtype|weight|plants. We parse
