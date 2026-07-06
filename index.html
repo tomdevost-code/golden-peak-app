@@ -9799,50 +9799,65 @@ function destroyKeyAudit(){
   const el = document.getElementById('destroy-recon-report');
   if(!el) return;
   el.style.display = '';
-  const liveByKey = new Map();
-  wasteRecs.forEach(w => liveByKey.set(NAT_KEY_FN.waste(w), w));
-  const rows = [];
-  destroyRecs.forEach(ev=>{
-    (ev.coveredKeys||[]).forEach(k=>{
-      if(liveByKey.has(k)) return; // covered key matches a live record — fine
-      const parts = String(k).split('|');
-      const kb = (parts[0]||'').toUpperCase(), kd = parts[1]||'';
-      const cands = wasteRecs.filter(w => (w.batch||'').toString().toUpperCase()===kb && (w.date||'')===kd);
-      if(!cands.length){ rows.push({ev:ev.date||'', covered:k, live:null, diff:-1}); return; }
-      cands.forEach(w=>{
-        const lk = NAT_KEY_FN.waste(w);
-        let d=-1; const L=Math.max(k.length,lk.length);
-        for(let i=0;i<L;i++){ if(k.charCodeAt(i)!==lk.charCodeAt(i)){ d=i; break; } }
-        rows.push({ev:ev.date||'', covered:k, live:lk, diff:d});
-      });
-    });
-  });
   const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  if(!rows.length){
-    el.innerHTML = '<div style="margin-top:8px;border:1px solid var(--green);background:var(--green-pale);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--green);">Every covered-waste key matches a live waste record. No coverage mismatches on this laptop — its pending list is correct.</div>';
+  const firstDiff = (a,b) => { const L=Math.max(a.length,b.length); for(let i=0;i<L;i++){ if(a.charCodeAt(i)!==b.charCodeAt(i)) return i; } return -1; };
+  const diffLine = (a,b,d) => { if(d<0) return '<div style="color:var(--amber);">strings are byte-identical (would match) — likely a duplicate live record</div>'; const ac=a.charCodeAt(d), bc=b.charCodeAt(d); return '<div style="color:var(--red);">first diff at position '+d+': A '+(isNaN(ac)?'(end)':'&ldquo;'+esc(a[d]||'')+'&rdquo; code '+ac)+' vs B '+(isNaN(bc)?'(end)':'&ldquo;'+esc(b[d]||'')+'&rdquo; code '+bc)+'</div>'; };
+  // Flatten every covered key across all events (with its event date).
+  const allCovered = [];
+  destroyRecs.forEach(ev => (ev.coveredKeys||[]).forEach(k => allCovered.push({k:String(k), ev:ev.date||''})));
+  const coveredSet = new Set(allCovered.map(c=>c.k));
+  // DIRECTION 1 — "why is this record PENDING?" For each pending waste record, look for a covered
+  // key with the same batch+date (a near-miss). If found, its key differs → show the byte diff.
+  const pend = (typeof destroyPendingWaste==='function') ? destroyPendingWaste() : [];
+  const pendRows = [];
+  pend.forEach(w=>{
+    const lk = NAT_KEY_FN.waste(w);
+    if(coveredSet.has(lk)) return; // actually covered (shouldn't be pending) — skip
+    const kb=(w.batch||'').toString().toUpperCase(), kd=w.date||'';
+    const nears = allCovered.filter(c=>{ const p=c.k.split('|'); return (p[0]||'').toUpperCase()===kb && (p[1]||'')===kd; });
+    if(nears.length){
+      nears.forEach(c => pendRows.push({live:lk, covered:c.k, ev:c.ev, diff:firstDiff(lk,c.k), why:'should be covered but key differs'}));
+    } else {
+      pendRows.push({live:lk, covered:null, ev:'', diff:-1, why:'no destruction event covers this batch+date — genuinely new'});
+    }
+  });
+  // DIRECTION 2 — covered keys with no matching live record (orphan coverage).
+  const liveSet = new Set(wasteRecs.map(w=>NAT_KEY_FN.waste(w)));
+  const orphanRows = [];
+  allCovered.forEach(c=>{
+    if(liveSet.has(c.k)) return;
+    const p=c.k.split('|'); const kb=(p[0]||'').toUpperCase(), kd=p[1]||'';
+    const cands = wasteRecs.filter(w=> (w.batch||'').toString().toUpperCase()===kb && (w.date||'')===kd);
+    if(cands.length){ cands.forEach(w=>{ const lk=NAT_KEY_FN.waste(w); orphanRows.push({covered:c.k, live:lk, ev:c.ev, diff:firstDiff(c.k,lk)}); }); }
+  });
+  if(!pendRows.length && !orphanRows.length){
+    el.innerHTML = '<div style="margin-top:8px;border:1px solid var(--green);background:var(--green-pale);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--green);">No coverage-key problems found. Every pending record is genuinely uncovered and every covered key matches a live record.</div>';
     return;
   }
   let html = '<div style="margin-top:8px;border:1px solid var(--amber);border-radius:8px;overflow:hidden;">'
-    + '<div style="background:var(--amber-pale);color:#3B2A00;padding:8px 10px;font-family:var(--mono);font-size:12px;font-weight:700;">'+rows.length+' covered-waste key(s) with no matching live record</div>'
-    + '<div style="font-size:11px;color:var(--text2);padding:8px 10px;line-height:1.5;">Each event stored these keys when the destruction happened, but no current waste record produces the same key — so those records resurface as pending. The first differing character is flagged below.</div>'
-    + '<div style="max-height:360px;overflow:auto;padding:6px 10px;">';
-  rows.forEach(r=>{
-    html += '<div style="border-top:1px solid var(--border);padding:8px 0;font-size:11px;font-family:var(--mono);">';
-    html += '<div style="color:var(--text3);">event '+esc(r.ev)+'</div>';
-    html += '<div>covered: '+esc(r.covered)+'</div>';
-    if(r.live === null){
-      html += '<div style="color:var(--red);">live:    (no live waste record exists for this batch + date)</div>';
-    } else {
-      html += '<div>live:&nbsp;&nbsp;&nbsp;&nbsp;'+esc(r.live)+'</div>';
-      if(r.diff >= 0){
-        const cc = r.covered.charCodeAt(r.diff), lc = r.live.charCodeAt(r.diff);
-        html += '<div style="color:var(--red);">first diff at position '+r.diff+': covered '+(isNaN(cc)?'(end)':'&ldquo;'+esc(r.covered[r.diff]||'')+'&rdquo; code '+cc)+' vs live '+(isNaN(lc)?'(end)':'&ldquo;'+esc(r.live[r.diff]||'')+'&rdquo; code '+lc)+'</div>';
-      } else {
-        html += '<div style="color:var(--amber);">strings look identical but did not match the live-key index — possible duplicate live record</div>';
-      }
-    }
-    html += '</div>';
-  });
+    + '<div style="background:var(--amber-pale);color:#3B2A00;padding:8px 10px;font-family:var(--mono);font-size:12px;font-weight:700;">Coverage-key audit</div>'
+    + '<div style="max-height:400px;overflow:auto;padding:6px 10px;">';
+  if(pendRows.length){
+    html += '<div style="font-size:11px;font-weight:700;color:#3B2A00;margin:6px 0;">Pending records that look like they SHOULD be covered ('+pendRows.length+'):</div>';
+    pendRows.forEach(r=>{
+      html += '<div style="border-top:1px solid var(--border);padding:8px 0;font-size:11px;font-family:var(--mono);">';
+      html += '<div style="color:var(--text3);">'+esc(r.why)+(r.ev?' · event '+esc(r.ev):'')+'</div>';
+      html += '<div>A (live pending): '+esc(r.live)+'</div>';
+      if(r.covered !== null){ html += '<div>B (covered key):&nbsp; '+esc(r.covered)+'</div>'; html += diffLine(r.live, r.covered, r.diff); }
+      html += '</div>';
+    });
+  }
+  if(orphanRows.length){
+    html += '<div style="font-size:11px;font-weight:700;color:#3B2A00;margin:10px 0 6px;">Covered keys with no matching live record ('+orphanRows.length+'):</div>';
+    orphanRows.forEach(r=>{
+      html += '<div style="border-top:1px solid var(--border);padding:8px 0;font-size:11px;font-family:var(--mono);">';
+      html += '<div style="color:var(--text3);">event '+esc(r.ev)+'</div>';
+      html += '<div>A (covered key): '+esc(r.covered)+'</div>';
+      html += '<div>B (live record):&nbsp; '+esc(r.live)+'</div>';
+      html += diffLine(r.covered, r.live, r.diff);
+      html += '</div>';
+    });
+  }
   html += '</div></div>';
   el.innerHTML = html;
 }
