@@ -14133,6 +14133,7 @@ function summaryRenderHistory(batchId){
       '<td style="padding:6px 8px;text-align:center;white-space:nowrap;">'+
         '<button type="button" onclick="summaryTxEditQty('+_txIdArg+')" title="Correct the quantity on this transaction" style="font-size:11px;padding:3px 8px;margin-right:4px;border:1px solid var(--border);background:var(--bg2);border-radius:var(--radius-sm);cursor:pointer;color:var(--text2);">Edit Qty</button>'+
         '<button type="button" onclick="summaryTxEditPhase('+_txIdArg+')" title="Correct which phase this transaction counts in (Veg/Clone vs Flower for CTLS)" style="font-size:11px;padding:3px 8px;margin-right:4px;border:1px solid var(--border);background:var(--bg2);border-radius:var(--radius-sm);cursor:pointer;color:var(--text2);">Phase</button>'+
+        '<button type="button" onclick="summaryTxEditDate('+_txIdArg+')" title="Correct the date on this transaction (keeps the matching lifecycle date in sync)" style="font-size:11px;padding:3px 8px;margin-right:4px;border:1px solid var(--border);background:var(--bg2);border-radius:var(--radius-sm);cursor:pointer;color:var(--text2);">Date</button>'+
         '<button type="button" onclick="summaryTxMove('+_txIdArg+')" title="Move this transaction to another batch" style="font-size:11px;padding:3px 8px;margin-right:4px;border:1px solid var(--border);background:var(--bg2);border-radius:var(--radius-sm);cursor:pointer;color:var(--text2);">Move</button>'+
         '<button type="button" onclick="summaryTxDelete('+_txIdArg+')" title="Delete this transaction" style="font-size:11px;padding:3px 8px;border:1px solid var(--red);background:var(--red-pale);border-radius:var(--radius-sm);cursor:pointer;color:var(--red);">Delete</button>'+
       '</td>'+
@@ -14294,6 +14295,45 @@ async function summaryTxEditPhase(id){
     catch(e){ console.error('[summaryTxEditPhase] Airtable push failed', e); toast('Updated locally; Airtable push failed — will retry on next sync.',5000); }
   }
   toast('Phase corrected to '+match+'.');
+  try { if(typeof summaryBatchChanged==='function') summaryBatchChanged(); } catch(_){}
+  try { if(typeof renderBatchLog==='function') renderBatchLog(); } catch(_){}
+}
+// Correct the DATE on a transaction. For a Phase Change, the batch's matching lifecycle date is the
+// same event, so we keep it in sync (Veg→flowerStart, etc.) — that's what keeps the Summary lifecycle
+// date and the Transaction History from drifting apart. Syncs both to Airtable.
+async function summaryTxEditDate(id){
+  const idx = batchTxRecs.findIndex(t => String(t.id) === String(id));
+  if(idx < 0){ toast('Transaction not found.'); return; }
+  const t = batchTxRecs[idx];
+  const cur = t.date || '';
+  // Resolve the matching lifecycle field up front (Phase Change only), so the no-change check and the
+  // sync both account for it — this lets you correct the case where the lifecycle date is the one off.
+  let _batch = null, _fld = null;
+  if(t.txType === 'Phase Change'){
+    const b = batchRecs.find(r=>r.batchId===t.batchId && !r.type);
+    const _map = { 'Veg':'vegStart', 'Flower':'flowerStart', 'Drying':'harvestDate', 'Packaged':'packagedDate', 'Delivered':'deliveredDate' };
+    _fld = b ? _map[t.plantPhase||''] : null;
+    if(b && _fld) _batch = b;
+  }
+  const curLifecycle = (_batch && _fld) ? (_batch[_fld]||'') : null;
+  const inp = prompt('Correct the date (YYYY-MM-DD) for this "'+t.txType+'" transaction.\n\nTransaction date: '+(cur||'(none)')+(curLifecycle!==null?'\nLifecycle date: '+(curLifecycle||'(none)'):''), cur);
+  if(inp === null) return;
+  const nd = (inp||'').trim();
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(nd)){ toast('Enter the date as YYYY-MM-DD.'); return; }
+  if(nd === cur && (curLifecycle === null || nd === curLifecycle)){ toast('No change.'); return; }
+  t.date = nd; t.synced = false;
+  lsSet('gp-batchtx', batchTxRecs);
+  // Sync the matching lifecycle date to the same value.
+  if(_batch && _fld){ _batch[_fld] = nd; _batch.synced = false; lsSet('gp-batch', batchRecs); }
+  if(cfg.token && cfg.base && cfg.batchtxTbl && t.airtableId){
+    try { await atUpdateById(cfg.batchtxTbl, t.airtableId, { 'Date': nd }); t.synced = true; lsSet('gp-batchtx', batchTxRecs); }
+    catch(e){ console.error('[summaryTxEditDate] tx push failed', e); toast('Updated locally; Airtable push failed — will retry on next sync.',5000); }
+  }
+  if(_batch && cfg.token && cfg.base && cfg.batchTbl){
+    try { await atUpsert(cfg.batchTbl, buildBatchFields(_batch), ['Batch ID']); _batch.synced = true; lsSet('gp-batch', batchRecs); }
+    catch(_){}
+  }
+  toast('Date corrected to '+nd+(_batch?' — lifecycle date synced too':'')+'.');
   try { if(typeof summaryBatchChanged==='function') summaryBatchChanged(); } catch(_){}
   try { if(typeof renderBatchLog==='function') renderBatchLog(); } catch(_){}
 }
