@@ -2089,6 +2089,21 @@ tr:last-child td { border-bottom: none; }
 </div>
 <div class="toast" id="toast"></div>
 
+<!-- ===== SUPABASE EDITION: login gate (covers the app until signed in) ===== -->
+<div id="sb-login-overlay" style="position:fixed;inset:0;z-index:2147483647;background:#0b3d17;color:#eaffea;display:flex;align-items:center;justify-content:center;font-family:system-ui,sans-serif;">
+  <div style="background:#0f5223;padding:28px;border-radius:14px;width:320px;max-width:90%;box-shadow:0 10px 40px rgba(0,0,0,.4);">
+    <h2 style="margin:0 0 4px;color:#fff;font-size:18px;">Golden Peak Field Log</h2>
+    <div style="font-size:12px;color:#bfeecb;margin-bottom:16px;">Supabase edition — please sign in</div>
+    <input id="sb-email" type="email" placeholder="email" autocomplete="username" style="width:100%;box-sizing:border-box;padding:10px;margin:6px 0;border:none;border-radius:8px;font-size:14px;" />
+    <input id="sb-password" type="password" placeholder="password" autocomplete="current-password" style="width:100%;box-sizing:border-box;padding:10px;margin:6px 0;border:none;border-radius:8px;font-size:14px;" />
+    <button id="sb-login-btn" style="width:100%;padding:11px;margin-top:8px;border:none;border-radius:8px;background:#38b24a;color:#fff;font-size:15px;cursor:pointer;">Log in</button>
+    <div id="sb-login-msg" style="font-size:12px;margin-top:10px;min-height:16px;color:#cfeedd;"></div>
+  </div>
+</div>
+<!-- set BEFORE the app script so the Airtable poller never starts in this edition -->
+<script>window.__SB_MODE = true;</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
 <script>
 const EC_LO=2.2,EC_HI=2.3,PH_EC_LO=6.2,PH_EC_HI=6.3;
 const RO_PH_LO=6.0,RO_PH_HI=6.5,RO_VAR_LO=0.3,RO_VAR_HI=0.5,RO_VAR_ALERT=1.0;
@@ -3370,6 +3385,7 @@ async function pullFromAirtable(opts){
 let autoSyncTimer = null;
 const AUTO_SYNC_MS = 60000;
 function startAutoSync(){
+  if(window.__SB_MODE) return; // Supabase edition — no Airtable polling
   if(autoSyncTimer){ clearInterval(autoSyncTimer); autoSyncTimer = null; }
   if(!atReady()){
     console.log('[autosync] not starting — Airtable not configured');
@@ -16601,6 +16617,249 @@ function buildSeedInvFields(rec){
   Object.keys(f).forEach(k => { if(f[k] === undefined || f[k] === null || f[k] === '') delete f[k]; });
   return f;
 }
+</script>
+
+<!-- ======================================================================= -->
+<!-- SUPABASE EDITION — data layer (read foundation).                        -->
+<!-- Signs in, pulls every table from Supabase into the app's localStorage    -->
+<!-- (mapping columns back to the app's field names), then reloads so the     -->
+<!-- existing app boots from that data. Read-only for now: saves are wired in -->
+<!-- the next step. Airtable polling is disabled via window.__SB_MODE.        -->
+<!-- ======================================================================= -->
+<script>
+(function(){
+  const SB_URL  = 'https://ukudiciethsyaiojwggb.supabase.co';
+  const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVrdWRpY2lldGhzeWFpb2p3Z2diIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM0MzU0MjEsImV4cCI6MjA5OTAxMTQyMX0.sUlgSCMA0j1xJUfZo_f93dsS0Sq0aDWB6i3mC0WHjdc';
+  const SBC = window.supabase.createClient(SB_URL, SB_ANON);
+  window.__SBC = SBC;
+  const dstr = v => (v==null ? '' : String(v));   // date/text: null -> '' (app uses '')
+  const ls = (k,v) => { try{ localStorage.setItem(k, JSON.stringify(v)); }catch(_){} };
+
+  // ---- reverse mappers: Supabase row -> the app's record shape ----
+  const fromBatch = r => ({ id:r.batch_id, batchId:r.batch_id, cultivar:r.cultivar, mother:r.mother, geneticsSource:r.genetics_source, externalCompany:r.external_company, seedStrain:r.seed_strain, seedLotNumber:r.seed_lot_number, notes:r.notes, createdDate:dstr(r.created_date), cloneDate:dstr(r.clone_date), hydrationDate:dstr(r.hydration_date), vegStart:dstr(r.veg_start_date), flowerStart:dstr(r.flower_start_date), harvestDate:dstr(r.harvest_date), packagedDate:dstr(r.package_date), soldDate:dstr(r.sold_date), deliveredDate:dstr(r.delivered_date), closedDate:dstr(r.closed_date), plantPhase:r.plant_phase, status:r.status||'Open', rooms:r.rooms||[], roomDistribution:r.room_distribution||{}, harvestedWeights:r.harvested_weights||{}, harvestedPlants:r.harvested_plants||{}, completedHarvests:r.completed_harvests||[], postDryingWeight:r.post_drying_weight_kg, momPurpose:r.mom_purpose, momPurposeCounts:r.mom_purpose_counts||{}, momPhaseCounts:r.mom_phase_counts||{}, synced:true });
+  const fromTx = r => ({ id:r.id, airtableId:r.id, batchId:r.batch_id, date:dstr(r.date), txType:r.transaction_type, plantPhase:r.plant_phase, qty:r.quantity, weight:r.weight_kg, currentQtyAfter:r.current_quantity_after, saleStage:r.sale_stage, labDestinationType:r.lab_destination_type, labMaterialType:r.lab_material_type, labDestinationName:r.lab_destination_name, fromPhase:r.from_phase, toPhase:r.to_phase, room:r.room, cohortPurpose:r.cohort_purpose, notes:r.notes, synced:true });
+  const fromEc = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, date:dstr(r.date), room:r.room, grower:r.grower, wtype:r.watering_type, dripEcPens:[r.drip_ec_pen1,r.drip_ec_pen2,r.drip_ec_pen3], dripPhPens:[r.drip_ph_pen1,r.drip_ph_pen2,r.drip_ph_pen3], events:[r.event1_ml,r.event2_ml,r.event3_ml,r.event4_ml,r.event5_ml,r.event6_ml,r.event7_ml,r.event8_ml], notes:r.notes, synced:true });
+  const fromRo = r => { const o={ id:r.id, airtableId:r.id, batch:r.batch_id, date:dstr(r.date), room:r.room, grower:r.grower, inputEC:r.input_ec, variance:r.ec_variance, notes:r.notes, synced:true, samples:[] }; for(let i=1;i<=8;i++) o.samples.push({ec:r['s'+i+'_ec'], ph:r['s'+i+'_ph']}); return o; };
+  const fromFlow = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, date:dstr(r.date), time:r.time, room:r.room, grower:r.grower, reading:r.reading, notes:r.notes, synced:true });
+  const fromWaste = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, date:dstr(r.date), grower:r.grower, room:r.room, type:r.waste_type, subtype:r.sub_category, weight:r.weight_kg, plants:r.plants_destroyed, notes:r.notes, synced:true });
+  const fromHarvest = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, date:dstr(r.date), grower:r.grower, room:r.room, binNumber:r.bin_number, tareWeight:r.tare_weight_kg, totalWeight:r.total_weight_kg, netWeight:r.net_weight_kg, notes:r.notes, synced:true });
+  const fromPostdry = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, binNumber:r.container_id, date:dstr(r.date), grower:r.grower, tareWeight:r.tare_weight_kg, grossWeight:r.gross_weight_kg, netWeight:r.net_weight_kg, containerType:r.type_size, sampleType:r.sample_type||'Sold', notes:r.notes, synced:true });
+  const fromBio = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, date:dstr(r.date), grower:r.grower, room:r.room, beneficial:r.beneficial, quantity:r.quantity, notes:r.notes, synced:true });
+  const fromPest = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, date:dstr(r.date), grower:r.grower, room:r.room, location:r.location, card:r.card, pests:r.pests, quantity:r.quantity, notes:r.notes, synced:true });
+  const fromSeed = r => ({ id:r.lot_number, airtableId:r.lot_number, lotNumber:r.lot_number, strain:r.strain, source:r.source, acquisitionType:r.acquisition_type, sourceMomBatch:r.source_mother_batch, qtyOnHand:r.quantity_on_hand, qtyAcquired:r.quantity_acquired, qtyGerminated:r.quantity_germinated, dateReceived:dstr(r.date_received), notes:r.notes, synced:true });
+  const fromSanClean = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, date:dstr(r.date), grower:r.grower, template:r.template, room:r.room, task:r.task, notes:r.notes, synced:true });
+  const fromSanTool = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, date:dstr(r.date), grower:r.grower, tool:r.tool, cleaned:!!r.cleaned, sanitized:!!r.sanitized, notes:r.notes, synced:true });
+  const fromSanEdit = r => ({ id:r.template, template:r.template, removed:r.removed||[], renamed:r.renamed||{}, added:r.added||[], synced:true });
+  // waste natural key from a Supabase waste row (to rebuild destruction coveredKeys)
+  const wasteKeyRow = w => [ (w.batch_id||'').toString().toUpperCase(), dstr(w.date), (w.room||'').toString(), (w.waste_type||'').toString(), (w.sub_category||'').toString(), (parseFloat(w.weight_kg)||0).toFixed(3), (parseInt(w.plants_destroyed)||0) ].join('|');
+
+  async function q(t){ const { data, error } = await SBC.from(t).select('*'); if(error) throw new Error(t+': '+error.message); return data||[]; }
+
+  async function hydrate(){
+    ls('gp-batch',    (await q('batches')).map(fromBatch));
+    ls('gp-batchtx',  (await q('transactions')).map(fromTx));
+    ls('gp-ec',       (await q('ec_logs')).map(fromEc));
+    ls('gp-ro',       (await q('runoff_logs')).map(fromRo));
+    ls('gp-flow',     (await q('flow_logs')).map(fromFlow));
+    const wasteRows = await q('waste_records');
+    ls('gp-waste',    wasteRows.map(fromWaste));
+    ls('gp-harvest',  (await q('harvest_records')).map(fromHarvest));
+    ls('gp-postdry',  (await q('postdry_records')).map(fromPostdry));
+    ls('gp-bio',      (await q('bio_records')).map(fromBio));
+    ls('gp-pest',     (await q('pest_records')).map(fromPest));
+    ls('gp-seedinv',  (await q('seed_inventory')).map(fromSeed));
+    ls('gp-sanclean', (await q('sanitation_cleaning')).map(fromSanClean));
+    ls('gp-santool',  (await q('sanitation_tool')).map(fromSanTool));
+    ls('gp-sanedits', (await q('sanitation_task_edits')).map(fromSanEdit));
+    // destruction — reassemble adjust + coveredKeys from the join tables
+    const keyById = {}; wasteRows.forEach(w => { keyById[w.id] = wasteKeyRow(w); });
+    const events = await q('destruction_events');
+    const adjs = await q('destruction_adjust');
+    const covs = await q('destruction_covered');
+    const adjBy = {}; adjs.forEach(a => { (adjBy[a.destruction_id] = adjBy[a.destruction_id]||[]).push(a); });
+    const covBy = {}; covs.forEach(c => { (covBy[c.destruction_id] = covBy[c.destruction_id]||[]).push(c.waste_id); });
+    ls('gp-destroy', events.map(e => {
+      const aRows = adjBy[e.id]||[];
+      return { id:e.id, airtableId:e.id, date:dstr(e.date), employee:e.employee, method:e.method, witness:e.witness, address:e.address, attest:!!e.attest, sig:e.signature, vegWeight:e.veg_weight_kg, dryWeight:e.dry_weight_kg, dryingLoss:e.drying_loss_kg, notes:e.notes,
+        coveredKeys: (covBy[e.id]||[]).map(wid => keyById[wid]).filter(Boolean),
+        adjust: aRows.map(a => ({ batch:a.batch_id, vegRecorded:a.veg_recorded, dryRecorded:a.dry_recorded, vegActual:a.veg_actual, dryActual:a.dry_actual })),
+        batches: [...new Set(aRows.map(a=>a.batch_id).filter(Boolean))],
+        vegRecorded: aRows.reduce((s,a)=>s+(parseFloat(a.veg_recorded)||0),0),
+        dryRecorded: aRows.reduce((s,a)=>s+(parseFloat(a.dry_recorded)||0),0),
+        synced:true };
+    }));
+  }
+
+  // ===== WRITES — all tables reroute the app's Airtable choke-point functions to Supabase =====
+  // The existing save/edit/delete flows already call atPost/atUpsert/atUpdateById/atDelete with the
+  // right cfg table id + Airtable field object, so nothing else in the app needs editing. Each table
+  // has a field-name -> column map. Destruction is special (its covered-waste + adjustments become
+  // join-table rows). Anything unmapped no-ops (no Airtable contact).
+  const num = v => (v===''||v==null||isNaN(parseFloat(v))) ? null : parseFloat(v);
+  const uw  = v => Array.isArray(v) ? v[0] : v;
+  const pj  = v => { try{ return JSON.parse(v); }catch(_){ return v; } };
+  const mk  = M => f => { const o={}; for(const k in f){ if(k==='Batch ID') o.batch_id=uw(f[k]); else if(M[k]!==undefined) o[M[k]]=f[k]; } return o; };
+
+  const M_BATCH={'Batch ID':'batch_id','Cultivar Name':'cultivar','Mother ID':'mother','Source of Genetics':'genetics_source','External Clone Company':'external_company','Notes':'notes','Created Date':'created_date','Clone Date':'clone_date','Delivered Date':'delivered_date','Plant Phase':'plant_phase','Status':'status','Closed Date':'closed_date','Mom Purpose':'mom_purpose','Hydration Date':'hydration_date','Veg Start Date':'veg_start_date','Flower Start Date':'flower_start_date','Harvest Date':'harvest_date','Package Date':'package_date','Sold Date':'sold_date','Post-Drying Weight (kg)':'post_drying_weight_kg'};
+  const B_JSON={'Room Distribution':'room_distribution','Harvested Weights':'harvested_weights','Harvested Plants':'harvested_plants','Mom Purpose Counts':'mom_purpose_counts'};
+  const mapBatch = f => { const o={}; for(const k in f){ if(M_BATCH[k]!==undefined) o[M_BATCH[k]]=f[k]; else if(B_JSON[k]!==undefined) o[B_JSON[k]]=pj(f[k]); else if(k==='Rooms') o.rooms=Array.isArray(f[k])?f[k]:String(f[k]).split(',').map(s=>s.trim()).filter(Boolean); else if(k==='Completed Harvests') o.completed_harvests=String(f[k]).split(',').map(s=>s.trim()).filter(Boolean); } return o; };
+  const M_TX={'Date':'date','Transaction Type':'transaction_type','Plant Phase':'plant_phase','Quantity':'quantity','Weight (kg)':'weight_kg','Current Quantity After':'current_quantity_after','Sale Stage':'sale_stage','Lab Destination Type':'lab_destination_type','Lab Material Type':'lab_material_type','Lab Destination Name':'lab_destination_name','From Phase':'from_phase','To Phase':'to_phase','Room':'room','Cohort Purpose':'cohort_purpose','Notes':'notes'};
+  const M_EC={'Date':'date','Room':'room','Grower':'grower','Watering Type':'watering_type','Drip EC Pen 1':'drip_ec_pen1','Drip EC Pen 2':'drip_ec_pen2','Drip EC Pen 3':'drip_ec_pen3','Drip pH Pen 1':'drip_ph_pen1','Drip pH Pen 2':'drip_ph_pen2','Drip pH Pen 3':'drip_ph_pen3','Event 1 ml/plant':'event1_ml','Event 2 ml/plant':'event2_ml','Event 3 ml/plant':'event3_ml','Event 4 ml/plant':'event4_ml','Event 5 ml/plant':'event5_ml','Event 6 ml/plant':'event6_ml','Event 7 ml/plant':'event7_ml','Event 8 ml/plant':'event8_ml','Notes':'notes'};
+  const M_RO={'Date':'date','Room':'room','Grower':'grower','Input EC':'input_ec','EC Variance':'ec_variance','Notes':'notes','S1 EC':'s1_ec','S2 EC':'s2_ec','S3 EC':'s3_ec','S4 EC':'s4_ec','S5 EC':'s5_ec','S6 EC':'s6_ec','S7 EC':'s7_ec','S8 EC':'s8_ec','S1 pH':'s1_ph','S2 pH':'s2_ph','S3 pH':'s3_ph','S4 pH':'s4_ph','S5 pH':'s5_ph','S6 pH':'s6_ph','S7 pH':'s7_ph','S8 pH':'s8_ph'};
+  const M_FLOW={'Date':'date','Time':'time','Room':'room','Grower':'grower','Reading':'reading','Notes':'notes'};
+  const M_WASTE={'Date':'date','Grower':'grower','Room':'room','Waste Type':'waste_type','Sub-Category':'sub_category','Weight (kg)':'weight_kg','Plants Destroyed':'plants_destroyed','Notes':'notes'};
+  const M_HARV={'Date':'date','Grower':'grower','Room':'room','Bin Number':'bin_number','Tare Weight (kg)':'tare_weight_kg','Total Weight (kg)':'total_weight_kg','Net Weight (kg)':'net_weight_kg','Notes':'notes'};
+  const M_POST={'Date':'date','Grower':'grower','Container ID':'container_id','Tare Weight (kg)':'tare_weight_kg','Gross Weight (kg)':'gross_weight_kg','Net Weight (kg)':'net_weight_kg','Type/Size':'type_size','Sample Type':'sample_type','Notes':'notes'};
+  const M_BIO={'Date':'date','Grower':'grower','Room':'room','Beneficial':'beneficial','Quantity':'quantity','Notes':'notes'};
+  const M_PEST={'Date':'date','Grower':'grower','Room':'room','Location':'location','Card':'card','Pests':'pests','Quantity':'quantity','Notes':'notes'};
+  const M_SEED={'Lot Number':'lot_number','Strain':'strain','Source':'source','Acquisition Type':'acquisition_type','Source Mother Batch':'source_mother_batch','Quantity On Hand':'quantity_on_hand','Quantity Acquired':'quantity_acquired','Quantity Germinated':'quantity_germinated','Date Received':'date_received','Notes':'notes'};
+  const mapSeed = f => { const o={}; for(const k in f){ if(M_SEED[k]!==undefined) o[M_SEED[k]]=f[k]; } return o; };
+  const M_SANCL={'Date':'date','Grower':'grower','Template':'template','Room':'room','Task':'task','Notes':'notes'};
+  const M_SANTL={'Date':'date','Grower':'grower','Tool':'tool','Cleaned':'cleaned','Sanitized':'sanitized','Notes':'notes'};
+  const mapSanEd = f => { const o={ template:f['Template'] }; if('Removed' in f) o.removed=pj(f['Removed'])||[]; if('Renamed' in f) o.renamed=pj(f['Renamed'])||{}; if('Added' in f) o.added=pj(f['Added'])||[]; return o; };
+
+  const T = {
+    batch:{table:'batches',pk:'batch_id',map:mapBatch,localFields:true},
+    tx:{table:'transactions',pk:'id',map:mk(M_TX)},
+    ec:{table:'ec_logs',pk:'id',map:mk(M_EC)},
+    ro:{table:'runoff_logs',pk:'id',map:mk(M_RO)},
+    flow:{table:'flow_logs',pk:'id',map:mk(M_FLOW)},
+    waste:{table:'waste_records',pk:'id',map:mk(M_WASTE)},
+    harvest:{table:'harvest_records',pk:'id',map:mk(M_HARV)},
+    postdry:{table:'postdry_records',pk:'id',map:mk(M_POST)},
+    bio:{table:'bio_records',pk:'id',map:mk(M_BIO)},
+    pest:{table:'pest_records',pk:'id',map:mk(M_PEST)},
+    seed:{table:'seed_inventory',pk:'lot_number',map:mapSeed},
+    sancl:{table:'sanitation_cleaning',pk:'id',map:mk(M_SANCL)},
+    santl:{table:'sanitation_tool',pk:'id',map:mk(M_SANTL)},
+    saned:{table:'sanitation_task_edits',pk:'template',map:mapSanEd},
+    destroy:{table:'destruction_events',pk:'id',destroy:true}
+  };
+  function tblFor(t){
+    if(typeof cfg==='undefined'||!cfg||!t) return null;
+    if(t===cfg.batchTbl) return T.batch; if(t===cfg.batchtxTbl) return T.tx;
+    if(t===cfg.ecTbl) return T.ec; if(t===cfg.roTbl) return T.ro; if(t===cfg.flowTbl) return T.flow;
+    if(t===cfg.wasteTbl) return T.waste; if(t===cfg.harvestTbl) return T.harvest; if(t===cfg.postDryTbl) return T.postdry;
+    if(t===cfg.bioTbl) return T.bio; if(t===cfg.pestTbl) return T.pest; if(t===cfg.seedInvTbl) return T.seed;
+    if(t===cfg.sanCleanTbl) return T.sancl; if(t===cfg.sanToolTbl) return T.santl; if(t===cfg.sanEditsTbl) return T.saned;
+    if(t===cfg.destroyTbl) return T.destroy;
+    return null;
+  }
+  const say=(m,e)=>{ try{ if(typeof toast==='function') toast(m); }catch(_){} if(e) console.error(m,e); };
+
+  async function insertDestruction(f){
+    const ev={ date:f['Date']||null, employee:f['Employee']||null, method:f['Method']||null, witness:f['Witness']||null, address:f['Address']||null, attest:!!f['Attestation'], signature:f['Signature']||null, veg_weight_kg:num(f['Veg Weight (kg)']), dry_weight_kg:num(f['Dry Weight (kg)']), drying_loss_kg:num(f['Drying Loss (kg)']), notes:f['Notes']||null };
+    const { data:er, error:e1 } = await SBC.from('destruction_events').insert(ev).select().maybeSingle();
+    if(e1){ say('Supabase destruction save failed: '+e1.message,e1); return {}; }
+    const id=er.id;
+    let adjust=[]; try{ if(f['Adjustments']){ const p=JSON.parse(f['Adjustments']); if(Array.isArray(p)) adjust=p; } }catch(_){}
+    if(adjust.length){ const { error:e2 }=await SBC.from('destruction_adjust').insert(adjust.map(a=>({ destruction_id:id, batch_id:a.batch||null, veg_recorded:num(a.vegRecorded), dry_recorded:num(a.dryRecorded), veg_actual:num(a.vegActual), dry_actual:num(a.dryActual) }))); if(e2) say('destruction_adjust: '+e2.message,e2); }
+    let ck=[]; try{ if(f['Covered Waste']){ const p=JSON.parse(f['Covered Waste']); if(Array.isArray(p)) ck=p; } }catch(_){}
+    if(ck.length){ const { data:wr }=await SBC.from('waste_records').select('id,batch_id,date,room,waste_type,sub_category,weight_kg,plants_destroyed'); const byKey={}; (wr||[]).forEach(w=>{ byKey[wasteKeyRow(w)]=w.id; }); const cov=ck.map(k=>byKey[k]).filter(Boolean).map(wid=>({ destruction_id:id, waste_id:wid })); if(cov.length){ const { error:e3 }=await SBC.from('destruction_covered').insert(cov); if(e3) say('destruction_covered: '+e3.message,e3); } }
+    return { id };
+  }
+
+  atPost = async function(tbl, fields){
+    const t=tblFor(tbl); if(!t) return {};
+    if(t.destroy) return await insertDestruction(fields);
+    const { data, error } = await SBC.from(t.table).insert(t.map(fields)).select().maybeSingle();
+    if(error){ say('Supabase save failed: '+error.message, error); return {}; }
+    return { id: data && (data.id || data.batch_id || data.lot_number) };
+  };
+  atUpsert = async function(tbl, fields, mergeOn){
+    const t=tblFor(tbl); if(!t) return { records:[{}] };
+    const row=t.map(fields);
+    if(t.localFields && row.batch_id && typeof batchRecs!=='undefined'){
+      const b=batchRecs.find(x=>x.batchId===row.batch_id && !x.type);
+      if(b){ row.mom_phase_counts=b.momPhaseCounts||{}; if(b.momPurposeCounts) row.mom_purpose_counts=b.momPurposeCounts; if(b.seedStrain!=null) row.seed_strain=b.seedStrain; if(b.seedLotNumber!=null) row.seed_lot_number=b.seedLotNumber; }
+    }
+    const { data, error } = await SBC.from(t.table).upsert(row,{onConflict:t.pk}).select().maybeSingle();
+    if(error){ say('Supabase save failed: '+error.message, error); return { records:[{}] }; }
+    return { records:[{ id: data && (data.id || data.batch_id || data.lot_number) }] };
+  };
+  atUpdateById = async function(tbl, recordId, fields){
+    const t=tblFor(tbl); if(!t) return {};
+    const { error } = await SBC.from(t.table).update(t.map(fields)).eq(t.pk, recordId);
+    if(error){ say('Supabase update failed: '+error.message, error); throw new Error(error.message); }
+    return {};
+  };
+  atDelete = async function(tbl, recordId){
+    const t=tblFor(tbl); if(!t) return true;
+    const { error } = await SBC.from(t.table).delete().eq(t.pk, recordId);
+    if(error){ say('Supabase delete failed: '+error.message, error); return false; }
+    return true;
+  };
+  syncPending = async function(){ return; };
+
+  // ===== REAL-TIME (Step 3) =====
+  // On any change from any laptop, re-pull the data and refresh the read views — debounced so a burst
+  // of changes triggers one refresh, and skipped while the grower is actively typing in a field so it
+  // never disrupts data entry. Replaces the old 60-second Airtable poll.
+  async function sbRefresh(source){
+    if(source==='realtime'){ const a=document.activeElement; if(a && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName||'')) return; }
+    try{ await hydrate(); }catch(e){ console.error('[sbRefresh]', e); return; }
+    try{ if(typeof loadAll==='function') loadAll(); }catch(_){}
+    ['populateBatchDropdowns','updatePendingBadge','renderBatchLog','summaryPopulateBatches','renderWaste','renderEC','renderRO','destroyRenderPending','destroyRenderHistory','seedInvRenderList','renderWasteReport'].forEach(fn=>{ try{ if(typeof window[fn]==='function') window[fn](); }catch(_){} });
+  }
+  pullFromAirtable = async function(){ await sbRefresh('manual'); };   // the "Pull now" button now refreshes from Supabase
+  let _rtTimer=null, _rtChannel=null;
+  async function startRealtime(){
+    // Realtime honours RLS — the socket must carry the user's JWT or it receives nothing.
+    try{ const { data } = await SBC.auth.getSession(); if(data && data.session && SBC.realtime && SBC.realtime.setAuth){ SBC.realtime.setAuth(data.session.access_token); } }catch(e){ console.error('[realtime] setAuth', e); }
+    if(_rtChannel){ try{ SBC.removeChannel(_rtChannel); }catch(_){} }
+    const bump = () => { console.log('[realtime] change received'); clearTimeout(_rtTimer); _rtTimer=setTimeout(()=>sbRefresh('realtime'), 1500); };
+    const ch = SBC.channel('gp-live');
+    ['batches','transactions','ec_logs','runoff_logs','flow_logs','waste_records','harvest_records','postdry_records','bio_records','pest_records','seed_inventory','destruction_events','destruction_adjust','destruction_covered','sanitation_cleaning','sanitation_tool','sanitation_task_edits']
+      .forEach(tbl => ch.on('postgres_changes', { event:'*', schema:'public', table:tbl }, bump));
+    ch.subscribe((st, err) => { console.log('[realtime] status:', st, err||''); });
+    _rtChannel = ch;
+  }
+
+  // ---- login gate / boot flow ----
+  const overlay = document.getElementById('sb-login-overlay');
+  const hide = () => { if(overlay) overlay.style.display='none'; };
+  const show = () => { if(overlay) overlay.style.display='flex'; };
+  const msg  = (m,err) => { const el=document.getElementById('sb-login-msg'); if(el){ el.textContent=m; el.style.color=err?'#ff9a9a':'#cfeedd'; } };
+
+  function showBadge(email){
+    if(document.getElementById('sb-badge')) return;
+    const b = document.createElement('div');
+    b.id = 'sb-badge';
+    b.style.cssText = 'position:fixed;bottom:10px;right:10px;z-index:2147483000;background:#0f5223;color:#eaffea;font:12px system-ui,sans-serif;padding:6px 10px;border-radius:20px;box-shadow:0 2px 10px rgba(0,0,0,.3);display:flex;gap:8px;align-items:center;opacity:.92;';
+    b.appendChild(Object.assign(document.createElement('span'),{textContent:'Supabase · '+(email||'signed in')}));
+    const btn = Object.assign(document.createElement('button'),{textContent:'Sign out'});
+    btn.style.cssText = 'background:#38b24a;color:#fff;border:none;border-radius:12px;padding:3px 8px;font-size:11px;cursor:pointer;';
+    btn.onclick = async () => { try{ await SBC.auth.signOut(); }catch(_){} sessionStorage.removeItem('sb-hydrated'); location.reload(); };
+    b.appendChild(btn);
+    document.body.appendChild(b);
+  }
+  async function afterAuth(){
+    if(sessionStorage.getItem('sb-hydrated')==='1'){ hide(); try{ const { data } = await SBC.auth.getUser(); showBadge(data && data.user ? data.user.email : ''); }catch(_){ showBadge(''); } try{ startRealtime(); }catch(e){ console.error('[realtime]', e); } return; }
+    msg('Loading your data from Supabase…');
+    try{ await hydrate(); sessionStorage.setItem('sb-hydrated','1'); location.reload(); }
+    catch(e){ msg('Could not load data: '+(e.message||e), true); console.error(e); }
+  }
+  async function init(){
+    try{
+      const { data } = await SBC.auth.getSession();
+      if(data && data.session){ await afterAuth(); return; }
+    }catch(e){ console.error(e); }
+    show();
+    const btn = document.getElementById('sb-login-btn');
+    const go = async () => {
+      msg('Signing in…');
+      const email = (document.getElementById('sb-email').value||'').trim();
+      const password = document.getElementById('sb-password').value||'';
+      const { error } = await SBC.auth.signInWithPassword({ email, password });
+      if(error){ msg('Sign-in failed: '+error.message, true); return; }
+      await afterAuth();
+    };
+    if(btn) btn.onclick = go;
+    const pw = document.getElementById('sb-password');
+    if(pw) pw.addEventListener('keydown', e => { if(e.key==='Enter') go(); });
+  }
+  init();
+})();
 </script>
 </body>
 </html>
