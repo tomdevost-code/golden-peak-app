@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Golden Peak — One-time migration to Supabase</title>
+<style>
+  body{font-family:system-ui,sans-serif;max-width:820px;margin:24px auto;padding:0 16px;color:#1a1a1a;}
+  h1{font-size:20px;} h2{font-size:15px;margin-top:24px;}
+  .card{border:1px solid #ddd;border-radius:10px;padding:16px;margin:14px 0;background:#fafafa;}
+  input{font:inherit;padding:8px 10px;border:1px solid #ccc;border-radius:6px;width:280px;max-width:100%;}
+  button{font:inherit;padding:9px 16px;border:none;border-radius:8px;background:#1a7f37;color:#fff;cursor:pointer;margin-top:8px;}
+  button.secondary{background:#555;} button.danger{background:#7B0000;}
+  button:disabled{opacity:.5;cursor:not-allowed;}
+  #log{white-space:pre-wrap;font-family:ui-monospace,monospace;font-size:12px;background:#111;color:#d8d8d8;padding:12px;border-radius:8px;max-height:360px;overflow:auto;}
+  .ok{color:#1a7f37;} .warn{color:#b26a00;} .err{color:#c0392b;}
+  textarea{width:100%;height:90px;font-family:ui-monospace,monospace;font-size:11px;}
+  label{display:block;font-size:12px;color:#555;margin:8px 0 2px;}
+</style>
+</head>
+<body>
+<h1>Golden Peak Field Log — one-time migration → Supabase</h1>
+<p style="font-size:13px;color:#555;">Run this <b>once</b>, on the laptop whose data you trust. It reads the app's local data and loads it into your Supabase tables. Nothing is deleted from the app or Airtable.</p>
+
+<div class="card">
+  <h2>1. Log in</h2>
+  <label>Email (one of your grower logins)</label>
+  <input id="email" type="email" placeholder="tom.devost@goldenpeak.ca" />
+  <label>Password</label>
+  <input id="password" type="password" />
+  <br/><button id="loginBtn">Log in</button>
+  <span id="loginStatus" style="font-size:13px;margin-left:8px;"></span>
+</div>
+
+<div class="card">
+  <h2>2. Load the app's local data</h2>
+  <p style="font-size:12px;color:#555;">If you open this page on the same site as the app (…/golden-peak-app/migrate.html) it reads the data automatically. Otherwise paste a data dump (I'll tell you how) into the box.</p>
+  <textarea id="pasteBox" placeholder="(optional) paste localStorage dump here"></textarea>
+  <br/><button id="loadBtn" class="secondary">Load local data</button>
+  <div id="counts" style="font-size:13px;margin-top:10px;"></div>
+</div>
+
+<div class="card">
+  <h2>3. Migrate</h2>
+  <p style="font-size:12px;color:#555;">Inserts everything into Supabase in the correct order and rebuilds the destruction→waste links. Safe to check the log as it runs.</p>
+  <button id="migrateBtn" disabled>Migrate to Supabase</button>
+  <button id="clearBtn" class="danger" disabled title="Delete all rows from the Supabase tables (for re-running during testing)">Clear Supabase tables</button>
+</div>
+
+<h2>Log</h2>
+<div id="log"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const SUPABASE_URL = 'https://ukudiciethsyaiojwggb.supabase.co';
+const ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVrdWRpY2lldGhzeWFpb2p3Z2diIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM0MzU0MjEsImV4cCI6MjA5OTAxMTQyMX0.sUlgSCMA0j1xJUfZo_f93dsS0Sq0aDWB6i3mC0WHjdc';
+const sb = window.supabase.createClient(SUPABASE_URL, ANON_KEY);
+
+const $ = id => document.getElementById(id);
+const logEl = $('log');
+function log(msg, cls){ const s=document.createElement('div'); if(cls) s.className=cls; s.textContent=msg; logEl.appendChild(s); logEl.scrollTop=logEl.scrollHeight; }
+
+// ---- helpers ----------------------------------------------------------------
+const d   = v => (v && String(v).trim()) ? String(v).trim() : null;   // date -> null when blank
+const num = v => (v===''||v==null||isNaN(parseFloat(v))) ? null : parseFloat(v);
+const int = v => (v===''||v==null||isNaN(parseInt(v))) ? null : parseInt(v);
+const arr = v => Array.isArray(v) ? v : [];
+const obj = v => (v && typeof v==='object' && !Array.isArray(v)) ? v : {};
+const bId = r => r.batchId || r.batch || null;
+// Waste natural key — MUST match the app's NAT_KEY_FN.waste exactly (for destruction links).
+const wasteKey = r => [
+  (r.batch||r.batchId||'').toString().toUpperCase(), r.date||'',
+  (r.room||'').toString(), (r.type||'').toString(), (r.subtype||'').toString(),
+  (parseFloat(r.weight)||0).toFixed(3), (parseInt(r.plants)||0)
+].join('|');
+
+// ---- read local data --------------------------------------------------------
+const LS_KEYS = ['gp-batch','gp-batchtx','gp-ec','gp-ro','gp-flow','gp-waste','gp-harvest','gp-postdry','gp-bio','gp-pest','gp-seedinv','gp-destroy','gp-sanclean','gp-santool','gp-sanedits'];
+let DATA = null;
+function readLocal(){
+  let src = {};
+  const paste = $('pasteBox').value.trim();
+  if(paste){ try{ src = JSON.parse(paste); }catch(e){ log('Could not parse pasted data: '+e.message,'err'); return null; } }
+  const get = k => {
+    if(paste) return arr(src[k]);
+    try{ return arr(JSON.parse(localStorage.getItem(k)||'[]')); }catch(_){ return []; }
+  };
+  return {
+    batch:get('gp-batch'), batchtx:get('gp-batchtx'), ec:get('gp-ec'), ro:get('gp-ro'),
+    flow:get('gp-flow'), waste:get('gp-waste'), harvest:get('gp-harvest'), postdry:get('gp-postdry'),
+    bio:get('gp-bio'), pest:get('gp-pest'), seedinv:get('gp-seedinv'), destroy:get('gp-destroy'),
+    sanclean:get('gp-sanclean'), santool:get('gp-santool'), sanedits:get('gp-sanedits')
+  };
+}
+
+// ---- mappers (app record -> table row) --------------------------------------
+const mapBatch = r => ({
+  batch_id:r.batchId, cultivar:r.cultivar||null, mother:r.mother||null, genetics_source:r.geneticsSource||null,
+  external_company:r.externalCompany||null, seed_strain:r.seedStrain||null, seed_lot_number:r.seedLotNumber||null,
+  notes:r.notes||null, created_date:d(r.createdDate), clone_date:d(r.cloneDate), hydration_date:d(r.hydrationDate),
+  veg_start_date:d(r.vegStart), flower_start_date:d(r.flowerStart), harvest_date:d(r.harvestDate),
+  package_date:d(r.packagedDate), sold_date:d(r.soldDate), delivered_date:d(r.deliveredDate), closed_date:d(r.closedDate),
+  plant_phase:r.plantPhase||null, status:r.status||'Open', rooms:arr(r.rooms),
+  room_distribution:obj(r.roomDistribution), harvested_weights:obj(r.harvestedWeights), harvested_plants:obj(r.harvestedPlants),
+  completed_harvests:arr(r.completedHarvests), post_drying_weight_kg:num(r.postDryingWeight),
+  mom_purpose:r.momPurpose||null, mom_purpose_counts:obj(r.momPurposeCounts), mom_phase_counts:obj(r.momPhaseCounts)
+});
+const mapTx = r => ({
+  batch_id:bId(r), date:d(r.date), transaction_type:r.txType||null, plant_phase:r.plantPhase||null,
+  quantity:int(r.qty)||0, weight_kg:num(r.weight), current_quantity_after:int(r.currentQtyAfter),
+  sale_stage:r.saleStage||null, lab_destination_type:r.labDestinationType||null, lab_material_type:r.labMaterialType||null,
+  lab_destination_name:r.labDestinationName||null, from_phase:r.fromPhase||null, to_phase:r.toPhase||null,
+  room:r.room||null, cohort_purpose:r.cohortPurpose||null, notes:r.notes||null
+});
+const mapEc = r => ({
+  batch_id:bId(r), date:d(r.date), room:r.room||null, grower:r.grower||null, watering_type:r.wtype||null,
+  drip_ec_pen1:num((r.dripEcPens||[])[0]), drip_ec_pen2:num((r.dripEcPens||[])[1]), drip_ec_pen3:num((r.dripEcPens||[])[2]),
+  drip_ph_pen1:num((r.dripPhPens||[])[0]), drip_ph_pen2:num((r.dripPhPens||[])[1]), drip_ph_pen3:num((r.dripPhPens||[])[2]),
+  event1_ml:num((r.events||[])[0]), event2_ml:num((r.events||[])[1]), event3_ml:num((r.events||[])[2]), event4_ml:num((r.events||[])[3]),
+  event5_ml:num((r.events||[])[4]), event6_ml:num((r.events||[])[5]), event7_ml:num((r.events||[])[6]), event8_ml:num((r.events||[])[7]),
+  notes:r.notes||null
+});
+const mapRo = r => { const s=r.samples||[]; const o={ batch_id:bId(r), date:d(r.date), room:r.room||null, grower:r.grower||null, input_ec:num(r.inputEC), ec_variance:num(r.variance), notes:r.notes||null };
+  for(let i=0;i<8;i++){ o['s'+(i+1)+'_ec']=num((s[i]||{}).ec); o['s'+(i+1)+'_ph']=num((s[i]||{}).ph); } return o; };
+const mapFlow = r => ({ batch_id:bId(r), date:d(r.date), time:r.time||null, room:r.room||null, grower:r.grower||null, reading:num(r.reading), notes:r.notes||null });
+const mapWaste = r => ({ batch_id:bId(r), date:d(r.date), grower:r.grower||null, room:r.room||null, waste_type:r.type||null, sub_category:r.subtype||null, weight_kg:num(r.weight), plants_destroyed:int(r.plants)||0, notes:r.notes||null });
+const mapHarvest = r => ({ batch_id:bId(r), date:d(r.date), grower:r.grower||null, room:r.room||null, bin_number:int(r.binNumber), tare_weight_kg:num(r.tareWeight), total_weight_kg:num(r.totalWeight), net_weight_kg:num(r.netWeight), notes:r.notes||null });
+const mapPostdry = r => ({ batch_id:bId(r), container_id:int(r.binNumber), date:d(r.date), grower:r.grower||null, tare_weight_kg:num(r.tareWeight), gross_weight_kg:num(r.grossWeight), net_weight_kg:num(r.netWeight), type_size:r.containerType||null, sample_type:r.sampleType||'Sold', notes:r.notes||null });
+const mapBio = r => ({ batch_id:bId(r), date:d(r.date), grower:r.grower||null, room:r.room||null, beneficial:r.beneficial||null, quantity:num(r.quantity), notes:r.notes||null });
+const mapPest = r => ({ batch_id:bId(r), date:d(r.date), grower:r.grower||null, room:r.room||null, location:r.location||null, card:r.card||null, pests:r.pests||null, quantity:num(r.quantity), notes:r.notes||null });
+const mapSeed = r => ({ lot_number:r.lotNumber, strain:r.strain||null, source:r.source||null, acquisition_type:r.acquisitionType||null, source_mother_batch:r.sourceMomBatch||null, quantity_on_hand:int(r.qtyOnHand)||0, quantity_acquired:int(r.qtyAcquired)||0, quantity_germinated:int(r.qtyGerminated)||0, date_received:d(r.dateReceived), notes:r.notes||null });
+const mapSanClean = r => ({ batch_id:bId(r)||null, date:d(r.date), grower:r.grower||null, template:r.template||null, room:r.room||null, task:r.task||null, notes:r.notes||null });
+const mapSanTool = r => ({ batch_id:bId(r)||null, date:d(r.date), grower:r.grower||null, tool:r.tool||null, cleaned:!!r.cleaned, sanitized:!!r.sanitized, notes:r.notes||null });
+const mapSanEdit = r => ({ template:r.template, removed:arr(r.removed), renamed:obj(r.renamed), added:arr(r.added) });
+
+// insert helper — chunks, returns inserted rows
+async function insertRows(table, rows){
+  if(!rows.length){ log('  '+table+': nothing to insert'); return []; }
+  const out=[]; const CH=200;
+  for(let i=0;i<rows.length;i+=CH){
+    const chunk = rows.slice(i,i+CH);
+    const { data, error } = await sb.from(table).insert(chunk).select();
+    if(error){ log('  '+table+': ERROR '+error.message,'err'); throw error; }
+    out.push(...(data||[]));
+  }
+  log('  '+table+': inserted '+out.length,'ok');
+  return out;
+}
+
+// ---- migration --------------------------------------------------------------
+async function migrate(){
+  $('migrateBtn').disabled = true;
+  try{
+    const D = DATA;
+    // batches first — build the valid-id set so we can flag orphan children
+    log('Batches…'); await insertRows('batches', D.batch.map(mapBatch));
+    const validBatch = new Set(D.batch.map(b=>b.batchId));
+    const keepLinked = (rows, mapper, table) => {
+      const good=[], orphan=[];
+      rows.forEach(r=>{ const id=bId(r); (id && !validBatch.has(id) ? orphan : good).push(r); });
+      if(orphan.length) log('  '+table+': skipping '+orphan.length+' record(s) that reference a missing batch','warn');
+      return good.map(mapper);
+    };
+    log('Seed inventory…'); await insertRows('seed_inventory', D.seedinv.map(mapSeed));
+    log('Transactions…'); await insertRows('transactions', keepLinked(D.batchtx, mapTx, 'transactions'));
+    log('EC logs…'); await insertRows('ec_logs', keepLinked(D.ec, mapEc, 'ec_logs'));
+    log('Runoff…'); await insertRows('runoff_logs', keepLinked(D.ro, mapRo, 'runoff_logs'));
+    log('Flow…'); await insertRows('flow_logs', keepLinked(D.flow, mapFlow, 'flow_logs'));
+    log('Harvest…'); await insertRows('harvest_records', keepLinked(D.harvest, mapHarvest, 'harvest_records'));
+    log('Post-drying…'); await insertRows('postdry_records', keepLinked(D.postdry, mapPostdry, 'postdry_records'));
+    log('Bio control…'); await insertRows('bio_records', keepLinked(D.bio, mapBio, 'bio_records'));
+    log('Pest…'); await insertRows('pest_records', keepLinked(D.pest, mapPest, 'pest_records'));
+    log('Sanitation cleaning…'); await insertRows('sanitation_cleaning', D.sanclean.map(mapSanClean));
+    log('Sanitation tools…'); await insertRows('sanitation_tool', D.santool.map(mapSanTool));
+    log('Sanitation task edits…'); await insertRows('sanitation_task_edits', D.sanedits.map(mapSanEdit));
+
+    // waste — capture natural-key -> new uuid so we can rebuild destruction links
+    log('Waste…');
+    const wasteGood = keepLinked(D.waste, r=>r, 'waste_records'); // keep original records that link OK
+    const wasteInserted = await insertRows('waste_records', wasteGood.map(mapWaste));
+    const keyToWasteId = new Map();
+    wasteGood.forEach((orig,i)=>{ if(wasteInserted[i]) keyToWasteId.set(wasteKey(orig), wasteInserted[i].id); });
+
+    // destruction events + adjust + covered
+    log('Destruction events…');
+    const evInserted = await insertRows('destruction_events', D.destroy.map(r=>({
+      date:d(r.date), employee:r.employee||null, method:r.method||null, witness:r.witness||null,
+      address:r.address||null, attest:!!r.attest, signature:r.sig||null,
+      veg_weight_kg:num(r.vegWeight)||0, dry_weight_kg:num(r.dryWeight)||0, drying_loss_kg:num(r.dryingLoss)||0, notes:r.notes||null
+    })));
+    const adjRows=[], covRows=[]; let covMissed=0;
+    D.destroy.forEach((r,i)=>{
+      const evId = evInserted[i] && evInserted[i].id; if(!evId) return;
+      arr(r.adjust).forEach(a=>adjRows.push({ destruction_id:evId, batch_id:(validBatch.has(a.batch)?a.batch:null), veg_recorded:num(a.vegRecorded)||0, dry_recorded:num(a.dryRecorded)||0, veg_actual:num(a.vegActual)||0, dry_actual:num(a.dryActual)||0 }));
+      arr(r.coveredKeys).forEach(k=>{ const wid=keyToWasteId.get(k); if(wid) covRows.push({ destruction_id:evId, waste_id:wid }); else covMissed++; });
+    });
+    log('Destruction adjustments…'); await insertRows('destruction_adjust', adjRows);
+    log('Destruction covered links…'); await insertRows('destruction_covered', covRows);
+    if(covMissed) log('  note: '+covMissed+' covered-waste key(s) had no live waste record (already-deleted originals) — expected for cleaned data','warn');
+
+    log('','ok'); log('✔ MIGRATION COMPLETE. Check the counts in Supabase → Table Editor against your app.','ok');
+  }catch(e){ log('MIGRATION STOPPED: '+(e.message||e),'err'); }
+  finally{ $('migrateBtn').disabled=false; }
+}
+
+async function clearAll(){
+  if(!confirm('Delete ALL rows from every Supabase table? (Use this only to re-run the migration during testing.)')) return;
+  const order = ['destruction_covered','destruction_adjust','destruction_events','sanitation_task_edits','sanitation_tool','sanitation_cleaning','pest_records','bio_records','postdry_records','harvest_records','waste_records','flow_logs','runoff_logs','ec_logs','transactions','seed_inventory','batches'];
+  for(const t of order){ const { error } = await sb.from(t).delete().neq('created_at','1900-01-01'); log('cleared '+t+(error?(' ERROR '+error.message):''), error?'err':'ok'); }
+  log('All tables cleared.','warn');
+}
+
+// ---- wire up ----------------------------------------------------------------
+$('loginBtn').onclick = async () => {
+  const { data, error } = await sb.auth.signInWithPassword({ email:$('email').value.trim(), password:$('password').value });
+  if(error){ $('loginStatus').textContent='Login failed: '+error.message; $('loginStatus').className='err'; return; }
+  $('loginStatus').textContent='Logged in as '+data.user.email; $('loginStatus').className='ok';
+  $('migrateBtn').disabled = !DATA; $('clearBtn').disabled = false;
+  log('Logged in as '+data.user.email,'ok');
+};
+$('loadBtn').onclick = () => {
+  DATA = readLocal(); if(!DATA) return;
+  const c = Object.entries({Batches:DATA.batch,Transactions:DATA.batchtx,'EC':DATA.ec,Runoff:DATA.ro,Flow:DATA.flow,Waste:DATA.waste,Harvest:DATA.harvest,'Post-dry':DATA.postdry,Bio:DATA.bio,Pest:DATA.pest,Seeds:DATA.seedinv,Destruction:DATA.destroy,'San-clean':DATA.sanclean,'San-tool':DATA.santool,'San-edits':DATA.sanedits}).map(([k,v])=>k+': '+v.length).join('  ·  ');
+  $('counts').textContent = c;
+  log('Loaded local data — '+c);
+  if(!DATA.batch.length) log('WARNING: 0 batches found. If you are NOT on the app site, paste a data dump instead.','warn');
+  const loggedIn = $('loginStatus').className==='ok'; $('migrateBtn').disabled = !loggedIn;
+};
+$('migrateBtn').onclick = migrate;
+$('clearBtn').onclick = clearAll;
+</script>
+</body>
+</html>
