@@ -13320,7 +13320,10 @@ async function summaryUpdateBatch(){
   }
   // Guard: while the batch is in Flower phase, the room assignments are locked. Drying and
   // Packaged batches always have empty rooms (auto-cleared on phase advance) so no comparison.
-  if(existingPhase === 'Flower'){
+  // EXCEPTIONS: closing the batch, or a batch whose plants are all gone (qty <= 0, e.g. a mother
+  // whose flower cohort was destroyed) — in those cases the rooms are naturally emptied and the
+  // lock must not stand in the way of closing.
+  if(existingPhase === 'Flower' && status !== 'Closed' && calcBatchQty(batchId) > 0){
     const oldRooms = (batchRecs[idx].rooms||[]).slice().sort().join('|');
     const newRooms = rooms.slice().sort().join('|');
     if(oldRooms !== newRooms){
