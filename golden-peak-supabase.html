@@ -16690,14 +16690,73 @@ function buildSeedInvFields(rec){
     }));
   }
 
+  // ===== WRITES — Step 2: Batches + Transactions =====
+  // Reroute the app's Airtable choke-point functions to Supabase for these two tables. The existing
+  // save/edit/delete flows already call atPost/atUpsert/atUpdateById/atDelete, so nothing else needs
+  // editing. Any OTHER table no-ops (no Airtable contact) until it's wired in a later step.
+  const TX_MAP = {'Date':'date','Transaction Type':'transaction_type','Plant Phase':'plant_phase','Quantity':'quantity','Weight (kg)':'weight_kg','Current Quantity After':'current_quantity_after','Sale Stage':'sale_stage','Lab Destination Type':'lab_destination_type','Lab Material Type':'lab_material_type','Lab Destination Name':'lab_destination_name','From Phase':'from_phase','To Phase':'to_phase','Room':'room','Cohort Purpose':'cohort_purpose','Notes':'notes'};
+  const B_MAP = {'Batch ID':'batch_id','Cultivar Name':'cultivar','Mother ID':'mother','Source of Genetics':'genetics_source','External Clone Company':'external_company','Notes':'notes','Created Date':'created_date','Clone Date':'clone_date','Delivered Date':'delivered_date','Plant Phase':'plant_phase','Status':'status','Closed Date':'closed_date','Mom Purpose':'mom_purpose','Hydration Date':'hydration_date','Veg Start Date':'veg_start_date','Flower Start Date':'flower_start_date','Harvest Date':'harvest_date','Package Date':'package_date','Sold Date':'sold_date','Post-Drying Weight (kg)':'post_drying_weight_kg'};
+  const B_JSON = {'Room Distribution':'room_distribution','Harvested Weights':'harvested_weights','Harvested Plants':'harvested_plants','Mom Purpose Counts':'mom_purpose_counts'};
+  const mapTx = f => { const o={}; for(const k in f){ if(k==='Batch ID') o.batch_id = Array.isArray(f[k])?f[k][0]:f[k]; else if(TX_MAP[k]) o[TX_MAP[k]]=f[k]; } return o; };
+  const mapBatch = f => { const o={}; for(const k in f){ if(B_MAP[k]) o[B_MAP[k]]=f[k]; else if(B_JSON[k]){ try{ o[B_JSON[k]]=JSON.parse(f[k]); }catch(_){ o[B_JSON[k]]=f[k]; } } else if(k==='Rooms') o.rooms = Array.isArray(f[k])?f[k]:String(f[k]).split(',').map(s=>s.trim()).filter(Boolean); else if(k==='Completed Harvests') o.completed_harvests = String(f[k]).split(',').map(s=>s.trim()).filter(Boolean); } return o; };
+  const T_BATCH = { table:'batches', pk:'batch_id', map:mapBatch };
+  const T_TX    = { table:'transactions', pk:'id', map:mapTx };
+  const tblFor = t => (typeof cfg!=='undefined' && cfg && t===cfg.batchTbl) ? T_BATCH : (typeof cfg!=='undefined' && cfg && t===cfg.batchtxTbl) ? T_TX : null;
+  const say = (m,e) => { try{ if(typeof toast==='function') toast(m); }catch(_){} if(e) console.error(m,e); };
+
+  atPost = async function(tbl, fields){
+    const t=tblFor(tbl); if(!t) return {};
+    const { data, error } = await SBC.from(t.table).insert(t.map(fields)).select().maybeSingle();
+    if(error){ say('Supabase save failed: '+error.message, error); return {}; }
+    return { id: data && (data.id || data.batch_id) };
+  };
+  atUpsert = async function(tbl, fields, mergeOn){
+    const t=tblFor(tbl); if(!t) return { records:[{}] };
+    const row=t.map(fields);
+    if(t===T_BATCH && row.batch_id && typeof batchRecs!=='undefined'){
+      const b=batchRecs.find(x=>x.batchId===row.batch_id && !x.type);
+      if(b){ row.mom_phase_counts=b.momPhaseCounts||{}; if(b.momPurposeCounts) row.mom_purpose_counts=b.momPurposeCounts; if(b.seedStrain!=null) row.seed_strain=b.seedStrain; if(b.seedLotNumber!=null) row.seed_lot_number=b.seedLotNumber; }
+    }
+    const { data, error } = await SBC.from(t.table).upsert(row,{onConflict:t.pk}).select().maybeSingle();
+    if(error){ say('Supabase save failed: '+error.message, error); return { records:[{}] }; }
+    return { records:[{ id: data && (data.id || data.batch_id) }] };
+  };
+  atUpdateById = async function(tbl, recordId, fields){
+    const t=tblFor(tbl); if(!t) return {};
+    const { error } = await SBC.from(t.table).update(t.map(fields)).eq(t.pk, recordId);
+    if(error){ say('Supabase update failed: '+error.message, error); throw new Error(error.message); }
+    return {};
+  };
+  atDelete = async function(tbl, recordId){
+    const t=tblFor(tbl); if(!t) return true;
+    const { error } = await SBC.from(t.table).delete().eq(t.pk, recordId);
+    if(error){ say('Supabase delete failed: '+error.message, error); return false; }
+    return true;
+  };
+  // No Airtable in this edition.
+  pullFromAirtable = async function(){ return; };
+  syncPending = async function(){ return; };
+
   // ---- login gate / boot flow ----
   const overlay = document.getElementById('sb-login-overlay');
   const hide = () => { if(overlay) overlay.style.display='none'; };
   const show = () => { if(overlay) overlay.style.display='flex'; };
   const msg  = (m,err) => { const el=document.getElementById('sb-login-msg'); if(el){ el.textContent=m; el.style.color=err?'#ff9a9a':'#cfeedd'; } };
 
+  function showBadge(email){
+    if(document.getElementById('sb-badge')) return;
+    const b = document.createElement('div');
+    b.id = 'sb-badge';
+    b.style.cssText = 'position:fixed;bottom:10px;right:10px;z-index:2147483000;background:#0f5223;color:#eaffea;font:12px system-ui,sans-serif;padding:6px 10px;border-radius:20px;box-shadow:0 2px 10px rgba(0,0,0,.3);display:flex;gap:8px;align-items:center;opacity:.92;';
+    b.appendChild(Object.assign(document.createElement('span'),{textContent:'Supabase · '+(email||'signed in')}));
+    const btn = Object.assign(document.createElement('button'),{textContent:'Sign out'});
+    btn.style.cssText = 'background:#38b24a;color:#fff;border:none;border-radius:12px;padding:3px 8px;font-size:11px;cursor:pointer;';
+    btn.onclick = async () => { try{ await SBC.auth.signOut(); }catch(_){} sessionStorage.removeItem('sb-hydrated'); location.reload(); };
+    b.appendChild(btn);
+    document.body.appendChild(b);
+  }
   async function afterAuth(){
-    if(sessionStorage.getItem('sb-hydrated')==='1'){ hide(); return; }  // already fresh this session
+    if(sessionStorage.getItem('sb-hydrated')==='1'){ hide(); try{ const { data } = await SBC.auth.getUser(); showBadge(data && data.user ? data.user.email : ''); }catch(_){ showBadge(''); } return; }
     msg('Loading your data from Supabase…');
     try{ await hydrate(); sessionStorage.setItem('sb-hydrated','1'); location.reload(); }
     catch(e){ msg('Could not load data: '+(e.message||e), true); console.error(e); }
