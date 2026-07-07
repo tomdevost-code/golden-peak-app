@@ -81,6 +81,7 @@ const wasteKey=r=>[(r.batch_id||'').toString().toUpperCase(),dt(r.date)||'',(r.r
 const dedupeBy = (rows, key) => { const m={}; rows.forEach(r=>{ const k=r[key]; if(k!=null && k!=='') m[k]=r; }); const out=Object.values(m); if(out.length<rows.length) log('  ('+(rows.length-out.length)+' duplicate '+key+'(s) collapsed)','warn'); return out; };
 async function atAll(tbl){ const token=$('at-token').value.trim(), base=$('at-base').value.trim(); let out=[],off=''; do{ const r=await fetch('https://api.airtable.com/v0/'+base+'/'+tbl+'?pageSize=100'+(off?'&offset='+off:''),{headers:{'Authorization':'Bearer '+token}}); if(!r.ok) throw new Error('Airtable '+tbl+' '+r.status); const j=await r.json(); out=out.concat(j.records||[]); off=j.offset||''; }while(off); return out; }
 async function ins(table, rows){ if(!rows.length){ log('  '+table+': 0'); return []; } const out=[]; for(let i=0;i<rows.length;i+=200){ const {data,error}=await sb.from(table).insert(rows.slice(i,i+200)).select(); if(error) throw new Error(table+': '+error.message); out.push(...(data||[])); } log('  '+table+': '+out.length,'ok'); return out; }
+async function up(table, rows, onConflict){ if(!rows.length){ log('  '+table+': 0'); return []; } const out=[]; for(let i=0;i<rows.length;i+=200){ const {data,error}=await sb.from(table).upsert(rows.slice(i,i+200),{onConflict}).select(); if(error) throw new Error(table+': '+error.message); out.push(...(data||[])); } log('  '+table+': '+out.length,'ok'); return out; }
 
 // field maps (Airtable name -> column)
 const M_TX={'Date':'date','Transaction Type':'transaction_type','Plant Phase':'plant_phase','Quantity':'quantity','Weight (kg)':'weight_kg','Current Quantity After':'current_quantity_after','Sale Stage':'sale_stage','Lab Destination Type':'lab_destination_type','Lab Material Type':'lab_material_type','Lab Destination Name':'lab_destination_name','From Phase':'from_phase','To Phase':'to_phase','Room':'room','Cohort Purpose':'cohort_purpose','Notes':'notes'};
@@ -104,8 +105,10 @@ const mapSeed = rec => { const f=rec.fields||{}; const o={}; for(const k in f){ 
 const mapSanEd = rec => { const f=rec.fields||{}; const o={ template:f['Template'] }; if('Removed' in f) o.removed=pj(f['Removed'])||[]; if('Renamed' in f) o.renamed=pj(f['Renamed'])||{}; if('Added' in f) o.added=pj(f['Added'])||[]; return o; };
 
 async function clearAll(){
-  const order=['destruction_covered','destruction_adjust','destruction_events','sanitation_task_edits','sanitation_tool','sanitation_cleaning','pest_records','bio_records','postdry_records','harvest_records','waste_records','flow_logs','runoff_logs','ec_logs','transactions','seed_inventory','batches'];
-  for(const t of order){ const { error }=await sb.from(t).delete().not('created_at','is',null); if(error) log('  clear '+t+' ERROR '+error.message,'err'); }
+  // Delete every row from each table, filtering on a NOT-NULL key column that actually exists
+  // (some tables have no created_at, which is why the old filter silently skipped them).
+  const order=[['destruction_covered','destruction_id'],['destruction_adjust','id'],['destruction_events','id'],['sanitation_task_edits','template'],['sanitation_tool','id'],['sanitation_cleaning','id'],['pest_records','id'],['bio_records','id'],['postdry_records','id'],['harvest_records','id'],['waste_records','id'],['flow_logs','id'],['runoff_logs','id'],['ec_logs','id'],['transactions','id'],['seed_inventory','lot_number'],['batches','batch_id']];
+  for(const [t,col] of order){ const { error }=await sb.from(t).delete().not(col,'is',null); if(error) log('  clear '+t+' ERROR '+error.message,'err'); }
   log('Cleared all Supabase tables.','warn');
 }
 
@@ -118,7 +121,7 @@ async function run(){
     log('Batch Log…');
     const bRecs=await atAll($('t-batch').value.trim());
     const r2b={}; bRecs.forEach(b=>{ r2b[b.id]=(b.fields&&b.fields['Batch ID'])||''; });
-    await ins('batches', dedupeBy(bRecs.map(mapBatch), 'batch_id'));
+    await up('batches', dedupeBy(bRecs.map(mapBatch), 'batch_id'), 'batch_id');
 
     log('Transactions…');  await ins('transactions', (await atAll($('t-batchtx').value.trim())).map(r=>child(M_TX,r,r2b)));
     log('EC…');            await ins('ec_logs', (await atAll($('t-ec').value.trim())).map(r=>child(M_EC,r,r2b)));
@@ -128,10 +131,10 @@ async function run(){
     log('Post-Drying…');   await ins('postdry_records', (await atAll($('t-postdry').value.trim())).map(r=>child(M_POST,r,r2b)));
     log('Bio…');           await ins('bio_records', (await atAll($('t-bio').value.trim())).map(r=>child(M_BIO,r,r2b)));
     log('Pest…');          await ins('pest_records', (await atAll($('t-pest').value.trim())).map(r=>child(M_PEST,r,r2b)));
-    log('Seed Inventory…');await ins('seed_inventory', dedupeBy((await atAll($('t-seed').value.trim())).map(mapSeed), 'lot_number'));
+    log('Seed Inventory…');await up('seed_inventory', dedupeBy((await atAll($('t-seed').value.trim())).map(mapSeed), 'lot_number'), 'lot_number');
     if($('t-sancl').value.trim()){ log('Batch Cleaning…'); await ins('sanitation_cleaning', (await atAll($('t-sancl').value.trim())).map(r=>child(M_SANCL,r,r2b))); }
     if($('t-santl').value.trim()){ log('Tool Cleaning…'); await ins('sanitation_tool', (await atAll($('t-santl').value.trim())).map(r=>child(M_SANTL,r,r2b))); }
-    if($('t-saned').value.trim()){ log('Sanitation Task Edits…'); await ins('sanitation_task_edits', dedupeBy((await atAll($('t-saned').value.trim())).map(mapSanEd), 'template')); }
+    if($('t-saned').value.trim()){ log('Sanitation Task Edits…'); await up('sanitation_task_edits', dedupeBy((await atAll($('t-saned').value.trim())).map(mapSanEd), 'template'), 'template'); }
 
     // Waste — insert + build natural-key -> new uuid map
     log('Waste…');
