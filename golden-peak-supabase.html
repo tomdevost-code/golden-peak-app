@@ -16789,8 +16789,31 @@ function buildSeedInvFields(rec){
     if(error){ say('Supabase delete failed: '+error.message, error); return false; }
     return true;
   };
-  pullFromAirtable = async function(){ return; };
   syncPending = async function(){ return; };
+
+  // ===== REAL-TIME (Step 3) =====
+  // On any change from any laptop, re-pull the data and refresh the read views — debounced so a burst
+  // of changes triggers one refresh, and skipped while the grower is actively typing in a field so it
+  // never disrupts data entry. Replaces the old 60-second Airtable poll.
+  async function sbRefresh(source){
+    if(source==='realtime'){ const a=document.activeElement; if(a && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName||'')) return; }
+    try{ await hydrate(); }catch(e){ console.error('[sbRefresh]', e); return; }
+    try{ if(typeof loadAll==='function') loadAll(); }catch(_){}
+    ['populateBatchDropdowns','updatePendingBadge','renderBatchLog','summaryPopulateBatches','renderWaste','renderEC','renderRO','destroyRenderPending','destroyRenderHistory','seedInvRenderList','renderWasteReport'].forEach(fn=>{ try{ if(typeof window[fn]==='function') window[fn](); }catch(_){} });
+  }
+  pullFromAirtable = async function(){ await sbRefresh('manual'); };   // the "Pull now" button now refreshes from Supabase
+  let _rtTimer=null, _rtChannel=null;
+  async function startRealtime(){
+    // Realtime honours RLS — the socket must carry the user's JWT or it receives nothing.
+    try{ const { data } = await SBC.auth.getSession(); if(data && data.session && SBC.realtime && SBC.realtime.setAuth){ SBC.realtime.setAuth(data.session.access_token); } }catch(e){ console.error('[realtime] setAuth', e); }
+    if(_rtChannel){ try{ SBC.removeChannel(_rtChannel); }catch(_){} }
+    const bump = () => { console.log('[realtime] change received'); clearTimeout(_rtTimer); _rtTimer=setTimeout(()=>sbRefresh('realtime'), 1500); };
+    const ch = SBC.channel('gp-live');
+    ['batches','transactions','ec_logs','runoff_logs','flow_logs','waste_records','harvest_records','postdry_records','bio_records','pest_records','seed_inventory','destruction_events','destruction_adjust','destruction_covered','sanitation_cleaning','sanitation_tool','sanitation_task_edits']
+      .forEach(tbl => ch.on('postgres_changes', { event:'*', schema:'public', table:tbl }, bump));
+    ch.subscribe((st, err) => { console.log('[realtime] status:', st, err||''); });
+    _rtChannel = ch;
+  }
 
   // ---- login gate / boot flow ----
   const overlay = document.getElementById('sb-login-overlay');
@@ -16811,7 +16834,7 @@ function buildSeedInvFields(rec){
     document.body.appendChild(b);
   }
   async function afterAuth(){
-    if(sessionStorage.getItem('sb-hydrated')==='1'){ hide(); try{ const { data } = await SBC.auth.getUser(); showBadge(data && data.user ? data.user.email : ''); }catch(_){ showBadge(''); } return; }
+    if(sessionStorage.getItem('sb-hydrated')==='1'){ hide(); try{ const { data } = await SBC.auth.getUser(); showBadge(data && data.user ? data.user.email : ''); }catch(_){ showBadge(''); } try{ startRealtime(); }catch(e){ console.error('[realtime]', e); } return; }
     msg('Loading your data from Supabase…');
     try{ await hydrate(); sessionStorage.setItem('sb-hydrated','1'); location.reload(); }
     catch(e){ msg('Could not load data: '+(e.message||e), true); console.error(e); }
