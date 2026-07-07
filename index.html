@@ -13260,7 +13260,11 @@ async function summaryUpdateBatch(){
       }
     }
   }
-  const plantPhase = document.getElementById('summary-phase').value;
+  // For mother batches the Plant Phase dropdown is hidden (moms track phase via momPhaseCounts), so
+  // its stale value ('Clones' by default) must not drive the phase — keep the batch's existing phase.
+  const plantPhase = isMotherBatch(batchId)
+    ? (batchRecs[idx].plantPhase || '')
+    : document.getElementById('summary-phase').value;
   // Validation: a batch in Flower phase cannot live only in the Veg room — flowering plants
   // must be in at least one Flower room. (Mothers are exempt: they can keep Veg-room plants in
   // earlier phases while a Flower-bucket cohort is recorded separately.)
@@ -13289,7 +13293,7 @@ async function summaryUpdateBatch(){
   const _exHarvest = batchRecs[idx].harvestDate || '';
   // Guard: enforce forward-only phase progression
   const existingPhase = batchRecs[idx].plantPhase || '';
-  if(plantPhase && !getAllowedPhases(existingPhase, batchId).includes(plantPhase)){
+  if(plantPhase && plantPhase !== existingPhase && !getAllowedPhases(existingPhase, batchId).includes(plantPhase)){
     toast('Cannot move plant phase backward (from '+(existingPhase||'unset')+' to '+plantPhase+').',5000);
     return;
   }
@@ -13299,7 +13303,7 @@ async function summaryUpdateBatch(){
   const _existPostHarvest = ['Drying','Packaged','Delivered'].includes(existingPhase);
   const _gZeroBatch = batchRecs[idx];
   const _gZeroStart = (String(_gZeroBatch.geneticsSource||'').toLowerCase() === 'seeds') ? 'Germination' : 'Clones';
-  if(calcBatchQty(batchId) <= 0 && !_existPostHarvest && plantPhase && plantPhase !== _gZeroStart){
+  if(calcBatchQty(batchId) <= 0 && plantPhase !== existingPhase && !_existPostHarvest && plantPhase && plantPhase !== _gZeroStart){
     toast('Cannot advance phase: batch has 0 plants. Add a '+(_gZeroStart==='Germination'?'Seeds Germinated':'Produced/Received')+' transaction first.',5000);
     return;
   }
