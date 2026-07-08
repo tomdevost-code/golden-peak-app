@@ -16644,8 +16644,8 @@ function buildSeedInvFields(rec){
   const fromWaste = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, date:dstr(r.date), grower:r.grower, room:r.room, type:r.waste_type, subtype:r.sub_category, weight:r.weight_kg, plants:r.plants_destroyed, notes:r.notes, synced:true });
   const fromHarvest = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, date:dstr(r.date), grower:r.grower, room:r.room, binNumber:r.bin_number, tareWeight:r.tare_weight_kg, totalWeight:r.total_weight_kg, netWeight:r.net_weight_kg, notes:r.notes, synced:true });
   const fromPostdry = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, binNumber:r.container_id, date:dstr(r.date), grower:r.grower, tareWeight:r.tare_weight_kg, grossWeight:r.gross_weight_kg, netWeight:r.net_weight_kg, containerType:r.type_size, sampleType:r.sample_type||'Sold', notes:r.notes, synced:true });
-  const fromBio = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, date:dstr(r.date), grower:r.grower, room:r.room, beneficial:r.beneficial, quantity:r.quantity, notes:r.notes, synced:true });
-  const fromPest = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, date:dstr(r.date), grower:r.grower, room:r.room, location:r.location, card:r.card, pests:r.pests, quantity:r.quantity, notes:r.notes, synced:true });
+  const fromBio = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, date:dstr(r.date), grower:r.grower, room:r.room, product:r.product, unit:r.unit, reason:r.reason, quantity:r.quantity, notes:r.notes, synced:true });
+  const fromPest = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, date:dstr(r.date), grower:r.grower, room:r.room, location:r.location, cardNumber:(r.card!=null&&r.card!==''?parseInt(r.card):null), pests:(function(){ if(r.pests==null) return []; if(Array.isArray(r.pests)) return r.pests; try{ const _p=JSON.parse(r.pests); return Array.isArray(_p)?_p:(_p?[_p]:[]); }catch(_){ return String(r.pests).split(',').map(s=>s.trim()).filter(Boolean); } })(), quantity:r.quantity, notes:r.notes, synced:true });
   const fromSeed = r => ({ id:r.lot_number, airtableId:r.lot_number, lotNumber:r.lot_number, strain:r.strain, source:r.source, acquisitionType:r.acquisition_type, sourceMomBatch:r.source_mother_batch, qtyOnHand:r.quantity_on_hand, qtyAcquired:r.quantity_acquired, qtyGerminated:r.quantity_germinated, dateReceived:dstr(r.date_received), notes:r.notes, synced:true });
   const fromSanClean = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, date:dstr(r.date), grower:r.grower, template:r.template, room:r.room, task:r.task, notes:r.notes, synced:true });
   const fromSanTool = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, date:dstr(r.date), grower:r.grower, tool:r.tool, cleaned:!!r.cleaned, sanitized:!!r.sanitized, notes:r.notes, synced:true });
@@ -16710,11 +16710,12 @@ function buildSeedInvFields(rec){
   const M_WASTE={'Date':'date','Grower':'grower','Room':'room','Waste Type':'waste_type','Sub-Category':'sub_category','Weight (kg)':'weight_kg','Plants Destroyed':'plants_destroyed','Notes':'notes'};
   const M_HARV={'Date':'date','Grower':'grower','Room':'room','Bin Number':'bin_number','Tare Weight (kg)':'tare_weight_kg','Total Weight (kg)':'total_weight_kg','Net Weight (kg)':'net_weight_kg','Notes':'notes'};
   const M_POST={'Date':'date','Grower':'grower','Container ID':'container_id','Tare Weight (kg)':'tare_weight_kg','Gross Weight (kg)':'gross_weight_kg','Net Weight (kg)':'net_weight_kg','Type/Size':'type_size','Sample Type':'sample_type','Notes':'notes'};
-  const M_BIO={'Date':'date','Grower':'grower','Room':'room','Beneficial':'beneficial','Quantity':'quantity','Notes':'notes'};
-  const M_PEST={'Date':'date','Grower':'grower','Room':'room','Location':'location','Card':'card','Pests':'pests','Quantity':'quantity','Notes':'notes'};
+  const M_BIO={'Date':'date','Grower':'grower','Room':'room','Product':'product','Quantity':'quantity','Unit':'unit','Reason':'reason','Notes':'notes'};
+  const M_PEST={'Date':'date','Grower':'grower','Room':'room','Location':'location','Card Number':'card','Pests Identified':'pests','Quantity':'quantity','Notes':'notes'};
+  const mapPest = f => { const o=mk(M_PEST)(f); if(o.card!=null) o.card=String(o.card); if(o.pests!=null && typeof o.pests!=='string') o.pests=JSON.stringify(o.pests); return o; };
   const M_SEED={'Lot Number':'lot_number','Strain':'strain','Source':'source','Acquisition Type':'acquisition_type','Source Mother Batch':'source_mother_batch','Quantity On Hand':'quantity_on_hand','Quantity Acquired':'quantity_acquired','Quantity Germinated':'quantity_germinated','Date Received':'date_received','Notes':'notes'};
   const mapSeed = f => { const o={}; for(const k in f){ if(M_SEED[k]!==undefined) o[M_SEED[k]]=f[k]; } return o; };
-  const M_SANCL={'Date':'date','Grower':'grower','Template':'template','Room':'room','Task':'task','Notes':'notes'};
+  const M_SANCL={'Date':'date','Grower':'grower','Log Template':'template','Room':'room','Task':'task','Notes':'notes'};
   const M_SANTL={'Date':'date','Grower':'grower','Tool':'tool','Cleaned':'cleaned','Sanitized':'sanitized','Notes':'notes'};
   const mapSanEd = f => { const o={ template:f['Template'] }; if('Removed' in f) o.removed=pj(f['Removed'])||[]; if('Renamed' in f) o.renamed=pj(f['Renamed'])||{}; if('Added' in f) o.added=pj(f['Added'])||[]; return o; };
 
@@ -16728,7 +16729,7 @@ function buildSeedInvFields(rec){
     harvest:{table:'harvest_records',pk:'id',map:mk(M_HARV)},
     postdry:{table:'postdry_records',pk:'id',map:mk(M_POST)},
     bio:{table:'bio_records',pk:'id',map:mk(M_BIO)},
-    pest:{table:'pest_records',pk:'id',map:mk(M_PEST)},
+    pest:{table:'pest_records',pk:'id',map:mapPest},
     seed:{table:'seed_inventory',pk:'lot_number',map:mapSeed},
     sancl:{table:'sanitation_cleaning',pk:'id',map:mk(M_SANCL)},
     santl:{table:'sanitation_tool',pk:'id',map:mk(M_SANTL)},
