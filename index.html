@@ -16639,7 +16639,7 @@ function buildSeedInvFields(rec){
   const fromBatch = r => ({ id:r.batch_id, batchId:r.batch_id, cultivar:r.cultivar, mother:r.mother, geneticsSource:r.genetics_source, externalCompany:r.external_company, seedStrain:r.seed_strain, seedLotNumber:r.seed_lot_number, notes:r.notes, createdDate:dstr(r.created_date), cloneDate:dstr(r.clone_date), hydrationDate:dstr(r.hydration_date), vegStart:dstr(r.veg_start_date), flowerStart:dstr(r.flower_start_date), harvestDate:dstr(r.harvest_date), packagedDate:dstr(r.package_date), soldDate:dstr(r.sold_date), deliveredDate:dstr(r.delivered_date), closedDate:dstr(r.closed_date), plantPhase:r.plant_phase, status:r.status||'Open', rooms:r.rooms||[], roomDistribution:r.room_distribution||{}, harvestedWeights:r.harvested_weights||{}, harvestedPlants:r.harvested_plants||{}, completedHarvests:r.completed_harvests||[], postDryingWeight:r.post_drying_weight_kg, momPurpose:r.mom_purpose, momPurposeCounts:r.mom_purpose_counts||{}, momPhaseCounts:r.mom_phase_counts||{}, synced:true });
   const fromTx = r => ({ id:r.id, airtableId:r.id, batchId:r.batch_id, date:dstr(r.date), txType:r.transaction_type, plantPhase:r.plant_phase, qty:r.quantity, weight:r.weight_kg, currentQtyAfter:r.current_quantity_after, saleStage:r.sale_stage, labDestinationType:r.lab_destination_type, labMaterialType:r.lab_material_type, labDestinationName:r.lab_destination_name, fromPhase:r.from_phase, toPhase:r.to_phase, room:r.room, cohortPurpose:r.cohort_purpose, notes:r.notes, synced:true });
   const fromEc = r => { const _a=a=>{const v=a.map(parseFloat).filter(x=>!isNaN(x)&&x>0); return v.length?Math.round(v.reduce((s,b)=>s+b,0)/v.length*100)/100:null;}; const ecP=[r.drip_ec_pen1,r.drip_ec_pen2,r.drip_ec_pen3], phP=[r.drip_ph_pen1,r.drip_ph_pen2,r.drip_ph_pen3], evs=[r.event1_ml,r.event2_ml,r.event3_ml,r.event4_ml,r.event5_ml,r.event6_ml,r.event7_ml,r.event8_ml]; const tot=evs.map(parseFloat).reduce((s,v)=>s+(isNaN(v)?0:v),0); return { id:r.id, airtableId:r.id, batch:r.batch_id, date:dstr(r.date), room:r.room, grower:r.grower, wtype:r.watering_type, dripEcPens:ecP, dripPhPens:phP, dripEc:_a(ecP), dripPh:_a(phP), events:evs, totalML:tot||null, notes:r.notes, synced:true }; };
-  const fromRo = r => { const o={ id:r.id, airtableId:r.id, batch:r.batch_id, date:dstr(r.date), room:r.room, grower:r.grower, inputEC:r.input_ec, variance:r.ec_variance, notes:r.notes, synced:true, samples:[] }; for(let i=1;i<=8;i++) o.samples.push({ec:r['s'+i+'_ec'], ph:r['s'+i+'_ph']}); return o; };
+  const fromRo = r => { const _n=v=>(v==null||v===''||isNaN(parseFloat(v)))?null:parseFloat(v); const _a=arr=>{const v=arr.map(parseFloat).filter(x=>!isNaN(x)&&x>0); return v.length?Math.round(v.reduce((s,b)=>s+b,0)/v.length*100)/100:null;}; const o={ id:r.id, airtableId:r.id, batch:r.batch_id, date:dstr(r.date), room:r.room, grower:r.grower, inputEC:_n(r.input_ec), variance:_n(r.ec_variance), notes:r.notes, synced:true, samples:[] }; for(let i=1;i<=8;i++) o.samples.push({ec:_n(r['s'+i+'_ec']), ph:_n(r['s'+i+'_ph'])}); o.avgEC=_a(o.samples.map(s=>s.ec)); o.avgPH=_a(o.samples.map(s=>s.ph)); o.ecAlert=(o.variance!=null && o.variance>RO_VAR_ALERT); return o; };
   const fromFlow = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, date:dstr(r.date), time:r.time, room:r.room, grower:r.grower, reading:r.reading, notes:r.notes, synced:true });
   const fromWaste = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, date:dstr(r.date), grower:r.grower, room:r.room, type:r.waste_type, subtype:r.sub_category, weight:r.weight_kg, plants:r.plants_destroyed, notes:r.notes, synced:true });
   const fromHarvest = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, date:dstr(r.date), grower:r.grower, room:r.room, binNumber:r.bin_number, tareWeight:r.tare_weight_kg, totalWeight:r.total_weight_kg, netWeight:r.net_weight_kg, notes:r.notes, synced:true });
@@ -16656,10 +16656,14 @@ function buildSeedInvFields(rec){
   async function q(t){ const { data, error } = await SBC.from(t).select('*'); if(error) throw new Error(t+': '+error.message); return data||[]; }
 
   async function hydrate(){
-    ls('gp-batch',    (await q('batches')).map(fromBatch));
+    const _batchRows = (await q('batches')).map(fromBatch);
+    ls('gp-batch',    _batchRows);
+    // batch date lookup so EC/Runoff rows can recompute stage/day (not stored per-row in Supabase)
+    const _bd = {}; _batchRows.forEach(b => { _bd[b.batchId] = { vegStart:b.vegStart||'', flowerStart:b.flowerStart||'', hydrationDate:b.hydrationDate||'', harvestDate:b.harvestDate||'' }; });
+    const _enrich = rec => { const b=_bd[rec.batch]; if(b){ rec.vegStart=b.vegStart; rec.flowerStart=b.flowerStart; rec.hydrationDate=b.hydrationDate; rec.harvestDate=b.harvestDate; try{ const cs=calcStage(b.vegStart,b.flowerStart,rec.date); rec.stage=cs.stage; rec.day=cs.day; }catch(_){} } return rec; };
     ls('gp-batchtx',  (await q('transactions')).map(fromTx));
-    ls('gp-ec',       (await q('ec_logs')).map(fromEc));
-    ls('gp-ro',       (await q('runoff_logs')).map(fromRo));
+    ls('gp-ec',       (await q('ec_logs')).map(fromEc).map(_enrich));
+    ls('gp-ro',       (await q('runoff_logs')).map(fromRo).map(_enrich));
     ls('gp-flow',     (await q('flow_logs')).map(fromFlow));
     const wasteRows = await q('waste_records');
     ls('gp-waste',    wasteRows.map(fromWaste));
