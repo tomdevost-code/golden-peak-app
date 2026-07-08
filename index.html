@@ -13761,14 +13761,19 @@ async function summaryAddTransaction(){
   //                                     default to that purpose; user can re-designate later).
   //   • Moved to Moms (source is mom) → subtract from junior phase + junior purpose first.
   // The destination-mom side of a Moved-to-Moms tx is handled below in the _destTx block.
+  let _momPhaseChanged = false;
   if(_txBatchRec && isMotherBatch(batchId)){
     if(txType === 'Produced/Received' && qty > 0){
       momPhaseAdjust(_txBatchRec, 'Clones', +qty);
       momPurposeIncrementCloneDonor(_txBatchRec, qty);
+      _momPhaseChanged = true;
     } else if(txType === 'Moved to Moms' && qty > 0){
       momPhaseSubtractJunior(_txBatchRec, qty);
       momPurposeSubtractJunior(_txBatchRec, qty);
+      _momPhaseChanged = true;
     }
+    // Persist the mom's phase counts so a real-time refresh can't rebuild them into the wrong bucket.
+    if(_momPhaseChanged){ _txBatchRec.synced = false; lsSet('gp-batch', batchRecs); }
   }
   // For Moved to Moms: create the paired Produced/Received tx on the destination
   // mother batch so its plant count increases by the same amount. Linked via notes.
@@ -13965,7 +13970,7 @@ async function summaryAddTransaction(){
   // If the Harvested tx auto-advanced the phase to Drying (or zero-qty re-locked to Clones),
   // or the Clone Date was just captured on a Clones-External Produced/Received tx,
   // push the batch update to Airtable so the change is reflected immediately.
-  if((_phaseAutoChanged || _cloneDateCaptured || _soldDateStamped) && cfg.batchTbl && cfg.token && cfg.base){
+  if((_phaseAutoChanged || _cloneDateCaptured || _soldDateStamped || _momPhaseChanged) && cfg.batchTbl && cfg.token && cfg.base){
     try{
       const _bi = batchRecs.findIndex(r=>r.batchId===batchId && !r.type);
       if(_bi >= 0){
