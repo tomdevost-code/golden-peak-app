@@ -1390,8 +1390,7 @@ tr:last-child td { border-bottom: none; }
         <!-- Transaction History -->
         <div class="section-label">Transaction History</div>
         <div id="summary-tx-history" style="margin-bottom:8px;"></div>
-        <button type="button" class="btn-secondary" onclick="summaryAddCorrectiveTx()" style="width:100%;margin-bottom:8px;font-size:12px;">＋ Add corrective transaction (manual)</button>
-        <button type="button" class="btn-secondary" onclick="summaryResyncBatchTx()" style="width:100%;margin-bottom:20px;font-size:12px;">⇪ Re-push this batch's transactions to Airtable</button>
+        <button type="button" class="btn-secondary" onclick="summaryAddCorrectiveTx()" style="width:100%;margin-bottom:20px;font-size:12px;">＋ Add corrective transaction (manual)</button>
       </div>
     </div>
 
@@ -8431,7 +8430,7 @@ async function removeDuplicateDestroyRecords(){
   toast('Removed '+ok+' duplicate destruction record(s)'+(fail?' ('+fail+' failed)':'')+'.', 5000);
 }
 
-// Read-only consolidated health check. Bundles the structural checks — Airtable transaction extras,
+// Read-only consolidated health check. Bundles the structural checks —
 // duplicate batch records, mother distribution vs count, negative balances, and local duplicate rows
 // — into one green/amber report. It CANNOT verify counts against physical reality (only the grower
 // can), but it catches the structural problems that caused the sync drift. Changes nothing.
@@ -8439,26 +8438,8 @@ async function dataHealthCheck(){
   const el = document.getElementById('data-health-report');
   if(el){ el.style.display=''; el.innerHTML='<div style="padding:8px;color:var(--text2);font-size:12px;">Running checks…</div>'; }
   const checks = []; // {level:'ok'|'warn'|'err', label, detail}
-  const atOk = (typeof atReady==='function') && atReady();
-  // 1. Airtable transactions this laptop doesn't link to (strays a fresh pull would ingest).
-  if(atOk){
-    try {
-      const remote = await atFetchAll(cfg.batchtxTbl);
-      const localAt = new Set(batchTxRecs.map(t=>t.airtableId).filter(Boolean));
-      const extras = remote.filter(rr => !localAt.has(rr.id)).length;
-      checks.push(extras ? {level:'warn', label:'Airtable transactions not on this laptop', detail: extras+' stray record(s) — use "Compare This Laptop to Airtable"'} : {level:'ok', label:'Airtable transactions', detail:'all '+remote.length+' accounted for'});
-    } catch(e){ checks.push({level:'err', label:'Transaction compare failed', detail:(e&&e.message)||''}); }
-    // 2. Duplicate batch records (same Batch ID under two record ids).
-    try {
-      const rbatches = await atFetchAll(cfg.batchTbl);
-      const byId = {};
-      rbatches.forEach(br=>{ const bid=((br.fields&&br.fields['Batch ID'])||'').toString().trim().toUpperCase(); if(bid)(byId[bid]=byId[bid]||[]).push(br); });
-      const dups = Object.keys(byId).filter(k=>byId[k].length>1);
-      checks.push(dups.length ? {level:'warn', label:'Duplicate batch records in Airtable', detail: dups.join(', ')+' — use "Find Duplicate Batch Records"'} : {level:'ok', label:'Batch records', detail: rbatches.length+' unique, no duplicates'});
-    } catch(e){ checks.push({level:'err', label:'Batch-record check failed', detail:(e&&e.message)||''}); }
-  } else {
-    checks.push({level:'warn', label:'Airtable not configured', detail:'transaction & batch-record checks skipped'});
-  }
+  // 1. Duplicate batch records (the shared database enforces unique Batch IDs; this verifies the loaded set).
+  { const byId={}; batchRecs.forEach(b=>{ if(b&&b.batchId){ const k=b.batchId.toString().trim().toUpperCase(); (byId[k]=byId[k]||[]).push(b); } }); const dups=Object.keys(byId).filter(k=>byId[k].length>1); checks.push(dups.length ? {level:'warn', label:'Duplicate batch records', detail: dups.join(', ')} : {level:'ok', label:'Batch records', detail: Object.keys(byId).length+' unique, no duplicates'}); }
   // 3. Mother distribution total vs transaction-derived count.
   const momMismatch = [];
   batchRecs.filter(b=>b && !b.type && isMotherBatch(b.batchId) && !b.closedDate).forEach(b=>{
