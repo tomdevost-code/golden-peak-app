@@ -1827,31 +1827,8 @@ tr:last-child td { border-bottom: none; }
         <div class="sfield"><label>Flower Day Milestones Table ID <span style="font-size:10px;color:var(--text3);font-weight:400;">(Cultivation — shared milestone list)</span></label><input type="text" id="s-fdtasks" placeholder="tblXXXXXXXXXXXXXX" /></div>
         <button class="btn-save" onclick="saveSettings()">Save and Test Connection</button>
         <div class="conn-status" id="conn-status"></div>
-        <div style="margin-top:14px;padding-top:12px;border-top:1px dashed var(--border);">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-            <strong style="font-size:13px;">Multi-laptop sync</strong>
-            <span id="pull-status" style="font-size:12px;color:var(--text3);font-family:var(--mono);">—</span>
-          </div>
-          <p style="font-size:12px;color:var(--text2);line-height:1.5;margin:0 0 8px;">The app auto-pulls from Airtable every 60 seconds when this tab is visible, so records entered on another laptop appear here automatically. Tap below to pull immediately.</p>
-          <button class="btn-save" onclick="pullFromAirtable({manual:true})" style="background:var(--green);">Pull from Airtable Now</button>
-        </div>
-        <button class="btn-save" id="sync-pending-btn" onclick="syncPending()" style="margin-top:8px;background:var(--blue);">Sync Pending Records</button>
-        <div class="conn-status" id="sync-pending-status"></div>
-        <button class="btn-save" onclick="dedupeBatchTxLocal()" style="margin-top:8px;background:var(--amber);color:#3B2A00;">Clean Up Duplicate Transactions (Local)</button>
-        <button class="btn-save" onclick="cleanAirtableDuplicateTx()" style="margin-top:8px;background:#7B0000;">Clean Up Airtable Duplicates</button>
-        <div class="conn-status" id="clean-air-dupes-status"></div>
-        <div id="clean-air-dupes-preview" style="display:none;"></div>
-        <button class="btn-save" onclick="diagnoseAirtableVsLocal()" style="margin-top:8px;background:var(--blue);">Compare This Laptop to Airtable (Transactions)</button>
-        <div id="air-compare-report" style="display:none;"></div>
-        <button class="btn-save" onclick="diagnoseDuplicateBatchRecords()" style="margin-top:8px;background:var(--blue);">Find Duplicate Batch Records</button>
-        <div id="dup-batch-report" style="display:none;"></div>
-        <button class="btn-save" onclick="diagnoseDuplicateDestroyRecords()" style="margin-top:8px;background:var(--blue);">Find Duplicate Destruction Records</button>
-        <div id="dup-destroy-report" style="display:none;"></div>
         <button class="btn-save" onclick="dataHealthCheck()" style="margin-top:8px;background:var(--green);">Run Data Health Check</button>
         <div id="data-health-report" style="display:none;"></div>
-        <button class="btn-save" onclick="diagnoseBatchTx()" style="margin-top:8px;background:var(--blue);">Diagnose Transactions (Console)</button>
-        <div class="conn-status" id="dedupe-tx-status"></div>
-        <button class="btn-save" onclick="clearPendingRecords()" style="margin-top:8px;background:var(--red);">Clear Pending Records</button>
         <button class="btn-save" onclick="clearAllLocalData()" style="margin-top:8px;background:#7B0000;">Clear All Local Data</button>
       </div>
       <div class="settings-card">
@@ -1861,9 +1838,8 @@ tr:last-child td { border-bottom: none; }
         <div class="sfield"><label>Flower Day</label><input type="number" id="fd-day" min="1" step="1" placeholder="e.g. 21" /></div>
         <div class="sfield"><label>Tasks (one per line)</label><textarea id="fd-tasks" rows="3" placeholder="Deleaf&#10;Install Trellis" style="width:100%;font-size:14px;font-family:var(--sans);border-radius:var(--radius-sm);border:1px solid var(--border);padding:10px;background:var(--card);color:var(--text);outline:none;"></textarea></div>
         <button class="btn-save" onclick="fdSaveMilestone()">Save Milestone</button>
-        <button class="btn-save" onclick="fdSyncMilestones()" style="margin-top:8px;background:var(--green);">Sync to Airtable</button>
         <button class="btn-save" onclick="fdResetMilestones()" style="margin-top:8px;background:var(--amber);color:#3B2A00;">Reset to Defaults</button>
-        <div style="font-size:11px;color:var(--text3);margin-top:8px;">Adding a Flower Day that already exists replaces its task list. "Sync to Airtable" uploads the current list to the shared Milestones table.</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:8px;">Adding a Flower Day that already exists replaces its task list.</div>
       </div>
       <div class="settings-card">
         <h3>How to get your credentials</h3>
