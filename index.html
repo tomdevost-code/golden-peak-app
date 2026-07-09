@@ -650,7 +650,7 @@ tr:last-child td { border-bottom: none; }
     </div>
 
     <!-- BATCH LOG -->
-    <div class="page" id="page-batch">
+    <div class="page active" id="page-batch">
       <!-- Active Batches List (top) -->
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
         <div class="section-label" id="batch-list-label" style="margin:0;">Active Batches</div>
@@ -956,7 +956,7 @@ tr:last-child td { border-bottom: none; }
     </div>
 
     <!-- BATCH SUMMARY -->
-    <div class="page active" id="page-summary">
+    <div class="page" id="page-summary">
       <!-- Batch selector -->
       <div class="card" style="margin-bottom:12px;">
         <div class="section-label">Select Batch</div>
@@ -1973,11 +1973,11 @@ tr:last-child td { border-bottom: none; }
       <svg viewBox="0 0 24 24"><path d="M12 22V12M12 12c0-5.5 4-8 8-8 0 5.5-4 8-8 8zM12 12c0-5.5-4-8-8-8 0 5.5 4 8 8 8z"/></svg>
       Seeds
     </button>
-    <button class="bnav-btn" id="bn-batch" onclick="switchPage('batch',this)">
+    <button class="bnav-btn active" id="bn-batch" onclick="switchPage('batch',this)">
       <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
       Batches
     </button>
-    <button class="bnav-btn active" id="bn-summary" onclick="switchPage('summary',this)">
+    <button class="bnav-btn" id="bn-summary" onclick="switchPage('summary',this)">
       <svg viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9h6m-6 4h6m-6-8h.01"/></svg>
       Batch Mgmt
     </button>
@@ -4317,6 +4317,17 @@ function stageLabel(r){if(!r.stage||!r.day)return'<span style="color:var(--text3
 function toast(msg,dur){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),dur||2500);}
 
 function switchPage(page,btn){document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.bnav-btn').forEach(b=>b.classList.remove('active'));document.getElementById('page-'+page).classList.add('active');btn.classList.add('active');if(page==='report'){renderEC();renderRO();ctlsDefaultMonth();}if(page==='waste'){renderWaste();}if(page==='batch'){renderBatchLog();}if(page==='summary'){summaryPopulateBatches();}if(page==='harvest'){harvestPopulateBatches();harvestRefreshDate();harvestPopulateBinNumbers();}if(page==='postdry'){postDryPopulateBatches();postDrySetupChanged();}if(page==='bio'){bioRefreshDate();bioSeqUnlock();}if(page==='pest'){pestRefreshDate();pestPopulateBatches();pestSeqUnlock();}if(page==='destroy'){if(typeof destroyEnter==='function')destroyEnter();}if(page==='sancleaning'){sanclEnter();}if(page==='santool'){santoolEnter();}if(page==='seeds'){seedInvEnter();}if(page==='settings'){if(typeof fdRenderMilestones==='function')fdRenderMilestones();}
+
+// After a successful save, clear the batch selection so the next entry forces a re-select.
+// Grower and Date are intentionally left alone — the same person keeps logging on the same day.
+function resetBatchAfterSave(prefix, handler){
+  ['-batch-select','-batch'].forEach(sfx => {
+    const el = document.getElementById(prefix + sfx);
+    if(el && 'value' in el) el.value = '';
+  });
+  if(handler){ try{ if(typeof window[handler] === 'function') window[handler](); }catch(_){} }
+  try{ window.scrollTo({top:0, behavior:'smooth'}); }catch(_){}
+}
   // Remember the last-page-visited per section so toggling sections returns the user to where they left off.
   if(page === 'settings') {
     // Settings is shared between sections — don't update per-section memory.
@@ -4883,6 +4894,8 @@ async function harvestSave(){
       toast('Bin saved locally - Airtable: '+(e.message||'sync failed'),5000);
     }
   }
+
+  resetBatchAfterSave('harvest', 'harvestSetupChanged');
 }
 // ───────────────────── Post-Drying Inventory Weight Log ─────────────────────
 // ── BIOLOGICAL CONTROL LOG ────────────────────────────────────────────────────
@@ -5096,6 +5109,8 @@ async function bioSave(){
       toast('Saved locally - Airtable: '+(e.message||'sync failed'),5000);
     }
   }
+
+  resetBatchAfterSave('bio', 'bioBatchSelect');
 }
 function bioClearConfirm(){
   if(!confirm('Clear the current form? Unsaved data will be lost.')) return;
@@ -5478,6 +5493,8 @@ async function pestSave(){
       toast('Saved locally - Airtable: '+(e.message||'sync failed'),5000);
     }
   }
+
+  resetBatchAfterSave('pest', 'pestBatchSelect');
 }
 
 function pestClearConfirm(){
@@ -5735,6 +5752,8 @@ async function postDrySave(){
       toast('Container saved locally - Airtable: '+(e.message||'sync failed'),5000);
     }
   }
+
+  resetBatchAfterSave('postdry', 'postDrySetupChanged');
 }
 function postDryRenderBins(batchId){
   // Render the table of containers logged so far for this batch + running total.
@@ -7154,6 +7173,8 @@ async function flowSave(){
   } else {
     toast('Saved locally — set the Flow Meter Table ID in Settings to sync.',4500);
   }
+
+  resetBatchAfterSave('flow', 'flowBatchChanged');
 }
 // Collapse exact-duplicate flow readings (same batch/date/time/room/reading/grower/notes),
 // keeping the synced copy. Self-heals dupes that slipped in from double-saves or re-sync.
@@ -7489,6 +7510,8 @@ async function ecSave(){
   ecRefreshAfterSave(rec.batch, rec.room);
   applyCascadeLocks();
   updatePendingBadge();
+
+  resetBatchAfterSave('ec', 'ecBatchSelect');
 }
 function ecRefreshAfterSave(batch, room){
   // Clear pen readings, events, wtype, notes, flow, totals
@@ -8769,6 +8792,8 @@ document.getElementById('ro-date').value=today;
   _bp('ecSeqUnlock', ecSeqUnlock);
   _bp('wasteSeqUnlock', wasteSeqUnlock);
   _bp('summaryPopulateBatches', summaryPopulateBatches);
+  // Batches is the landing page now — render its list on boot (switchPage isn't called at startup).
+  _bp('renderBatchLog', () => { if(typeof renderBatchLog === 'function') renderBatchLog(); });
   _bp('initSections', initSections);
   console.log('[boot] total synchronous boot: '+Math.round(performance.now()-_t0)+' ms');
 })();
@@ -9142,7 +9167,10 @@ async function wasteSave(){
       updatePendingBadge();
     }catch(e){ /* Sync Pending will retry */ }
   }
+  const _wGrower = (document.getElementById('waste-grower')||{}).value || '';
   wasteClear();
+  const _wg = document.getElementById('waste-grower'); if(_wg) _wg.value = _wGrower;
+  resetBatchAfterSave('waste','wasteBatchSelect');
 }
 
 function wasteClear(){
@@ -15318,6 +15346,8 @@ async function sanclSaveSelectedTasks(){
     lsSet('gp-sanclean', sanCleanRecs);
     if(typeof updatePendingBadge === 'function') updatePendingBadge();
   }
+
+  resetBatchAfterSave('sancl', 'sanclChanged');
 }
 
 // Reset the Batch Cleaning Log form to its empty state. Called after a successful save so the
@@ -15533,6 +15563,8 @@ async function santoolSave(){
     lsSet('gp-santool', sanToolRecs);
     if(typeof updatePendingBadge === 'function') updatePendingBadge();
   }
+
+  resetBatchAfterSave('santool', null);
 }
 
 // Reset the Tool Cleaning Log form so the grower can move on to a different batch/tool set.
