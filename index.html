@@ -16739,13 +16739,13 @@ function buildSeedInvFields(rec){
   // of changes triggers one refresh, and skipped while the grower is actively typing in a field so it
   // never disrupts data entry. Replaces the old 60-second Airtable poll.
   async function sbRefresh(source){
-    if(source==='realtime'){ const a=document.activeElement; if(a && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName||'')) return; }
+    if(source!=='manual'){ const a=document.activeElement; if(a && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName||'')) return; const _now=Date.now(); if(_now - _lastAutoRefresh < 3000) return; _lastAutoRefresh=_now; }
     try{ await hydrate(); }catch(e){ console.error('[sbRefresh]', e); return; }
     try{ if(typeof loadAll==='function') loadAll(); }catch(_){}
     ['populateBatchDropdowns','updatePendingBadge','renderBatchLog','summaryPopulateBatches','renderWaste','renderEC','renderRO','destroyRenderPending','destroyRenderHistory','seedInvRenderList','renderWasteReport'].forEach(fn=>{ try{ if(typeof window[fn]==='function') window[fn](); }catch(_){} });
   }
   pullFromAirtable = async function(){ await sbRefresh('manual'); };   // the "Pull now" button now refreshes from Supabase
-  let _rtTimer=null, _rtChannel=null;
+  let _rtTimer=null, _rtChannel=null, _rtRetry=null, _rtCatchup=false, _liveWired=false, _lastAutoRefresh=0;
   async function startRealtime(){
     // Realtime honours RLS — the socket must carry the user's JWT or it receives nothing.
     try{ const { data } = await SBC.auth.getSession(); if(data && data.session && SBC.realtime && SBC.realtime.setAuth){ SBC.realtime.setAuth(data.session.access_token); } }catch(e){ console.error('[realtime] setAuth', e); }
@@ -16754,8 +16754,33 @@ function buildSeedInvFields(rec){
     const ch = SBC.channel('gp-live');
     ['batches','transactions','ec_logs','runoff_logs','flow_logs','waste_records','harvest_records','postdry_records','bio_records','pest_records','seed_inventory','destruction_events','destruction_adjust','destruction_covered','sanitation_cleaning','sanitation_tool','sanitation_task_edits']
       .forEach(tbl => ch.on('postgres_changes', { event:'*', schema:'public', table:tbl }, bump));
-    ch.subscribe((st, err) => { console.log('[realtime] status:', st, err||''); });
+    ch.subscribe((st, err) => {
+      console.log('[realtime] status:', st, err||'');
+      if(st === 'SUBSCRIBED'){
+        clearTimeout(_rtRetry);
+        // Re-subscribed after a drop — pull whatever changed while we were disconnected.
+        if(_rtCatchup){ _rtCatchup = false; sbRefresh('reconnect'); }
+      } else if(st === 'CLOSED' || st === 'CHANNEL_ERROR' || st === 'TIMED_OUT'){
+        // The socket died (laptop slept, network blip). Without this the tab silently goes stale.
+        _rtCatchup = true;
+        clearTimeout(_rtRetry);
+        _rtRetry = setTimeout(() => { startRealtime().catch(e => console.error('[realtime] retry', e)); }, 5000);
+      }
+    });
     _rtChannel = ch;
+    wireLiveSyncSafetyNets();
+  }
+
+  // Safety nets so a second laptop can never sit on stale data. Realtime can drop silently, and a
+  // plain reload does NOT re-hydrate (hydrate is gated on a per-tab session flag). So: catch up when
+  // the tab regains focus, when the network returns, and on a slow poll while the tab is visible.
+  function wireLiveSyncSafetyNets(){
+    if(_liveWired) return;
+    _liveWired = true;
+    document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'visible') sbRefresh('visibility'); });
+    window.addEventListener('focus',  () => sbRefresh('focus'));
+    window.addEventListener('online', () => { _rtCatchup = true; startRealtime().catch(()=>{}); });
+    setInterval(() => { if(document.visibilityState === 'visible') sbRefresh('poll'); }, 60000);
   }
 
   // ---- login gate / boot flow ----
@@ -16777,7 +16802,7 @@ function buildSeedInvFields(rec){
     document.body.appendChild(b);
   }
   async function afterAuth(){
-    if(sessionStorage.getItem('sb-hydrated')==='1'){ hide(); try{ const { data } = await SBC.auth.getUser(); showBadge(data && data.user ? data.user.email : ''); }catch(_){ showBadge(''); } try{ startRealtime(); }catch(e){ console.error('[realtime]', e); } return; }
+    if(sessionStorage.getItem('sb-hydrated')==='1'){ hide(); try{ const { data } = await SBC.auth.getUser(); showBadge(data && data.user ? data.user.email : ''); }catch(_){ showBadge(''); } try{ startRealtime(); }catch(e){ console.error('[realtime]', e); } setTimeout(()=>{ try{ sbRefresh('boot'); }catch(_){} }, 1500); return; }
     msg('Loading your data from Supabase…');
     try{ await hydrate(); sessionStorage.setItem('sb-hydrated','1'); location.reload(); }
     catch(e){ msg('Could not load data: '+(e.message||e), true); console.error(e); }
