@@ -2076,7 +2076,7 @@ let sanclSelectedTasks = new Set();
 let santoolSelectedTools = [];
 
 // Default last-page-visited per section so the back-and-forth feels natural.
-let lastPagePerSection = { cultivation: 'summary', sanitation: 'sancleaning' };
+let lastPagePerSection = { cultivation: 'batch', sanitation: 'sancleaning' };
 
 // Hardcoded cleaning task templates from the FORM-SA-021 paper form. Each entry: { template,
 // phase, name, order }. Templates: Mother-Veg, Drying, Transplant, Grow Room, Trimming.
@@ -4359,7 +4359,7 @@ function setAppSection(section){
   if(navC) navC.classList.toggle('section-hidden', section !== 'cultivation');
   if(navS) navS.classList.toggle('section-hidden', section !== 'sanitation');
   // Restore the last page visited in this section.
-  const lastPage = lastPagePerSection[section] || (section === 'sanitation' ? 'sancleaning' : 'summary');
+  const lastPage = lastPagePerSection[section] || (section === 'sanitation' ? 'sancleaning' : 'batch');
   const targetBtn = document.getElementById('bn-' + lastPage) ||
                     document.getElementById('bn-' + lastPage + (section === 'sanitation' && lastPage === 'settings' ? '-san' : ''));
   if(targetBtn) switchPage(lastPage, targetBtn);
@@ -4374,10 +4374,13 @@ function initSections(){
     if(!p.dataset.section) p.dataset.section = 'cultivation';
   });
   // Restore last section / last page from localStorage.
-  const stored = lsGet('gp-section');
   const storedLast = lsGet('gp-section-last');
   if(storedLast && typeof storedLast === 'object') lastPagePerSection = {...lastPagePerSection, ...storedLast};
-  setAppSection(stored === 'sanitation' ? 'sanitation' : 'cultivation');
+  // Every fresh load / login lands on the Batches page in the Cultivation section, regardless of
+  // where the previous session left off. Within a session, toggling sections still returns the
+  // user to the page they were last on in that section.
+  lastPagePerSection.cultivation = 'batch';
+  setAppSection('cultivation');
 }
 // ── HARVEST LOG ──────────────────────────────────────────────────────────────
 function harvestRefreshDate(){const t=localDate();const el=document.getElementById('harvest-date'); if(el) el.value=t;}
