@@ -16630,30 +16630,34 @@ function buildSeedInvFields(rec){
   async function q(t){ const { data, error } = await SBC.from(t).select('*'); if(error) throw new Error(t+': '+error.message); return data||[]; }
 
   async function hydrate(){
-    const _batchRows = (await q('batches')).map(fromBatch);
-    ls('gp-batch',    _batchRows);
+    // Fetch every table in PARALLEL (was sequential — 17 round-trips ran one-after-another, which
+    // made login hang 20-30s). Promise.all issues them concurrently, then we map/assemble locally.
+    const [batches, txs, ec, ro, flow, waste, harvest, postdry, bio, pest, seed, sancl, santl, saned, events, adjs, covs] = await Promise.all([
+      q('batches'), q('transactions'), q('ec_logs'), q('runoff_logs'), q('flow_logs'),
+      q('waste_records'), q('harvest_records'), q('postdry_records'), q('bio_records'),
+      q('pest_records'), q('seed_inventory'), q('sanitation_cleaning'), q('sanitation_tool'),
+      q('sanitation_task_edits'), q('destruction_events'), q('destruction_adjust'), q('destruction_covered')
+    ]);
+    const _batchRows = batches.map(fromBatch);
+    ls('gp-batch', _batchRows);
     // batch date lookup so EC/Runoff rows can recompute stage/day (not stored per-row in Supabase)
     const _bd = {}; _batchRows.forEach(b => { _bd[b.batchId] = { vegStart:b.vegStart||'', flowerStart:b.flowerStart||'', hydrationDate:b.hydrationDate||'', harvestDate:b.harvestDate||'' }; });
     const _enrich = rec => { const b=_bd[rec.batch]; if(b){ rec.vegStart=b.vegStart; rec.flowerStart=b.flowerStart; rec.hydrationDate=b.hydrationDate; rec.harvestDate=b.harvestDate; try{ const cs=calcStage(b.vegStart,b.flowerStart,rec.date); rec.stage=cs.stage; rec.day=cs.day; }catch(_){} } return rec; };
-    ls('gp-batchtx',  (await q('transactions')).map(fromTx));
-    ls('gp-ec',       (await q('ec_logs')).map(fromEc).map(_enrich));
-    ls('gp-ro',       (await q('runoff_logs')).map(fromRo).map(_enrich));
-    ls('gp-flow',     (await q('flow_logs')).map(fromFlow));
-    const wasteRows = await q('waste_records');
-    ls('gp-waste',    wasteRows.map(fromWaste));
-    ls('gp-harvest',  (await q('harvest_records')).map(fromHarvest));
-    ls('gp-postdry',  (await q('postdry_records')).map(fromPostdry));
-    ls('gp-bio',      (await q('bio_records')).map(fromBio));
-    ls('gp-pest',     (await q('pest_records')).map(fromPest));
-    ls('gp-seedinv',  (await q('seed_inventory')).map(fromSeed));
-    ls('gp-sanclean', (await q('sanitation_cleaning')).map(fromSanClean));
-    ls('gp-santool',  (await q('sanitation_tool')).map(fromSanTool));
-    ls('gp-sanedits', (await q('sanitation_task_edits')).map(fromSanEdit));
+    ls('gp-batchtx',  txs.map(fromTx));
+    ls('gp-ec',       ec.map(fromEc).map(_enrich));
+    ls('gp-ro',       ro.map(fromRo).map(_enrich));
+    ls('gp-flow',     flow.map(fromFlow));
+    ls('gp-waste',    waste.map(fromWaste));
+    ls('gp-harvest',  harvest.map(fromHarvest));
+    ls('gp-postdry',  postdry.map(fromPostdry));
+    ls('gp-bio',      bio.map(fromBio));
+    ls('gp-pest',     pest.map(fromPest));
+    ls('gp-seedinv',  seed.map(fromSeed));
+    ls('gp-sanclean', sancl.map(fromSanClean));
+    ls('gp-santool',  santl.map(fromSanTool));
+    ls('gp-sanedits', saned.map(fromSanEdit));
     // destruction — reassemble adjust + coveredKeys from the join tables
-    const keyById = {}; wasteRows.forEach(w => { keyById[w.id] = wasteKeyRow(w); });
-    const events = await q('destruction_events');
-    const adjs = await q('destruction_adjust');
-    const covs = await q('destruction_covered');
+    const keyById = {}; waste.forEach(w => { keyById[w.id] = wasteKeyRow(w); });
     const adjBy = {}; adjs.forEach(a => { (adjBy[a.destruction_id] = adjBy[a.destruction_id]||[]).push(a); });
     const covBy = {}; covs.forEach(c => { (covBy[c.destruction_id] = covBy[c.destruction_id]||[]).push(c.waste_id); });
     ls('gp-destroy', events.map(e => {
