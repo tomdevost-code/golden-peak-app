@@ -1803,6 +1803,22 @@ tr:last-child td { border-bottom: none; }
     </div>
 
     <!-- SETTINGS -->
+    <div class="page" id="page-pheno" data-section="cultivation">
+      <div class="card">
+        <div class="section-label">Pheno Hunt</div>
+        <p style="font-size:11px;color:var(--text3);margin:0 0 12px;line-height:1.4;">Pick a batch, add each plant you're evaluating, then log dated observations and set a Keep / Winner / Cull status and rating per plant.</p>
+        <div class="field"><label>Batch</label>
+          <select id="pheno-batch" onchange="phenoBatchChanged()"><option value="">-- select batch --</option></select>
+        </div>
+        <div id="pheno-add-plant" style="display:none;">
+          <div class="field"><label>Add plant <span style="font-size:10px;color:var(--text3);font-weight:400;">— optional tag / nickname</span></label>
+            <input id="pheno-new-tag" placeholder="optional tag or nickname" />
+          </div>
+          <button type="button" class="btn-save" onclick="phenoAddPlant()">+ Add Plant</button>
+        </div>
+      </div>
+      <div id="pheno-plants"></div>
+    </div>
     <div class="page" id="page-settings">
       <div class="settings-card">
         <h3>Airtable access <span style="font-size:11px;color:var(--text3);font-weight:400;">(data tools only)</span></h3>
@@ -1973,6 +1989,10 @@ tr:last-child td { border-bottom: none; }
       <svg viewBox="0 0 24 24"><path d="M12 22V12M12 12c0-5.5 4-8 8-8 0 5.5-4 8-8 8zM12 12c0-5.5-4-8-8-8 0 5.5 4 8 8 8z"/></svg>
       Seeds
     </button>
+    <button class="bnav-btn" id="bn-pheno" onclick="switchPage('pheno',this)">
+      <svg viewBox="0 0 24 24"><path d="M12 2C7 7 7 13 12 22 17 13 17 7 12 2z"/></svg>
+      Pheno
+    </button>
     <button class="bnav-btn active" id="bn-batch" onclick="switchPage('batch',this)">
       <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
       Batches
@@ -2057,7 +2077,7 @@ tr:last-child td { border-bottom: none; }
 <script>
 const EC_LO=2.2,EC_HI=2.3,PH_EC_LO=6.2,PH_EC_HI=6.3;
 const RO_PH_LO=6.0,RO_PH_HI=6.5,RO_VAR_LO=0.3,RO_VAR_HI=0.5,RO_VAR_ALERT=1.0;
-let ecRecs=[],roRecs=[],wasteRecs=[],batchRecs=[],batchTxRecs=[],harvestRecs=[],postDryRecs=[],bioRecs=[],pestRecs=[],sanCleanRecs=[],sanToolRecs=[],sanEditsRecs=[],seedInvRecs=[],flowRecs=[],destroyRecs=[],cfg={token:'',base:'',ecTbl:'',roTbl:'',wasteTbl:'',batchTbl:'',batchtxTbl:'',harvestTbl:'',postDryTbl:'',bioTbl:'',pestTbl:'',sanCleanTbl:'',sanToolTbl:'',sanEditsTbl:'',seedInvTbl:'',flowTbl:'',destroyTbl:'',fdTasksTbl:''};
+let ecRecs=[],roRecs=[],wasteRecs=[],batchRecs=[],batchTxRecs=[],harvestRecs=[],postDryRecs=[],bioRecs=[],pestRecs=[],sanCleanRecs=[],sanToolRecs=[],sanEditsRecs=[],seedInvRecs=[],flowRecs=[],destroyRecs=[],phenoPlantRecs=[],phenoObsRecs=[],cfg={token:'',base:'',ecTbl:'',roTbl:'',wasteTbl:'',batchTbl:'',batchtxTbl:'',harvestTbl:'',postDryTbl:'',bioTbl:'',pestTbl:'',sanCleanTbl:'',sanToolTbl:'',sanEditsTbl:'',seedInvTbl:'',flowTbl:'',destroyTbl:'',fdTasksTbl:''};
 // Dirty flag for the flower-day milestones single-row config sync. Declared up here (not next to
 // FLOWER_DAY_TASKS lower down) so updatePendingBadge can read it during boot without a TDZ error.
 let fdTasksDirty=false;
@@ -2169,7 +2189,7 @@ function sanGetTasks(template, phase){
 
 function lsGet(k){try{return JSON.parse(localStorage.getItem(k)||'null');}catch(e){return null;}}
 function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
-function loadAll(){ecRecs=lsGet('gp-ec')||[];roRecs=lsGet('gp-ro')||[];wasteRecs=lsGet('gp-waste')||[];batchRecs=lsGet('gp-batch')||[];batchTxRecs=lsGet('gp-batchtx')||[];harvestRecs=lsGet('gp-harvest')||[];postDryRecs=lsGet('gp-postdry')||[];bioRecs=lsGet('gp-bio')||[];pestRecs=lsGet('gp-pest')||[];sanCleanRecs=lsGet('gp-sanclean')||[];sanToolRecs=lsGet('gp-santool')||[];sanEditsRecs=lsGet('gp-sanedits')||[];seedInvRecs=lsGet('gp-seedinv')||[];flowRecs=lsGet('gp-flow')||[];destroyRecs=lsGet('gp-destroy')||[];try{fdTasksDirty=!!lsGet('gp-fdtasks-dirty');}catch(_){}migrateSanTaskEditsToRecs();wasteRecs.forEach(r=>{if(r.type==='Vegetative waste')r.type='Vegetative Waste';});lsSet('gp-waste',wasteRecs);const s=lsGet('gp-cfg');if(s){cfg=s;applySettings();}dedupeBatchRecs();backfillHarvestedTxs();reconcileAllPackagedBatches();try{cleanLocalDuplicates({batchtxSkipTypes:['Destroyed']});}catch(_){}}
+function loadAll(){ecRecs=lsGet('gp-ec')||[];roRecs=lsGet('gp-ro')||[];wasteRecs=lsGet('gp-waste')||[];batchRecs=lsGet('gp-batch')||[];batchTxRecs=lsGet('gp-batchtx')||[];harvestRecs=lsGet('gp-harvest')||[];postDryRecs=lsGet('gp-postdry')||[];bioRecs=lsGet('gp-bio')||[];pestRecs=lsGet('gp-pest')||[];sanCleanRecs=lsGet('gp-sanclean')||[];sanToolRecs=lsGet('gp-santool')||[];sanEditsRecs=lsGet('gp-sanedits')||[];seedInvRecs=lsGet('gp-seedinv')||[];flowRecs=lsGet('gp-flow')||[];destroyRecs=lsGet('gp-destroy')||[];phenoPlantRecs=lsGet('gp-phenoplant')||[];phenoObsRecs=lsGet('gp-phenoobs')||[];try{fdTasksDirty=!!lsGet('gp-fdtasks-dirty');}catch(_){}migrateSanTaskEditsToRecs();wasteRecs.forEach(r=>{if(r.type==='Vegetative waste')r.type='Vegetative Waste';});lsSet('gp-waste',wasteRecs);const s=lsGet('gp-cfg');if(s){cfg=s;applySettings();}dedupeBatchRecs();backfillHarvestedTxs();reconcileAllPackagedBatches();try{cleanLocalDuplicates({batchtxSkipTypes:['Destroyed']});}catch(_){}}
 
 // One-time migration of the previous gp-san-task-edits localStorage shape into the new
 // synced sanEditsRecs array. Runs on every boot but only does work the first time.
@@ -4316,7 +4336,7 @@ function setAvg(id,val,lo,hi){const el=document.getElementById(id);if(val===null
 function stageLabel(r){if(!r.stage||!r.day)return'<span style="color:var(--text3)">-</span>';return r.stage==='flower'?'<span class="flower-txt">F'+r.day+'</span>':'<span class="veg-txt">V'+r.day+'</span>';}
 function toast(msg,dur){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),dur||2500);}
 
-function switchPage(page,btn){document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.bnav-btn').forEach(b=>b.classList.remove('active'));document.getElementById('page-'+page).classList.add('active');btn.classList.add('active');if(page==='report'){renderEC();renderRO();ctlsDefaultMonth();}if(page==='waste'){renderWaste();}if(page==='batch'){renderBatchLog();}if(page==='summary'){summaryPopulateBatches();}if(page==='harvest'){harvestPopulateBatches();harvestRefreshDate();harvestPopulateBinNumbers();}if(page==='postdry'){postDryPopulateBatches();postDrySetupChanged();}if(page==='bio'){bioRefreshDate();bioSeqUnlock();}if(page==='pest'){pestRefreshDate();pestPopulateBatches();pestSeqUnlock();}if(page==='destroy'){if(typeof destroyEnter==='function')destroyEnter();}if(page==='sancleaning'){sanclEnter();}if(page==='santool'){santoolEnter();}if(page==='seeds'){seedInvEnter();}if(page==='settings'){if(typeof fdRenderMilestones==='function')fdRenderMilestones();}
+function switchPage(page,btn){document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.bnav-btn').forEach(b=>b.classList.remove('active'));document.getElementById('page-'+page).classList.add('active');btn.classList.add('active');if(page==='report'){renderEC();renderRO();ctlsDefaultMonth();}if(page==='waste'){renderWaste();}if(page==='batch'){renderBatchLog();}if(page==='summary'){summaryPopulateBatches();}if(page==='harvest'){harvestPopulateBatches();harvestRefreshDate();harvestPopulateBinNumbers();}if(page==='postdry'){postDryPopulateBatches();postDrySetupChanged();}if(page==='bio'){bioRefreshDate();bioSeqUnlock();}if(page==='pest'){pestRefreshDate();pestPopulateBatches();pestSeqUnlock();}if(page==='destroy'){if(typeof destroyEnter==='function')destroyEnter();}if(page==='sancleaning'){sanclEnter();}if(page==='santool'){santoolEnter();}if(page==='seeds'){seedInvEnter();}if(page==='pheno'){phenoEnter();}if(page==='settings'){if(typeof fdRenderMilestones==='function')fdRenderMilestones();}
 
 // After a successful save, clear the batch selection so the next entry forces a re-select.
 // Grower and Date are intentionally left alone — the same person keeps logging on the same day.
@@ -7703,7 +7723,7 @@ function clearAllLocalData(){
   if(!confirm('⚠ RESET LOCAL DATA\n\nThis will permanently delete all locally-stored records: batches, transactions, EC/Runoff/Waste/Harvest/Post-Drying/Bio/Pest/Cleaning logs, seed inventory, and pending sync queue.\n\nAirtable credentials (Settings) will be preserved.\n\nIMPORTANT: Other devices (laptops, phones) using this app still have their own local copies. If you intend to start fresh in production, clear the data on every device — otherwise the un-cleared local data will be re-pushed to Airtable on the next sync.\n\nContinue?')) return;
   const _typed = prompt('Type RESET (in capital letters) to confirm. Anything else cancels.');
   if(_typed !== 'RESET'){ toast('Reset cancelled — no data changed.', 4000); return; }
-  ecRecs=[];roRecs=[];wasteRecs=[];batchRecs=[];batchTxRecs=[];harvestRecs=[];postDryRecs=[];bioRecs=[];pestRecs=[];sanCleanRecs=[];sanToolRecs=[];sanEditsRecs=[];seedInvRecs=[];flowRecs=[];destroyRecs=[];
+  ecRecs=[];roRecs=[];wasteRecs=[];batchRecs=[];batchTxRecs=[];harvestRecs=[];postDryRecs=[];bioRecs=[];pestRecs=[];sanCleanRecs=[];sanToolRecs=[];sanEditsRecs=[];seedInvRecs=[];flowRecs=[];destroyRecs=[];phenoPlantRecs=[];phenoObsRecs=[];
   lsSet('gp-ec',[]);lsSet('gp-ro',[]);lsSet('gp-waste',[]);lsSet('gp-batch',[]);lsSet('gp-batchtx',[]);lsSet('gp-harvest',[]);lsSet('gp-postdry',[]);lsSet('gp-bio',[]);lsSet('gp-pest',[]);lsSet('gp-sanclean',[]);lsSet('gp-santool',[]);lsSet('gp-sanedits',[]);lsSet('gp-seedinv',[]);lsSet('gp-flow',[]);lsSet('gp-destroy',[]);
   // Also nuke legacy storage keys that would otherwise re-seed records on the next boot:
   //   gp-san-task-edits — pre-sync sanitation template overrides (migrated into gp-sanedits on boot)
@@ -8780,6 +8800,131 @@ document.getElementById('ro-date').value=today;
 // ── TEMP BOOT INSTRUMENTATION (remove once the freeze is diagnosed) ──────────────
 // Times each synchronous boot step and logs record counts, so a plain refresh prints
 // exactly which step eats the 30-45s freeze. Open DevTools → Console to read it.
+// ═══ PHENO HUNT ═══════════════════════════════════════════════════════════════
+// Track individual plants during a pheno hunt: per-plant Keep/Winner/Cull status +
+// star rating, and a timeline of dated observations (grower, structured traits, notes).
+// Supabase-native — reads/writes go through window.__SBC and hydrate/realtime like everything else.
+let phenoSelBatch = '';
+function _phenoSB(){ return (typeof window!=='undefined' && window.__SBC) ? window.__SBC : null; }
+const PHENO_STATUS = ['Undecided','Keep','Winner','Cull'];
+const PHENO_STATUS_COLOR = { 'Undecided':'var(--text3)', 'Keep':'var(--green)', 'Winner':'#B8860B', 'Cull':'var(--red)' };
+function _phenoEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+function phenoEnter(){ phenoPopulateBatches(); phenoBatchChanged(); }
+function phenoPopulateBatches(){
+  const sel = document.getElementById('pheno-batch'); if(!sel) return;
+  const cur = sel.value;
+  const ids = batchRecs.filter(b=>b && b.batchId && !b.closedDate).map(b=>b.batchId).sort();
+  sel.innerHTML = '<option value="">-- select batch --</option>' + ids.map(id=>`<option value="${_phenoEsc(id)}">${_phenoEsc(id)}</option>`).join('');
+  if(cur && ids.includes(cur)) sel.value = cur;
+}
+function phenoBatchChanged(){
+  phenoSelBatch = (document.getElementById('pheno-batch')||{}).value || '';
+  const add = document.getElementById('pheno-add-plant'); if(add) add.style.display = phenoSelBatch ? '' : 'none';
+  phenoRenderPlants();
+}
+
+async function phenoAddPlant(){
+  const batch = phenoSelBatch; if(!batch){ toast('Select a batch first.'); return; }
+  const tag = ((document.getElementById('pheno-new-tag')||{}).value || '').trim();
+  const nums = phenoPlantRecs.filter(p=>p.batch===batch).map(p=>parseInt(p.plantNumber)||0);
+  const next = (nums.length ? Math.max.apply(null, nums) : 0) + 1;
+  const sb = _phenoSB(); if(!sb){ toast('Not connected — sign in first.'); return; }
+  try{
+    const { data, error } = await sb.from('pheno_plants').insert({ batch_id:batch, plant_number:next, tag:tag||null, status:'Undecided', rating:0 }).select().single();
+    if(error) throw error;
+    phenoPlantRecs.push({ id:data.id, batch:batch, plantNumber:next, tag:tag, status:'Undecided', rating:0, notes:'', synced:true });
+    lsSet('gp-phenoplant', phenoPlantRecs);
+    const t = document.getElementById('pheno-new-tag'); if(t) t.value='';
+    phenoRenderPlants();
+    toast('Added Plant '+next+' to '+batch+'.');
+  }catch(e){ toast('Could not add plant: '+(e.message||e), 5000); }
+}
+async function phenoDeletePlant(id){
+  const p = phenoPlantRecs.find(x=>x.id===id); if(!p) return;
+  if(!confirm('Delete Plant '+p.plantNumber+(p.tag?(' ('+p.tag+')'):'')+' and all its observations?')) return;
+  const sb = _phenoSB(); if(!sb){ toast('Not connected.'); return; }
+  try{
+    const { error } = await sb.from('pheno_plants').delete().eq('id', id); if(error) throw error;
+    phenoPlantRecs = phenoPlantRecs.filter(x=>x.id!==id);
+    phenoObsRecs = phenoObsRecs.filter(o=>o.plantId!==id);
+    lsSet('gp-phenoplant', phenoPlantRecs); lsSet('gp-phenoobs', phenoObsRecs);
+    phenoRenderPlants();
+  }catch(e){ toast('Delete failed: '+(e.message||e),5000); }
+}
+async function phenoSetStatus(id, status){
+  const p = phenoPlantRecs.find(x=>x.id===id); if(!p) return;
+  const sb = _phenoSB(); if(!sb){ toast('Not connected.'); return; }
+  const prev = p.status; p.status = status; lsSet('gp-phenoplant', phenoPlantRecs); phenoRenderPlants();
+  try{ const { error } = await sb.from('pheno_plants').update({ status:status }).eq('id', id); if(error) throw error; }
+  catch(e){ p.status = prev; lsSet('gp-phenoplant', phenoPlantRecs); phenoRenderPlants(); toast('Update failed: '+(e.message||e),4000); }
+}
+async function phenoSetRating(id, n){
+  const p = phenoPlantRecs.find(x=>x.id===id); if(!p) return;
+  const val = (p.rating === n) ? 0 : n;
+  const sb = _phenoSB(); if(!sb){ toast('Not connected.'); return; }
+  const prev = p.rating; p.rating = val; lsSet('gp-phenoplant', phenoPlantRecs); phenoRenderPlants();
+  try{ const { error } = await sb.from('pheno_plants').update({ rating:val }).eq('id', id); if(error) throw error; }
+  catch(e){ p.rating = prev; lsSet('gp-phenoplant', phenoPlantRecs); phenoRenderPlants(); toast('Update failed: '+(e.message||e),4000); }
+}
+async function phenoAddObs(id){
+  const g = k => (document.getElementById(k)||{}).value || '';
+  const date = g('pheno-o-date-'+id) || localDate();
+  const grower = g('pheno-o-grower-'+id);
+  const notes = g('pheno-o-notes-'+id).trim();
+  const vigor=g('pheno-o-vigor-'+id).trim(), structure=g('pheno-o-structure-'+id).trim(), aroma=g('pheno-o-aroma-'+id).trim(), color=g('pheno-o-color-'+id).trim(), trich=g('pheno-o-trich-'+id).trim();
+  if(!notes && !vigor && !structure && !aroma && !color && !trich){ toast('Enter at least a note or a trait.'); return; }
+  const sb = _phenoSB(); if(!sb){ toast('Not connected.'); return; }
+  try{
+    const { data, error } = await sb.from('pheno_observations').insert({ plant_id:id, date:date, grower:grower||null, notes:notes||null, vigor:vigor||null, structure:structure||null, aroma:aroma||null, color:color||null, trichomes:trich||null }).select().single();
+    if(error) throw error;
+    phenoObsRecs.push({ id:data.id, plantId:id, date:date, grower:grower, notes:notes, vigor:vigor, structure:structure, aroma:aroma, color:color, trichomes:trich, synced:true });
+    lsSet('gp-phenoobs', phenoObsRecs);
+    phenoRenderPlants();
+    toast('Observation added.');
+  }catch(e){ toast('Could not add observation: '+(e.message||e),5000); }
+}
+async function phenoDeleteObs(oid){
+  if(!confirm('Delete this observation?')) return;
+  const sb = _phenoSB(); if(!sb){ toast('Not connected.'); return; }
+  try{
+    const { error } = await sb.from('pheno_observations').delete().eq('id', oid); if(error) throw error;
+    phenoObsRecs = phenoObsRecs.filter(o=>o.id!==oid);
+    lsSet('gp-phenoobs', phenoObsRecs);
+    phenoRenderPlants();
+  }catch(e){ toast('Delete failed: '+(e.message||e),5000); }
+}
+function phenoStars(p){
+  let s=''; for(let i=1;i<=5;i++){ s += `<span onclick="phenoSetRating('${p.id}',${i})" title="${i} star" style="cursor:pointer;font-size:18px;line-height:1;color:${i<=(p.rating||0)?'#F5A623':'var(--border2)'};">★</span>`; } return s;
+}
+function phenoStatusPills(p){
+  return PHENO_STATUS.map(st=>{ const on=(p.status||'Undecided')===st; return `<button type="button" onclick="phenoSetStatus('${p.id}','${st}')" style="font-size:11px;padding:3px 10px;margin-right:4px;margin-bottom:4px;border-radius:12px;border:1px solid ${on?PHENO_STATUS_COLOR[st]:'var(--border)'};background:${on?PHENO_STATUS_COLOR[st]:'transparent'};color:${on?'#fff':'var(--text2)'};cursor:pointer;">${st}</button>`; }).join('');
+}
+function _phenoTrait(label,val){ return val ? `<span style="display:inline-block;margin-right:10px;font-size:11px;"><span style="color:var(--text3);">${label}:</span> ${_phenoEsc(val)}</span>` : ''; }
+function phenoObsList(plantId){
+  const obs = phenoObsRecs.filter(o=>o.plantId===plantId).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  if(!obs.length) return '<div style="font-size:11px;color:var(--text3);padding:6px 0;">No observations yet.</div>';
+  return obs.map(o=>{
+    const traits = [_phenoTrait('Vigor',o.vigor),_phenoTrait('Structure',o.structure),_phenoTrait('Aroma',o.aroma),_phenoTrait('Color',o.color),_phenoTrait('Trichomes',o.trichomes)].join('');
+    return `<div style="border-top:1px solid var(--border);padding:6px 0;"><div style="display:flex;justify-content:space-between;align-items:center;"><span style="font-family:var(--mono);font-size:11px;color:var(--text2);">${o.date||'—'}${o.grower?(' · '+_phenoEsc(o.grower)):''}</span><button type="button" onclick="phenoDeleteObs('${o.id}')" style="font-size:10px;padding:1px 6px;border:1px solid var(--red);background:var(--red-pale);color:var(--red);border-radius:var(--radius-sm);cursor:pointer;">✕</button></div>${traits?('<div style="margin-top:3px;">'+traits+'</div>'):''}${o.notes?('<div style="margin-top:3px;font-size:12px;white-space:pre-wrap;">'+_phenoEsc(o.notes)+'</div>'):''}</div>`;
+  }).join('');
+}
+function _phenoGrowerOpts(){ return ['','Jordan Elliott','Brandon Cail','Tom Devost'].map(g=>`<option value="${g}">${g||'-- grower --'}</option>`).join(''); }
+function phenoPlantCard(p){
+  const pid=p.id;
+  return `<div class="card" style="margin-bottom:12px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><div style="font-weight:600;">Plant ${p.plantNumber}${p.tag?(' <span style="font-size:12px;color:var(--text3);font-weight:400;">· '+_phenoEsc(p.tag)+'</span>'):''}</div><button type="button" onclick="phenoDeletePlant('${pid}')" style="font-size:11px;padding:2px 8px;border:1px solid var(--red);background:var(--red-pale);color:var(--red);border-radius:var(--radius-sm);cursor:pointer;">Delete plant</button></div><div style="margin-bottom:6px;">${phenoStatusPills(p)}</div><div style="margin-bottom:10px;">${phenoStars(p)}</div><div style="font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;margin-bottom:2px;">Observations</div>${phenoObsList(pid)}<details style="margin-top:8px;"><summary style="cursor:pointer;font-size:12px;color:var(--green);font-weight:600;">+ Add observation</summary><div style="margin-top:8px;"><div class="g2"><div class="field"><label>Date</label><input type="date" id="pheno-o-date-${pid}" value="${localDate()}" /></div><div class="field"><label>Grower</label><select id="pheno-o-grower-${pid}">${_phenoGrowerOpts()}</select></div></div><div class="g2"><div class="field"><label>Vigor</label><input id="pheno-o-vigor-${pid}" placeholder="e.g. strong, slow" /></div><div class="field"><label>Structure</label><input id="pheno-o-structure-${pid}" placeholder="e.g. bushy, tight nodes" /></div></div><div class="g2"><div class="field"><label>Aroma</label><input id="pheno-o-aroma-${pid}" placeholder="e.g. gas, citrus, earthy" /></div><div class="field"><label>Color</label><input id="pheno-o-color-${pid}" placeholder="e.g. green, purple hues" /></div></div><div class="field"><label>Trichomes</label><input id="pheno-o-trich-${pid}" placeholder="e.g. frosty, sparse" /></div><div class="field"><label>Notes</label><textarea id="pheno-o-notes-${pid}" rows="2" style="width:100%;font-family:var(--sans);font-size:14px;border-radius:var(--radius-sm);border:1px solid var(--border);padding:8px;background:var(--card);color:var(--text);"></textarea></div><button type="button" class="btn-save" onclick="phenoAddObs('${pid}')">Add observation</button></div></details></div>`;
+}
+function phenoRenderPlants(){
+  const wrap = document.getElementById('pheno-plants'); if(!wrap) return;
+  const batch = phenoSelBatch || (document.getElementById('pheno-batch')||{}).value || '';
+  if(!batch){ wrap.innerHTML=''; return; }
+  const plants = phenoPlantRecs.filter(p=>p.batch===batch).slice().sort((a,b)=>(a.plantNumber||0)-(b.plantNumber||0));
+  if(!plants.length){ wrap.innerHTML = '<div class="card"><div style="font-size:12px;color:var(--text3);">No plants added yet — use “+ Add Plant” above.</div></div>'; return; }
+  const winners=plants.filter(p=>p.status==='Winner').length, keeps=plants.filter(p=>p.status==='Keep').length, culls=plants.filter(p=>p.status==='Cull').length;
+  const summary = `<div class="card" style="margin-bottom:12px;"><div style="font-size:12px;color:var(--text2);">${plants.length} plant${plants.length===1?'':'s'} · <b style="color:#B8860B;">${winners}</b> winner${winners===1?'':'s'} · <b style="color:var(--green);">${keeps}</b> keep · <b style="color:var(--red);">${culls}</b> cull</div></div>`;
+  wrap.innerHTML = summary + plants.map(phenoPlantCard).join('');
+}
+
 (function _bootTimed(){
   const _t0 = performance.now();
   const _bp = (name, fn) => { const s = performance.now(); try{ fn(); } finally { const d = Math.round(performance.now()-s); if(d >= 1) console.log('[boot] '+name+': '+d+' ms'); } };
@@ -16629,14 +16774,17 @@ function buildSeedInvFields(rec){
 
   async function q(t){ const { data, error } = await SBC.from(t).select('*'); if(error) throw new Error(t+': '+error.message); return data||[]; }
 
+  const fromPhenoPlant = r => ({ id:r.id, batch:r.batch_id, plantNumber:r.plant_number, tag:r.tag||'', status:r.status||'Undecided', rating:r.rating||0, notes:r.notes||'', synced:true });
+  const fromPhenoObs = r => ({ id:r.id, plantId:r.plant_id, date:dstr(r.date), grower:r.grower||'', notes:r.notes||'', vigor:r.vigor||'', structure:r.structure||'', aroma:r.aroma||'', color:r.color||'', trichomes:r.trichomes||'', synced:true });
   async function hydrate(){
     // Fetch every table in PARALLEL (was sequential — 17 round-trips ran one-after-another, which
     // made login hang 20-30s). Promise.all issues them concurrently, then we map/assemble locally.
-    const [batches, txs, ec, ro, flow, waste, harvest, postdry, bio, pest, seed, sancl, santl, saned, events, adjs, covs] = await Promise.all([
+    const [batches, txs, ec, ro, flow, waste, harvest, postdry, bio, pest, seed, sancl, santl, saned, events, adjs, covs, phPlants, phObs] = await Promise.all([
       q('batches'), q('transactions'), q('ec_logs'), q('runoff_logs'), q('flow_logs'),
       q('waste_records'), q('harvest_records'), q('postdry_records'), q('bio_records'),
       q('pest_records'), q('seed_inventory'), q('sanitation_cleaning'), q('sanitation_tool'),
-      q('sanitation_task_edits'), q('destruction_events'), q('destruction_adjust'), q('destruction_covered')
+      q('sanitation_task_edits'), q('destruction_events'), q('destruction_adjust'), q('destruction_covered'),
+      q('pheno_plants'), q('pheno_observations')
     ]);
     const _batchRows = batches.map(fromBatch);
     ls('gp-batch', _batchRows);
@@ -16656,6 +16804,8 @@ function buildSeedInvFields(rec){
     ls('gp-sanclean', sancl.map(fromSanClean));
     ls('gp-santool',  santl.map(fromSanTool));
     ls('gp-sanedits', saned.map(fromSanEdit));
+    ls('gp-phenoplant', phPlants.map(fromPhenoPlant));
+    ls('gp-phenoobs', phObs.map(fromPhenoObs));
     // destruction — reassemble adjust + coveredKeys from the join tables
     const keyById = {}; waste.forEach(w => { keyById[w.id] = wasteKeyRow(w); });
     const adjBy = {}; adjs.forEach(a => { (adjBy[a.destruction_id] = adjBy[a.destruction_id]||[]).push(a); });
@@ -16782,7 +16932,7 @@ function buildSeedInvFields(rec){
     if(source!=='manual'){ const a=document.activeElement; if(a && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName||'')) return; const _now=Date.now(); if(_now - _lastAutoRefresh < 3000) return; _lastAutoRefresh=_now; }
     try{ await hydrate(); }catch(e){ console.error('[sbRefresh]', e); return; }
     try{ if(typeof loadAll==='function') loadAll(); }catch(_){}
-    ['populateBatchDropdowns','updatePendingBadge','renderBatchLog','summaryPopulateBatches','renderWaste','renderEC','renderRO','destroyRenderPending','destroyRenderHistory','seedInvRenderList','renderWasteReport'].forEach(fn=>{ try{ if(typeof window[fn]==='function') window[fn](); }catch(_){} });
+    ['populateBatchDropdowns','updatePendingBadge','renderBatchLog','summaryPopulateBatches','renderWaste','renderEC','renderRO','destroyRenderPending','destroyRenderHistory','seedInvRenderList','renderWasteReport','phenoRenderPlants'].forEach(fn=>{ try{ if(typeof window[fn]==='function') window[fn](); }catch(_){} });
   }
   pullFromAirtable = async function(){ await sbRefresh('manual'); };   // the "Pull now" button now refreshes from Supabase
   let _rtTimer=null, _rtChannel=null, _rtRetry=null, _rtCatchup=false, _liveWired=false, _lastAutoRefresh=0;
@@ -16792,7 +16942,7 @@ function buildSeedInvFields(rec){
     if(_rtChannel){ try{ SBC.removeChannel(_rtChannel); }catch(_){} }
     const bump = () => { console.log('[realtime] change received'); clearTimeout(_rtTimer); _rtTimer=setTimeout(()=>sbRefresh('realtime'), 1500); };
     const ch = SBC.channel('gp-live');
-    ['batches','transactions','ec_logs','runoff_logs','flow_logs','waste_records','harvest_records','postdry_records','bio_records','pest_records','seed_inventory','destruction_events','destruction_adjust','destruction_covered','sanitation_cleaning','sanitation_tool','sanitation_task_edits']
+    ['batches','transactions','ec_logs','runoff_logs','flow_logs','waste_records','harvest_records','postdry_records','bio_records','pest_records','seed_inventory','destruction_events','destruction_adjust','destruction_covered','sanitation_cleaning','sanitation_tool','sanitation_task_edits','pheno_plants','pheno_observations']
       .forEach(tbl => ch.on('postgres_changes', { event:'*', schema:'public', table:tbl }, bump));
     ch.subscribe((st, err) => {
       console.log('[realtime] status:', st, err||'');
