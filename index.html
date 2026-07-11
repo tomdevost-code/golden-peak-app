@@ -318,7 +318,7 @@ tr:last-child td { border-bottom: none; }
               <select id="flow-grower"><option value="">select grower</option><option>Jordan Elliott</option><option>Brandon Cail</option><option>Tom Devost</option></select>
             </div>
             <div class="field"><label>Flow Meter Reading (L)</label>
-              <input type="number" id="flow-reading" step="0.001" min="0" placeholder="0.000" onwheel="this.blur()" />
+              <input type="number" id="flow-reading" step="1" min="0" placeholder="0" onwheel="this.blur()" />
             </div>
           </div>
           <div class="field" style="margin-bottom:10px;"><label>Notes</label>
@@ -6984,7 +6984,7 @@ function ecRenderRecent(batch /*, room — ignored: filters by batch only */){
         _flowShown[_fk] = true;
         const _fId = "'" + String(_fr.id).replace(/\\/g,'\\\\').replace(/'/g,"\\'") + "'";
         const _fEditable = (_fr.date || '') === _flowEditableDate;
-        flowCell = '<span style="font-weight:600;">'+parseFloat(_fr.reading).toFixed(2)+'</span>'+
+        flowCell = '<span style="font-weight:600;">'+Math.round(parseFloat(_fr.reading))+'</span>'+
           (_fEditable
             ? ' <button type="button" title="Edit reading" onclick="flowEditStart('+_fId+')" style="font-size:10px;padding:1px 5px;margin-left:3px;border:1px solid var(--border);background:var(--bg2);border-radius:var(--radius-sm);cursor:pointer;color:var(--text2);">✎</button>'+
               '<button type="button" title="Delete reading" onclick="flowDelete('+_fId+')" style="font-size:10px;padding:1px 5px;margin-left:2px;border:1px solid var(--red);background:var(--red-pale);border-radius:var(--radius-sm);cursor:pointer;color:var(--red);">✕</button>'
@@ -7131,7 +7131,7 @@ async function flowSave(){
   const date  = (document.getElementById('flow-date')||{}).value || '';
   const time  = (document.getElementById('flow-time')||{}).value || '';
   const grower= (document.getElementById('flow-grower')||{}).value || '';
-  const reading = parseFloat((document.getElementById('flow-reading')||{}).value);
+  const reading = Math.round(parseFloat((document.getElementById('flow-reading')||{}).value));
   const notes = ((document.getElementById('flow-notes')||{}).value || '').trim();
   if(!batch){ toast('Please select a batch.'); return; }
   if(!room){ toast('Please select a room.'); return; }
@@ -7143,7 +7143,7 @@ async function flowSave(){
     .map(r => parseFloat(r.reading));
   if(_prior.length){
     const _maxPrev = Math.max(..._prior);
-    if(reading < _maxPrev && !confirm('This reading ('+reading.toFixed(3)+' L) is LOWER than the highest existing reading for '+batch+' / '+room+' ('+_maxPrev.toFixed(3)+' L). The meter is zeroed per batch and should climb. Save anyway?')) return;
+    if(reading < _maxPrev && !confirm('This reading ('+Math.round(reading)+' L) is LOWER than the highest existing reading for '+batch+' / '+room+' ('+Math.round(_maxPrev)+' L). The meter is zeroed per batch and should climb. Save anyway?')) return;
   }
   const _flowEditing = flowEditId != null;
   let rec;
@@ -7154,12 +7154,12 @@ async function flowSave(){
     lsSet('gp-flow', flowRecs);
     flowEditId = null;
     const _fb=document.getElementById('flow-btn'); if(_fb) _fb.textContent='Save Flow Reading';
-    toast('Flow reading updated ('+reading.toFixed(3)+' L)');
+    toast('Flow reading updated ('+Math.round(reading)+' L)');
   } else {
     rec = { id: Date.now(), date, time, room, grower, batch, reading, notes, synced:false };
     flowRecs.unshift(rec);
     lsSet('gp-flow', flowRecs);
-    toast('Flow reading saved ('+reading.toFixed(3)+' L)');
+    toast('Flow reading saved ('+Math.round(reading)+' L)');
   }
   updatePendingBadge();
   ['flow-reading','flow-notes','flow-time'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
@@ -7232,7 +7232,7 @@ async function flowDelete(id){
   const idx = flowRecs.findIndex(r => String(r.id) === String(id));
   if(idx < 0){ toast('Reading not found.'); return; }
   const rec = flowRecs[idx];
-  if(!confirm('Delete this flow reading'+(rec.date?' from '+rec.date:'')+((rec.reading!=null)?' ('+parseFloat(rec.reading).toFixed(3)+' L)':'')+'? This cannot be undone.')) return;
+  if(!confirm('Delete this flow reading'+(rec.date?' from '+rec.date:'')+((rec.reading!=null)?' ('+Math.round(parseFloat(rec.reading))+' L)':'')+'? This cannot be undone.')) return;
   if(rec.airtableId && cfg.flowTbl && cfg.token && cfg.base){
     setSyncPill('ing','Deleting...');
     const ok = await atDelete(cfg.flowTbl, rec.airtableId, true);
@@ -14515,7 +14515,7 @@ function renderBatchReport(batchId){
           grand += delta;
         });
       });
-      const L = v => (Math.round((v||0)*1000)/1000).toFixed(3) + ' L';
+      const L = v => Math.round(v||0) + ' L';
       const phaseOrder = ['Clones / Pre-Veg','Veg','Flower'];
       const phaseRows = phaseOrder.filter(p => byPhase[p] != null).map(p => [p, L(byPhase[p])]);
       phaseRows.push(['Total Water Used', L(grand)]);
