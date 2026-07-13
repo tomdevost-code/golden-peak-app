@@ -5653,14 +5653,14 @@ function postDryPopulateBatches(){
   const cur = sel.value;
   const _pdMomsOnly = momsOnlyFilter('postdry-batch-select');
   const eligible = batchRecs
-    .filter(b => !b.type && b.plantPhase === 'Drying' && !isBatchClosedRec(b))
+    .filter(b => !b.type && (b.plantPhase === 'Drying' || b.plantPhase === 'Packaged') && !isBatchClosedRec(b))
     .filter(b => _pdMomsOnly === isMotherBatch(b.batchId))  // moms toggle is exclusive
-    .map(b => b.batchId)
-    .sort();
+    .slice()
+    .sort((a,b)=> (a.batchId||'').localeCompare(b.batchId||''));
   sel.innerHTML = '<option value="">-- select batch --</option>' +
-    eligible.map(id => '<option'+(id===cur?' selected':'')+'>'+id+'</option>').join('');
+    eligible.map(b => '<option value="'+b.batchId+'"'+(b.batchId===cur?' selected':'')+'>'+b.batchId+(b.plantPhase==='Packaged'?' (packaged — add late sample)':'')+'</option>').join('');
   if(!eligible.length){
-    sel.innerHTML = '<option value="">No batches in Drying phase</option>';
+    sel.innerHTML = '<option value="">No batches in Drying or Packaged phase</option>';
   } else {
     autoSelectIfSingle('postdry-batch-select');
   }
@@ -5735,6 +5735,18 @@ async function postDrySave(){
     };
     postDryRecs.unshift(rec);
     lsSet('gp-postdry', postDryRecs);
+  }
+  // If the batch has already been Completed (Packaged), keep its Post-Drying Weight total in step
+  // with its containers so a late retention/COA sample is reflected, and re-sync the batch.
+  {
+    const _pdB = batchRecs.find(r => r.batchId === batch && !r.type);
+    if(_pdB && _pdB.plantPhase === 'Packaged'){
+      const _tot = postDryRecs.filter(r => r.batch === batch).reduce((s,r)=> s + (parseFloat(r.netWeight)||0), 0);
+      _pdB.postDryingWeight = Math.round(_tot * 1000) / 1000;
+      _pdB.synced = false;
+      lsSet('gp-batch', batchRecs);
+      if(cfg.batchTbl){ try { await atUpsert(cfg.batchTbl, buildBatchFields(_pdB), ['Batch ID']); _pdB.synced = true; lsSet('gp-batch', batchRecs); } catch(_){} }
+    }
   }
   // Clear the per-bin fields; keep grower + batch + date for the next container
   document.getElementById('postdry-tare').value = '';
@@ -5880,6 +5892,13 @@ async function postDryComplete(){
   // Drying → Packaged, sets Package Date, records a Phase Change tx, and syncs.
   const batch = document.getElementById('postdry-batch-select').value;
   if(!batch){ toast('Select a batch first.'); return; }
+  // Already-packaged (non-mom) batch: don't re-advance or re-stamp. A late sample added via
+  // Save Container already updates the Post-Drying Weight total; completing again is unnecessary.
+  const _pdDone = batchRecs.find(r => r.batchId === batch && !r.type);
+  if(_pdDone && _pdDone.plantPhase === 'Packaged' && !isMotherBatch(batch)){
+    toast(batch+' is already packaged. Add the container with Save Container — no need to Complete again.', 5500);
+    return;
+  }
   // Rule: a batch cannot be packaged unless it has been harvested. We enforce this by checking
   // for at least one Harvested transaction AND a stamped harvestDate on the batch record.
   const _batchRec = batchRecs.find(r => r.batchId === batch && !r.type);
