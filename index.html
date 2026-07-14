@@ -8618,9 +8618,9 @@ async function syncPending(){
   const pendingFlow=flowRecs.filter(r=>!r.synced);
   const pendingDestroy=destroyRecs.filter(r=>!r.synced);
   const total=pendingEC.length+pendingRO.length+pendingWaste.length+pendingBatch.length+pendingBatchTx.length+pendingHarvest.length+pendingPostDry.length+pendingBio.length+pendingPest.length+pendingSanClean.length+pendingSanTool.length+pendingSanEdits.length+pendingSeedInv.length+pendingFlow.length+pendingDestroy.length;
-  if(!total){st.style.display='block';st.style.background='var(--green-pale)';st.style.color='var(--green)';st.textContent='No pending records - everything is synced.';updatePendingBadge();return;}
-  st.style.display='block';st.style.background='var(--bg2)';st.style.color='var(--text2)';st.textContent='Syncing '+total+' record(s)...';
-  btn.disabled=true;setSyncPill('ing','Syncing...');
+  if(!total){if(st){st.style.display='block';st.style.background='var(--green-pale)';st.style.color='var(--green)';st.textContent='No pending records - everything is synced.';}updatePendingBadge();return;}
+  if(st){st.style.display='block';st.style.background='var(--bg2)';st.style.color='var(--text2)';st.textContent='Syncing '+total+' record(s)...';}
+  if(btn) btn.disabled=true;setSyncPill('ing','Syncing...');
   let ok=0,fail=0,lastErr='';
   for(const rec of pendingEC){
     try{
@@ -8802,10 +8802,10 @@ async function syncPending(){
     }catch(e){fail++;lastErr='Milestones: '+e.message;}
   }
   updatePendingBadge();
-  btn.disabled=false;
-  if(fail===0){setSyncPill('ok','Synced');st.style.background='var(--green-pale)';st.style.color='var(--green)';st.textContent='Done! '+ok+' record(s) synced to Airtable.';}
-  else if(ok>0){setSyncPill('err','Partial sync');st.style.background='var(--amber-pale)';st.style.color='var(--amber)';st.textContent=ok+' synced, '+fail+' failed. Check connection and retry.';}
-  else{setSyncPill('err','Sync failed');st.style.background='var(--red-pale)';st.style.color='var(--red)';st.textContent='Sync failed: '+(lastErr||'Check your Airtable connection.');}
+  if(btn) btn.disabled=false;
+  if(fail===0){setSyncPill('ok','Synced');if(st){st.style.background='var(--green-pale)';st.style.color='var(--green)';st.textContent='Done! '+ok+' record(s) synced.';}}
+  else if(ok>0){setSyncPill('err','Partial sync');if(st){st.style.background='var(--amber-pale)';st.style.color='var(--amber)';st.textContent=ok+' synced, '+fail+' failed. Retry.';}}
+  else{setSyncPill('err','Sync failed');if(st){st.style.background='var(--red-pale)';st.style.color='var(--red)';st.textContent='Sync failed: '+(lastErr||'');}}
 }
 function applySettings(){const _t=document.getElementById('s-token'); if(_t) _t.value=cfg.token||'';const _b=document.getElementById('s-base'); if(_b) _b.value=cfg.base||'';}
 async function saveSettings(){cfg=Object.assign({},cfg,{token:(document.getElementById('s-token')?.value||'').trim(),base:(document.getElementById('s-base')?.value||'').trim()});lsSet('gp-cfg',cfg);applySettings();const st=document.getElementById('conn-status');if(st){st.style.display='block';st.style.background='var(--green-pale)';st.style.color='var(--green)';st.textContent='Credentials saved.';}}
@@ -16991,6 +16991,16 @@ function buildSeedInvFields(rec){
     try{ await hydrate(); }catch(e){ console.error('[sbRefresh]', e); return; }
     try{ if(typeof loadAll==='function') loadAll(); }catch(_){}
     ['populateBatchDropdowns','updatePendingBadge','renderBatchLog','summaryPopulateBatches','renderWaste','renderEC','renderRO','destroyRenderPending','destroyRenderHistory','seedInvRenderList','renderWasteReport','phenoRenderPlants'].forEach(fn=>{ try{ if(typeof window[fn]==='function') window[fn](); }catch(_){} });
+    // Push any locally-corrected records up to Supabase so fixes persist and the pending badge
+    // clears. A boot reconciler can zero a phantom batch balance and flag that batch unsynced;
+    // without a push it would recur every load. Batches use an idempotent upsert (safe to repeat).
+    try{
+      if(typeof batchRecs!=='undefined' && typeof buildBatchFields==='function' && typeof atUpsert==='function'){
+        const _pend = batchRecs.filter(b=>b && !b.synced && !b.type);
+        for(const _b of _pend){ try{ await atUpsert(cfg.batchTbl, buildBatchFields(_b), ['Batch ID']); _b.synced=true; }catch(_){} }
+        if(_pend.length){ try{ lsSet('gp-batch', batchRecs); }catch(_){} try{ if(typeof updatePendingBadge==='function') updatePendingBadge(); }catch(_){} }
+      }
+    }catch(_){}
   }
   pullFromAirtable = async function(){ await sbRefresh('manual'); };   // the "Pull now" button now refreshes from Supabase
   let _rtTimer=null, _rtChannel=null, _rtRetry=null, _rtCatchup=false, _liveWired=false, _lastAutoRefresh=0;
