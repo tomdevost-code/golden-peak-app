@@ -1805,17 +1805,16 @@ tr:last-child td { border-bottom: none; }
     <!-- SETTINGS -->
     <div class="page" id="page-pheno" data-section="cultivation">
       <div class="card">
-        <div class="section-label">Pheno Hunt</div>
-        <p style="font-size:11px;color:var(--text3);margin:0 0 12px;line-height:1.4;">Pick a batch, add each plant you're evaluating, then log dated observations and set a Keep / Winner / Cull status and rating per plant.</p>
+        <div class="section-label">Pheno Info</div>
+        <p style="font-size:11px;color:var(--text3);margin:0 0 12px;line-height:1.4;">Seed batches track each individual pheno; production and mother batches track a single plant. Pick a batch, then log dated observations, ratings and notes.</p>
         <div class="field"><label>Batch</label>
           <select id="pheno-batch" onchange="phenoBatchChanged()"><option value="">-- select batch --</option></select>
         </div>
-        <div id="pheno-add-plant" style="display:none;">
-          <div class="field"><label>Add plant <span style="font-size:10px;color:var(--text3);font-weight:400;">— optional tag / nickname</span></label>
-            <input id="pheno-new-tag" placeholder="optional tag or nickname" />
-          </div>
-          <button type="button" class="btn-save" onclick="phenoAddPlant()">+ Add Plant</button>
+        <div style="display:flex;gap:8px;margin:0 0 10px;">
+          <button type="button" id="pheno-filter-moms" class="btn-secondary" onclick="phenoToggleMoms()" style="flex:1;font-size:12px;">Hide mothers</button>
+          <button type="button" id="pheno-filter-closed" class="btn-secondary" onclick="phenoToggleClosed()" style="flex:1;font-size:12px;">Show closed</button>
         </div>
+        <div id="pheno-add-plant" style="display:none;"></div>
       </div>
       <div id="pheno-plants"></div>
     </div>
@@ -8819,56 +8818,91 @@ document.getElementById('ro-date').value=today;
 // ── TEMP BOOT INSTRUMENTATION (remove once the freeze is diagnosed) ──────────────
 // Times each synchronous boot step and logs record counts, so a plain refresh prints
 // exactly which step eats the 30-45s freeze. Open DevTools → Console to read it.
-// ═══ PHENO HUNT ═══════════════════════════════════════════════════════════════
-// Track individual plants during a pheno hunt: per-plant Keep/Winner/Cull status +
-// star rating, and a timeline of dated observations (grower, structured traits, notes).
-// Supabase-native — reads/writes go through window.__SBC and hydrate/realtime like everything else.
+// ═══ PHENO INFO ═══════════════════════════════════════════════════════════════
+// Two modes, chosen automatically by batch type:
+//   • Seeds batch (S-xxx)  → PHENO HUNT: track many individual plants from the same seed strain.
+//   • Production / Mother  → SINGLE PLANT: one plant per batch (these are already winners).
+// Per plant: Keep/Winner/Cull status (hunt mode only) + star rating + a timeline of dated
+// observations (grower, structured traits, notes). Supabase-native via window.__SBC.
 let phenoSelBatch = '';
+let phenoMode = 'hunt';
+let phenoHideMoms = false;
+let phenoShowClosed = false;
 function _phenoSB(){ return (typeof window!=='undefined' && window.__SBC) ? window.__SBC : null; }
 const PHENO_STATUS = ['Undecided','Keep','Winner','Cull'];
 const PHENO_STATUS_COLOR = { 'Undecided':'var(--text3)', 'Keep':'var(--green)', 'Winner':'#B8860B', 'Cull':'var(--red)' };
 function _phenoEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function _phenoIsClosed(b){ return (typeof isBatchClosedRec==='function') ? isBatchClosedRec(b) : (!!b.closedDate || (b.status && b.status!=='Open')); }
+function _phenoCultivar(batch){ const b = batchRecs.find(x=>x.batchId===batch && !x.type); return b ? (b.cultivar||'') : ''; }
 
-function phenoEnter(){ phenoPopulateBatches(); phenoBatchChanged(); }
+function phenoEnter(){ phenoPopulateBatches(); phenoSyncFilterBtns(); phenoBatchChanged(); }
+function phenoToggleMoms(){ phenoHideMoms = !phenoHideMoms; phenoSyncFilterBtns(); phenoPopulateBatches(); }
+function phenoToggleClosed(){ phenoShowClosed = !phenoShowClosed; phenoSyncFilterBtns(); phenoPopulateBatches(); }
+function phenoSyncFilterBtns(){
+  const m = document.getElementById('pheno-filter-moms');
+  const c = document.getElementById('pheno-filter-closed');
+  if(m){ m.textContent = phenoHideMoms ? '✓ Mothers hidden' : 'Hide mothers'; m.style.background = phenoHideMoms ? 'var(--green)' : ''; m.style.color = phenoHideMoms ? '#fff' : ''; m.style.borderColor = phenoHideMoms ? 'var(--green)' : ''; }
+  if(c){ c.textContent = phenoShowClosed ? '✓ Showing closed' : 'Show closed'; c.style.background = phenoShowClosed ? 'var(--green)' : ''; c.style.color = phenoShowClosed ? '#fff' : ''; c.style.borderColor = phenoShowClosed ? 'var(--green)' : ''; }
+}
 function phenoPopulateBatches(){
   const sel = document.getElementById('pheno-batch'); if(!sel) return;
   const cur = sel.value;
-  const ids = batchRecs.filter(b=>b && b.batchId && !b.closedDate).map(b=>b.batchId).sort();
+  const ids = batchRecs.filter(b=>{
+    if(!b || !b.batchId) return false;
+    if(!phenoShowClosed && _phenoIsClosed(b)) return false;
+    if(phenoHideMoms && isMotherBatch(b.batchId)) return false;
+    return true;
+  }).map(b=>b.batchId).sort();
   sel.innerHTML = '<option value="">-- select batch --</option>' + ids.map(id=>`<option value="${_phenoEsc(id)}">${_phenoEsc(id)}</option>`).join('');
-  if(cur && ids.includes(cur)) sel.value = cur;
+  if(cur && ids.includes(cur)){ sel.value = cur; } else if(cur){ sel.value=''; phenoBatchChanged(); }
 }
 function phenoBatchChanged(){
   phenoSelBatch = (document.getElementById('pheno-batch')||{}).value || '';
-  const add = document.getElementById('pheno-add-plant'); if(add) add.style.display = phenoSelBatch ? '' : 'none';
+  phenoMode = (phenoSelBatch && typeof isSeedsBatchId==='function' && isSeedsBatchId(phenoSelBatch)) ? 'hunt' : 'single';
+  phenoRenderAddArea();
   phenoRenderPlants();
 }
-
+function phenoRenderAddArea(){
+  const el = document.getElementById('pheno-add-plant'); if(!el) return;
+  if(!phenoSelBatch){ el.style.display='none'; el.innerHTML=''; return; }
+  if(phenoMode==='hunt'){
+    el.style.display='';
+    el.innerHTML = '<div class="field"><label>Add plant <span style="font-size:10px;color:var(--text3);font-weight:400;">— optional tag / nickname</span></label><input id="pheno-new-tag" placeholder="optional tag or nickname" /></div><button type="button" class="btn-save" onclick="phenoAddPlant()">+ Add Plant</button>';
+  } else {
+    const has = phenoPlantRecs.some(p=>p.batch===phenoSelBatch);
+    if(has){ el.style.display='none'; el.innerHTML=''; }
+    else { el.style.display=''; el.innerHTML = '<p style="font-size:11px;color:var(--text3);margin:0 0 8px;line-height:1.4;">Production / mother batch — tracked as a single plant.</p><button type="button" class="btn-save" onclick="phenoAddPlant()">+ Start tracking this batch</button>'; }
+  }
+}
 async function phenoAddPlant(){
   const batch = phenoSelBatch; if(!batch){ toast('Select a batch first.'); return; }
-  const tag = ((document.getElementById('pheno-new-tag')||{}).value || '').trim();
+  if(phenoMode==='single' && phenoPlantRecs.some(p=>p.batch===batch)){ toast('Already tracking this batch.'); return; }
+  const tag = (phenoMode==='hunt') ? (((document.getElementById('pheno-new-tag')||{}).value)||'').trim() : '';
   const nums = phenoPlantRecs.filter(p=>p.batch===batch).map(p=>parseInt(p.plantNumber)||0);
   const next = (nums.length ? Math.max.apply(null, nums) : 0) + 1;
+  const initStatus = (phenoMode==='single') ? 'Winner' : 'Undecided';
   const sb = _phenoSB(); if(!sb){ toast('Not connected — sign in first.'); return; }
   try{
-    const { data, error } = await sb.from('pheno_plants').insert({ batch_id:batch, plant_number:next, tag:tag||null, status:'Undecided', rating:0 }).select().single();
+    const { data, error } = await sb.from('pheno_plants').insert({ batch_id:batch, plant_number:next, tag:tag||null, status:initStatus, rating:0 }).select().single();
     if(error) throw error;
-    phenoPlantRecs.push({ id:data.id, batch:batch, plantNumber:next, tag:tag, status:'Undecided', rating:0, notes:'', synced:true });
+    phenoPlantRecs.push({ id:data.id, batch:batch, plantNumber:next, tag:tag, status:initStatus, rating:0, notes:'', synced:true });
     lsSet('gp-phenoplant', phenoPlantRecs);
     const t = document.getElementById('pheno-new-tag'); if(t) t.value='';
-    phenoRenderPlants();
-    toast('Added Plant '+next+' to '+batch+'.');
-  }catch(e){ toast('Could not add plant: '+(e.message||e), 5000); }
+    phenoRenderAddArea(); phenoRenderPlants();
+    toast(phenoMode==='single' ? ('Now tracking '+batch+'.') : ('Added Plant '+next+' to '+batch+'.'));
+  }catch(e){ toast('Could not add: '+(e.message||e), 5000); }
 }
 async function phenoDeletePlant(id){
   const p = phenoPlantRecs.find(x=>x.id===id); if(!p) return;
-  if(!confirm('Delete Plant '+p.plantNumber+(p.tag?(' ('+p.tag+')'):'')+' and all its observations?')) return;
+  const label = (phenoMode==='single') ? ('this batch ('+p.batch+')') : ('Plant '+p.plantNumber+(p.tag?(' ('+p.tag+')'):''));
+  if(!confirm('Stop tracking '+label+' and delete all its observations?')) return;
   const sb = _phenoSB(); if(!sb){ toast('Not connected.'); return; }
   try{
     const { error } = await sb.from('pheno_plants').delete().eq('id', id); if(error) throw error;
     phenoPlantRecs = phenoPlantRecs.filter(x=>x.id!==id);
     phenoObsRecs = phenoObsRecs.filter(o=>o.plantId!==id);
     lsSet('gp-phenoplant', phenoPlantRecs); lsSet('gp-phenoobs', phenoObsRecs);
-    phenoRenderPlants();
+    phenoRenderAddArea(); phenoRenderPlants();
   }catch(e){ toast('Delete failed: '+(e.message||e),5000); }
 }
 async function phenoSetStatus(id, status){
@@ -8931,16 +8965,29 @@ function phenoObsList(plantId){
 function _phenoGrowerOpts(){ return ['','Jordan Elliott','Brandon Cail','Tom Devost'].map(g=>`<option value="${g}">${g||'-- grower --'}</option>`).join(''); }
 function phenoPlantCard(p){
   const pid=p.id;
-  return `<div class="card" style="margin-bottom:12px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><div style="font-weight:600;">Plant ${p.plantNumber}${p.tag?(' <span style="font-size:12px;color:var(--text3);font-weight:400;">· '+_phenoEsc(p.tag)+'</span>'):''}</div><button type="button" onclick="phenoDeletePlant('${pid}')" style="font-size:11px;padding:2px 8px;border:1px solid var(--red);background:var(--red-pale);color:var(--red);border-radius:var(--radius-sm);cursor:pointer;">Delete plant</button></div><div style="margin-bottom:6px;">${phenoStatusPills(p)}</div><div style="margin-bottom:10px;">${phenoStars(p)}</div><div style="font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;margin-bottom:2px;">Observations</div>${phenoObsList(pid)}<details style="margin-top:8px;"><summary style="cursor:pointer;font-size:12px;color:var(--green);font-weight:600;">+ Add observation</summary><div style="margin-top:8px;"><div class="g2"><div class="field"><label>Date</label><input type="date" id="pheno-o-date-${pid}" value="${localDate()}" /></div><div class="field"><label>Grower</label><select id="pheno-o-grower-${pid}">${_phenoGrowerOpts()}</select></div></div><div class="g2"><div class="field"><label>Vigor</label><input id="pheno-o-vigor-${pid}" placeholder="e.g. strong, slow" /></div><div class="field"><label>Structure</label><input id="pheno-o-structure-${pid}" placeholder="e.g. bushy, tight nodes" /></div></div><div class="g2"><div class="field"><label>Aroma</label><input id="pheno-o-aroma-${pid}" placeholder="e.g. gas, citrus, earthy" /></div><div class="field"><label>Color</label><input id="pheno-o-color-${pid}" placeholder="e.g. green, purple hues" /></div></div><div class="field"><label>Trichomes</label><input id="pheno-o-trich-${pid}" placeholder="e.g. frosty, sparse" /></div><div class="field"><label>Notes</label><textarea id="pheno-o-notes-${pid}" rows="2" style="width:100%;font-family:var(--sans);font-size:14px;border-radius:var(--radius-sm);border:1px solid var(--border);padding:8px;background:var(--card);color:var(--text);"></textarea></div><button type="button" class="btn-save" onclick="phenoAddObs('${pid}')">Add observation</button></div></details></div>`;
+  const heading = (phenoMode==='single')
+    ? (_phenoEsc(_phenoCultivar(p.batch) || p.batch) + ' <span style="font-size:12px;color:var(--text3);font-weight:400;">· '+_phenoEsc(p.batch)+'</span>')
+    : ('Plant '+p.plantNumber+(p.tag?(' <span style="font-size:12px;color:var(--text3);font-weight:400;">· '+_phenoEsc(p.tag)+'</span>'):''));
+  const statusRow = (phenoMode==='single') ? '' : ('<div style="margin-bottom:6px;">'+phenoStatusPills(p)+'</div>');
+  const delLabel = (phenoMode==='single') ? 'Stop tracking' : 'Delete plant';
+  return `<div class="card" style="margin-bottom:12px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><div style="font-weight:600;">${heading}</div><button type="button" onclick="phenoDeletePlant('${pid}')" style="font-size:11px;padding:2px 8px;border:1px solid var(--red);background:var(--red-pale);color:var(--red);border-radius:var(--radius-sm);cursor:pointer;">${delLabel}</button></div>${statusRow}<div style="margin-bottom:10px;">${phenoStars(p)}</div><div style="font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;margin-bottom:2px;">Observations</div>${phenoObsList(pid)}<details style="margin-top:8px;"><summary style="cursor:pointer;font-size:12px;color:var(--green);font-weight:600;">+ Add observation</summary><div style="margin-top:8px;"><div class="g2"><div class="field"><label>Date</label><input type="date" id="pheno-o-date-${pid}" value="${localDate()}" /></div><div class="field"><label>Grower</label><select id="pheno-o-grower-${pid}">${_phenoGrowerOpts()}</select></div></div><div class="g2"><div class="field"><label>Vigor</label><input id="pheno-o-vigor-${pid}" placeholder="e.g. strong, slow" /></div><div class="field"><label>Structure</label><input id="pheno-o-structure-${pid}" placeholder="e.g. bushy, tight nodes" /></div></div><div class="g2"><div class="field"><label>Aroma</label><input id="pheno-o-aroma-${pid}" placeholder="e.g. gas, citrus, earthy" /></div><div class="field"><label>Color</label><input id="pheno-o-color-${pid}" placeholder="e.g. green, purple hues" /></div></div><div class="field"><label>Trichomes</label><input id="pheno-o-trich-${pid}" placeholder="e.g. frosty, sparse" /></div><div class="field"><label>Notes</label><textarea id="pheno-o-notes-${pid}" rows="2" style="width:100%;font-family:var(--sans);font-size:14px;border-radius:var(--radius-sm);border:1px solid var(--border);padding:8px;background:var(--card);color:var(--text);"></textarea></div><button type="button" class="btn-save" onclick="phenoAddObs('${pid}')">Add observation</button></div></details></div>`;
 }
 function phenoRenderPlants(){
   const wrap = document.getElementById('pheno-plants'); if(!wrap) return;
   const batch = phenoSelBatch || (document.getElementById('pheno-batch')||{}).value || '';
   if(!batch){ wrap.innerHTML=''; return; }
   const plants = phenoPlantRecs.filter(p=>p.batch===batch).slice().sort((a,b)=>(a.plantNumber||0)-(b.plantNumber||0));
-  if(!plants.length){ wrap.innerHTML = '<div class="card"><div style="font-size:12px;color:var(--text3);">No plants added yet — use “+ Add Plant” above.</div></div>'; return; }
-  const winners=plants.filter(p=>p.status==='Winner').length, keeps=plants.filter(p=>p.status==='Keep').length, culls=plants.filter(p=>p.status==='Cull').length;
-  const summary = `<div class="card" style="margin-bottom:12px;"><div style="font-size:12px;color:var(--text2);">${plants.length} plant${plants.length===1?'':'s'} · <b style="color:#B8860B;">${winners}</b> winner${winners===1?'':'s'} · <b style="color:var(--green);">${keeps}</b> keep · <b style="color:var(--red);">${culls}</b> cull</div></div>`;
+  if(!plants.length){
+    wrap.innerHTML = (phenoMode==='single')
+      ? ''
+      : '<div class="card"><div style="font-size:12px;color:var(--text3);">No plants added yet — use “+ Add Plant” above.</div></div>';
+    return;
+  }
+  let summary = '';
+  if(phenoMode==='hunt'){
+    const winners=plants.filter(p=>p.status==='Winner').length, keeps=plants.filter(p=>p.status==='Keep').length, culls=plants.filter(p=>p.status==='Cull').length;
+    summary = `<div class="card" style="margin-bottom:12px;"><div style="font-size:12px;color:var(--text2);">${plants.length} plant${plants.length===1?'':'s'} · <b style="color:#B8860B;">${winners}</b> winner${winners===1?'':'s'} · <b style="color:var(--green);">${keeps}</b> keep · <b style="color:var(--red);">${culls}</b> cull</div></div>`;
+  }
   wrap.innerHTML = summary + plants.map(phenoPlantCard).join('');
 }
 
