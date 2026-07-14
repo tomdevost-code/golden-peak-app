@@ -1810,10 +1810,9 @@ tr:last-child td { border-bottom: none; }
         <div class="field"><label>Batch</label>
           <select id="pheno-batch" onchange="phenoBatchChanged()"><option value="">-- select batch --</option></select>
         </div>
-        <div style="display:flex;gap:8px;margin:0 0 10px;">
-          <button type="button" id="pheno-filter-moms" class="btn-secondary" onclick="phenoToggleMoms()" style="flex:1;font-size:12px;">Hide mothers</button>
-          <button type="button" id="pheno-filter-closed" class="btn-secondary" onclick="phenoToggleClosed()" style="flex:1;font-size:12px;">Show closed</button>
-        </div>
+        <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);margin:2px 0 10px;cursor:pointer;">
+          <input type="checkbox" id="pheno-show-closed" onchange="phenoPopulateBatches()"> Closed only
+        </label>
         <div id="pheno-add-plant" style="display:none;"></div>
       </div>
       <div id="pheno-plants"></div>
@@ -1990,7 +1989,7 @@ tr:last-child td { border-bottom: none; }
     </button>
     <button class="bnav-btn" id="bn-pheno" onclick="switchPage('pheno',this)">
       <svg viewBox="0 0 24 24"><path d="M12 2C7 7 7 13 12 22 17 13 17 7 12 2z"/></svg>
-      Pheno
+      Pheno Info
     </button>
     <button class="bnav-btn active" id="bn-batch" onclick="switchPage('batch',this)">
       <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
@@ -6267,7 +6266,7 @@ function populateBatchDropdowns(){
 const MOMS_FILTER_SELECTS = [
   'ec-batch-select','ro-batch-select','waste-batch-select',
   'harvest-batch-select','postdry-batch-select','bio-batch-select',
-  'pest-batch-select','summary-batch-select'
+  'pest-batch-select','summary-batch-select','pheno-batch'
 ];
 const MOMS_FILTER_REPOP = {
   'ec-batch-select':      ()=>populateBatchDropdowns(),
@@ -6277,7 +6276,8 @@ const MOMS_FILTER_REPOP = {
   'postdry-batch-select': ()=>{ if(typeof postDryPopulateBatches==='function')  postDryPopulateBatches(); },
   'bio-batch-select':     ()=>{ if(typeof bioPopulateBatches==='function')      bioPopulateBatches(); },
   'pest-batch-select':    ()=>{ if(typeof pestPopulateBatches==='function')     pestPopulateBatches(); },
-  'summary-batch-select': ()=>{ if(typeof summaryPopulateBatches==='function')  summaryPopulateBatches(); }
+  'summary-batch-select': ()=>{ if(typeof summaryPopulateBatches==='function')  summaryPopulateBatches(); },
+  'pheno-batch': ()=>{ if(typeof phenoPopulateBatches==='function') phenoPopulateBatches(); }
 };
 
 function momsOnlyFilter(selectId){
@@ -8826,8 +8826,6 @@ document.getElementById('ro-date').value=today;
 // observations (grower, structured traits, notes). Supabase-native via window.__SBC.
 let phenoSelBatch = '';
 let phenoMode = 'hunt';
-let phenoHideMoms = false;
-let phenoShowClosed = false;
 function _phenoSB(){ return (typeof window!=='undefined' && window.__SBC) ? window.__SBC : null; }
 const PHENO_STATUS = ['Undecided','Keep','Winner','Cull'];
 const PHENO_STATUS_COLOR = { 'Undecided':'var(--text3)', 'Keep':'var(--green)', 'Winner':'#B8860B', 'Cull':'var(--red)' };
@@ -8835,22 +8833,16 @@ function _phenoEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g, c=>({'&':'
 function _phenoIsClosed(b){ return (typeof isBatchClosedRec==='function') ? isBatchClosedRec(b) : (!!b.closedDate || (b.status && b.status!=='Open')); }
 function _phenoCultivar(batch){ const b = batchRecs.find(x=>x.batchId===batch && !x.type); return b ? (b.cultivar||'') : ''; }
 
-function phenoEnter(){ phenoPopulateBatches(); phenoSyncFilterBtns(); phenoBatchChanged(); }
-function phenoToggleMoms(){ phenoHideMoms = !phenoHideMoms; phenoSyncFilterBtns(); phenoPopulateBatches(); }
-function phenoToggleClosed(){ phenoShowClosed = !phenoShowClosed; phenoSyncFilterBtns(); phenoPopulateBatches(); }
-function phenoSyncFilterBtns(){
-  const m = document.getElementById('pheno-filter-moms');
-  const c = document.getElementById('pheno-filter-closed');
-  if(m){ m.textContent = phenoHideMoms ? '✓ Mothers hidden' : 'Hide mothers'; m.style.background = phenoHideMoms ? 'var(--green)' : ''; m.style.color = phenoHideMoms ? '#fff' : ''; m.style.borderColor = phenoHideMoms ? 'var(--green)' : ''; }
-  if(c){ c.textContent = phenoShowClosed ? '✓ Showing closed' : 'Show closed'; c.style.background = phenoShowClosed ? 'var(--green)' : ''; c.style.color = phenoShowClosed ? '#fff' : ''; c.style.borderColor = phenoShowClosed ? 'var(--green)' : ''; }
-}
+function phenoEnter(){ phenoPopulateBatches(); phenoBatchChanged(); }
 function phenoPopulateBatches(){
   const sel = document.getElementById('pheno-batch'); if(!sel) return;
+  const closedOnly = !!((document.getElementById('pheno-show-closed')||{}).checked);
+  const momsOnly = (typeof momsOnlyFilter === 'function') && momsOnlyFilter('pheno-batch');
   const cur = sel.value;
   const ids = batchRecs.filter(b=>{
-    if(!b || !b.batchId) return false;
-    if(!phenoShowClosed && _phenoIsClosed(b)) return false;
-    if(phenoHideMoms && isMotherBatch(b.batchId)) return false;
+    if(!b || b.type || !b.batchId) return false;
+    if(closedOnly ? !b.closedDate : !!b.closedDate) return false;   // exclusive: open-only or closed-only
+    if(momsOnly !== isMotherBatch(b.batchId)) return false;         // exclusive: moms-only or non-moms
     return true;
   }).map(b=>b.batchId).sort();
   sel.innerHTML = '<option value="">-- select batch --</option>' + ids.map(id=>`<option value="${_phenoEsc(id)}">${_phenoEsc(id)}</option>`).join('');
