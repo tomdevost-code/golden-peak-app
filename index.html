@@ -1073,6 +1073,10 @@ tr:last-child td { border-bottom: none; }
               <label>Flower Start <span style="font-size:10px;color:var(--text3);font-weight:400;">(drives F-day)</span></label>
               <input type="date" id="summary-flower-start-edit" style="font-size:14px;font-family:var(--mono);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;" />
             </div>
+            <div class="field">
+              <label>Delivered Date <span style="font-size:10px;color:var(--text3);font-weight:400;">(actual delivery date)</span></label>
+              <input type="date" id="summary-delivered-date-edit" style="font-size:14px;font-family:var(--mono);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;" />
+            </div>
           </div>
           <button type="button" class="btn-secondary" onclick="summaryReconcileFromHistory()" style="width:100%;margin-bottom:12px;font-size:12px;">⟲ Reconcile phase &amp; dates from transaction history</button>
 
@@ -3680,7 +3684,7 @@ function calcBatchQty(batchId){
   }
   return Math.max(0,qty);
 }
-async function recordPhaseChangeTx(batchId, fromPhase, toPhase, weight){
+async function recordPhaseChangeTx(batchId, fromPhase, toPhase, weight, dateOverride){
   // Creates a 'Phase Change' transaction in batchTxRecs to audit-trail phase transitions.
   // qty=0 so it doesn't affect the running balance. Notes describe the transition.
   // Optional `weight` is captured for milestone phases (e.g. Drying → Packaged stamps the total
@@ -3689,7 +3693,7 @@ async function recordPhaseChangeTx(batchId, fromPhase, toPhase, weight){
   const tx = {
     id: Date.now() + Math.floor(Math.random()*1000),
     batchId,
-    date: localDate(),
+    date: (dateOverride && /^\d{4}-\d{2}-\d{2}$/.test(dateOverride)) ? dateOverride : localDate(),
     txType: 'Phase Change',
     qty: 0,
     weight: (typeof weight === 'number' && weight > 0) ? Math.round(weight*1000)/1000 : 0,
@@ -11614,6 +11618,7 @@ function summaryBatchChanged(){
   const _scu=document.getElementById('summary-cultivar'); if(_scu) _scu.value = b.cultivar||'';
   const _svs=document.getElementById('summary-veg-start-edit'); if(_svs) _svs.value = b.vegStart||'';
   const _sfs=document.getElementById('summary-flower-start-edit'); if(_sfs) _sfs.value = b.flowerStart||'';
+  const _sdd=document.getElementById('summary-delivered-date-edit'); if(_sdd) _sdd.value = b.deliveredDate||'';
   summaryUpdatePhaseOptions(b.plantPhase||'', _curQty);
   document.getElementById('summary-status').value = b.status||'Open';
   applyPhaseRoomLock();
@@ -13587,15 +13592,37 @@ async function summaryUpdateBatch(){
   { const _e=document.getElementById('summary-flower-start-edit'); if(_e) batchRecs[idx].flowerStart = _e.value || ''; }
   batchRecs[idx].harvestDate = _autoHarvest;
   batchRecs[idx].packagedDate = _autoPackaged;
-  // Delivered Date is auto-set when phase advances to Delivered (above). No user input.
+  // Delivered Date auto-stamps to today when the phase advances to Delivered. The editable field
+  // below lets the grower correct it to the ACTUAL delivery date (e.g. delivered yesterday, recorded
+  // today). Only applied for a delivered batch so a stray value can't stamp one early.
   batchRecs[idx].deliveredDate = _autoDelivered;
+  { const _e = document.getElementById('summary-delivered-date-edit');
+    if(_e && _e.value && (plantPhase === 'Delivered' || batchRecs[idx].deliveredDate)) batchRecs[idx].deliveredDate = _e.value; }
   // soldDate is set when the batch's Status is set to Closed (treated as "fully sold off")
   if(status === 'Closed' && !batchRecs[idx].soldDate) batchRecs[idx].soldDate = (closedDate || _t);
   lsSet('gp-batch', batchRecs);
-  // Record an audit-trail phase change transaction when the saved phase differs from the prior phase
+  // Record an audit-trail phase change transaction when the saved phase differs from the prior phase.
+  // Advancing to Delivered stamps the tx with the ACTUAL delivery date rather than today.
   if(plantPhase && plantPhase !== existingPhase){
-    recordPhaseChangeTx(batchId, existingPhase, plantPhase);
+    recordPhaseChangeTx(batchId, existingPhase, plantPhase, undefined,
+      (plantPhase === 'Delivered' ? batchRecs[idx].deliveredDate : undefined));
   }
+  // Keep the Delivered phase-change transaction aligned with a corrected delivery date, so the
+  // transaction history and the Batch Info Delivered Date always agree.
+  if(batchRecs[idx].deliveredDate){
+    const _dtx = batchTxRecs.filter(t => t && t.batchId === batchId && t.txType === 'Phase Change' && t.plantPhase === 'Delivered')
+                            .sort((a,b) => (b.id||0) - (a.id||0))[0];
+    if(_dtx && _dtx.date !== batchRecs[idx].deliveredDate){
+      _dtx.date = batchRecs[idx].deliveredDate;
+      _dtx.synced = false;
+      lsSet('gp-batchtx', batchTxRecs);
+      if(_dtx.airtableId && cfg.batchtxTbl && cfg.token && cfg.base){
+        try { await atUpdateById(cfg.batchtxTbl, _dtx.airtableId, { 'Date': _dtx.date }); _dtx.synced = true; lsSet('gp-batchtx', batchTxRecs); } catch(_){}
+      }
+      if(typeof updatePendingBadge === 'function') updatePendingBadge();
+    }
+  }
+  try { if(typeof summaryRenderHistory === 'function') summaryRenderHistory(batchId); } catch(_){}
   summaryPopulateBatches();
   summaryUpdateTxTypeOptions(batchId); // refresh tx-type options based on the newly saved phase
   // Refresh the Batch Info Delivered Date display + apply post-delivery lockdown if needed
