@@ -4340,7 +4340,7 @@ function setAvg(id,val,lo,hi){const el=document.getElementById(id);if(val===null
 function stageLabel(r){if(!r.stage||!r.day)return'<span style="color:var(--text3)">-</span>';return r.stage==='flower'?'<span class="flower-txt">F'+r.day+'</span>':'<span class="veg-txt">V'+r.day+'</span>';}
 function toast(msg,dur){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),dur||2500);}
 
-function switchPage(page,btn){document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.bnav-btn').forEach(b=>b.classList.remove('active'));document.getElementById('page-'+page).classList.add('active');btn.classList.add('active');if(page==='report'){renderEC();renderRO();ctlsDefaultMonth();}if(page==='waste'){renderWaste();}if(page==='batch'){renderBatchLog();}if(page==='summary'){summaryPopulateBatches();}if(page==='harvest'){harvestPopulateBatches();harvestRefreshDate();harvestPopulateBinNumbers();}if(page==='postdry'){postDryPopulateBatches();postDrySetupChanged();}if(page==='bio'){bioRefreshDate();bioSeqUnlock();}if(page==='pest'){pestRefreshDate();pestPopulateBatches();pestSeqUnlock();}if(page==='destroy'){if(typeof destroyEnter==='function')destroyEnter();}if(page==='sancleaning'){sanclEnter();}if(page==='santool'){santoolEnter();}if(page==='seeds'){seedInvEnter();}if(page==='pheno'){phenoEnter();}if(page==='settings'){if(typeof fdRenderMilestones==='function')fdRenderMilestones();}
+function switchPage(page,btn){document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.bnav-btn').forEach(b=>b.classList.remove('active'));document.getElementById('page-'+page).classList.add('active');btn.classList.add('active');if(page==='report'){renderEC();renderRO();ctlsDefaultMonth();}if(page==='waste'){wasteRefreshDate();renderWaste();}if(page==='ec'){ecRefreshDate();}if(page==='ro'){roRefreshDate();}if(page==='batch'){renderBatchLog();}if(page==='summary'){summaryPopulateBatches();}if(page==='harvest'){harvestPopulateBatches();harvestRefreshDate();harvestPopulateBinNumbers();}if(page==='postdry'){postDryPopulateBatches();postDrySetupChanged();}if(page==='bio'){bioRefreshDate();bioSeqUnlock();}if(page==='pest'){pestRefreshDate();pestPopulateBatches();pestSeqUnlock();}if(page==='destroy'){if(typeof destroyEnter==='function')destroyEnter();}if(page==='sancleaning'){sanclEnter();}if(page==='santool'){santoolEnter();}if(page==='seeds'){seedInvEnter();}if(page==='pheno'){phenoEnter();}if(page==='settings'){if(typeof fdRenderMilestones==='function')fdRenderMilestones();}
 
 // After a successful save, clear the batch selection so the next entry forces a re-select.
 // Grower and Date are intentionally left alone — the same person keeps logging on the same day.
@@ -8817,6 +8817,11 @@ function applySettings(){const _t=document.getElementById('s-token'); if(_t) _t.
 async function saveSettings(){cfg=Object.assign({},cfg,{token:(document.getElementById('s-token')?.value||'').trim(),base:(document.getElementById('s-base')?.value||'').trim()});lsSet('gp-cfg',cfg);applySettings();const st=document.getElementById('conn-status');if(st){st.style.display='block';st.style.background='var(--green-pale)';st.style.color='var(--green)';st.textContent='Credentials saved.';}}
 
 function localDate(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+// Re-stamp a page's date box to today's LOCAL date when the page is opened. Without this the value
+// set at boot goes stale on a laptop left running overnight and entries save against yesterday.
+function ecRefreshDate(){ const el=document.getElementById('ec-date'); if(el) el.value=localDate(); }
+function roRefreshDate(){ const el=document.getElementById('ro-date'); if(el) el.value=localDate(); }
+function wasteRefreshDate(){ const el=document.getElementById('waste-date'); if(el) el.value=localDate(); }
 const today=localDate();
 document.getElementById('ec-date').value=today;
 document.getElementById('ro-date').value=today;
@@ -9009,7 +9014,7 @@ function phenoRenderPlants(){
   _bp('initSections', initSections);
   console.log('[boot] total synchronous boot: '+Math.round(performance.now()-_t0)+' ms');
 })();
-document.getElementById('waste-date').value=new Date().toISOString().split('T')[0];
+document.getElementById('waste-date').value=localDate();
 // Kick off auto-sync (60s polling) if Airtable is configured. Idempotent —
 // also re-invoked from saveSettings() so a fresh token starts the timer.
 startAutoSync();
@@ -9393,7 +9398,7 @@ function wasteClear(){
   document.getElementById('waste-weight').value='';
   document.getElementById('waste-plants').value='';document.getElementById('waste-plants').disabled=true;document.getElementById('waste-plants').style.background='var(--bg2)';document.getElementById('waste-plants').style.color='var(--text3)';document.getElementById('waste-plants').style.cursor='not-allowed';
   document.getElementById('waste-notes').value='';
-  document.getElementById('waste-date').value=new Date().toISOString().split('T')[0];
+  document.getElementById('waste-date').value=localDate();
   document.getElementById('waste-room-strip').style.display='none';
   wasteSeqUnlock();
 }
