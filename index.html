@@ -17088,8 +17088,36 @@ function buildSeedInvFields(rec){
     b.appendChild(btn);
     document.body.appendChild(b);
   }
+  // ── Idle auto-logout ──────────────────────────────────────────────────────
+  // Shared facility laptops: sign out after 15 minutes with no interaction so an unattended
+  // session can't be used by someone else. Any mouse / key / touch / scroll resets the timer,
+  // and a warning toast fires a minute out so nobody loses a half-filled form without notice.
+  const IDLE_MS = 15 * 60 * 1000;
+  const IDLE_WARN_MS = 60 * 1000;
+  let _idleT = null, _idleW = null, _idleWired = false, _idleLast = 0;
+  async function idleLogout(){
+    try{ await SBC.auth.signOut(); }catch(_){}
+    try{ sessionStorage.removeItem('sb-hydrated'); }catch(_){}
+    location.reload();
+  }
+  function resetIdle(){
+    const _now = Date.now();
+    if(_now - _idleLast < 5000) return;   // throttle: at most one reset per 5s (mousemove is chatty)
+    _idleLast = _now;
+    clearTimeout(_idleT); clearTimeout(_idleW);
+    _idleW = setTimeout(()=>{ try{ if(typeof toast==='function') toast('Signing out in 1 minute due to inactivity — move the mouse or tap to stay signed in.', 9000); }catch(_){} }, Math.max(0, IDLE_MS - IDLE_WARN_MS));
+    _idleT = setTimeout(idleLogout, IDLE_MS);
+  }
+  function startIdleWatch(){
+    if(_idleWired) return;
+    _idleWired = true;
+    ['mousemove','mousedown','keydown','touchstart','scroll','click'].forEach(ev =>
+      document.addEventListener(ev, resetIdle, { passive:true, capture:true }));
+    _idleLast = 0; resetIdle();
+  }
+
   async function afterAuth(){
-    if(sessionStorage.getItem('sb-hydrated')==='1'){ hide(); try{ const { data } = await SBC.auth.getUser(); showBadge(data && data.user ? data.user.email : ''); }catch(_){ showBadge(''); } try{ startRealtime(); }catch(e){ console.error('[realtime]', e); } setTimeout(()=>{ try{ sbRefresh('boot'); }catch(_){} }, 1500); return; }
+    if(sessionStorage.getItem('sb-hydrated')==='1'){ hide(); try{ const { data } = await SBC.auth.getUser(); showBadge(data && data.user ? data.user.email : ''); }catch(_){ showBadge(''); } try{ startRealtime(); }catch(e){ console.error('[realtime]', e); } try{ startIdleWatch(); }catch(e){ console.error('[idle]', e); } setTimeout(()=>{ try{ sbRefresh('boot'); }catch(_){} }, 1500); return; }
     msg('Loading your data from Supabase…');
     try{ await hydrate(); sessionStorage.setItem('sb-hydrated','1'); location.reload(); }
     catch(e){ msg('Could not load data: '+(e.message||e), true); console.error(e); }
