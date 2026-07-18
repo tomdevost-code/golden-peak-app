@@ -4974,7 +4974,7 @@ function bioPopulateBatches(){
         && (t.txType === 'Produced/Received' || t.txType === 'Seeds Germinated'));
     })
     .map(b => b.batchId)
-    .sort();
+    .sort((a,b)=>a.localeCompare(b));
   sel.innerHTML = '<option value="">-- select batch --</option>' +
     eligible.map(id => '<option'+(id===cur?' selected':'')+'>'+id+'</option>').join('');
   if(typeof autoSelectIfSingle === 'function') autoSelectIfSingle('bio-batch-select');
@@ -6241,7 +6241,7 @@ function populateBatchDropdowns(){
   }
   // Apply the per-select Moms toggle on top of the phase-based lists. Default
   // (button OFF) HIDES mom batches; pressing the button switches to moms ONLY.
-  const _ecFinal    = ecList.filter(b => momsOnlyFilter('ec-batch-select')       ?  isMotherBatch(b.batchId) : !isMotherBatch(b.batchId));
+  const _ecFinal    = ecList.filter(b => !isMotherBatch(b.batchId));   // EC never shows mom batches (or closed — already excluded)
   const _roFinal    = roList.filter(b => momsOnlyFilter('ro-batch-select')       ?  isMotherBatch(b.batchId) : !isMotherBatch(b.batchId));
   const _wasteFinal = wasteList.filter(b => momsOnlyFilter('waste-batch-select') ?  isMotherBatch(b.batchId) : !isMotherBatch(b.batchId));
   fillFormSelect('ec-batch-select','-- select batch --',_ecFinal);
@@ -6270,12 +6270,11 @@ function populateBatchDropdowns(){
 // When toggled on, the dropdown filters to mother batches only — without
 // disrupting any of the other per-page rules (phase, closed, etc.).
 const MOMS_FILTER_SELECTS = [
-  'ec-batch-select','ro-batch-select','waste-batch-select',
+  'ro-batch-select','waste-batch-select',
   'harvest-batch-select','postdry-batch-select','bio-batch-select',
   'pest-batch-select','summary-batch-select','pheno-batch'
 ];
 const MOMS_FILTER_REPOP = {
-  'ec-batch-select':      ()=>populateBatchDropdowns(),
   'ro-batch-select':      ()=>populateBatchDropdowns(),
   'waste-batch-select':   ()=>populateBatchDropdowns(),
   'harvest-batch-select': ()=>{ if(typeof harvestPopulateBatches==='function')  harvestPopulateBatches(); },
@@ -8855,7 +8854,7 @@ function phenoPopulateBatches(){
     if(closedOnly ? !b.closedDate : !!b.closedDate) return false;   // exclusive: open-only or closed-only
     if(momsOnly !== isMotherBatch(b.batchId)) return false;         // exclusive: moms-only or non-moms
     return true;
-  }).map(b=>b.batchId).sort();
+  }).map(b=>b.batchId).sort((a,b)=>a.localeCompare(b));
   sel.innerHTML = '<option value="">-- select batch --</option>' + ids.map(id=>`<option value="${_phenoEsc(id)}">${_phenoEsc(id)}</option>`).join('');
   if(cur && ids.includes(cur)){ sel.value = cur; } else if(cur){ sel.value=''; phenoBatchChanged(); }
 }
@@ -11558,7 +11557,7 @@ function summaryPopulateBatches(){
     // Moms toggle is exclusive: hide moms when OFF, show only moms when ON.
     if(_sumMomsOnly !== isMotherBatch(b.batchId)) return false;
     return true;
-  });
+  }).sort((a,b)=>(a.batchId||'').localeCompare(b.batchId||''));
   sel.innerHTML = '<option value="">-- select batch --</option>' +
     batches.map(b => '<option value="'+b.batchId+'"'+(b.batchId===cur?' selected':'')+'>'+b.batchId+(b.cultivar?' – '+b.cultivar:'')+(b.closedDate?' [Closed]':'')+'</option>').join('');
   if(cur && batches.some(b=>b.batchId===cur)) summaryBatchChanged();
