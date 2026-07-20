@@ -12660,6 +12660,9 @@ async function summaryReopenBatch(){
   b.synced = false;
   lsSet('gp-batch', batchRecs);
   if(cfg.batchTbl){ try{ await atUpsert(cfg.batchTbl, buildBatchFields(b), ['Batch ID']); b.synced = true; lsSet('gp-batch', batchRecs); }catch(_){} }
+  // buildBatchFields strips empty fields, so the cleared Closed Date isn't sent by the upsert above
+  // and Supabase would keep the old value. Explicitly null it so the re-open actually persists.
+  if(window.__SBC){ try{ await window.__SBC.from('batches').update({ closed_date: null, status: 'Open' }).eq('batch_id', bid); }catch(e){ console.error('[reopen] clear closed_date', e); } }
   if(typeof updatePendingBadge === 'function') updatePendingBadge();
   const _cc = document.getElementById('summary-show-closed'); if(_cc) _cc.checked = false;
   summaryPopulateBatches();
