@@ -1144,6 +1144,7 @@ tr:last-child td { border-bottom: none; }
               <option value="Open">Open</option>
               <option value="Closed">Closed</option>
             </select>
+            <button type="button" id="summary-reopen-btn" onclick="summaryReopenBatch()" style="display:none;margin-top:8px;width:100%;font-size:12px;padding:8px;border:1px solid var(--green);background:var(--green-pale);color:var(--green);border-radius:var(--radius-sm);cursor:pointer;font-weight:600;">Re-open this batch</button>
           </div>
 
           <!-- Closed Date (only shows when Closed) -->
@@ -11629,6 +11630,7 @@ function summaryBatchChanged(){
   const _sdd=document.getElementById('summary-delivered-date-edit'); if(_sdd) _sdd.value = b.deliveredDate||'';
   summaryUpdatePhaseOptions(b.plantPhase||'', _curQty);
   document.getElementById('summary-status').value = b.status||'Open';
+  { const _rb=document.getElementById('summary-reopen-btn'); if(_rb) _rb.style.display = (typeof isBatchClosedRec==='function' && isBatchClosedRec(b)) ? '' : 'none'; }
   applyPhaseRoomLock();
   summaryUpdateVegLock();
   summaryStatusChanged();
@@ -12646,6 +12648,26 @@ function summaryRefreshCurrentDay(batchId){
 function summaryStatusChanged(){
   const closed = document.getElementById('summary-status').value === 'Closed';
   document.getElementById('summary-closed-date-wrap').style.display = closed ? '' : 'none';
+}
+async function summaryReopenBatch(){
+  const bid = (document.getElementById('summary-batch-select')||{}).value || '';
+  const b = batchRecs.find(r => r.batchId === bid && !r.type);
+  if(!b){ toast('Select a batch first.'); return; }
+  if(!(typeof isBatchClosedRec==='function' && isBatchClosedRec(b))){ toast('This batch is already open.'); return; }
+  if(!confirm('Re-open batch '+bid+'? It returns to active status and reappears in the operational dropdowns.')) return;
+  b.status = 'Open';
+  b.closedDate = '';
+  b.synced = false;
+  lsSet('gp-batch', batchRecs);
+  if(cfg.batchTbl){ try{ await atUpsert(cfg.batchTbl, buildBatchFields(b), ['Batch ID']); b.synced = true; lsSet('gp-batch', batchRecs); }catch(_){} }
+  if(typeof updatePendingBadge === 'function') updatePendingBadge();
+  const _cc = document.getElementById('summary-show-closed'); if(_cc) _cc.checked = false;
+  summaryPopulateBatches();
+  const _sel = document.getElementById('summary-batch-select');
+  if(_sel){ _sel.value = bid; if(typeof summaryBatchChanged==='function') summaryBatchChanged(); }
+  try{ if(typeof populateBatchDropdowns==='function') populateBatchDropdowns(); }catch(_){}
+  try{ if(typeof renderBatchLog==='function') renderBatchLog(); }catch(_){}
+  toast('Batch '+bid+' re-opened.');
 }
 // Color palette for rooms (used by the chip renderer)
 const ROOM_CHIP_COLORS = {
