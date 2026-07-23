@@ -11729,24 +11729,18 @@ function fdPersistMilestones(){ try { lsSet('gp-fdtasks', FLOWER_DAY_TASKS); } c
 // Push the whole milestone list to Airtable as a single upserted row (Key='FlowerDayMilestones').
 // Marks dirty up front so the change is tracked even if the push fails (Sync Pending will retry).
 async function fdSyncMilestones(){
-  fdTasksDirty = true;
-  try { lsSet('gp-fdtasks-dirty', true); } catch(_){}
-  if(typeof updatePendingBadge === 'function') updatePendingBadge();
-  if(!(cfg.fdTasksTbl && cfg.token && cfg.base)){
-    toast('Saved on this device. Set the Flower Day Milestones Table ID in Settings to sync.', 4500);
-    return false;
-  }
+  fdPersistMilestones();
+  const sb = (typeof window!=='undefined' && window.__SBC) ? window.__SBC : null;
+  if(!sb){ toast('Saved on this device (not connected).', 4000); return false; }
   if(typeof setSyncPill === 'function') setSyncPill('ing','Syncing...');
   try {
-    await atUpsert(cfg.fdTasksTbl, { 'Key':'FlowerDayMilestones', 'Milestones': JSON.stringify(FLOWER_DAY_TASKS) }, ['Key']);
-    fdTasksDirty = false;
-    try { lsSet('gp-fdtasks-dirty', false); } catch(_){}
+    const { error } = await sb.from('flower_milestones').upsert({ id:'global', data: FLOWER_DAY_TASKS, updated_at: new Date().toISOString() }, { onConflict:'id' });
+    if(error) throw error;
     if(typeof setSyncPill === 'function') setSyncPill('ok','Synced');
-    if(typeof updatePendingBadge === 'function') updatePendingBadge();
     return true;
   } catch(e){
     if(typeof setSyncPill === 'function') setSyncPill('err','Sync failed');
-    toast('Saved locally — Airtable: '+(e.message||'sync failed'), 5000);
+    toast('Saved locally — sync failed: '+(e.message||''), 5000);
     return false;
   }
 }
@@ -16899,12 +16893,13 @@ function buildSeedInvFields(rec){
   async function hydrate(){
     // Fetch every table in PARALLEL (was sequential — 17 round-trips ran one-after-another, which
     // made login hang 20-30s). Promise.all issues them concurrently, then we map/assemble locally.
-    const [batches, txs, ec, ro, flow, waste, harvest, postdry, bio, pest, seed, sancl, santl, saned, events, adjs, covs, phPlants, phObs] = await Promise.all([
+    const [batches, txs, ec, ro, flow, waste, harvest, postdry, bio, pest, seed, sancl, santl, saned, events, adjs, covs, phPlants, phObs, fmRows] = await Promise.all([
       q('batches'), q('transactions'), q('ec_logs'), q('runoff_logs'), q('flow_logs'),
       q('waste_records'), q('harvest_records'), q('postdry_records'), q('bio_records'),
       q('pest_records'), q('seed_inventory'), q('sanitation_cleaning'), q('sanitation_tool'),
       q('sanitation_task_edits'), q('destruction_events'), q('destruction_adjust'), q('destruction_covered'),
-      q('pheno_plants'), q('pheno_observations')
+      q('pheno_plants'), q('pheno_observations'),
+      q('flower_milestones')
     ]);
     const _batchRows = batches.map(fromBatch);
     ls('gp-batch', _batchRows);
@@ -16926,6 +16921,14 @@ function buildSeedInvFields(rec){
     ls('gp-sanedits', saned.map(fromSanEdit));
     ls('gp-phenoplant', phPlants.map(fromPhenoPlant));
     ls('gp-phenoobs', phObs.map(fromPhenoObs));
+    // Shared flower-day milestones — apply the single global row to the app's live map + storage.
+    try{
+      if(fmRows && fmRows.length && fmRows[0] && fmRows[0].data && typeof FLOWER_DAY_TASKS !== 'undefined'){
+        FLOWER_DAY_TASKS = fmRows[0].data;
+        lsSet('gp-fdtasks', FLOWER_DAY_TASKS);
+        if(typeof fdRenderMilestones === 'function') fdRenderMilestones();
+      }
+    }catch(_){}
     // destruction — reassemble adjust + coveredKeys from the join tables
     const keyById = {}; waste.forEach(w => { keyById[w.id] = wasteKeyRow(w); });
     const adjBy = {}; adjs.forEach(a => { (adjBy[a.destruction_id] = adjBy[a.destruction_id]||[]).push(a); });
@@ -17052,7 +17055,7 @@ function buildSeedInvFields(rec){
     if(source!=='manual'){ const a=document.activeElement; if(a && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName||'')) return; const _now=Date.now(); if(_now - _lastAutoRefresh < 3000) return; _lastAutoRefresh=_now; }
     try{ await hydrate(); }catch(e){ console.error('[sbRefresh]', e); return; }
     try{ if(typeof loadAll==='function') loadAll(); }catch(_){}
-    ['populateBatchDropdowns','updatePendingBadge','renderBatchLog','summaryPopulateBatches','renderWaste','renderEC','renderRO','destroyRenderPending','destroyRenderHistory','seedInvRenderList','renderWasteReport','phenoRenderPlants'].forEach(fn=>{ try{ if(typeof window[fn]==='function') window[fn](); }catch(_){} });
+    ['populateBatchDropdowns','updatePendingBadge','renderBatchLog','summaryPopulateBatches','renderWaste','renderEC','renderRO','destroyRenderPending','destroyRenderHistory','seedInvRenderList','renderWasteReport','phenoRenderPlants','fdRenderMilestones'].forEach(fn=>{ try{ if(typeof window[fn]==='function') window[fn](); }catch(_){} });
     // Push any locally-corrected records up to Supabase so fixes persist and the pending badge
     // clears. A boot reconciler can zero a phantom batch balance and flag that batch unsynced;
     // without a push it would recur every load. Batches use an idempotent upsert (safe to repeat).
@@ -17072,7 +17075,7 @@ function buildSeedInvFields(rec){
     if(_rtChannel){ try{ SBC.removeChannel(_rtChannel); }catch(_){} }
     const bump = () => { console.log('[realtime] change received'); clearTimeout(_rtTimer); _rtTimer=setTimeout(()=>sbRefresh('realtime'), 1500); };
     const ch = SBC.channel('gp-live');
-    ['batches','transactions','ec_logs','runoff_logs','flow_logs','waste_records','harvest_records','postdry_records','bio_records','pest_records','seed_inventory','destruction_events','destruction_adjust','destruction_covered','sanitation_cleaning','sanitation_tool','sanitation_task_edits','pheno_plants','pheno_observations']
+    ['batches','transactions','ec_logs','runoff_logs','flow_logs','waste_records','harvest_records','postdry_records','bio_records','pest_records','seed_inventory','destruction_events','destruction_adjust','destruction_covered','sanitation_cleaning','sanitation_tool','sanitation_task_edits','pheno_plants','pheno_observations','flower_milestones']
       .forEach(tbl => ch.on('postgres_changes', { event:'*', schema:'public', table:tbl }, bump));
     ch.subscribe((st, err) => {
       console.log('[realtime] status:', st, err||'');
