@@ -10250,6 +10250,8 @@ function destroyPrint(id){
     const dryB = adj ? (parseFloat(adj.dryActual)||0) : dryRec;
     const vegLossB = vegRec - vegB;
     const dryLossB = dryRec - dryB;
+    // Initials from the Employee name (e.g. "Jordan Elliott" -> "JE") for the Initial column.
+    const _empInitials = String(rec.employee||'').trim().split(/\s+/).filter(Boolean).map(w=>w[0].toUpperCase()).join('');
     // Destruction Log block — one summary row per batch using ACTUAL destroyed weights.
     let lb = '<div class="dblock"><div style="margin:0 0 6px;"><strong>Batch ID:</strong> '+bid+'</div>';
     lb += '<table style="width:100%;border-collapse:collapse;font-size:11px;"><thead><tr>'
@@ -10261,7 +10263,7 @@ function destroyPrint(id){
       +'<td style="border:1px solid #333;padding:4px;">'+(rec.method||'')+'</td>'
       +'<td style="border:1px solid #333;padding:4px;text-align:right;">'+L(vegB)+'</td>'
       +'<td style="border:1px solid #333;padding:4px;text-align:right;">'+L(dryB)+'</td>'
-      +'<td style="border:1px solid #333;padding:4px;"></td>'
+      +'<td style="border:1px solid #333;padding:4px;">'+_empInitials+'</td>'
       +'</tr></tbody></table>';
     // Per-batch weight reconciliation: total waste recorded, total actually destroyed, and the
     // difference (drying loss) — one row for Vegetative, one for Dry.
