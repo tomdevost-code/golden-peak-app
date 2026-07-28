@@ -1158,6 +1158,17 @@ tr:last-child td { border-bottom: none; }
         </div>
 
         <!-- Mother Phase Distribution + Advance Cohort (mothers only) -->
+        <div class="card" id="summary-clone-cohort-card" style="display:none;margin-bottom:12px;">
+          <div class="section-label">Clone Cohort <span style="font-size:10px;color:var(--text3);font-weight:400;font-family:var(--mono);text-transform:none;letter-spacing:0;">(new cuttings tracked apart from veg until rooted)</span></div>
+          <div style="display:flex;align-items:flex-end;gap:8px;">
+            <div class="field" style="flex:1;margin-bottom:0;">
+              <label>Plants still in Clones <span id="summary-clone-total" style="font-size:10px;color:var(--text3);font-weight:400;"></span></label>
+              <input type="number" id="summary-clone-cohort" min="0" step="1" placeholder="0" onwheel="this.blur()" style="font-size:14px;font-family:var(--mono);font-weight:700;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;" />
+            </div>
+            <button type="button" class="btn-save" onclick="summaryCloneCohortSave()" style="white-space:nowrap;">Save</button>
+          </div>
+          <div style="font-size:11px;color:var(--text3);margin-top:6px;line-height:1.4;">Cuttings taken from this batch are counted here automatically. Lower the number as they root and move to Veg &mdash; the batch shows e.g. &ldquo;Clones (12) / Veg (8)&rdquo;.</div>
+        </div>
         <div class="card" id="summary-mom-phase-card" style="display:none;margin-bottom:12px;">
           <div class="section-label">Phase Distribution <span style="font-size:10px;color:var(--text3);font-weight:400;font-family:var(--mono);text-transform:none;letter-spacing:0;">(mothers track plants per phase independently)</span></div>
 
@@ -3863,6 +3874,19 @@ function getDisplayPhase(batchRec){
       if(active.length > 1){
         return active.map(p => p + ' ('+(c[p]||0)+')').join(' / ');
       }
+    }
+  }
+  // Non-mother batch with a tracked clone cohort: cuttings taken (Produced/Received)
+  // while the batch was already in Veg/Flower/Drying are a separate cohort that hasn't
+  // rooted into veg yet. Surface a split label like "Clones (24) / Veg (6)".
+  if(!isMotherBatch(batchRec.batchId)){
+    const _cc = parseInt(batchRec.cloneCohort) || 0;
+    if(_cc > 0 && (phase === 'Veg' || phase === 'Flower' || phase === 'Drying')){
+      const _tot = calcBatchQty(batchRec.batchId);
+      const _rest = Math.max(0, _tot - _cc);
+      let _ccLbl = _rest > 0 ? ('Clones ('+_cc+') / '+phase+' ('+_rest+')') : ('Clones ('+_cc+')');
+      if(_livePlantsSold > 0) _ccLbl += ' · ' + _livePlantsSold + ' sold';
+      return _ccLbl;
     }
   }
   // Regular (non-mother) batch in Flower phase: if any plants remain in the Veg room,
@@ -11621,6 +11645,19 @@ function summaryBatchChanged(){
     input.value = (_dist[r] != null && _dist[r] !== 0) ? _dist[r] : (_dist[r] === 0 ? '0' : '');
   });
   document.getElementById('si-phase').textContent = getDisplayPhase(b);
+  { const _ccCard=document.getElementById('summary-clone-cohort-card');
+    if(_ccCard){
+      const _nonMom = !isMotherBatch(b.batchId);
+      const _tot = (typeof calcBatchQty==='function') ? calcBatchQty(b.batchId) : 0;
+      const _cc = parseInt(b.cloneCohort)||0;
+      const _show = _nonMom && _tot>0 && (['Veg','Flower','Drying'].includes(b.plantPhase||'') || _cc>0);
+      _ccCard.style.display = _show ? '' : 'none';
+      if(_show){
+        const _in=document.getElementById('summary-clone-cohort'); if(_in) _in.value=_cc;
+        const _lb=document.getElementById('summary-clone-total'); if(_lb) _lb.textContent='(of '+_tot+' total)';
+      }
+    }
+  }
   // Rooms display: show every flower room the batch ever touched (incl. harvested rooms with
   // count = 0) plus Veg if it still has unallocated plants. Harvested-room visibility makes the
   // multi-day harvest state obvious — e.g. "Flower 1 (0), Flower 2 (30)" means Flower 1 has been
@@ -12630,6 +12667,13 @@ function computeBatchDayParts(b, today){
     const cd = calcCloneDay(b.batchId, today);
     if(cd && cd > 0) parts.push({label:'C'+cd, desc:'clones'});
   } else if(b.plantPhase === 'Veg' && b.vegStart){
+    const _ccv = parseInt(b.cloneCohort) || 0;
+    if(_ccv > 0){
+      const _lp = (typeof _latestPRDate === 'function') ? _latestPRDate() : null;
+      const _base = _lp || b.cloneDate || null;
+      const _cd = _base ? daysBetween(_base, today) : null;
+      if(_cd != null && _cd > 0) parts.push({label:'C'+_cd, desc:'clones'});
+    }
     const vd = daysBetween(b.vegStart, today);
     if(vd > 0) parts.push({label:'V'+vd, desc:'veg'});
   } else if(b.plantPhase === 'Flower'){
@@ -12727,6 +12771,23 @@ async function summaryReopenBatch(){
   try{ if(typeof populateBatchDropdowns==='function') populateBatchDropdowns(); }catch(_){}
   try{ if(typeof renderBatchLog==='function') renderBatchLog(); }catch(_){}
   toast('Batch '+bid+' re-opened.');
+}
+
+async function summaryCloneCohortSave(){
+  const sel=document.getElementById('summary-batch-select');
+  const bid=sel?sel.value:'';
+  const b=batchRecs.find(r=>r.batchId===bid && !r.type);
+  if(!b){ toast('Select a batch first.'); return; }
+  if(isMotherBatch(b.batchId)){ toast('Mother batches track cohorts in the Phase Distribution card.'); return; }
+  const tot=(typeof calcBatchQty==='function') ? calcBatchQty(bid) : 0;
+  const inp=document.getElementById('summary-clone-cohort');
+  let n=parseInt(inp?inp.value:'0'); if(isNaN(n)||n<0) n=0; if(n>tot) n=tot;
+  b.cloneCohort=n; b.synced=false; lsSet('gp-batch', batchRecs);
+  if(cfg.batchTbl){ try{ await atUpsert(cfg.batchTbl, buildBatchFields(b), ['Batch ID']); b.synced=true; lsSet('gp-batch', batchRecs); }catch(_){} }
+  if(typeof updatePendingBadge==='function') updatePendingBadge();
+  toast('Clone cohort set to '+n+' for '+bid+'.');
+  if(typeof summaryBatchChanged==='function') summaryBatchChanged();
+  try{ if(typeof renderBatchLog==='function') renderBatchLog(); }catch(_){}
 }
 // Color palette for rooms (used by the chip renderer)
 const ROOM_CHIP_COLORS = {
@@ -14127,6 +14188,15 @@ async function summaryAddTransaction(){
     }
     // Persist the mom's phase counts so a real-time refresh can't rebuild them into the wrong bucket.
     if(_momPhaseChanged){ _txBatchRec.synced = false; lsSet('gp-batch', batchRecs); }
+  }
+  // Non-mother batch: clones taken (Produced/Received) while the batch is already in
+  // Veg/Flower/Drying are a separate cohort — track them so the batch shows
+  // "Clones (N) / Veg (M)" until the grower advances them (reduces the count) as they root.
+  if(_txBatchRec && !isMotherBatch(batchId) && txType === 'Produced/Received' && qty > 0
+     && ['Veg','Flower','Drying'].includes(_txBatchRec.plantPhase || '')){
+    _txBatchRec.cloneCohort = (parseInt(_txBatchRec.cloneCohort) || 0) + qty;
+    _txBatchRec.synced = false; lsSet('gp-batch', batchRecs);
+    _momPhaseChanged = true;   // reuse the batch-upsert trigger below to persist clone_cohort
   }
   // For Moved to Moms: create the paired Produced/Received tx on the destination
   // mother batch so its plant count increases by the same amount. Linked via notes.
@@ -16950,7 +17020,7 @@ function buildSeedInvFields(rec){
   const ls = (k,v) => { try{ localStorage.setItem(k, JSON.stringify(v)); }catch(_){} };
 
   // ---- reverse mappers: Supabase row -> the app's record shape ----
-  const fromBatch = r => ({ id:r.batch_id, batchId:r.batch_id, cultivar:r.cultivar, mother:r.mother, geneticsSource:r.genetics_source, externalCompany:r.external_company, seedStrain:r.seed_strain, seedLotNumber:r.seed_lot_number, notes:r.notes, createdDate:dstr(r.created_date), cloneDate:dstr(r.clone_date), hydrationDate:dstr(r.hydration_date), vegStart:dstr(r.veg_start_date), flowerStart:dstr(r.flower_start_date), harvestDate:dstr(r.harvest_date), packagedDate:dstr(r.package_date), soldDate:dstr(r.sold_date), deliveredDate:dstr(r.delivered_date), closedDate:dstr(r.closed_date), plantPhase:r.plant_phase, status:r.status||'Open', rooms:r.rooms||[], roomDistribution:r.room_distribution||{}, harvestedWeights:r.harvested_weights||{}, harvestedPlants:r.harvested_plants||{}, completedHarvests:r.completed_harvests||[], postDryingWeight:r.post_drying_weight_kg, momPurpose:r.mom_purpose, momPurposeCounts:r.mom_purpose_counts||{}, momPhaseCounts:r.mom_phase_counts||{}, synced:true });
+  const fromBatch = r => ({ id:r.batch_id, batchId:r.batch_id, cultivar:r.cultivar, mother:r.mother, geneticsSource:r.genetics_source, externalCompany:r.external_company, seedStrain:r.seed_strain, seedLotNumber:r.seed_lot_number, notes:r.notes, createdDate:dstr(r.created_date), cloneDate:dstr(r.clone_date), hydrationDate:dstr(r.hydration_date), vegStart:dstr(r.veg_start_date), flowerStart:dstr(r.flower_start_date), harvestDate:dstr(r.harvest_date), packagedDate:dstr(r.package_date), soldDate:dstr(r.sold_date), deliveredDate:dstr(r.delivered_date), closedDate:dstr(r.closed_date), plantPhase:r.plant_phase, status:r.status||'Open', rooms:r.rooms||[], roomDistribution:r.room_distribution||{}, harvestedWeights:r.harvested_weights||{}, harvestedPlants:r.harvested_plants||{}, completedHarvests:r.completed_harvests||[], postDryingWeight:r.post_drying_weight_kg, momPurpose:r.mom_purpose, momPurposeCounts:r.mom_purpose_counts||{}, momPhaseCounts:r.mom_phase_counts||{}, cloneCohort:r.clone_cohort||0, synced:true });
   const fromTx = r => ({ id:r.id, airtableId:r.id, batchId:r.batch_id, date:dstr(r.date), txType:r.transaction_type, plantPhase:r.plant_phase, qty:r.quantity, weight:r.weight_kg, currentQtyAfter:r.current_quantity_after, saleStage:r.sale_stage, labDestinationType:r.lab_destination_type, labMaterialType:r.lab_material_type, labDestinationName:r.lab_destination_name, fromPhase:r.from_phase, toPhase:r.to_phase, room:r.room, cohortPurpose:r.cohort_purpose, notes:r.notes, synced:true });
   const fromEc = r => { const _a=a=>{const v=a.map(parseFloat).filter(x=>!isNaN(x)&&x>0); return v.length?Math.round(v.reduce((s,b)=>s+b,0)/v.length*100)/100:null;}; const ecP=[r.drip_ec_pen1,r.drip_ec_pen2,r.drip_ec_pen3], phP=[r.drip_ph_pen1,r.drip_ph_pen2,r.drip_ph_pen3], evs=[r.event1_ml,r.event2_ml,r.event3_ml,r.event4_ml,r.event5_ml,r.event6_ml,r.event7_ml,r.event8_ml]; const tot=evs.map(parseFloat).reduce((s,v)=>s+(isNaN(v)?0:v),0); return { id:r.id, airtableId:r.id, batch:r.batch_id, date:dstr(r.date), room:r.room, grower:r.grower, wtype:r.watering_type, dripEcPens:ecP, dripPhPens:phP, dripEc:_a(ecP), dripPh:_a(phP), events:evs, totalML:tot||null, notes:r.notes, synced:true }; };
   const fromRo = r => { const _n=v=>(v==null||v===''||isNaN(parseFloat(v)))?null:parseFloat(v); const _a=arr=>{const v=arr.map(parseFloat).filter(x=>!isNaN(x)&&x>0); return v.length?Math.round(v.reduce((s,b)=>s+b,0)/v.length*100)/100:null;}; const o={ id:r.id, airtableId:r.id, batch:r.batch_id, date:dstr(r.date), room:r.room, grower:r.grower, inputEC:_n(r.input_ec), variance:_n(r.ec_variance), notes:r.notes, synced:true, samples:[] }; for(let i=1;i<=8;i++) o.samples.push({ec:_n(r['s'+i+'_ec']), ph:_n(r['s'+i+'_ph'])}); o.avgEC=_a(o.samples.map(s=>s.ec)); o.avgPH=_a(o.samples.map(s=>s.ph)); o.ecAlert=(o.variance!=null && o.variance>RO_VAR_ALERT); return o; };
@@ -17110,7 +17180,7 @@ function buildSeedInvFields(rec){
     const row=t.map(fields);
     if(t.localFields && row.batch_id && typeof batchRecs!=='undefined'){
       const b=batchRecs.find(x=>x.batchId===row.batch_id && !x.type);
-      if(b){ row.mom_phase_counts=b.momPhaseCounts||{}; if(b.momPurposeCounts) row.mom_purpose_counts=b.momPurposeCounts; if(b.seedStrain!=null) row.seed_strain=b.seedStrain; if(b.seedLotNumber!=null) row.seed_lot_number=b.seedLotNumber; }
+      if(b){ row.mom_phase_counts=b.momPhaseCounts||{}; row.clone_cohort=b.cloneCohort||0; if(b.momPurposeCounts) row.mom_purpose_counts=b.momPurposeCounts; if(b.seedStrain!=null) row.seed_strain=b.seedStrain; if(b.seedLotNumber!=null) row.seed_lot_number=b.seedLotNumber; }
     }
     const { data, error } = await SBC.from(t.table).upsert(row,{onConflict:t.pk}).select().maybeSingle();
     if(error){ say('Supabase save failed: '+error.message, error); return { records:[{}] }; }
