@@ -11847,61 +11847,77 @@ async function milestoneToggleEl(el, batchId){
   summaryRenderFlowerAlerts(batchId);
 }
 function milestoneRefreshCurrent(){ const bid=(document.getElementById('summary-batch-select')||{}).value; if(bid && typeof summaryRenderFlowerAlerts==='function') summaryRenderFlowerAlerts(bid); }
+let _msShowDone = false;
+function msToggleDone(bid){ _msShowDone = !_msShowDone; if(typeof summaryRenderFlowerAlerts==='function') summaryRenderFlowerAlerts(bid); }
 function summaryRenderFlowerAlerts(batchId){
   const wrap = document.getElementById('summary-flower-alerts');
   if(!wrap) return;
-  wrap.style.display = 'none';
-  wrap.innerHTML = '';
+  wrap.style.display = 'none'; wrap.innerHTML = '';
   if(!batchId) return;
   const b = batchRecs.find(r => r.batchId === batchId && !r.type);
-  if(!b) return;
-  if(b.plantPhase !== 'Flower' || !b.flowerStart) return;
-  const today = localDate();
-  const fd = daysBetween(b.flowerStart, today);
+  if(!b || b.plantPhase !== 'Flower' || !b.flowerStart) return;
+  const fd = daysBetween(b.flowerStart, localDate());
   if(!fd || fd <= 0) return;
   const _esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   const allDays = Object.keys(FLOWER_DAY_TASKS).map(d=>parseInt(d,10)).filter(n=>!isNaN(n)).sort((a,b)=>a-b);
   const reached  = allDays.filter(d => d <= fd);
   const upcoming = allDays.filter(d => d > fd && d <= fd + 21).slice(0,3);
-  if(!reached.length && !upcoming.length) return;
+  const outstanding = [], completed = [];
+  reached.forEach(day => (FLOWER_DAY_TASKS[day]||[]).forEach((t, idx) => {
+    const rec = _milestoneCompRec(batchId, day, t);
+    (rec ? completed : outstanding).push({ day, idx, task:t, rec });
+  }));
+  const total = outstanding.length + completed.length;
+  if(!total && !upcoming.length) return;
+  const box = 'background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);';
   let html = '';
-  if(reached.length){
-    html += '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;">'
-         +   '<div style="font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">Milestone checklist — F'+fd+' today</div>';
-    reached.forEach(day => {
-      const tasks = FLOWER_DAY_TASKS[day] || [];
-      const isToday = (day === fd);
-      html += '<div style="margin-bottom:8px;"><div style="font-family:var(--mono);font-weight:700;color:'+(isToday?'var(--amber)':'var(--green)')+';font-size:12px;margin-bottom:2px;">F'+day+(isToday?' — TODAY':'')+'</div>';
-      tasks.forEach((t, idx) => {
-        const rec = _milestoneCompRec(batchId, day, t);
-        const done = !!rec;
-        html += '<label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;padding:2px 0;cursor:pointer;">'
-             +    '<input type="checkbox" data-mday="'+day+'" data-midx="'+idx+'" onchange="milestoneToggleEl(this,\''+_esc(batchId)+'\')"'+(done?' checked':'')+' style="margin-top:3px;" />'
-             +    '<span style="'+(done?'color:var(--text3);text-decoration:line-through;':'color:var(--text);')+'">'+_esc(t)
-             +      (done && (rec.grower||rec.completedDate) ? ' <span style="font-size:11px;color:var(--text3);text-decoration:none;">('+_esc(rec.grower||'')+(rec.grower&&rec.completedDate?', ':'')+_esc(rec.completedDate||'')+')</span>' : '')
-             +    '</span></label>';
-      });
-      html += '</div>';
+  if(total){
+    const pct = Math.round((completed.length/total)*100);
+    html += '<div style="'+box+'padding:9px 12px;">'
+      +  '<div style="display:flex;align-items:center;gap:8px;margin-bottom:'+(outstanding.length?'8px':'0')+';">'
+      +    '<span style="font-family:var(--mono);font-size:11px;color:var(--text2);white-space:nowrap;">F'+fd+' today</span>'
+      +    '<span style="flex:1;height:6px;background:var(--border);border-radius:99px;overflow:hidden;"><span style="display:block;width:'+pct+'%;height:100%;background:var(--green);"></span></span>'
+      +    '<span style="font-size:12px;font-weight:600;white-space:nowrap;">'+completed.length+'/'+total+'</span>'
+      +  '</div>';
+    outstanding.forEach(o => {
+      const isToday = o.day === fd;
+      html += '<label style="display:flex;align-items:center;gap:8px;font-size:13px;padding:2px 0;cursor:pointer;">'
+        +  '<input type="checkbox" data-mday="'+o.day+'" data-midx="'+o.idx+'" onchange="milestoneToggleEl(this,\''+_esc(batchId)+'\')" />'
+        +  '<span style="color:var(--text);"><span style="font-family:var(--mono);color:var(--text3);">F'+o.day+'</span> · '+_esc(o.task)+'</span>'
+        +  (isToday ? '<span style="margin-left:auto;font-size:11px;color:var(--amber);font-weight:600;">today</span>' : '')
+        +  '</label>';
     });
+    if(!outstanding.length){
+      html += '<div style="font-size:12px;color:var(--green);padding:2px 0;">All reached milestones complete.</div>';
+    }
+    if(completed.length){
+      html += '<div onclick="msToggleDone(\''+_esc(batchId)+'\')" style="font-size:12px;color:var(--text3);cursor:pointer;margin-top:'+(outstanding.length?'6px':'4px')+';user-select:none;">'
+        + (_msShowDone ? '&#9662;' : '&#9656;') + ' ' + completed.length + ' completed</div>';
+      if(_msShowDone){
+        completed.forEach(o => {
+          const at = (o.rec && (o.rec.grower || o.rec.completedDate)) ? (_esc(o.rec.grower||'') + (o.rec.grower && o.rec.completedDate ? ' · ' : '') + _esc(o.rec.completedDate||'')) : '';
+          html += '<label style="display:flex;align-items:center;gap:8px;font-size:13px;padding:2px 0;cursor:pointer;">'
+            +  '<input type="checkbox" checked data-mday="'+o.day+'" data-midx="'+o.idx+'" onchange="milestoneToggleEl(this,\''+_esc(batchId)+'\')" />'
+            +  '<span style="color:var(--text3);text-decoration:line-through;"><span style="font-family:var(--mono);">F'+o.day+'</span> · '+_esc(o.task)+'</span>'
+            +  (at ? '<span style="margin-left:auto;font-size:11px;color:var(--text3);white-space:nowrap;">'+at+'</span>' : '')
+            +  '</label>';
+        });
+      }
+    }
     html += '</div>';
   }
   if(upcoming.length){
-    html += '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;margin-top:8px;">'
-         +   '<div style="font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">Upcoming milestones</div>';
+    html += '<div style="'+box+'padding:8px 12px;margin-top:8px;">'
+      +  '<div style="font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;">Upcoming</div>';
     upcoming.forEach(day => {
-      const away = day - fd; const inLabel = away===1 ? 'in 1 day' : ('in '+away+' days');
-      html += '<div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:4px;">'
-           +    '<span style="font-family:var(--mono);font-weight:700;color:var(--green);min-width:36px;">F'+day+'</span>'
-           +    '<span style="color:var(--text3);font-size:11px;min-width:60px;">'+inLabel+'</span>'
-           +    '<span style="font-size:12px;color:var(--text2);">'+(FLOWER_DAY_TASKS[day]||[]).map(_esc).join(' · ')+'</span>'
-           +  '</div>';
+      const away = day - fd; const inLabel = away===1 ? '1 day' : (away+' days');
+      html += '<div style="font-size:12px;color:var(--text2);padding:1px 0;"><span style="font-family:var(--mono);font-weight:600;color:var(--green);">F'+day+'</span> <span style="color:var(--text3);">('+inLabel+')</span> · '+(FLOWER_DAY_TASKS[day]||[]).map(_esc).join(', ')+'</div>';
     });
     html += '</div>';
   }
   wrap.innerHTML = html;
   wrap.style.display = '';
 }
-
 
 // ─── Mother phase distribution UI ────────────────────────────────────────────
 // Mom Purpose change handler. Persists the new purpose to batchRec, updates the hint text,
