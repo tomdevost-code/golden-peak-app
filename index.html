@@ -2082,7 +2082,7 @@ tr:last-child td { border-bottom: none; }
 <script>
 const EC_LO=2.2,EC_HI=2.3,PH_EC_LO=6.2,PH_EC_HI=6.3;
 const RO_PH_LO=6.0,RO_PH_HI=6.5,RO_VAR_LO=0.3,RO_VAR_HI=0.5,RO_VAR_ALERT=1.0;
-let ecRecs=[],roRecs=[],wasteRecs=[],batchRecs=[],batchTxRecs=[],harvestRecs=[],postDryRecs=[],bioRecs=[],pestRecs=[],sanCleanRecs=[],sanToolRecs=[],sanEditsRecs=[],seedInvRecs=[],flowRecs=[],destroyRecs=[],phenoPlantRecs=[],phenoObsRecs=[],cfg={token:'',base:'',ecTbl:'',roTbl:'',wasteTbl:'',batchTbl:'',batchtxTbl:'',harvestTbl:'',postDryTbl:'',bioTbl:'',pestTbl:'',sanCleanTbl:'',sanToolTbl:'',sanEditsTbl:'',seedInvTbl:'',flowTbl:'',destroyTbl:'',fdTasksTbl:''};
+let ecRecs=[],roRecs=[],wasteRecs=[],batchRecs=[],batchTxRecs=[],harvestRecs=[],postDryRecs=[],bioRecs=[],pestRecs=[],sanCleanRecs=[],sanToolRecs=[],sanEditsRecs=[],seedInvRecs=[],flowRecs=[],destroyRecs=[],phenoPlantRecs=[],phenoObsRecs=[],milestoneCompRecs=[],cfg={token:'',base:'',ecTbl:'',roTbl:'',wasteTbl:'',batchTbl:'',batchtxTbl:'',harvestTbl:'',postDryTbl:'',bioTbl:'',pestTbl:'',sanCleanTbl:'',sanToolTbl:'',sanEditsTbl:'',seedInvTbl:'',flowTbl:'',destroyTbl:'',fdTasksTbl:''};
 // Dirty flag for the flower-day milestones single-row config sync. Declared up here (not next to
 // FLOWER_DAY_TASKS lower down) so updatePendingBadge can read it during boot without a TDZ error.
 let fdTasksDirty=false;
@@ -2194,7 +2194,7 @@ function sanGetTasks(template, phase){
 
 function lsGet(k){try{return JSON.parse(localStorage.getItem(k)||'null');}catch(e){return null;}}
 function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
-function loadAll(){ecRecs=lsGet('gp-ec')||[];roRecs=lsGet('gp-ro')||[];wasteRecs=lsGet('gp-waste')||[];batchRecs=lsGet('gp-batch')||[];batchTxRecs=lsGet('gp-batchtx')||[];harvestRecs=lsGet('gp-harvest')||[];postDryRecs=lsGet('gp-postdry')||[];bioRecs=lsGet('gp-bio')||[];pestRecs=lsGet('gp-pest')||[];sanCleanRecs=lsGet('gp-sanclean')||[];sanToolRecs=lsGet('gp-santool')||[];sanEditsRecs=lsGet('gp-sanedits')||[];seedInvRecs=lsGet('gp-seedinv')||[];flowRecs=lsGet('gp-flow')||[];destroyRecs=lsGet('gp-destroy')||[];phenoPlantRecs=lsGet('gp-phenoplant')||[];phenoObsRecs=lsGet('gp-phenoobs')||[];try{fdTasksDirty=false;lsSet('gp-fdtasks-dirty',false);}catch(_){}migrateSanTaskEditsToRecs();wasteRecs.forEach(r=>{if(r.type==='Vegetative waste')r.type='Vegetative Waste';});lsSet('gp-waste',wasteRecs);const s=lsGet('gp-cfg');if(s){cfg=s;applySettings();}dedupeBatchRecs();backfillHarvestedTxs();reconcileAllPackagedBatches();try{cleanLocalDuplicates({batchtxSkipTypes:['Destroyed']});}catch(_){}if(window.__SB_MODE){try{cfg.token=cfg.token||'__sb__';cfg.base=cfg.base||'__sb__';const _sbr={ecTbl:'ec_logs',roTbl:'runoff_logs',flowTbl:'flow_logs',wasteTbl:'waste_records',batchTbl:'batches',batchtxTbl:'transactions',harvestTbl:'harvest_records',postDryTbl:'postdry_records',bioTbl:'bio_records',pestTbl:'pest_records',seedInvTbl:'seed_inventory',sanCleanTbl:'sanitation_cleaning',sanToolTbl:'sanitation_tool',sanEditsTbl:'sanitation_task_edits',destroyTbl:'destruction_events'};Object.keys(_sbr).forEach(k=>{if(!cfg[k])cfg[k]=_sbr[k];});}catch(_){}}}
+function loadAll(){ecRecs=lsGet('gp-ec')||[];roRecs=lsGet('gp-ro')||[];wasteRecs=lsGet('gp-waste')||[];batchRecs=lsGet('gp-batch')||[];batchTxRecs=lsGet('gp-batchtx')||[];harvestRecs=lsGet('gp-harvest')||[];postDryRecs=lsGet('gp-postdry')||[];bioRecs=lsGet('gp-bio')||[];pestRecs=lsGet('gp-pest')||[];sanCleanRecs=lsGet('gp-sanclean')||[];sanToolRecs=lsGet('gp-santool')||[];sanEditsRecs=lsGet('gp-sanedits')||[];seedInvRecs=lsGet('gp-seedinv')||[];flowRecs=lsGet('gp-flow')||[];destroyRecs=lsGet('gp-destroy')||[];phenoPlantRecs=lsGet('gp-phenoplant')||[];phenoObsRecs=lsGet('gp-phenoobs')||[];milestoneCompRecs=lsGet('gp-milestonecomp')||[];try{fdTasksDirty=false;lsSet('gp-fdtasks-dirty',false);}catch(_){}migrateSanTaskEditsToRecs();wasteRecs.forEach(r=>{if(r.type==='Vegetative waste')r.type='Vegetative Waste';});lsSet('gp-waste',wasteRecs);const s=lsGet('gp-cfg');if(s){cfg=s;applySettings();}dedupeBatchRecs();backfillHarvestedTxs();reconcileAllPackagedBatches();try{cleanLocalDuplicates({batchtxSkipTypes:['Destroyed']});}catch(_){}if(window.__SB_MODE){try{cfg.token=cfg.token||'__sb__';cfg.base=cfg.base||'__sb__';const _sbr={ecTbl:'ec_logs',roTbl:'runoff_logs',flowTbl:'flow_logs',wasteTbl:'waste_records',batchTbl:'batches',batchtxTbl:'transactions',harvestTbl:'harvest_records',postDryTbl:'postdry_records',bioTbl:'bio_records',pestTbl:'pest_records',seedInvTbl:'seed_inventory',sanCleanTbl:'sanitation_cleaning',sanToolTbl:'sanitation_tool',sanEditsTbl:'sanitation_task_edits',destroyTbl:'destruction_events'};Object.keys(_sbr).forEach(k=>{if(!cfg[k])cfg[k]=_sbr[k];});}catch(_){}}}
 
 // One-time migration of the previous gp-san-task-edits localStorage shape into the new
 // synced sanEditsRecs array. Runs on every boot but only does work the first time.
@@ -11805,10 +11805,49 @@ function fdResetMilestones(){
 }
 fdRenderMilestones();
 
+// ── Milestone completion tracking ────────────────────────────────────────────
+// Per-batch, per-task checkboxes on reached flower-day milestones. Persisted to the
+// milestone_completions table (Supabase-native via window.__SBC) and shown on the Batch Report.
+function _milestoneCompRec(batch, day, task){
+  return milestoneCompRecs.find(m => m && m.batch===batch && (parseInt(m.flowerDay)||0)===day && m.task===task) || null;
+}
+function _growerFromEmail(email){
+  const lp = String(email||'').split('@')[0] || '';
+  if(!lp) return '';
+  return lp.split(/[._-]+/).filter(Boolean).map(w=>w.charAt(0).toUpperCase()+w.slice(1)).join(' ');
+}
+async function milestoneToggleEl(el, batchId){
+  const day = parseInt(el.getAttribute('data-mday'));
+  const idx = parseInt(el.getAttribute('data-midx'));
+  const task = ((FLOWER_DAY_TASKS[day]||[])[idx]) || '';
+  if(!task) return;
+  const checked = el.checked;
+  const sb = (typeof window!=='undefined' && window.__SBC) ? window.__SBC : null;
+  if(!sb){ toast('Not connected — sign in first.'); el.checked = !checked; return; }
+  if(checked){
+    let grower=''; try{ const { data } = await sb.auth.getUser(); grower = _growerFromEmail(data && data.user ? data.user.email : ''); }catch(_){}
+    const cd = localDate();
+    try{
+      const { data, error } = await sb.from('milestone_completions')
+        .upsert({ batch_id:batchId, flower_day:day, task:task, grower:grower||null, completed_date:cd }, { onConflict:'batch_id,flower_day,task' })
+        .select().single();
+      if(error) throw error;
+      milestoneCompRecs = milestoneCompRecs.filter(m=>!(m.batch===batchId && (parseInt(m.flowerDay)||0)===day && m.task===task));
+      milestoneCompRecs.push({ id:data.id, batch:batchId, flowerDay:day, task:task, grower:grower, completedDate:cd, synced:true });
+      lsSet('gp-milestonecomp', milestoneCompRecs);
+    }catch(e){ toast('Save failed: '+(e.message||e), 5000); el.checked=false; return; }
+  } else {
+    try{
+      const { error } = await sb.from('milestone_completions').delete().match({ batch_id:batchId, flower_day:day, task:task });
+      if(error) throw error;
+      milestoneCompRecs = milestoneCompRecs.filter(m=>!(m.batch===batchId && (parseInt(m.flowerDay)||0)===day && m.task===task));
+      lsSet('gp-milestonecomp', milestoneCompRecs);
+    }catch(e){ toast('Update failed: '+(e.message||e), 5000); el.checked=true; return; }
+  }
+  summaryRenderFlowerAlerts(batchId);
+}
+function milestoneRefreshCurrent(){ const bid=(document.getElementById('summary-batch-select')||{}).value; if(bid && typeof summaryRenderFlowerAlerts==='function') summaryRenderFlowerAlerts(bid); }
 function summaryRenderFlowerAlerts(batchId){
-  // Renders today's required flower-day tasks (amber banner) and the next few
-  // upcoming tasks (subtle reminder list). Hidden unless the selected batch is
-  // currently in Flower phase AND has a flowerStart date stamped.
   const wrap = document.getElementById('summary-flower-alerts');
   if(!wrap) return;
   wrap.style.display = 'none';
@@ -11820,37 +11859,41 @@ function summaryRenderFlowerAlerts(batchId){
   const today = localDate();
   const fd = daysBetween(b.flowerStart, today);
   if(!fd || fd <= 0) return;
-  const todaysTasks = FLOWER_DAY_TASKS[fd] || null;
-  // Upcoming: the next 3 milestones after today, within the next 21 days.
-  const upcoming = Object.keys(FLOWER_DAY_TASKS)
-    .map(d => parseInt(d, 10))
-    .filter(d => d > fd && d <= fd + 21)
-    .sort((a, b) => a - b)
-    .slice(0, 3)
-    .map(d => ({day: d, daysAway: d - fd, tasks: FLOWER_DAY_TASKS[d]}));
-  // Nothing to show → keep banner hidden.
-  if(!todaysTasks && !upcoming.length) return;
+  const _esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const allDays = Object.keys(FLOWER_DAY_TASKS).map(d=>parseInt(d,10)).filter(n=>!isNaN(n)).sort((a,b)=>a-b);
+  const reached  = allDays.filter(d => d <= fd);
+  const upcoming = allDays.filter(d => d > fd && d <= fd + 21).slice(0,3);
+  if(!reached.length && !upcoming.length) return;
   let html = '';
-  if(todaysTasks){
-    html += '<div style="background:var(--amber-pale);border:2px solid var(--amber);border-radius:var(--radius-sm);padding:12px 14px;">'
-         +    '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">'
-         +      '<span style="background:var(--amber);color:#fff;font-family:var(--mono);font-weight:700;font-size:13px;padding:3px 10px;border-radius:12px;">F'+fd+' — TODAY</span>'
-         +      '<span style="font-weight:600;color:var(--amber);font-size:14px;">Required tasks for today</span>'
-         +    '</div>'
-         +    '<ul style="margin:0;padding-left:20px;font-size:13px;color:var(--text);line-height:1.6;">'
-         +      todaysTasks.map(t => '<li>'+t+'</li>').join('')
-         +    '</ul>'
-         +  '</div>';
+  if(reached.length){
+    html += '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;">'
+         +   '<div style="font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">Milestone checklist — F'+fd+' today</div>';
+    reached.forEach(day => {
+      const tasks = FLOWER_DAY_TASKS[day] || [];
+      const isToday = (day === fd);
+      html += '<div style="margin-bottom:8px;"><div style="font-family:var(--mono);font-weight:700;color:'+(isToday?'var(--amber)':'var(--green)')+';font-size:12px;margin-bottom:2px;">F'+day+(isToday?' — TODAY':'')+'</div>';
+      tasks.forEach((t, idx) => {
+        const rec = _milestoneCompRec(batchId, day, t);
+        const done = !!rec;
+        html += '<label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;padding:2px 0;cursor:pointer;">'
+             +    '<input type="checkbox" data-mday="'+day+'" data-midx="'+idx+'" onchange="milestoneToggleEl(this,\''+_esc(batchId)+'\')"'+(done?' checked':'')+' style="margin-top:3px;" />'
+             +    '<span style="'+(done?'color:var(--text3);text-decoration:line-through;':'color:var(--text);')+'">'+_esc(t)
+             +      (done && (rec.grower||rec.completedDate) ? ' <span style="font-size:11px;color:var(--text3);text-decoration:none;">('+_esc(rec.grower||'')+(rec.grower&&rec.completedDate?', ':'')+_esc(rec.completedDate||'')+')</span>' : '')
+             +    '</span></label>';
+      });
+      html += '</div>';
+    });
+    html += '</div>';
   }
   if(upcoming.length){
-    html += '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;'+(todaysTasks?'margin-top:8px;':'')+'">'
-         +    '<div style="font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">Upcoming flower-day milestones</div>';
-    upcoming.forEach(u => {
-      const inLabel = u.daysAway === 1 ? 'in 1 day' : ('in ' + u.daysAway + ' days');
+    html += '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;margin-top:8px;">'
+         +   '<div style="font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">Upcoming milestones</div>';
+    upcoming.forEach(day => {
+      const away = day - fd; const inLabel = away===1 ? 'in 1 day' : ('in '+away+' days');
       html += '<div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:4px;">'
-           +    '<span style="font-family:var(--mono);font-weight:700;color:var(--green);min-width:36px;">F'+u.day+'</span>'
+           +    '<span style="font-family:var(--mono);font-weight:700;color:var(--green);min-width:36px;">F'+day+'</span>'
            +    '<span style="color:var(--text3);font-size:11px;min-width:60px;">'+inLabel+'</span>'
-           +    '<span style="font-size:12px;color:var(--text2);">'+u.tasks.join(' · ')+'</span>'
+           +    '<span style="font-size:12px;color:var(--text2);">'+(FLOWER_DAY_TASKS[day]||[]).map(_esc).join(' · ')+'</span>'
            +  '</div>';
     });
     html += '</div>';
@@ -11858,6 +11901,7 @@ function summaryRenderFlowerAlerts(batchId){
   wrap.innerHTML = html;
   wrap.style.display = '';
 }
+
 
 // ─── Mother phase distribution UI ────────────────────────────────────────────
 // Mom Purpose change handler. Persists the new purpose to batchRec, updates the hint text,
@@ -14786,6 +14830,25 @@ function renderBatchReport(batchId){
     }
   }
 
+  // Completed milestones for this batch (per-task checkboxes ticked on Batch Management)
+  {
+    const _mc = milestoneCompRecs.filter(m => m && m.batch === b.batchId)
+      .slice().sort((x,y)=> ((parseInt(x.flowerDay)||0)-(parseInt(y.flowerDay)||0)) || String(x.task||'').localeCompare(String(y.task||'')));
+    if(_mc.length){
+      const _me = v => String(v==null?'':v).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+      let _tbl = '<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr>'
+        + ['F-Day','Task','Completed by','Date'].map(h=>'<th style="text-align:left;padding:4px 8px;border-bottom:1px solid var(--border);font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">'+h+'</th>').join('')
+        + '</tr></thead><tbody>';
+      _mc.forEach(m => {
+        _tbl += '<tr><td style="padding:4px 8px;font-family:var(--mono);border-top:1px solid var(--border);">F'+(parseInt(m.flowerDay)||0)+'</td>'
+          + '<td style="padding:4px 8px;border-top:1px solid var(--border);">'+_me(m.task)+'</td>'
+          + '<td style="padding:4px 8px;border-top:1px solid var(--border);">'+_me(m.grower||'—')+'</td>'
+          + '<td style="padding:4px 8px;font-family:var(--mono);border-top:1px solid var(--border);">'+_me(m.completedDate||'—')+'</td></tr>';
+      });
+      _tbl += '</tbody></table>';
+      s += sectionCard('Completed Milestones ('+_mc.length+')', _tbl);
+    }
+  }
   // Transaction history
   if(txs.length){
     let running = 0;
@@ -16892,16 +16955,17 @@ function buildSeedInvFields(rec){
 
   const fromPhenoPlant = r => ({ id:r.id, batch:r.batch_id, plantNumber:r.plant_number, tag:r.tag||'', status:r.status||'Undecided', rating:r.rating||0, notes:r.notes||'', synced:true });
   const fromPhenoObs = r => ({ id:r.id, plantId:r.plant_id, date:dstr(r.date), grower:r.grower||'', notes:r.notes||'', vigor:r.vigor||'', structure:r.structure||'', aroma:r.aroma||'', color:r.color||'', trichomes:r.trichomes||'', synced:true });
+  const fromMilestoneComp = r => ({ id:r.id, batch:r.batch_id, flowerDay:r.flower_day, task:r.task, grower:r.grower||'', completedDate:dstr(r.completed_date), synced:true });
   async function hydrate(){
     // Fetch every table in PARALLEL (was sequential — 17 round-trips ran one-after-another, which
     // made login hang 20-30s). Promise.all issues them concurrently, then we map/assemble locally.
-    const [batches, txs, ec, ro, flow, waste, harvest, postdry, bio, pest, seed, sancl, santl, saned, events, adjs, covs, phPlants, phObs, fmRows] = await Promise.all([
+    const [batches, txs, ec, ro, flow, waste, harvest, postdry, bio, pest, seed, sancl, santl, saned, events, adjs, covs, phPlants, phObs, fmRows, mcompRows] = await Promise.all([
       q('batches'), q('transactions'), q('ec_logs'), q('runoff_logs'), q('flow_logs'),
       q('waste_records'), q('harvest_records'), q('postdry_records'), q('bio_records'),
       q('pest_records'), q('seed_inventory'), q('sanitation_cleaning'), q('sanitation_tool'),
       q('sanitation_task_edits'), q('destruction_events'), q('destruction_adjust'), q('destruction_covered'),
       q('pheno_plants'), q('pheno_observations'),
-      q('flower_milestones')
+      q('flower_milestones'), q('milestone_completions')
     ]);
     const _batchRows = batches.map(fromBatch);
     ls('gp-batch', _batchRows);
@@ -16931,6 +16995,7 @@ function buildSeedInvFields(rec){
         if(typeof fdRenderMilestones === 'function') fdRenderMilestones();
       }
     }catch(_){}
+    ls('gp-milestonecomp', (mcompRows||[]).map(fromMilestoneComp));
     // destruction — reassemble adjust + coveredKeys from the join tables
     const keyById = {}; waste.forEach(w => { keyById[w.id] = wasteKeyRow(w); });
     const adjBy = {}; adjs.forEach(a => { (adjBy[a.destruction_id] = adjBy[a.destruction_id]||[]).push(a); });
@@ -17057,7 +17122,7 @@ function buildSeedInvFields(rec){
     if(source!=='manual'){ const a=document.activeElement; if(a && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName||'')) return; const _now=Date.now(); if(_now - _lastAutoRefresh < 3000) return; _lastAutoRefresh=_now; }
     try{ await hydrate(); }catch(e){ console.error('[sbRefresh]', e); return; }
     try{ if(typeof loadAll==='function') loadAll(); }catch(_){}
-    ['populateBatchDropdowns','updatePendingBadge','renderBatchLog','summaryPopulateBatches','renderWaste','renderEC','renderRO','destroyRenderPending','destroyRenderHistory','seedInvRenderList','renderWasteReport','phenoRenderPlants','fdRenderMilestones'].forEach(fn=>{ try{ if(typeof window[fn]==='function') window[fn](); }catch(_){} });
+    ['populateBatchDropdowns','updatePendingBadge','renderBatchLog','summaryPopulateBatches','renderWaste','renderEC','renderRO','destroyRenderPending','destroyRenderHistory','seedInvRenderList','renderWasteReport','phenoRenderPlants','fdRenderMilestones','milestoneRefreshCurrent'].forEach(fn=>{ try{ if(typeof window[fn]==='function') window[fn](); }catch(_){} });
     // Push any locally-corrected records up to Supabase so fixes persist and the pending badge
     // clears. A boot reconciler can zero a phantom batch balance and flag that batch unsynced;
     // without a push it would recur every load. Batches use an idempotent upsert (safe to repeat).
@@ -17077,7 +17142,7 @@ function buildSeedInvFields(rec){
     if(_rtChannel){ try{ SBC.removeChannel(_rtChannel); }catch(_){} }
     const bump = () => { console.log('[realtime] change received'); clearTimeout(_rtTimer); _rtTimer=setTimeout(()=>sbRefresh('realtime'), 1500); };
     const ch = SBC.channel('gp-live');
-    ['batches','transactions','ec_logs','runoff_logs','flow_logs','waste_records','harvest_records','postdry_records','bio_records','pest_records','seed_inventory','destruction_events','destruction_adjust','destruction_covered','sanitation_cleaning','sanitation_tool','sanitation_task_edits','pheno_plants','pheno_observations','flower_milestones']
+    ['batches','transactions','ec_logs','runoff_logs','flow_logs','waste_records','harvest_records','postdry_records','bio_records','pest_records','seed_inventory','destruction_events','destruction_adjust','destruction_covered','sanitation_cleaning','sanitation_tool','sanitation_task_edits','pheno_plants','pheno_observations','flower_milestones','milestone_completions']
       .forEach(tbl => ch.on('postgres_changes', { event:'*', schema:'public', table:tbl }, bump));
     ch.subscribe((st, err) => {
       console.log('[realtime] status:', st, err||'');
