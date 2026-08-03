@@ -756,7 +756,7 @@ tr:last-child td { border-bottom: none; }
              Bypasses the normal event-driven flow: user sets phase + dates + plant count
              directly. After save the batch behaves like any other (forward-only progression,
              event-driven captures resume). -->
-        <div class="field" style="margin-bottom:10px;">
+        <div class="field" style="display:none;margin-bottom:10px;">
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;">
             <input type="checkbox" id="batch-backfill-toggle" onchange="batchBackfillToggle()" style="margin:0;cursor:pointer;" />
             <span style="font-weight:600;color:var(--text);">Backfill mode</span>
@@ -16656,7 +16656,6 @@ function seedInvRenderList(){
       '<th style="padding:8px 10px;text-align:right;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);" title="Current stock available to plant">On Hand</th>'+
       '<th style="padding:8px 10px;text-align:right;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);" title="Cumulative seeds that germinated from this lot">Germinated</th>'+
       '<th style="padding:8px 10px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Received</th>'+
-      '<th style="padding:8px 10px;text-align:center;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">Actions</th>'+
     '</tr></thead><tbody>';
   recs.forEach(r => {
     const qty = parseInt(r.qtyOnHand)||0;
@@ -16678,12 +16677,9 @@ function seedInvRenderList(){
     html += '<td style="padding:8px 10px;border-left:1px solid var(--border);text-align:right;font-family:var(--mono);font-weight:'+(isLow?'400':'700')+';color:'+(isLow?'var(--text3)':'var(--green)')+';">'+qty+'</td>';
     html += '<td style="padding:8px 10px;border-left:1px solid var(--border);text-align:right;font-family:var(--mono);color:var(--text2);">'+germinated+'</td>';
     html += '<td style="padding:8px 10px;border-left:1px solid var(--border);font-family:var(--mono);font-size:11px;color:var(--text2);">'+(r.dateReceived||'—')+'</td>';
-    html += '<td style="padding:8px 10px;border-left:1px solid var(--border);text-align:center;white-space:nowrap;">';
-    html += '<button class="btn-secondary" style="font-size:11px;padding:4px 8px;margin-right:4px;" onclick="seedInvEditStart('+r.id+')">Edit</button>';
-    html += '<button class="btn-secondary" style="font-size:11px;padding:4px 8px;color:var(--red);" onclick="seedInvDelete('+r.id+')">Delete</button>';
-    html += '</td></tr>';
+    html += '</tr>';
     if(r.notes){
-      html += '<tr style="background:var(--bg2);"><td colspan="8" style="padding:4px 10px;font-size:10px;color:var(--text3);font-family:var(--mono);">'+r.notes+'</td></tr>';
+      html += '<tr style="background:var(--bg2);"><td colspan="7" style="padding:4px 10px;font-size:10px;color:var(--text3);font-family:var(--mono);">'+r.notes+'</td></tr>';
     }
   });
   html += '</tbody></table>';
