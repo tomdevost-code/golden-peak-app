@@ -16427,6 +16427,24 @@ function ctlsToggleDetail(id){
   row.style.display = show ? '' : 'none';
   if(c) c.textContent = show ? '▾' : '▸';
 }
+// Detail lines are formatted "BATCHID — qty · date …". Inject the strain/cultivar name right
+// after the batch ID so each record reads "SP-001 · Blue Dream — 24 · 2026-07-15". Lot lines
+// (Seeds Inventory) lead with a lot number, not a batch ID, and already carry their strain, so
+// the lookup misses and they're left untouched.
+function _ctlsStrainFor(bid){
+  const b = batchRecs.find(x => x.batchId === bid && !x.type);
+  if(!b) return '';
+  return (b.cultivar || b.seedStrain || '').toString().trim();
+}
+function _ctlsAugmentDetail(s){
+  const sep = ' — ';
+  const idx = s.indexOf(sep);
+  if(idx < 0) return s;
+  const bid = s.slice(0, idx).trim();
+  const st = _ctlsStrainFor(bid);
+  if(!st) return s;
+  return bid + ' · ' + st + s.slice(idx);
+}
 function _ctlsBlock(title, rows){
   let html = '<div style="border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:14px;background:#fff;">';
   html += '<div style="font-size:12px;font-weight:700;color:var(--green);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:10px;border-bottom:1px solid var(--border);padding-bottom:6px;">'+title+'</div>';
@@ -16446,7 +16464,7 @@ function _ctlsBlock(title, rows){
     if(hasDetail){
       html += '<tr id="'+rid+'" style="display:none;"><td colspan="2" style="padding:2px 8px 8px 26px;background:var(--bg2);">'
            +    '<div style="font-size:10px;color:var(--text3);font-family:var(--mono);line-height:1.7;">'
-           +      r.detail.map(d=>'• '+d).join('<br>')
+           +      r.detail.map(d=>'• '+_ctlsAugmentDetail(d)).join('<br>')
            +    '</div></td></tr>';
     }
   });
