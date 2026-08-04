@@ -4535,7 +4535,14 @@ function harvestRenderBins(){
     totalEl.textContent = '0.000 kg';
     return;
   }
-  const bins = harvestRecs.filter(r=>r.batch===batch && r.room===room).sort((a,b)=>(b.id||0)-(a.id||0));
+  // Order by Container/Bin number ascending (the order they're entered, since binNumber
+  // auto-increments), with record id as a stable tiebreaker. Sorting by binNumber rather than
+  // id keeps an edited bin (e.g. a note added later) in place instead of jumping to the top.
+  const bins = harvestRecs.filter(r=>r.batch===batch && r.room===room).sort((a,b)=>{
+    const an=parseInt(a.binNumber)||0, bn=parseInt(b.binNumber)||0;
+    if(an!==bn) return an-bn;
+    return (a.id||0)-(b.id||0);
+  });
   const totalNet = bins.reduce((s,b)=>s+(b.netWeight||0),0);
   totalEl.textContent = totalNet.toFixed(3) + ' kg';
   if(bins.length === 0){
