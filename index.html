@@ -13516,7 +13516,11 @@ function summaryUpdateTxTypeOptions(batchId){
   // available (mothers are clone donors, not product), and Moved to Moms is also
   // disallowed — we don't transfer plants between mother batches.
   if(isMotherBatch(batchId)){
-    opts = opts.filter(o => o !== 'Sold' && o !== 'Moved to Moms');
+    // Moms are clone donors — no Moved to Moms, and no dry-flower sales. But a mom CAN sell live
+    // plants to another licensed producer while its plants are in Clones/Veg, so keep 'Sold' in
+    // those phases only.
+    const _momLiveSaleOk = (phase === 'Clones' || phase === 'Veg');
+    opts = opts.filter(o => o !== 'Moved to Moms' && (o !== 'Sold' || _momLiveSaleOk));
     if(phase !== 'Delivered' && !opts.includes('Produced/Received')){
       opts = ['Produced/Received', ...opts];
     }
@@ -13877,8 +13881,9 @@ async function summaryAddTransaction(){
   const _bSoldPhase = _bSoldRec ? (_bSoldRec.plantPhase||'') : '';
   const _isLivePlantSale = isSold && (_bSoldPhase === 'Clones' || _bSoldPhase === 'Veg');
   if(isSold){
-    if(isMotherBatch(batchId)){
-      toast('Mother batches cannot be sold.',4000);
+    // Moms may sell LIVE plants (Clones/Veg) to another licensed producer, but never dry flower.
+    if(isMotherBatch(batchId) && !_isLivePlantSale){
+      toast('Mother batches can only sell live plants (Clones/Veg) to a licensed producer.',5000);
       return;
     }
     // Once-per-batch rule only applies to the final dry-flower sale. Multiple live-plant
@@ -14200,6 +14205,12 @@ async function summaryAddTransaction(){
       momPurposeIncrementCloneDonor(_txBatchRec, qty);
       _momPhaseChanged = true;
     } else if(txType === 'Moved to Moms' && qty > 0){
+      momPhaseSubtractJunior(_txBatchRec, qty);
+      momPurposeSubtractJunior(_txBatchRec, qty);
+      _momPhaseChanged = true;
+    } else if(txType === 'Sold' && qty > 0){
+      // Live-plant sale from a mom to a licensed producer — plants leave the batch, so drain the
+      // junior phase buckets (Clones first, then Veg) and the purpose split accordingly.
       momPhaseSubtractJunior(_txBatchRec, qty);
       momPurposeSubtractJunior(_txBatchRec, qty);
       _momPhaseChanged = true;
