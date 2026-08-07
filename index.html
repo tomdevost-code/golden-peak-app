@@ -1364,8 +1364,14 @@ tr:last-child td { border-bottom: none; }
             <select id="tx-sale-stage" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;">
               <option value="Dry" selected>Dry (cured flower)</option>
               <option value="Fresh">Fresh (wet to processor)</option>
-              <option value="Clone">Live Plants</option>
+              <option value="Clone">Live Plants (to Licensed Producer)</option>
             </select>
+          </div>
+          <!-- Buyer (Licensed Producer): shown only for a live-plant Sold (Clones/Veg). Captures
+               which licensed producer the plants were sold to. Stored as tx.saleBuyer. -->
+          <div class="field" style="margin-bottom:10px;display:none;" id="tx-sale-buyer-wrap">
+            <label>Licensed Producer (buyer) <span style="color:var(--red);font-weight:700;">*</span></label>
+            <input type="text" id="tx-sale-buyer" placeholder="e.g. Acme Cannabis Inc." style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;box-sizing:border-box;" />
           </div>
           <!-- Sent to Lab fields: shown only for the Sent to Lab tx type. Captures Destination
                Type and Material Type. Weight + Plant Count are reused from above. -->
@@ -2550,6 +2556,7 @@ const REMOTE_MAPPERS = {
       runningQty: parseInt(f['Current Quantity After'])||0,
       plantPhase: f['Plant Phase']||'',
       saleStage: f['Sale Stage']||'',
+      saleBuyer: f['Sale Buyer']||'',
       labDestType: f['Lab Destination Type']||'',
       labMaterialType: f['Lab Material Type']||'',
       labDestName: f['Lab Destination Name']||'',
@@ -8709,7 +8716,7 @@ async function syncPending(){
         let running=0;
         for(const t of sorted){const q=parseInt(t.qty)||0;if(t.txType==='Produced/Received'||t.txType==='Seeds Germinated')running+=q;else running-=q;if(t.id===tx.id)break;}
         if(running<0)running=0;
-        const f={'Batch ID':tx.batchId?[tx.batchId]:undefined,'Date':tx.date,'Transaction Type':tx.txType,'Plant Phase':tx.plantPhase||undefined,'Quantity':tx.qty,'Weight (kg)':tx.weight||undefined,'Current Quantity After':running,'Sale Stage':tx.saleStage||undefined,'Lab Destination Type':tx.labDestType||undefined,'Lab Material Type':tx.labMaterialType||undefined,'Lab Destination Name':tx.labDestName||undefined,'From Phase':tx.fromPhase||undefined,'To Phase':tx.toPhase||undefined,'Room':tx.room||undefined,'Cohort Purpose':tx.cohortPurpose||undefined,'Notes':tx.notes||undefined};
+        const f={'Batch ID':tx.batchId?[tx.batchId]:undefined,'Date':tx.date,'Transaction Type':tx.txType,'Plant Phase':tx.plantPhase||undefined,'Quantity':tx.qty,'Weight (kg)':tx.weight||undefined,'Current Quantity After':running,'Sale Stage':tx.saleStage||undefined,'Sale Buyer':tx.saleBuyer||undefined,'Lab Destination Type':tx.labDestType||undefined,'Lab Material Type':tx.labMaterialType||undefined,'Lab Destination Name':tx.labDestName||undefined,'From Phase':tx.fromPhase||undefined,'To Phase':tx.toPhase||undefined,'Room':tx.room||undefined,'Cohort Purpose':tx.cohortPurpose||undefined,'Notes':tx.notes||undefined};
         Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
         if(tx.airtableId){ await atUpdateById(cfg.batchtxTbl, tx.airtableId, f); }
         else { const _tr=await atPost(cfg.batchtxTbl, f); if(_tr && _tr.id) tx.airtableId=_tr.id; }
@@ -13179,6 +13186,7 @@ function txTypeChanged(){
   // Default: hide both, clear values
   pcWrap.style.display = 'none';
   wetWrap.style.display = 'none';
+  { const _byW=document.getElementById('tx-sale-buyer-wrap'); if(_byW){ _byW.style.display='none'; const _by=document.getElementById('tx-sale-buyer'); /* keep value for edit re-population */ } }
   // Default the Plant Count label back to "Plant Count" — overridden below for Seeds Germinated.
   const pcLbl = document.getElementById('tx-plant-count-label');
   if(pcLbl) pcLbl.textContent = 'Plant Count';
@@ -13207,7 +13215,7 @@ function txTypeChanged(){
     const _ss = document.getElementById('tx-sale-stage');
     if(_ss){
       if(_isLivePlantSale){
-        _ss.innerHTML = '<option value="Clone" selected>Live Plants</option>';
+        _ss.innerHTML = '<option value="Clone" selected>Live Plants (to Licensed Producer)</option>';
         _ss.value = 'Clone';
       } else {
         _ss.innerHTML = '<option value="Dry" selected>Dry (cured flower)</option>'
@@ -13216,7 +13224,7 @@ function txTypeChanged(){
       }
     }
     if(_isLivePlantSale){
-      // Live-plant sale: show Plant Count, hide Weight.
+      // Live-plant sale: show Plant Count + Buyer (Licensed Producer), hide Weight.
       pcWrap.style.display = '';
       if(pcLbl) pcLbl.textContent = 'Plant Count';
       pcInp.readOnly = false;
@@ -13225,6 +13233,7 @@ function txTypeChanged(){
       pcInp.style.cursor = '';
       pcInp.value = '';
       wetInp.value = '';
+      const _byW=document.getElementById('tx-sale-buyer-wrap'); if(_byW) _byW.style.display='';
     } else {
       // Dry-flower sale: show Weight, hide Plant Count.
       wetWrap.style.display = '';
@@ -13931,9 +13940,14 @@ async function summaryAddTransaction(){
   // Routes the tx into the right CTLS section. Fallback is phase-aware: live-plant sales
   // default to 'Clone'; dry-flower sales default to 'Dry'.
   let _saleStage = '';
+  let _saleBuyer = '';
   if(isSold){
     const _ssRaw = (document.getElementById('tx-sale-stage')||{}).value || '';
     _saleStage = _ssRaw || (_isLivePlantSale ? 'Clone' : 'Dry');
+    if(_isLivePlantSale){
+      _saleBuyer = ((document.getElementById('tx-sale-buyer')||{}).value || '').trim();
+      if(!_saleBuyer){ toast('Enter the licensed producer (buyer) for this live-plant sale.'); return; }
+    }
   }
   // Mother batches AND S-batches receiving Produced/Received clones need a Cutting Source Batch.
   // For moms: another mother, an S-batch (any phase), or a non-mom batch in Veg.
@@ -14136,6 +14150,7 @@ async function summaryAddTransaction(){
   if(txType === 'Moved to Moms' && _destMomBatchId) tx.destBatchId = _destMomBatchId;
   if(txType === 'Produced/Received' && _srcCuttingBatchId) tx.sourceBatchId = _srcCuttingBatchId;
   if(txType === 'Sold' && _saleStage) tx.saleStage = _saleStage;
+  if(txType === 'Sold' && _saleBuyer) tx.saleBuyer = _saleBuyer;
   if(txType === 'Sent to Lab'){
     tx.labDestType = _labDest;
     tx.labMaterialType = _labMaterial;
@@ -14354,7 +14369,7 @@ async function summaryAddTransaction(){
   if(cfg.batchtxTbl && cfg.token && cfg.base){
     try{
       const currentQty = summaryCalcQty(batchId);
-      const f={'Batch ID':tx.batchId?[tx.batchId]:undefined,'Date':tx.date,'Transaction Type':tx.txType,'Plant Phase':tx.plantPhase||undefined,'Quantity':tx.qty,'Weight (kg)':tx.weight||undefined,'Current Quantity After':currentQty,'Sale Stage':tx.saleStage||undefined,'Lab Destination Type':tx.labDestType||undefined,'Lab Material Type':tx.labMaterialType||undefined,'Lab Destination Name':tx.labDestName||undefined,'From Phase':tx.fromPhase||undefined,'To Phase':tx.toPhase||undefined,'Room':tx.room||undefined,'Cohort Purpose':tx.cohortPurpose||undefined,'Notes':tx.notes||undefined};
+      const f={'Batch ID':tx.batchId?[tx.batchId]:undefined,'Date':tx.date,'Transaction Type':tx.txType,'Plant Phase':tx.plantPhase||undefined,'Quantity':tx.qty,'Weight (kg)':tx.weight||undefined,'Current Quantity After':currentQty,'Sale Stage':tx.saleStage||undefined,'Sale Buyer':tx.saleBuyer||undefined,'Lab Destination Type':tx.labDestType||undefined,'Lab Material Type':tx.labMaterialType||undefined,'Lab Destination Name':tx.labDestName||undefined,'From Phase':tx.fromPhase||undefined,'To Phase':tx.toPhase||undefined,'Room':tx.room||undefined,'Cohort Purpose':tx.cohortPurpose||undefined,'Notes':tx.notes||undefined};
       Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
       const _stRes = await atPost(cfg.batchtxTbl, f);
       tx.synced=true; if(_stRes && _stRes.id) tx.airtableId=_stRes.id; lsSet('gp-batchtx',batchTxRecs); setSyncPill('ok','Synced');
@@ -14486,7 +14501,7 @@ function summaryRenderHistory(batchId){
       const _ssTag = (t.saleStage||'');
       const _q = parseInt(t.qty)||0;
       const _w = parseFloat(t.weight)||0;
-      qtyDisplay = (_ssTag === 'Clone' && _q > 0) ? ('-' + _q + ' plants') : (_w.toFixed(3) + ' kg');
+      qtyDisplay = (_ssTag === 'Clone' && _q > 0) ? ('-' + _q + ' plants' + (t.saleBuyer?' → '+t.saleBuyer:'')) : (_w.toFixed(3) + ' kg');
     }
     else if(isHarvested){
       // Plant count from the room(s) during flower + wet weight, side by side
@@ -14546,7 +14561,7 @@ async function summaryResyncBatchTx(){
   let ok=0, fail=0, lastErr='';
   for(const tx of txs){
     try {
-      const f = { 'Batch ID':[batchId], 'Date':tx.date, 'Transaction Type':tx.txType, 'Plant Phase':tx.plantPhase||undefined, 'Quantity':tx.qty, 'Weight (kg)':tx.weight||undefined, 'Sale Stage':tx.saleStage||undefined, 'Lab Destination Type':tx.labDestType||undefined, 'Lab Material Type':tx.labMaterialType||undefined, 'Lab Destination Name':tx.labDestName||undefined, 'From Phase':tx.fromPhase||undefined, 'To Phase':tx.toPhase||undefined, 'Room':tx.room||undefined, 'Cohort Purpose':tx.cohortPurpose||undefined, 'Notes':tx.notes||undefined };
+      const f = { 'Batch ID':[batchId], 'Date':tx.date, 'Transaction Type':tx.txType, 'Plant Phase':tx.plantPhase||undefined, 'Quantity':tx.qty, 'Weight (kg)':tx.weight||undefined, 'Sale Stage':tx.saleStage||undefined, 'Sale Buyer':tx.saleBuyer||undefined, 'Lab Destination Type':tx.labDestType||undefined, 'Lab Material Type':tx.labMaterialType||undefined, 'Lab Destination Name':tx.labDestName||undefined, 'From Phase':tx.fromPhase||undefined, 'To Phase':tx.toPhase||undefined, 'Room':tx.room||undefined, 'Cohort Purpose':tx.cohortPurpose||undefined, 'Notes':tx.notes||undefined };
       Object.keys(f).forEach(k=>{ if(f[k]===undefined||f[k]===null||f[k]==='') delete f[k]; });
       const _r = await atPost(cfg.batchtxTbl, f); if(_r && _r.id) tx.airtableId = _r.id;
       tx.synced = true; ok++;
@@ -14956,7 +14971,7 @@ function renderBatchReport(batchId){
       }
       const _isCredit = (t.txType === 'Produced/Received' || t.txType === 'Seeds Germinated');
       const _isLivePlantSoldRow = (t.txType === 'Sold' && (t.saleStage||'') === 'Clone');
-      const qtyStr = _isLivePlantSoldRow ? ('-' + (parseInt(t.qty)||0) + ' plants')
+      const qtyStr = _isLivePlantSoldRow ? ('-' + (parseInt(t.qty)||0) + ' plants' + (t.saleBuyer?' → '+t.saleBuyer:''))
                    : t.txType === 'Sold' ? fmtKg(parseFloat(t.weight)||0)
                    : t.txType === 'Harvested' ? ((parseInt(t.qty)||0)+' / '+fmtKg(parseFloat(t.weight)||0))
                    : t.txType === 'Phase Change' ? (t.weight > 0 ? fmtKg(t.weight) : '—')
@@ -16245,7 +16260,7 @@ function ctlsVegMetrics(from, to){
     destroyedAll, destroyedAllDetail: _destAllTx.map(_txQtyD),
     vegWasteCount, vegWasteCountDetail: vegWastes.map(w => w.batch+' — '+(w.subtype||'')+' '+(parseFloat(w.weight)||0).toFixed(3)+' kg'+(w.date?' · '+w.date:'')),
     vegWasteWeight: vegWasteWeight || null, vegWasteWeightDetail: vegWastes.map(w => w.batch+' — '+(parseFloat(w.weight)||0).toFixed(3)+' kg ('+(w.subtype||'')+(w.date?', '+w.date:'')+')'),
-    sold: soldClones || null, soldDetail: _soldTx.map(_txQtyD),
+    sold: soldClones || null, soldDetail: _soldTx.map(t => t.batchId+' — '+(parseInt(t.qty)||0)+' plants'+(t.saleBuyer?' → '+t.saleBuyer:'')+(t.plantPhase?' ['+t.plantPhase+']':'')+(t.date?' · '+t.date:'')),
     sentToLab: sentToLabPlants || null, sentToLabDetail: _labTx.map(t => t.batchId+' — '+(parseInt(t.qty)||0)+' plants'+(t.labMaterialType?' ('+t.labMaterialType+')':'')+(t.date?' · '+t.date:'')),
     leafTestingWeight: leafTestingWeight || null, leafTestingWeightDetail: _leafTx.map(t => t.batchId+' — '+(parseFloat(t.weight)||0).toFixed(3)+' kg'+(t.date?' · '+t.date:''))
   };
@@ -17041,7 +17056,7 @@ function buildSeedInvFields(rec){
 
   // ---- reverse mappers: Supabase row -> the app's record shape ----
   const fromBatch = r => ({ id:r.batch_id, batchId:r.batch_id, cultivar:r.cultivar, mother:r.mother, geneticsSource:r.genetics_source, externalCompany:r.external_company, seedStrain:r.seed_strain, seedLotNumber:r.seed_lot_number, notes:r.notes, createdDate:dstr(r.created_date), cloneDate:dstr(r.clone_date), hydrationDate:dstr(r.hydration_date), vegStart:dstr(r.veg_start_date), flowerStart:dstr(r.flower_start_date), harvestDate:dstr(r.harvest_date), packagedDate:dstr(r.package_date), soldDate:dstr(r.sold_date), deliveredDate:dstr(r.delivered_date), closedDate:dstr(r.closed_date), plantPhase:r.plant_phase, status:r.status||'Open', rooms:r.rooms||[], roomDistribution:r.room_distribution||{}, harvestedWeights:r.harvested_weights||{}, harvestedPlants:r.harvested_plants||{}, completedHarvests:r.completed_harvests||[], postDryingWeight:r.post_drying_weight_kg, momPurpose:r.mom_purpose, momPurposeCounts:r.mom_purpose_counts||{}, momPhaseCounts:r.mom_phase_counts||{}, cloneCohort:r.clone_cohort||0, synced:true });
-  const fromTx = r => ({ id:r.id, airtableId:r.id, batchId:r.batch_id, date:dstr(r.date), txType:r.transaction_type, plantPhase:r.plant_phase, qty:r.quantity, weight:r.weight_kg, currentQtyAfter:r.current_quantity_after, saleStage:r.sale_stage, labDestinationType:r.lab_destination_type, labMaterialType:r.lab_material_type, labDestinationName:r.lab_destination_name, fromPhase:r.from_phase, toPhase:r.to_phase, room:r.room, cohortPurpose:r.cohort_purpose, notes:r.notes, synced:true });
+  const fromTx = r => ({ id:r.id, airtableId:r.id, batchId:r.batch_id, date:dstr(r.date), txType:r.transaction_type, plantPhase:r.plant_phase, qty:r.quantity, weight:r.weight_kg, currentQtyAfter:r.current_quantity_after, saleStage:r.sale_stage, saleBuyer:r.sale_buyer, labDestinationType:r.lab_destination_type, labMaterialType:r.lab_material_type, labDestinationName:r.lab_destination_name, fromPhase:r.from_phase, toPhase:r.to_phase, room:r.room, cohortPurpose:r.cohort_purpose, notes:r.notes, synced:true });
   const fromEc = r => { const _a=a=>{const v=a.map(parseFloat).filter(x=>!isNaN(x)&&x>0); return v.length?Math.round(v.reduce((s,b)=>s+b,0)/v.length*100)/100:null;}; const ecP=[r.drip_ec_pen1,r.drip_ec_pen2,r.drip_ec_pen3], phP=[r.drip_ph_pen1,r.drip_ph_pen2,r.drip_ph_pen3], evs=[r.event1_ml,r.event2_ml,r.event3_ml,r.event4_ml,r.event5_ml,r.event6_ml,r.event7_ml,r.event8_ml]; const tot=evs.map(parseFloat).reduce((s,v)=>s+(isNaN(v)?0:v),0); return { id:r.id, airtableId:r.id, batch:r.batch_id, date:dstr(r.date), room:r.room, grower:r.grower, wtype:r.watering_type, dripEcPens:ecP, dripPhPens:phP, dripEc:_a(ecP), dripPh:_a(phP), events:evs, totalML:tot||null, notes:r.notes, synced:true }; };
   const fromRo = r => { const _n=v=>(v==null||v===''||isNaN(parseFloat(v)))?null:parseFloat(v); const _a=arr=>{const v=arr.map(parseFloat).filter(x=>!isNaN(x)&&x>0); return v.length?Math.round(v.reduce((s,b)=>s+b,0)/v.length*100)/100:null;}; const o={ id:r.id, airtableId:r.id, batch:r.batch_id, date:dstr(r.date), room:r.room, grower:r.grower, inputEC:_n(r.input_ec), variance:_n(r.ec_variance), notes:r.notes, synced:true, samples:[] }; for(let i=1;i<=8;i++) o.samples.push({ec:_n(r['s'+i+'_ec']), ph:_n(r['s'+i+'_ph'])}); o.avgEC=_a(o.samples.map(s=>s.ec)); o.avgPH=_a(o.samples.map(s=>s.ph)); o.ecAlert=(o.variance!=null && o.variance>RO_VAR_ALERT); return o; };
   const fromFlow = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, date:dstr(r.date), time:r.time, room:r.room, grower:r.grower, reading:r.reading, notes:r.notes, synced:true });
@@ -17131,7 +17146,7 @@ function buildSeedInvFields(rec){
   const M_BATCH={'Batch ID':'batch_id','Cultivar Name':'cultivar','Mother ID':'mother','Source of Genetics':'genetics_source','External Clone Company':'external_company','Notes':'notes','Created Date':'created_date','Clone Date':'clone_date','Delivered Date':'delivered_date','Plant Phase':'plant_phase','Status':'status','Closed Date':'closed_date','Mom Purpose':'mom_purpose','Hydration Date':'hydration_date','Veg Start Date':'veg_start_date','Flower Start Date':'flower_start_date','Harvest Date':'harvest_date','Package Date':'package_date','Sold Date':'sold_date','Post-Drying Weight (kg)':'post_drying_weight_kg'};
   const B_JSON={'Room Distribution':'room_distribution','Harvested Weights':'harvested_weights','Harvested Plants':'harvested_plants','Mom Purpose Counts':'mom_purpose_counts'};
   const mapBatch = f => { const o={}; for(const k in f){ if(M_BATCH[k]!==undefined) o[M_BATCH[k]]=f[k]; else if(B_JSON[k]!==undefined) o[B_JSON[k]]=pj(f[k]); else if(k==='Rooms') o.rooms=Array.isArray(f[k])?f[k]:String(f[k]).split(',').map(s=>s.trim()).filter(Boolean); else if(k==='Completed Harvests') o.completed_harvests=String(f[k]).split(',').map(s=>s.trim()).filter(Boolean); } return o; };
-  const M_TX={'Date':'date','Transaction Type':'transaction_type','Plant Phase':'plant_phase','Quantity':'quantity','Weight (kg)':'weight_kg','Current Quantity After':'current_quantity_after','Sale Stage':'sale_stage','Lab Destination Type':'lab_destination_type','Lab Material Type':'lab_material_type','Lab Destination Name':'lab_destination_name','From Phase':'from_phase','To Phase':'to_phase','Room':'room','Cohort Purpose':'cohort_purpose','Notes':'notes'};
+  const M_TX={'Date':'date','Transaction Type':'transaction_type','Plant Phase':'plant_phase','Quantity':'quantity','Weight (kg)':'weight_kg','Current Quantity After':'current_quantity_after','Sale Stage':'sale_stage','Sale Buyer':'sale_buyer','Lab Destination Type':'lab_destination_type','Lab Material Type':'lab_material_type','Lab Destination Name':'lab_destination_name','From Phase':'from_phase','To Phase':'to_phase','Room':'room','Cohort Purpose':'cohort_purpose','Notes':'notes'};
   const M_EC={'Date':'date','Room':'room','Grower':'grower','Watering Type':'watering_type','Drip EC Pen 1':'drip_ec_pen1','Drip EC Pen 2':'drip_ec_pen2','Drip EC Pen 3':'drip_ec_pen3','Drip pH Pen 1':'drip_ph_pen1','Drip pH Pen 2':'drip_ph_pen2','Drip pH Pen 3':'drip_ph_pen3','Event 1 ml/plant':'event1_ml','Event 2 ml/plant':'event2_ml','Event 3 ml/plant':'event3_ml','Event 4 ml/plant':'event4_ml','Event 5 ml/plant':'event5_ml','Event 6 ml/plant':'event6_ml','Event 7 ml/plant':'event7_ml','Event 8 ml/plant':'event8_ml','Notes':'notes'};
   const M_RO={'Date':'date','Room':'room','Grower':'grower','Input EC':'input_ec','EC Variance':'ec_variance','Notes':'notes','S1 EC':'s1_ec','S2 EC':'s2_ec','S3 EC':'s3_ec','S4 EC':'s4_ec','S5 EC':'s5_ec','S6 EC':'s6_ec','S7 EC':'s7_ec','S8 EC':'s8_ec','S1 pH':'s1_ph','S2 pH':'s2_ph','S3 pH':'s3_ph','S4 pH':'s4_ph','S5 pH':'s5_ph','S6 pH':'s6_ph','S7 pH':'s7_ph','S8 pH':'s8_ph'};
   const M_FLOW={'Date':'date','Time':'time','Room':'room','Grower':'grower','Flow Reading':'reading','Notes':'notes'};
