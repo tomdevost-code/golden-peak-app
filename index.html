@@ -13667,19 +13667,9 @@ async function summaryUpdateBatch(){
       return;
     }
   }
-  // Guard: while the batch is in Flower phase, the room assignments are locked. Drying and
-  // Packaged batches always have empty rooms (auto-cleared on phase advance) so no comparison.
-  // EXCEPTIONS: closing the batch, or a batch whose plants are all gone (qty <= 0, e.g. a mother
-  // whose flower cohort was destroyed) — in those cases the rooms are naturally emptied and the
-  // lock must not stand in the way of closing.
-  if(existingPhase === 'Flower' && status !== 'Closed' && calcBatchQty(batchId) > 0){
-    const oldRooms = (batchRecs[idx].rooms||[]).slice().sort().join('|');
-    const newRooms = rooms.slice().sort().join('|');
-    if(oldRooms !== newRooms){
-      toast('Cannot change rooms — batch is in Flower phase (rooms locked once flowering starts).',5000);
-      return;
-    }
-  }
+  // Room assignments stay editable throughout Flower now — a batch can add or drop flower rooms
+  // (e.g. flip Veg backups into a room, or join a shared room) until it reaches Drying. The old
+  // "rooms locked once flowering starts" guard has been removed.
   // Packaged / Delivered: no cultivation rooms — plants are no longer in a room. Force empty.
   // Drying: multi-day harvest may still hold plants in unharvested flower rooms — preserve the
   // existing rooms array (don't let a Manage Batch save wipe it).
