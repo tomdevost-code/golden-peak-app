@@ -13025,9 +13025,9 @@ function applyPhaseRoomLock(){
   const batchId = document.getElementById('summary-batch-select').value;
   const b = batchId ? batchRecs.find(r=>r.batchId===batchId && !r.type) : null;
   const savedPhase = b ? (b.plantPhase||'') : '';
-  const roomsLocked = isSeedsBatchId(batchId)
-    ? ['Drying','Packaged','Delivered'].includes(savedPhase)   // pheno hunts: keep distributing rooms while in Flower
-    : ['Flower','Drying','Packaged','Delivered'].includes(savedPhase);
+  // Rooms stay editable through Flower for every batch (so Veg backups can be flipped into a
+  // flower room later); the distribution only hard-locks once the batch reaches Drying.
+  const roomsLocked = ['Drying','Packaged','Delivered'].includes(savedPhase);
   // Flower rooms held by ANOTHER open batch are off-limits for this batch.
   // Room sharing is allowed for every batch now — a flower room can hold more than one batch,
   // and each batch keeps its own per-room plant count. So nothing is treated as occupied-by-others.
@@ -13040,9 +13040,8 @@ function applyPhaseRoomLock(){
       if(!allowed) cb.checked = false;
     }
     else if(dropdownPhase==='Flower'){
-      // S-batches (pheno hunts) keep some plants in Veg as backups while others flower, so
-      // don't force the Veg room off for them. Regular batches still move everything to flower.
-      if(cb.value==='Veg' && !isSeedsBatchId(batchId)){ allowed=false; cb.checked=false; }
+      // Veg stays selectable while flowering for EVERY batch — plants left in the Veg room remain
+      // in Veg phase (backups / staggered flip) while the rest flower. So Veg is never forced off.
     }
     else if(['Packaged','Delivered'].includes(dropdownPhase)){
       // After packaging there are no cultivation rooms — everything stays unchecked + locked
