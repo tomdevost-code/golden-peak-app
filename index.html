@@ -13032,9 +13032,11 @@ function applyPhaseRoomLock(){
   const batchId = document.getElementById('summary-batch-select').value;
   const b = batchId ? batchRecs.find(r=>r.batchId===batchId && !r.type) : null;
   const savedPhase = b ? (b.plantPhase||'') : '';
-  const roomsLocked = ['Flower','Drying','Packaged','Delivered'].includes(savedPhase);
+  const roomsLocked = isSeedsBatchId(batchId)
+    ? ['Drying','Packaged','Delivered'].includes(savedPhase)   // pheno hunts: keep distributing rooms while in Flower
+    : ['Flower','Drying','Packaged','Delivered'].includes(savedPhase);
   // Flower rooms held by ANOTHER open batch are off-limits for this batch.
-  const occupiedByOthers = batchId ? getRoomsOccupiedByOtherBatches(batchId) : new Set();
+  const occupiedByOthers = (batchId && !isSeedsBatchId(batchId)) ? getRoomsOccupiedByOtherBatches(batchId) : new Set();
   document.querySelectorAll('.summary-room-cb').forEach(cb=>{
     let allowed=true;
     if(dropdownPhase==='Clones'||dropdownPhase==='Seeds'){
@@ -13043,7 +13045,9 @@ function applyPhaseRoomLock(){
       if(!allowed) cb.checked = false;
     }
     else if(dropdownPhase==='Flower'){
-      if(cb.value==='Veg'){ allowed=false; cb.checked=false; }
+      // S-batches (pheno hunts) keep some plants in Veg as backups while others flower, so
+      // don't force the Veg room off for them. Regular batches still move everything to flower.
+      if(cb.value==='Veg' && !isSeedsBatchId(batchId)){ allowed=false; cb.checked=false; }
     }
     else if(['Packaged','Delivered'].includes(dropdownPhase)){
       // After packaging there are no cultivation rooms — everything stays unchecked + locked
@@ -13632,13 +13636,16 @@ async function summaryUpdateBatch(){
       return;
     }
   }
-  // Exclusivity: refuse to save Flower rooms that are already occupied by another open batch.
-  const _occOwners = getRoomOccupancyOwners(batchId);
-  const _conflicts = rooms.filter(r => r !== 'Veg' && _occOwners[r]);
-  if(_conflicts.length){
-    const _msg = _conflicts.map(r => r + ' (held by ' + _occOwners[r] + ')').join(', ');
-    toast('Cannot assign room(s) already in use: ' + _msg + '. Vacate the other batch first.', 7000);
-    return;
+  // Exclusivity: refuse to save Flower rooms already occupied by another open batch. Pheno-hunt
+  // (S-) batches are exempt — they intentionally share flower rooms with other batches/strains.
+  if(!isSeedsBatchId(batchId)){
+    const _occOwners = getRoomOccupancyOwners(batchId);
+    const _conflicts = rooms.filter(r => r !== 'Veg' && _occOwners[r]);
+    if(_conflicts.length){
+      const _msg = _conflicts.map(r => r + ' (held by ' + _occOwners[r] + ')').join(', ');
+      toast('Cannot assign room(s) already in use: ' + _msg + '. Vacate the other batch first.', 7000);
+      return;
+    }
   }
   const status = document.getElementById('summary-status').value;
   const closedDate = status==='Closed' ? document.getElementById('summary-closed-date').value : '';
