@@ -12874,23 +12874,8 @@ function summaryRenderRoomChips(){
       '</div>';
     }
   });
-  // Show a list of rooms currently held by other batches — they can't be claimed until the
-  // owning batch vacates them. Helps the user understand why a room they expected isn't offered.
-  if(batchId){
-    const owners = getRoomOccupancyOwners(batchId);
-    const ownedRooms = Object.keys(owners).filter(r => !((batchRecs.find(x=>x.batchId===batchId && !x.type)?.rooms)||[]).includes(r));
-    if(ownedRooms.length){
-      availableHtml += ownedRooms.map(r => {
-        const cc = ROOM_CHIP_COLORS[r];
-        return '<div title="'+r+' is held by '+owners[r]+'" style="display:flex;align-items:center;gap:4px;background:var(--bg2);border:1px dashed var(--border);color:var(--text3);border-radius:20px;padding:3px 10px;font-size:12px;cursor:not-allowed;opacity:0.6;">'+
-          '<span style="width:7px;height:7px;border-radius:50%;background:'+cc.dot+';opacity:0.5;"></span>'+
-          '<span>'+r+'</span>'+
-          '<span style="font-size:10px;font-family:var(--mono);">→ '+owners[r]+'</span>'+
-        '</div>';
-      }).join('');
-      availableCount += ownedRooms.length;
-    }
-  }
+  // Room sharing is allowed — flower rooms held by other batches are offered as normal "Add"
+  // chips above (no longer greyed out), since more than one batch can occupy a room.
   activeEl.innerHTML = activeHtml || '<div style="font-size:11px;color:var(--text3);font-style:italic;padding:4px 0;">No rooms selected</div>';
   availableEl.innerHTML = availableHtml || '<div style="font-size:11px;color:var(--text3);font-style:italic;padding:4px 0;">All rooms in use</div>';
   activeSection.style.display = activeCount ? '' : 'none';
@@ -13044,7 +13029,9 @@ function applyPhaseRoomLock(){
     ? ['Drying','Packaged','Delivered'].includes(savedPhase)   // pheno hunts: keep distributing rooms while in Flower
     : ['Flower','Drying','Packaged','Delivered'].includes(savedPhase);
   // Flower rooms held by ANOTHER open batch are off-limits for this batch.
-  const occupiedByOthers = (batchId && !isSeedsBatchId(batchId)) ? getRoomsOccupiedByOtherBatches(batchId) : new Set();
+  // Room sharing is allowed for every batch now — a flower room can hold more than one batch,
+  // and each batch keeps its own per-room plant count. So nothing is treated as occupied-by-others.
+  const occupiedByOthers = new Set();
   document.querySelectorAll('.summary-room-cb').forEach(cb=>{
     let allowed=true;
     if(dropdownPhase==='Clones'||dropdownPhase==='Seeds'){
@@ -13644,17 +13631,8 @@ async function summaryUpdateBatch(){
       return;
     }
   }
-  // Exclusivity: refuse to save Flower rooms already occupied by another open batch. Pheno-hunt
-  // (S-) batches are exempt — they intentionally share flower rooms with other batches/strains.
-  if(!isSeedsBatchId(batchId)){
-    const _occOwners = getRoomOccupancyOwners(batchId);
-    const _conflicts = rooms.filter(r => r !== 'Veg' && _occOwners[r]);
-    if(_conflicts.length){
-      const _msg = _conflicts.map(r => r + ' (held by ' + _occOwners[r] + ')').join(', ');
-      toast('Cannot assign room(s) already in use: ' + _msg + '. Vacate the other batch first.', 7000);
-      return;
-    }
-  }
+  // Room sharing is allowed for every batch — a flower room may hold multiple batches at once,
+  // each tracking its own plant count. No exclusivity guard on save.
   const status = document.getElementById('summary-status').value;
   const closedDate = status==='Closed' ? document.getElementById('summary-closed-date').value : '';
   // Lifecycle dates are now event-driven — preserve existing values from the batch record
