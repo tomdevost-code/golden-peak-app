@@ -3648,8 +3648,13 @@ function getRoomsOccupiedByOtherBatches(currentBatchId){
     if(!b || b.type) return;
     if(b.batchId === currentBatchId) return;
     if(isBatchClosedRec(b)) return;
+    // A batch that's finished flowering (Drying/Packaged/Delivered) has vacated its grow rooms —
+    // the plants are drying/harvested now, so it no longer holds any Flower room.
+    if(['Drying','Packaged','Delivered'].includes(b.plantPhase||'')) return;
+    const _doneRooms = Array.isArray(b.completedHarvests) ? b.completedHarvests : [];
     // Only Flower rooms are exclusive — Veg is a shared bay.
     ['Flower 1','Flower 2','Flower 3','Flower 4','Flower 5','Tent'].forEach(r => {
+      if(_doneRooms.includes(r)) return; // room already harvested → vacated, free for new plants
       if(calcRoomPlantCount(b.batchId, r) > 0) occupied.add(r);
     });
   });
@@ -3664,7 +3669,10 @@ function getRoomOccupancyOwners(currentBatchId){
     if(!b || b.type) return;
     if(b.batchId === currentBatchId) return;
     if(isBatchClosedRec(b)) return;
+    if(['Drying','Packaged','Delivered'].includes(b.plantPhase||'')) return;
+    const _doneRooms = Array.isArray(b.completedHarvests) ? b.completedHarvests : [];
     ['Flower 1','Flower 2','Flower 3','Flower 4','Flower 5','Tent'].forEach(r => {
+      if(_doneRooms.includes(r)) return;
       if(!owners[r] && calcRoomPlantCount(b.batchId, r) > 0) owners[r] = b.batchId;
     });
   });
