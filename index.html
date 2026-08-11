@@ -11963,10 +11963,17 @@ function summaryRenderFlowerAlerts(batchId){
   }
   if(upcoming.length){
     html += '<div style="'+box+'padding:8px 12px;margin-top:8px;">'
-      +  '<div style="font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;">Upcoming</div>';
+      +  '<div style="font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;">Upcoming <span style="text-transform:none;letter-spacing:0;">— check off early if done ahead of schedule</span></div>';
     upcoming.forEach(day => {
       const away = day - fd; const inLabel = away===1 ? '1 day' : (away+' days');
-      html += '<div style="font-size:12px;color:var(--text2);padding:1px 0;"><span style="font-family:var(--mono);font-weight:600;color:var(--green);">F'+day+'</span> <span style="color:var(--text3);">('+inLabel+')</span> · '+(FLOWER_DAY_TASKS[day]||[]).map(_esc).join(', ')+'</div>';
+      (FLOWER_DAY_TASKS[day]||[]).forEach((t, idx) => {
+        const rec = _milestoneCompRec(batchId, day, t);
+        const done = !!rec;
+        html += '<label style="display:flex;align-items:center;gap:8px;font-size:13px;padding:2px 0;cursor:pointer;">'
+          +  '<input type="checkbox" '+(done?'checked':'')+' data-mday="'+day+'" data-midx="'+idx+'" onchange="milestoneToggleEl(this,\''+_esc(batchId)+'\')" />'
+          +  '<span style="color:'+(done?'var(--text3)':'var(--text2)')+';'+(done?'text-decoration:line-through;':'')+'"><span style="font-family:var(--mono);font-weight:600;color:var(--green);">F'+day+'</span> <span style="color:var(--text3);">(in '+inLabel+')</span> · '+_esc(t)+'</span>'
+          +  '</label>';
+      });
     });
     html += '</div>';
   }
