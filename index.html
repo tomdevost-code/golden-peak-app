@@ -12694,9 +12694,9 @@ function computeBatchDayParts(b, today){
   } else if(b.plantPhase === 'Veg' && b.vegStart){
     const _ccv = parseInt(b.cloneCohort) || 0;
     if(_ccv > 0){
-      const _lp = (typeof _latestPRDate === 'function') ? _latestPRDate() : null;
-      const _base = _lp || b.cloneDate || null;
-      const _cd = _base ? daysBetween(_base, today) : null;
+      // Clone-cohort day counts from the batch's CLONE DATE (when the clones were cut) — the same
+      // anchor a Clones-phase batch uses — so it reads independently of the Veg day (vegStart).
+      const _cd = calcCloneDay(b.batchId, today);
       if(_cd != null && _cd > 0) parts.push({label:'C'+_cd, desc:'clones'});
     }
     const vd = daysBetween(b.vegStart, today);
