@@ -65,6 +65,10 @@ html, body { height: 100%; background-color: var(--bg); background-image: url('b
    The sanitation pages have data-section="sanitation" and are shown via .page.active normally. */
 body.section-sanitation .page[data-section="cultivation"] { display: none !important; }
 body.section-cultivation .page[data-section="sanitation"] { display: none !important; }
+body.section-sanitation .page[data-section="qa"] { display: none !important; }
+body.section-cultivation .page[data-section="qa"] { display: none !important; }
+body.section-qa .page[data-section="cultivation"] { display: none !important; }
+body.section-qa .page[data-section="sanitation"] { display: none !important; }
 /* On wider screens, dock the EC Recent Entries panel to the right so it stays visible while filling out the form */
 @media (min-width: 1100px){
   .ec-recent-section{
@@ -188,6 +192,7 @@ tr:last-child td { border-bottom: none; }
   <div class="section-toggle" id="section-toggle">
     <button id="section-cultivation-btn" class="active" onclick="setAppSection('cultivation')">Cultivation</button>
     <button id="section-sanitation-btn" onclick="setAppSection('sanitation')">Sanitation</button>
+    <button id="section-qa-btn" onclick="setAppSection('qa')">Quality Assurance</button>
   </div>
 
   <div class="content">
@@ -2006,6 +2011,73 @@ tr:last-child td { border-bottom: none; }
 
   </div>
 
+    <!-- ===== QUALITY ASSURANCE ===== -->
+    <!-- Scale Check Log -->
+    <div class="page" id="page-qascale" data-section="qa">
+      <div class="card">
+        <div class="section-label">Scale Check Log</div>
+        <div class="field" style="margin-bottom:10px;">
+          <label>Batch <span style="color:var(--red);font-weight:700;">*</span></label>
+          <select id="qascale-batch" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;box-sizing:border-box;"><option value="">-- select batch --</option></select>
+        </div>
+        <div class="g2" style="margin-bottom:10px;">
+          <div class="field"><label>Date</label><input type="date" id="qascale-date" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;box-sizing:border-box;"></div>
+          <div class="field"><label>Scale ID <span style="color:var(--red);font-weight:700;">*</span></label><input type="text" id="qascale-scaleid" placeholder="e.g. Scale 1" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;box-sizing:border-box;"></div>
+        </div>
+        <div class="field" style="margin-bottom:10px;">
+          <label>Employee <span style="color:var(--red);font-weight:700;">*</span></label>
+          <select id="qascale-grower" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;box-sizing:border-box;"><option value="">-- select employee --</option><option>Jordan Elliott</option><option>Brandon Cail</option><option>Tom Devost</option></select>
+        </div>
+        <div class="field" style="margin-bottom:12px;">
+          <label>Weight Verification <span style="font-size:10px;color:var(--text3);font-weight:400;">(check each reference weight that passed)</span></label>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-top:6px;">
+            <label style="display:flex;flex-direction:column;align-items:center;gap:5px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 4px;cursor:pointer;font-size:13px;font-weight:600;">50.0g<input type="checkbox" id="qascale-p50" style="width:20px;height:20px;cursor:pointer;"></label>
+            <label style="display:flex;flex-direction:column;align-items:center;gap:5px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 4px;cursor:pointer;font-size:13px;font-weight:600;">200.0g<input type="checkbox" id="qascale-p200" style="width:20px;height:20px;cursor:pointer;"></label>
+            <label style="display:flex;flex-direction:column;align-items:center;gap:5px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 4px;cursor:pointer;font-size:13px;font-weight:600;">500.0g<input type="checkbox" id="qascale-p500" style="width:20px;height:20px;cursor:pointer;"></label>
+            <label style="display:flex;flex-direction:column;align-items:center;gap:5px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 4px;cursor:pointer;font-size:13px;font-weight:600;">2000g<input type="checkbox" id="qascale-p2000" style="width:20px;height:20px;cursor:pointer;"></label>
+          </div>
+        </div>
+        <div class="field" style="margin-bottom:12px;">
+          <label>Notes</label>
+          <textarea id="qascale-notes" rows="2" style="width:100%;box-sizing:border-box;font-size:14px;font-family:var(--sans);border-radius:var(--radius-sm);border:1px solid var(--border);padding:8px;background:var(--card);color:var(--text);" placeholder="Optional"></textarea>
+        </div>
+        <button class="btn-save" onclick="qascaleSave()">Save Scale Check</button>
+      </div>
+      <div class="card">
+        <div class="section-label">Recent Scale Checks</div>
+        <div id="qascale-recent" style="font-size:12px;"></div>
+      </div>
+    </div>
+
+    <!-- Flower Moisture Log -->
+    <div class="page" id="page-qamoisture" data-section="qa">
+      <div class="card">
+        <div class="section-label">Flower Moisture Log</div>
+        <div class="field" style="margin-bottom:10px;">
+          <label>Batch <span style="color:var(--red);font-weight:700;">*</span> <span style="font-size:10px;color:var(--text3);font-weight:400;">(Drying phase)</span></label>
+          <select id="qamoist-batch" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;box-sizing:border-box;"><option value="">-- select batch --</option></select>
+        </div>
+        <div class="g2" style="margin-bottom:10px;">
+          <div class="field"><label>Date</label><input type="date" id="qamoist-date" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;box-sizing:border-box;"></div>
+          <div class="field"><label>Time (24hr)</label><input type="time" id="qamoist-time" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;box-sizing:border-box;"></div>
+        </div>
+        <div class="g2" style="margin-bottom:10px;">
+          <div class="field"><label>Moisture % <span style="color:var(--red);font-weight:700;">*</span></label><input type="number" step="0.1" min="0" id="qamoist-moisture" placeholder="e.g. 11.0" onwheel="this.blur()" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;box-sizing:border-box;"></div>
+          <div class="field"><label>Initials / Employee <span style="color:var(--red);font-weight:700;">*</span></label><select id="qamoist-grower" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;box-sizing:border-box;"><option value="">-- select employee --</option><option>Jordan Elliott</option><option>Brandon Cail</option><option>Tom Devost</option></select></div>
+        </div>
+        <div class="field" style="margin-bottom:12px;">
+          <label>Notes</label>
+          <textarea id="qamoist-notes" rows="2" style="width:100%;box-sizing:border-box;font-size:14px;font-family:var(--sans);border-radius:var(--radius-sm);border:1px solid var(--border);padding:8px;background:var(--card);color:var(--text);" placeholder="Optional"></textarea>
+        </div>
+        <div style="font-size:11px;color:var(--text3);margin-bottom:10px;">Target drying range: <span id="qamoist-target-label" style="font-weight:600;color:var(--green);"></span> — readings in range highlight green.</div>
+        <button class="btn-save" onclick="qamoistureSave()">Save Moisture Reading</button>
+      </div>
+      <div class="card">
+        <div class="section-label">Recent Moisture Readings</div>
+        <div id="qamoist-recent" style="font-size:12px;"></div>
+      </div>
+    </div>
+
   <nav class="bottom-nav" id="nav-cultivation">
     <button class="bnav-btn" id="bn-seeds" onclick="switchPage('seeds',this)">
       <svg viewBox="0 0 24 24"><path d="M12 22V12M12 12c0-5.5 4-8 8-8 0 5.5-4 8-8 8zM12 12c0-5.5-4-8-8-8 0 5.5 4 8 8 8z"/></svg>
@@ -2078,6 +2150,16 @@ tr:last-child td { border-bottom: none; }
       Tool Clean
     </button>
   </nav>
+  <nav class="bottom-nav section-hidden" id="nav-qa">
+    <button class="bnav-btn" id="bn-qascale" onclick="switchPage('qascale',this)">
+      <svg viewBox="0 0 24 24"><path d="M12 3v3M5 6h14l-2 6H7L5 6zM8 12v3a4 4 0 008 0v-3M4 21h16"/></svg>
+      Scale Check
+    </button>
+    <button class="bnav-btn" id="bn-qamoisture" onclick="switchPage('qamoisture',this)">
+      <svg viewBox="0 0 24 24"><path d="M12 3s6 6.5 6 11a6 6 0 01-12 0c0-4.5 6-11 6-11z"/></svg>
+      Moisture
+    </button>
+  </nav>
 </div>
 <div class="toast" id="toast"></div>
 
@@ -2099,7 +2181,7 @@ tr:last-child td { border-bottom: none; }
 <script>
 const EC_LO=2.2,EC_HI=2.3,PH_EC_LO=6.2,PH_EC_HI=6.3;
 const RO_PH_LO=6.0,RO_PH_HI=6.5,RO_VAR_LO=0.3,RO_VAR_HI=0.5,RO_VAR_ALERT=1.0;
-let ecRecs=[],roRecs=[],wasteRecs=[],batchRecs=[],batchTxRecs=[],harvestRecs=[],postDryRecs=[],bioRecs=[],pestRecs=[],sanCleanRecs=[],sanToolRecs=[],sanEditsRecs=[],seedInvRecs=[],flowRecs=[],destroyRecs=[],phenoPlantRecs=[],phenoObsRecs=[],milestoneCompRecs=[],cfg={token:'',base:'',ecTbl:'',roTbl:'',wasteTbl:'',batchTbl:'',batchtxTbl:'',harvestTbl:'',postDryTbl:'',bioTbl:'',pestTbl:'',sanCleanTbl:'',sanToolTbl:'',sanEditsTbl:'',seedInvTbl:'',flowTbl:'',destroyTbl:'',fdTasksTbl:''};
+let ecRecs=[],roRecs=[],wasteRecs=[],batchRecs=[],batchTxRecs=[],harvestRecs=[],postDryRecs=[],bioRecs=[],pestRecs=[],sanCleanRecs=[],sanToolRecs=[],sanEditsRecs=[],seedInvRecs=[],flowRecs=[],destroyRecs=[],phenoPlantRecs=[],phenoObsRecs=[],milestoneCompRecs=[],qaScaleRecs=[],qaMoistRecs=[],cfg={token:'',base:'',ecTbl:'',roTbl:'',wasteTbl:'',batchTbl:'',batchtxTbl:'',harvestTbl:'',postDryTbl:'',bioTbl:'',pestTbl:'',sanCleanTbl:'',sanToolTbl:'',sanEditsTbl:'',seedInvTbl:'',flowTbl:'',destroyTbl:'',fdTasksTbl:'',qaScaleTbl:'',qaMoistTbl:''};
 // Dirty flag for the flower-day milestones single-row config sync. Declared up here (not next to
 // FLOWER_DAY_TASKS lower down) so updatePendingBadge can read it during boot without a TDZ error.
 let fdTasksDirty=false;
@@ -2211,7 +2293,7 @@ function sanGetTasks(template, phase){
 
 function lsGet(k){try{return JSON.parse(localStorage.getItem(k)||'null');}catch(e){return null;}}
 function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
-function loadAll(){ecRecs=lsGet('gp-ec')||[];roRecs=lsGet('gp-ro')||[];wasteRecs=lsGet('gp-waste')||[];batchRecs=lsGet('gp-batch')||[];batchTxRecs=lsGet('gp-batchtx')||[];harvestRecs=lsGet('gp-harvest')||[];postDryRecs=lsGet('gp-postdry')||[];bioRecs=lsGet('gp-bio')||[];pestRecs=lsGet('gp-pest')||[];sanCleanRecs=lsGet('gp-sanclean')||[];sanToolRecs=lsGet('gp-santool')||[];sanEditsRecs=lsGet('gp-sanedits')||[];seedInvRecs=lsGet('gp-seedinv')||[];flowRecs=lsGet('gp-flow')||[];destroyRecs=lsGet('gp-destroy')||[];phenoPlantRecs=lsGet('gp-phenoplant')||[];phenoObsRecs=lsGet('gp-phenoobs')||[];milestoneCompRecs=lsGet('gp-milestonecomp')||[];try{fdTasksDirty=false;lsSet('gp-fdtasks-dirty',false);}catch(_){}migrateSanTaskEditsToRecs();wasteRecs.forEach(r=>{if(r.type==='Vegetative waste')r.type='Vegetative Waste';});lsSet('gp-waste',wasteRecs);const s=lsGet('gp-cfg');if(s){cfg=s;applySettings();}dedupeBatchRecs();backfillHarvestedTxs();reconcileAllPackagedBatches();try{cleanLocalDuplicates({batchtxSkipTypes:['Destroyed']});}catch(_){}if(window.__SB_MODE){try{cfg.token=cfg.token||'__sb__';cfg.base=cfg.base||'__sb__';const _sbr={ecTbl:'ec_logs',roTbl:'runoff_logs',flowTbl:'flow_logs',wasteTbl:'waste_records',batchTbl:'batches',batchtxTbl:'transactions',harvestTbl:'harvest_records',postDryTbl:'postdry_records',bioTbl:'bio_records',pestTbl:'pest_records',seedInvTbl:'seed_inventory',sanCleanTbl:'sanitation_cleaning',sanToolTbl:'sanitation_tool',sanEditsTbl:'sanitation_task_edits',destroyTbl:'destruction_events'};Object.keys(_sbr).forEach(k=>{if(!cfg[k])cfg[k]=_sbr[k];});}catch(_){}}}
+function loadAll(){ecRecs=lsGet('gp-ec')||[];roRecs=lsGet('gp-ro')||[];wasteRecs=lsGet('gp-waste')||[];batchRecs=lsGet('gp-batch')||[];batchTxRecs=lsGet('gp-batchtx')||[];harvestRecs=lsGet('gp-harvest')||[];postDryRecs=lsGet('gp-postdry')||[];bioRecs=lsGet('gp-bio')||[];pestRecs=lsGet('gp-pest')||[];sanCleanRecs=lsGet('gp-sanclean')||[];sanToolRecs=lsGet('gp-santool')||[];sanEditsRecs=lsGet('gp-sanedits')||[];seedInvRecs=lsGet('gp-seedinv')||[];flowRecs=lsGet('gp-flow')||[];destroyRecs=lsGet('gp-destroy')||[];phenoPlantRecs=lsGet('gp-phenoplant')||[];phenoObsRecs=lsGet('gp-phenoobs')||[];milestoneCompRecs=lsGet('gp-milestonecomp')||[];qaScaleRecs=lsGet('gp-qascale')||[];qaMoistRecs=lsGet('gp-qamoist')||[];try{fdTasksDirty=false;lsSet('gp-fdtasks-dirty',false);}catch(_){}migrateSanTaskEditsToRecs();wasteRecs.forEach(r=>{if(r.type==='Vegetative waste')r.type='Vegetative Waste';});lsSet('gp-waste',wasteRecs);const s=lsGet('gp-cfg');if(s){cfg=s;applySettings();}dedupeBatchRecs();backfillHarvestedTxs();reconcileAllPackagedBatches();try{cleanLocalDuplicates({batchtxSkipTypes:['Destroyed']});}catch(_){}if(window.__SB_MODE){try{cfg.token=cfg.token||'__sb__';cfg.base=cfg.base||'__sb__';const _sbr={ecTbl:'ec_logs',roTbl:'runoff_logs',flowTbl:'flow_logs',wasteTbl:'waste_records',batchTbl:'batches',batchtxTbl:'transactions',harvestTbl:'harvest_records',postDryTbl:'postdry_records',bioTbl:'bio_records',pestTbl:'pest_records',seedInvTbl:'seed_inventory',sanCleanTbl:'sanitation_cleaning',sanToolTbl:'sanitation_tool',sanEditsTbl:'sanitation_task_edits',destroyTbl:'destruction_events',qaScaleTbl:'qa_scale_checks',qaMoistTbl:'qa_moisture_logs'};Object.keys(_sbr).forEach(k=>{if(!cfg[k])cfg[k]=_sbr[k];});}catch(_){}}}
 
 // One-time migration of the previous gp-san-task-edits localStorage shape into the new
 // synced sanEditsRecs array. Runs on every boot but only does work the first time.
@@ -4380,7 +4462,7 @@ function setAvg(id,val,lo,hi){const el=document.getElementById(id);if(val===null
 function stageLabel(r){if(!r.stage||!r.day)return'<span style="color:var(--text3)">-</span>';return r.stage==='flower'?'<span class="flower-txt">F'+r.day+'</span>':'<span class="veg-txt">V'+r.day+'</span>';}
 function toast(msg,dur){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),dur||2500);}
 
-function switchPage(page,btn){document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.bnav-btn').forEach(b=>b.classList.remove('active'));document.getElementById('page-'+page).classList.add('active');btn.classList.add('active');if(page==='report'){renderEC();renderRO();ctlsDefaultMonth();}if(page==='waste'){wasteRefreshDate();renderWaste();}if(page==='ec'){ecRefreshDate();}if(page==='ro'){roRefreshDate();}if(page==='batch'){renderBatchLog();}if(page==='summary'){summaryPopulateBatches();}if(page==='harvest'){harvestPopulateBatches();harvestRefreshDate();harvestPopulateBinNumbers();}if(page==='postdry'){postDryPopulateBatches();postDrySetupChanged();}if(page==='bio'){bioRefreshDate();bioSeqUnlock();}if(page==='pest'){pestRefreshDate();pestPopulateBatches();pestSeqUnlock();}if(page==='destroy'){if(typeof destroyEnter==='function')destroyEnter();}if(page==='sancleaning'){sanclEnter();}if(page==='santool'){santoolEnter();}if(page==='seeds'){seedInvEnter();}if(page==='pheno'){phenoEnter();}if(page==='settings'){if(typeof fdRenderMilestones==='function')fdRenderMilestones();}
+function switchPage(page,btn){document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.bnav-btn').forEach(b=>b.classList.remove('active'));document.getElementById('page-'+page).classList.add('active');btn.classList.add('active');if(page==='report'){renderEC();renderRO();ctlsDefaultMonth();}if(page==='waste'){wasteRefreshDate();renderWaste();}if(page==='ec'){ecRefreshDate();}if(page==='ro'){roRefreshDate();}if(page==='batch'){renderBatchLog();}if(page==='summary'){summaryPopulateBatches();}if(page==='harvest'){harvestPopulateBatches();harvestRefreshDate();harvestPopulateBinNumbers();}if(page==='postdry'){postDryPopulateBatches();postDrySetupChanged();}if(page==='bio'){bioRefreshDate();bioSeqUnlock();}if(page==='pest'){pestRefreshDate();pestPopulateBatches();pestSeqUnlock();}if(page==='destroy'){if(typeof destroyEnter==='function')destroyEnter();}if(page==='sancleaning'){sanclEnter();}if(page==='santool'){santoolEnter();}if(page==='seeds'){seedInvEnter();}if(page==='pheno'){phenoEnter();}if(page==='qascale'){qascaleEnter();}if(page==='qamoisture'){qamoistureEnter();}if(page==='settings'){if(typeof fdRenderMilestones==='function')fdRenderMilestones();}
 
 // After a successful save, clear the batch selection so the next entry forces a re-select.
 // Grower and Date are intentionally left alone — the same person keeps logging on the same day.
@@ -4406,24 +4488,30 @@ function resetBatchAfterSave(prefix, handler){
 // Switch between the Cultivation and Sanitation sections. Each section has its own bottom
 // nav and its own set of pages (linked via data-section attribute, set in initSections).
 function setAppSection(section){
-  if(section !== 'cultivation' && section !== 'sanitation') section = 'cultivation';
+  if(section !== 'cultivation' && section !== 'sanitation' && section !== 'qa') section = 'cultivation';
   appSection = section;
   lsSet('gp-section', section);
   // Update body class — drives CSS visibility for data-section pages.
   document.body.classList.toggle('section-cultivation', section === 'cultivation');
   document.body.classList.toggle('section-sanitation', section === 'sanitation');
+  document.body.classList.toggle('section-qa', section === 'qa');
   // Toggle button active state.
   const cb = document.getElementById('section-cultivation-btn');
   const sb = document.getElementById('section-sanitation-btn');
+  const qb = document.getElementById('section-qa-btn');
   if(cb) cb.classList.toggle('active', section === 'cultivation');
   if(sb) sb.classList.toggle('active', section === 'sanitation');
-  // Show the section's bottom nav, hide the other.
+  if(qb) qb.classList.toggle('active', section === 'qa');
+  // Show the section's bottom nav, hide the others.
   const navC = document.getElementById('nav-cultivation');
   const navS = document.getElementById('nav-sanitation');
+  const navQ = document.getElementById('nav-qa');
   if(navC) navC.classList.toggle('section-hidden', section !== 'cultivation');
   if(navS) navS.classList.toggle('section-hidden', section !== 'sanitation');
+  if(navQ) navQ.classList.toggle('section-hidden', section !== 'qa');
   // Restore the last page visited in this section.
-  const lastPage = lastPagePerSection[section] || (section === 'sanitation' ? 'sancleaning' : 'batch');
+  const _def = section === 'sanitation' ? 'sancleaning' : (section === 'qa' ? 'qascale' : 'batch');
+  const lastPage = lastPagePerSection[section] || _def;
   const targetBtn = document.getElementById('bn-' + lastPage) ||
                     document.getElementById('bn-' + lastPage + (section === 'sanitation' && lastPage === 'settings' ? '-san' : ''));
   if(targetBtn) switchPage(lastPage, targetBtn);
@@ -7710,7 +7798,7 @@ function roClear(){for(let i=1;i<=8;i++){document.getElementById('ro-ec-'+i).val
 
 // Pending badge
 function updatePendingBadge(){
-  const n=(ecRecs.filter(r=>!r.synced).length)+(roRecs.filter(r=>!r.synced).length)+(wasteRecs.filter(r=>!r.synced).length)+(batchRecs.filter(r=>!r.synced).length)+(batchTxRecs.filter(r=>!r.synced).length)+(harvestRecs.filter(r=>!r.synced).length)+(postDryRecs.filter(r=>!r.synced).length)+(bioRecs.filter(r=>!r.synced).length)+(pestRecs.filter(r=>!r.synced).length)+(sanCleanRecs.filter(r=>!r.synced).length)+(sanToolRecs.filter(r=>!r.synced).length)+(sanEditsRecs.filter(r=>!r.synced).length)+(seedInvRecs.filter(r=>!r.synced).length)+(flowRecs.filter(r=>!r.synced).length)+(destroyRecs.filter(r=>!r.synced).length);
+  const n=(ecRecs.filter(r=>!r.synced).length)+(roRecs.filter(r=>!r.synced).length)+(wasteRecs.filter(r=>!r.synced).length)+(batchRecs.filter(r=>!r.synced).length)+(batchTxRecs.filter(r=>!r.synced).length)+(harvestRecs.filter(r=>!r.synced).length)+(postDryRecs.filter(r=>!r.synced).length)+(bioRecs.filter(r=>!r.synced).length)+(pestRecs.filter(r=>!r.synced).length)+(sanCleanRecs.filter(r=>!r.synced).length)+(sanToolRecs.filter(r=>!r.synced).length)+(sanEditsRecs.filter(r=>!r.synced).length)+(seedInvRecs.filter(r=>!r.synced).length)+(flowRecs.filter(r=>!r.synced).length)+(destroyRecs.filter(r=>!r.synced).length)+(qaScaleRecs.filter(r=>!r.synced).length)+(qaMoistRecs.filter(r=>!r.synced).length);
   // Update the Settings badge — Settings only appears in the Cultivation bottom nav now.
   const b=document.getElementById('pending-badge');
   if(b){ if(n>0){b.textContent=n;b.style.display='block';}else{b.style.display='none';} }
@@ -7793,7 +7881,7 @@ function clearAllLocalData(){
   if(!confirm('⚠ RESET LOCAL DATA\n\nThis will permanently delete all locally-stored records: batches, transactions, EC/Runoff/Waste/Harvest/Post-Drying/Bio/Pest/Cleaning logs, seed inventory, and pending sync queue.\n\nAirtable credentials (Settings) will be preserved.\n\nIMPORTANT: Other devices (laptops, phones) using this app still have their own local copies. If you intend to start fresh in production, clear the data on every device — otherwise the un-cleared local data will be re-pushed to Airtable on the next sync.\n\nContinue?')) return;
   const _typed = prompt('Type RESET (in capital letters) to confirm. Anything else cancels.');
   if(_typed !== 'RESET'){ toast('Reset cancelled — no data changed.', 4000); return; }
-  ecRecs=[];roRecs=[];wasteRecs=[];batchRecs=[];batchTxRecs=[];harvestRecs=[];postDryRecs=[];bioRecs=[];pestRecs=[];sanCleanRecs=[];sanToolRecs=[];sanEditsRecs=[];seedInvRecs=[];flowRecs=[];destroyRecs=[];phenoPlantRecs=[];phenoObsRecs=[];
+  ecRecs=[];roRecs=[];wasteRecs=[];batchRecs=[];batchTxRecs=[];harvestRecs=[];postDryRecs=[];bioRecs=[];pestRecs=[];sanCleanRecs=[];sanToolRecs=[];sanEditsRecs=[];seedInvRecs=[];flowRecs=[];destroyRecs=[];phenoPlantRecs=[];phenoObsRecs=[];qaScaleRecs=[];qaMoistRecs=[];
   lsSet('gp-ec',[]);lsSet('gp-ro',[]);lsSet('gp-waste',[]);lsSet('gp-batch',[]);lsSet('gp-batchtx',[]);lsSet('gp-harvest',[]);lsSet('gp-postdry',[]);lsSet('gp-bio',[]);lsSet('gp-pest',[]);lsSet('gp-sanclean',[]);lsSet('gp-santool',[]);lsSet('gp-sanedits',[]);lsSet('gp-seedinv',[]);lsSet('gp-flow',[]);lsSet('gp-destroy',[]);
   // Also nuke legacy storage keys that would otherwise re-seed records on the next boot:
   //   gp-san-task-edits — pre-sync sanitation template overrides (migrated into gp-sanedits on boot)
@@ -8669,7 +8757,9 @@ async function syncPending(){
   const pendingSeedInv=seedInvRecs.filter(r=>!r.synced);
   const pendingFlow=flowRecs.filter(r=>!r.synced);
   const pendingDestroy=destroyRecs.filter(r=>!r.synced);
-  const total=pendingEC.length+pendingRO.length+pendingWaste.length+pendingBatch.length+pendingBatchTx.length+pendingHarvest.length+pendingPostDry.length+pendingBio.length+pendingPest.length+pendingSanClean.length+pendingSanTool.length+pendingSanEdits.length+pendingSeedInv.length+pendingFlow.length+pendingDestroy.length;
+  const pendingQaScale=qaScaleRecs.filter(r=>!r.synced);
+  const pendingQaMoist=qaMoistRecs.filter(r=>!r.synced);
+  const total=pendingEC.length+pendingRO.length+pendingWaste.length+pendingBatch.length+pendingBatchTx.length+pendingHarvest.length+pendingPostDry.length+pendingBio.length+pendingPest.length+pendingSanClean.length+pendingSanTool.length+pendingSanEdits.length+pendingSeedInv.length+pendingFlow.length+pendingDestroy.length+pendingQaScale.length+pendingQaMoist.length;
   if(!total){if(st){st.style.display='block';st.style.background='var(--green-pale)';st.style.color='var(--green)';st.textContent='No pending records - everything is synced.';}updatePendingBadge();return;}
   if(st){st.style.display='block';st.style.background='var(--bg2)';st.style.color='var(--text2)';st.textContent='Syncing '+total+' record(s)...';}
   if(btn) btn.disabled=true;setSyncPill('ing','Syncing...');
@@ -8852,6 +8942,14 @@ async function syncPending(){
       await atUpsert(cfg.fdTasksTbl, { 'Key':'FlowerDayMilestones', 'Milestones': JSON.stringify(FLOWER_DAY_TASKS) }, ['Key']);
       fdTasksDirty=false; lsSet('gp-fdtasks-dirty', false); ok++;
     }catch(e){fail++;lastErr='Milestones: '+e.message;}
+  }
+  if(pendingQaScale.length && cfg.qaScaleTbl){
+    for(const r of pendingQaScale){ try{ const _r=await atPost(cfg.qaScaleTbl, buildQaScaleFields(r)); if(_r&&_r.id) r.airtableId=_r.id; r.synced=true; ok++; }catch(e){fail++;lastErr='Scale Check: '+e.message;} }
+    lsSet('gp-qascale', qaScaleRecs);
+  }
+  if(pendingQaMoist.length && cfg.qaMoistTbl){
+    for(const r of pendingQaMoist){ try{ const _r=await atPost(cfg.qaMoistTbl, buildQaMoistFields(r)); if(_r&&_r.id) r.airtableId=_r.id; r.synced=true; ok++; }catch(e){fail++;lastErr='Moisture: '+e.message;} }
+    lsSet('gp-qamoist', qaMoistRecs);
   }
   updatePendingBadge();
   if(btn) btn.disabled=false;
@@ -14779,6 +14877,149 @@ async function summaryTxDelete(id){
 // button that uses the browser's native print (the modal's CSS makes it
 // reasonably print-friendly).
 
+
+// ═══════════════════════ QUALITY ASSURANCE ═══════════════════════
+// Flower-moisture target drying range (highlight). Adjust these two numbers to change the range.
+const MOISTURE_TARGET_LO = 13, MOISTURE_TARGET_HI = 14.5;
+function _qaGrowerSel(id){ const s=document.getElementById(id); return s?s.value:''; }
+function _qaOpenBatches(dryingOnly){
+  return batchRecs.filter(b => b && !b.type && !(typeof isBatchClosedRec==='function' && isBatchClosedRec(b))
+      && (!dryingOnly || (b.plantPhase||'')==='Drying'))
+    .sort((a,b)=>(a.batchId||'').localeCompare(b.batchId||''));
+}
+function _qaFillBatchSel(selId, dryingOnly){
+  const sel=document.getElementById(selId); if(!sel) return;
+  const cur=sel.value;
+  const list=_qaOpenBatches(dryingOnly);
+  sel.innerHTML='<option value="">-- select batch --</option>'+
+    list.map(b=>'<option value="'+b.batchId+'"'+(b.batchId===cur?' selected':'')+'>'+b.batchId+(b.cultivar?' – '+b.cultivar:'')+'</option>').join('');
+}
+// ---- Scale Check ----
+function qascaleEnter(){
+  _qaFillBatchSel('qascale-batch', false);
+  const dt=document.getElementById('qascale-date'); if(dt && !dt.value) dt.value=localDate();
+  qascaleRenderRecent();
+}
+function buildQaScaleFields(r){
+  return { 'Batch ID':r.batch, 'Date':r.date, 'Scale ID':r.scaleId, 'Grower':r.grower,
+    '50g Pass':!!r.p50, '200g Pass':!!r.p200, '500g Pass':!!r.p500, '2000g Pass':!!r.p2000,
+    'Notes':r.notes||undefined };
+}
+async function qascaleSave(){
+  const batch=(document.getElementById('qascale-batch')||{}).value||'';
+  const date=(document.getElementById('qascale-date')||{}).value||localDate();
+  const scaleId=((document.getElementById('qascale-scaleid')||{}).value||'').trim();
+  const grower=_qaGrowerSel('qascale-grower');
+  const notes=((document.getElementById('qascale-notes')||{}).value||'').trim();
+  if(!batch){ toast('Pick a batch.'); return; }
+  if(!scaleId){ toast('Enter a Scale ID.'); return; }
+  if(!grower){ toast('Pick an employee.'); return; }
+  const rec={ id:Date.now()+Math.floor(Math.random()*100000), batch, date, scaleId, grower,
+    p50:!!(document.getElementById('qascale-p50')||{}).checked,
+    p200:!!(document.getElementById('qascale-p200')||{}).checked,
+    p500:!!(document.getElementById('qascale-p500')||{}).checked,
+    p2000:!!(document.getElementById('qascale-p2000')||{}).checked,
+    notes, synced:false };
+  qaScaleRecs.unshift(rec); lsSet('gp-qascale', qaScaleRecs);
+  ['qascale-scaleid','qascale-notes'].forEach(i=>{const e=document.getElementById(i);if(e)e.value='';});
+  ['qascale-p50','qascale-p200','qascale-p500','qascale-p2000'].forEach(i=>{const e=document.getElementById(i);if(e)e.checked=false;});
+  qascaleRenderRecent();
+  if(typeof updatePendingBadge==='function') updatePendingBadge();
+  toast('Scale check saved for '+batch+'.');
+  if(cfg.qaScaleTbl){ try{ const res=await atPost(cfg.qaScaleTbl, buildQaScaleFields(rec)); rec.synced=true; if(res&&res.id) rec.airtableId=res.id; lsSet('gp-qascale', qaScaleRecs); if(typeof updatePendingBadge==='function') updatePendingBadge(); }catch(e){} }
+}
+async function qascaleDelete(id){
+  const idx=qaScaleRecs.findIndex(r=>String(r.id)===String(id)); if(idx<0) return;
+  const rec=qaScaleRecs[idx];
+  if(!confirm('Delete this scale check ('+(rec.scaleId||'')+(rec.date?' on '+rec.date:'')+')?')) return;
+  if(rec.airtableId && cfg.qaScaleTbl){ const ok=await atDelete(cfg.qaScaleTbl, rec.airtableId, true); if(!ok){ toast('Delete failed — kept.'); return; } }
+  qaScaleRecs.splice(idx,1); lsSet('gp-qascale', qaScaleRecs);
+  qascaleRenderRecent(); if(typeof updatePendingBadge==='function') updatePendingBadge();
+  toast('Scale check deleted.');
+}
+function _qaPass(v){ return v ? '<span style="color:var(--green);font-weight:700;">✓</span>' : '<span style="color:var(--red);">✕</span>'; }
+function qascaleRenderRecent(){
+  const el=document.getElementById('qascale-recent'); if(!el) return;
+  const rows=qaScaleRecs.slice().sort((a,b)=>(b.id||0)-(a.id||0)).slice(0,50);
+  if(!rows.length){ el.innerHTML='<div style="color:var(--text3);padding:6px 2px;">No scale checks yet.</div>'; return; }
+  let h='<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:var(--bg2);">'+
+    ['Date','Batch','Scale','Emp','50g','200g','500g','2000g',''].map(x=>'<th style="padding:5px 6px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">'+x+'</th>').join('')+'</tr></thead><tbody>';
+  rows.forEach(r=>{
+    h+='<tr style="border-bottom:1px solid var(--bg2);">'+
+      '<td style="padding:5px 6px;font-family:var(--mono);">'+(r.date||'—')+'</td>'+
+      '<td style="padding:5px 6px;">'+(r.batch||'—')+'</td>'+
+      '<td style="padding:5px 6px;">'+(r.scaleId||'—')+'</td>'+
+      '<td style="padding:5px 6px;">'+((r.grower||'').split(' ')[0]||'—')+'</td>'+
+      '<td style="padding:5px 6px;text-align:center;">'+_qaPass(r.p50)+'</td>'+
+      '<td style="padding:5px 6px;text-align:center;">'+_qaPass(r.p200)+'</td>'+
+      '<td style="padding:5px 6px;text-align:center;">'+_qaPass(r.p500)+'</td>'+
+      '<td style="padding:5px 6px;text-align:center;">'+_qaPass(r.p2000)+'</td>'+
+      '<td style="padding:5px 6px;text-align:right;"><button type="button" onclick="qascaleDelete(\''+r.id+'\')" style="font-size:10px;padding:1px 6px;border:1px solid var(--red);background:var(--red-pale);color:var(--red);border-radius:var(--radius-sm);cursor:pointer;">✕</button></td>'+
+      '</tr>'+(r.notes?('<tr><td colspan="9" style="padding:2px 6px 6px;font-size:11px;color:var(--text3);">'+r.notes+'</td></tr>'):'');
+  });
+  el.innerHTML=h+'</tbody></table></div>';
+}
+// ---- Flower Moisture ----
+function qamoistureEnter(){
+  _qaFillBatchSel('qamoist-batch', true);
+  const dt=document.getElementById('qamoist-date'); if(dt && !dt.value) dt.value=localDate();
+  const tm=document.getElementById('qamoist-time'); if(tm && !tm.value) tm.value=new Date().toTimeString().slice(0,5);
+  const tl=document.getElementById('qamoist-target-label'); if(tl) tl.textContent=MOISTURE_TARGET_LO+'–'+MOISTURE_TARGET_HI+'%';
+  qamoistRenderRecent();
+}
+function buildQaMoistFields(r){
+  return { 'Batch ID':r.batch, 'Date':r.date, 'Time':r.time||undefined, 'Moisture':(r.moisture==null?undefined:r.moisture), 'Grower':r.grower, 'Notes':r.notes||undefined };
+}
+async function qamoistureSave(){
+  const batch=(document.getElementById('qamoist-batch')||{}).value||'';
+  const date=(document.getElementById('qamoist-date')||{}).value||localDate();
+  const time=(document.getElementById('qamoist-time')||{}).value||'';
+  const mv=(document.getElementById('qamoist-moisture')||{}).value;
+  const grower=_qaGrowerSel('qamoist-grower');
+  const notes=((document.getElementById('qamoist-notes')||{}).value||'').trim();
+  if(!batch){ toast('Pick a batch (Drying phase).'); return; }
+  const moisture=parseFloat(mv);
+  if(isNaN(moisture)){ toast('Enter a moisture %.'); return; }
+  if(!grower){ toast('Pick initials / employee.'); return; }
+  const rec={ id:Date.now()+Math.floor(Math.random()*100000), batch, date, time, moisture, grower, notes, synced:false };
+  qaMoistRecs.unshift(rec); lsSet('gp-qamoist', qaMoistRecs);
+  ['qamoist-moisture','qamoist-notes'].forEach(i=>{const e=document.getElementById(i);if(e)e.value='';});
+  qamoistRenderRecent();
+  if(typeof updatePendingBadge==='function') updatePendingBadge();
+  toast('Moisture reading saved for '+batch+'.');
+  if(cfg.qaMoistTbl){ try{ const res=await atPost(cfg.qaMoistTbl, buildQaMoistFields(rec)); rec.synced=true; if(res&&res.id) rec.airtableId=res.id; lsSet('gp-qamoist', qaMoistRecs); if(typeof updatePendingBadge==='function') updatePendingBadge(); }catch(e){} }
+}
+async function qamoistDelete(id){
+  const idx=qaMoistRecs.findIndex(r=>String(r.id)===String(id)); if(idx<0) return;
+  const rec=qaMoistRecs[idx];
+  if(!confirm('Delete this moisture reading ('+(rec.moisture!=null?rec.moisture+'%':'')+(rec.date?' on '+rec.date:'')+')?')) return;
+  if(rec.airtableId && cfg.qaMoistTbl){ const ok=await atDelete(cfg.qaMoistTbl, rec.airtableId, true); if(!ok){ toast('Delete failed — kept.'); return; } }
+  qaMoistRecs.splice(idx,1); lsSet('gp-qamoist', qaMoistRecs);
+  qamoistRenderRecent(); if(typeof updatePendingBadge==='function') updatePendingBadge();
+  toast('Moisture reading deleted.');
+}
+function qamoistInRange(m){ return m!=null && !isNaN(m) && m>=MOISTURE_TARGET_LO && m<=MOISTURE_TARGET_HI; }
+function qamoistRenderRecent(){
+  const el=document.getElementById('qamoist-recent'); if(!el) return;
+  const rows=qaMoistRecs.slice().sort((a,b)=>(b.id||0)-(a.id||0)).slice(0,50);
+  if(!rows.length){ el.innerHTML='<div style="color:var(--text3);padding:6px 2px;">No moisture readings yet.</div>'; return; }
+  let h='<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:var(--bg2);">'+
+    ['Date','Time','Batch','Moisture','Emp',''].map(x=>'<th style="padding:5px 6px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">'+x+'</th>').join('')+'</tr></thead><tbody>';
+  rows.forEach(r=>{
+    const inR=qamoistInRange(r.moisture);
+    const mCell=(r.moisture!=null?r.moisture+'%':'—');
+    h+='<tr style="border-bottom:1px solid var(--bg2);">'+
+      '<td style="padding:5px 6px;font-family:var(--mono);">'+(r.date||'—')+'</td>'+
+      '<td style="padding:5px 6px;font-family:var(--mono);">'+(r.time||'—')+'</td>'+
+      '<td style="padding:5px 6px;">'+(r.batch||'—')+'</td>'+
+      '<td style="padding:5px 6px;font-family:var(--mono);font-weight:700;'+(inR?'color:var(--green);background:var(--green-pale);':'')+'">'+mCell+'</td>'+
+      '<td style="padding:5px 6px;">'+((r.grower||'').split(' ')[0]||'—')+'</td>'+
+      '<td style="padding:5px 6px;text-align:right;"><button type="button" onclick="qamoistDelete(\''+r.id+'\')" style="font-size:10px;padding:1px 6px;border:1px solid var(--red);background:var(--red-pale);color:var(--red);border-radius:var(--radius-sm);cursor:pointer;">✕</button></td>'+
+      '</tr>'+(r.notes?('<tr><td colspan="6" style="padding:2px 6px 6px;font-size:11px;color:var(--text3);">'+r.notes+'</td></tr>'):'');
+  });
+  el.innerHTML=h+'</tbody></table></div>';
+}
+
 function openBatchReport(){
   const batchId = document.getElementById('summary-batch-select').value;
   if(!batchId){ toast('Select a batch first.'); return; }
@@ -15153,8 +15394,23 @@ function renderBatchReport(batchId){
     }
   }
 
+  // Quality Assurance — Scale Check Log
+  {
+    const scaleChecks = qaScaleRecs.filter(r => r.batch === batchId).sort((a,c)=>(a.date||'').localeCompare(c.date||''));
+    const rows = scaleChecks.map(r => [ r.date||'—', r.scaleId||'—', r.grower||'—', r.p50?'✓':'✕', r.p200?'✓':'✕', r.p500?'✓':'✕', r.p2000?'✓':'✕', r.notes||'' ]);
+    if(rows.length){ s += sectionTable('Scale Check Log ('+scaleChecks.length+')', ['Date','Scale','Employee','50g','200g','500g','2000g','Notes'], rows); }
+    else { s += sectionCard('Scale Check Log (0)', '<div style="padding:6px 2px;color:var(--text3);font-size:12px;">No scale checks logged against this batch yet.</div>'); }
+  }
+  // Quality Assurance — Flower Moisture Log
+  {
+    const moistLogs = qaMoistRecs.filter(r => r.batch === batchId).sort((a,c)=>(a.date||'').localeCompare(c.date||'') || (a.time||'').localeCompare(c.time||''));
+    const rows = moistLogs.map(r => [ r.date||'—', r.time||'—', (r.moisture!=null?r.moisture+'%':'—'), r.grower||'—', r.notes||'' ]);
+    if(rows.length){ s += sectionTable('Flower Moisture Log ('+moistLogs.length+')', ['Date','Time','Moisture','Employee','Notes'], rows); }
+    else { s += sectionCard('Flower Moisture Log (0)', '<div style="padding:6px 2px;color:var(--text3);font-size:12px;">No moisture readings logged against this batch yet.</div>'); }
+  }
+
   // Empty sections note
-  if(!txs.length && !ecs.length && !ros.length && !wastes.length && !harvests.length && !postDrys.length && !bios.length && !pests.length && !cleans.length && !toolCleans.length){
+  if(!txs.length && !ecs.length && !ros.length && !wastes.length && !harvests.length && !postDrys.length && !bios.length && !pests.length && !cleans.length && !toolCleans.length && !qaScaleRecs.filter(r=>r.batch===batchId).length && !qaMoistRecs.filter(r=>r.batch===batchId).length){
     s += '<div style="padding:20px;text-align:center;color:var(--text3);font-size:13px;">No activity records yet for this batch.</div>';
   }
 
@@ -17082,20 +17338,26 @@ function buildSeedInvFields(rec){
   const wasteKeyRow = w => [ (w.batch_id||'').toString().toUpperCase(), dstr(w.date), (w.room||'').toString(), (w.waste_type||'').toString(), (w.sub_category||'').toString(), (parseFloat(w.weight_kg)||0).toFixed(3), (parseInt(w.plants_destroyed)||0) ].join('|');
 
   async function q(t){ const { data, error } = await SBC.from(t).select('*'); if(error) throw new Error(t+': '+error.message); return data||[]; }
+  // Soft variant — returns [] instead of throwing when a table is missing (e.g. a new QA table
+  // before its migration has been run), so one absent table can't break the whole hydrate.
+  async function qSoft(t){ try{ const { data, error } = await SBC.from(t).select('*'); if(error) return []; return data||[]; }catch(_){ return []; } }
 
   const fromPhenoPlant = r => ({ id:r.id, batch:r.batch_id, plantNumber:r.plant_number, tag:r.tag||'', status:r.status||'Undecided', rating:r.rating||0, notes:r.notes||'', synced:true });
   const fromPhenoObs = r => ({ id:r.id, plantId:r.plant_id, date:dstr(r.date), grower:r.grower||'', notes:r.notes||'', vigor:r.vigor||'', structure:r.structure||'', aroma:r.aroma||'', color:r.color||'', trichomes:r.trichomes||'', synced:true });
   const fromMilestoneComp = r => ({ id:r.id, batch:r.batch_id, flowerDay:r.flower_day, task:r.task, grower:r.grower||'', completedDate:dstr(r.completed_date), synced:true });
+  const fromQaScale = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, date:dstr(r.date), scaleId:r.scale_id||'', grower:r.grower||'', p50:!!r.pass_50g, p200:!!r.pass_200g, p500:!!r.pass_500g, p2000:!!r.pass_2000g, notes:r.notes||'', synced:true });
+  const fromQaMoist = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, date:dstr(r.date), time:r.time||'', moisture:(r.moisture==null||r.moisture===''?null:parseFloat(r.moisture)), grower:r.grower||'', notes:r.notes||'', synced:true });
   async function hydrate(){
     // Fetch every table in PARALLEL (was sequential — 17 round-trips ran one-after-another, which
     // made login hang 20-30s). Promise.all issues them concurrently, then we map/assemble locally.
-    const [batches, txs, ec, ro, flow, waste, harvest, postdry, bio, pest, seed, sancl, santl, saned, events, adjs, covs, phPlants, phObs, fmRows, mcompRows] = await Promise.all([
+    const [batches, txs, ec, ro, flow, waste, harvest, postdry, bio, pest, seed, sancl, santl, saned, events, adjs, covs, phPlants, phObs, fmRows, mcompRows, qaScaleRows, qaMoistRows] = await Promise.all([
       q('batches'), q('transactions'), q('ec_logs'), q('runoff_logs'), q('flow_logs'),
       q('waste_records'), q('harvest_records'), q('postdry_records'), q('bio_records'),
       q('pest_records'), q('seed_inventory'), q('sanitation_cleaning'), q('sanitation_tool'),
       q('sanitation_task_edits'), q('destruction_events'), q('destruction_adjust'), q('destruction_covered'),
       q('pheno_plants'), q('pheno_observations'),
-      q('flower_milestones'), q('milestone_completions')
+      q('flower_milestones'), q('milestone_completions'),
+      qSoft('qa_scale_checks'), qSoft('qa_moisture_logs')
     ]);
     const _batchRows = batches.map(fromBatch);
     ls('gp-batch', _batchRows);
@@ -17126,6 +17388,8 @@ function buildSeedInvFields(rec){
       }
     }catch(_){}
     ls('gp-milestonecomp', (mcompRows||[]).map(fromMilestoneComp));
+    ls('gp-qascale', (qaScaleRows||[]).map(fromQaScale));
+    ls('gp-qamoist', (qaMoistRows||[]).map(fromQaMoist));
     // destruction — reassemble adjust + coveredKeys from the join tables
     const keyById = {}; waste.forEach(w => { keyById[w.id] = wasteKeyRow(w); });
     const adjBy = {}; adjs.forEach(a => { (adjBy[a.destruction_id] = adjBy[a.destruction_id]||[]).push(a); });
@@ -17169,6 +17433,8 @@ function buildSeedInvFields(rec){
   const mapSeed = f => { const o={}; for(const k in f){ if(M_SEED[k]!==undefined) o[M_SEED[k]]=f[k]; } return o; };
   const M_SANCL={'Date':'date','Grower':'grower','Log Template':'template','Room':'room','Task':'task','Notes':'notes'};
   const M_SANTL={'Date':'date','Grower':'grower','Tool':'tool','Cleaned':'cleaned','Sanitized':'sanitized','Notes':'notes'};
+  const M_QASCALE={'Date':'date','Scale ID':'scale_id','Grower':'grower','50g Pass':'pass_50g','200g Pass':'pass_200g','500g Pass':'pass_500g','2000g Pass':'pass_2000g','Notes':'notes'};
+  const M_QAMOIST={'Date':'date','Time':'time','Moisture':'moisture','Grower':'grower','Notes':'notes'};
   const mapSanEd = f => { const o={ template:f['Template'] }; if('Removed' in f) o.removed=pj(f['Removed'])||[]; if('Renamed' in f) o.renamed=pj(f['Renamed'])||{}; if('Added' in f) o.added=pj(f['Added'])||[]; return o; };
 
   const T = {
@@ -17186,7 +17452,9 @@ function buildSeedInvFields(rec){
     sancl:{table:'sanitation_cleaning',pk:'id',map:mk(M_SANCL)},
     santl:{table:'sanitation_tool',pk:'id',map:mk(M_SANTL)},
     saned:{table:'sanitation_task_edits',pk:'template',map:mapSanEd},
-    destroy:{table:'destruction_events',pk:'id',destroy:true}
+    destroy:{table:'destruction_events',pk:'id',destroy:true},
+    qascale:{table:'qa_scale_checks',pk:'id',map:mk(M_QASCALE)},
+    qamoist:{table:'qa_moisture_logs',pk:'id',map:mk(M_QAMOIST)}
   };
   function tblFor(t){
     if(typeof cfg==='undefined'||!cfg||!t) return null;
@@ -17196,6 +17464,7 @@ function buildSeedInvFields(rec){
     if(t===cfg.bioTbl) return T.bio; if(t===cfg.pestTbl) return T.pest; if(t===cfg.seedInvTbl) return T.seed;
     if(t===cfg.sanCleanTbl) return T.sancl; if(t===cfg.sanToolTbl) return T.santl; if(t===cfg.sanEditsTbl) return T.saned;
     if(t===cfg.destroyTbl) return T.destroy;
+    if(t===cfg.qaScaleTbl) return T.qascale; if(t===cfg.qaMoistTbl) return T.qamoist;
     return null;
   }
   const say=(m,e)=>{ try{ if(typeof toast==='function') toast(m); }catch(_){} if(e) console.error(m,e); };
@@ -17252,7 +17521,7 @@ function buildSeedInvFields(rec){
     if(source!=='manual'){ const a=document.activeElement; if(a && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName||'')) return; const _now=Date.now(); if(_now - _lastAutoRefresh < 3000) return; _lastAutoRefresh=_now; }
     try{ await hydrate(); }catch(e){ console.error('[sbRefresh]', e); return; }
     try{ if(typeof loadAll==='function') loadAll(); }catch(_){}
-    ['populateBatchDropdowns','updatePendingBadge','renderBatchLog','summaryPopulateBatches','renderWaste','renderEC','renderRO','destroyRenderPending','destroyRenderHistory','seedInvRenderList','renderWasteReport','phenoRenderPlants','fdRenderMilestones','milestoneRefreshCurrent'].forEach(fn=>{ try{ if(typeof window[fn]==='function') window[fn](); }catch(_){} });
+    ['populateBatchDropdowns','updatePendingBadge','renderBatchLog','summaryPopulateBatches','renderWaste','renderEC','renderRO','destroyRenderPending','destroyRenderHistory','seedInvRenderList','renderWasteReport','phenoRenderPlants','fdRenderMilestones','milestoneRefreshCurrent','qascaleRenderRecent','qamoistRenderRecent'].forEach(fn=>{ try{ if(typeof window[fn]==='function') window[fn](); }catch(_){} });
     // Push any locally-corrected records up to Supabase so fixes persist and the pending badge
     // clears. A boot reconciler can zero a phantom batch balance and flag that batch unsynced;
     // without a push it would recur every load. Batches use an idempotent upsert (safe to repeat).
@@ -17272,7 +17541,7 @@ function buildSeedInvFields(rec){
     if(_rtChannel){ try{ SBC.removeChannel(_rtChannel); }catch(_){} }
     const bump = () => { console.log('[realtime] change received'); clearTimeout(_rtTimer); _rtTimer=setTimeout(()=>sbRefresh('realtime'), 1500); };
     const ch = SBC.channel('gp-live');
-    ['batches','transactions','ec_logs','runoff_logs','flow_logs','waste_records','harvest_records','postdry_records','bio_records','pest_records','seed_inventory','destruction_events','destruction_adjust','destruction_covered','sanitation_cleaning','sanitation_tool','sanitation_task_edits','pheno_plants','pheno_observations','flower_milestones','milestone_completions']
+    ['batches','transactions','ec_logs','runoff_logs','flow_logs','waste_records','harvest_records','postdry_records','bio_records','pest_records','seed_inventory','destruction_events','destruction_adjust','destruction_covered','sanitation_cleaning','sanitation_tool','sanitation_task_edits','pheno_plants','pheno_observations','flower_milestones','milestone_completions','qa_scale_checks','qa_moisture_logs']
       .forEach(tbl => ch.on('postgres_changes', { event:'*', schema:'public', table:tbl }, bump));
     ch.subscribe((st, err) => {
       console.log('[realtime] status:', st, err||'');
