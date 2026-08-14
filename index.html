@@ -1414,7 +1414,7 @@ tr:last-child td { border-bottom: none; }
         <!-- Transaction History -->
         <div class="section-label">Transaction History</div>
         <div id="summary-tx-history" style="margin-bottom:8px;"></div>
-        <button type="button" class="btn-secondary" onclick="summaryAddCorrectiveTx()" style="width:100%;margin-bottom:20px;font-size:12px;">＋ Add corrective transaction (manual)</button>
+        <button type="button" id="summary-corrective-btn" class="btn-secondary" onclick="summaryAddCorrectiveTx()" style="display:none;width:100%;margin-bottom:20px;font-size:12px;">＋ Add corrective transaction (manual)</button>
       </div>
     </div>
 
@@ -14428,7 +14428,11 @@ async function summaryAddTransaction(){
   }
 }
 
+// Feature flag — transaction editing (per-row Edit Qty / Phase / Date / Move / Delete under the
+// Action column) and the "Add corrective transaction" button. Set to true to re-enable both.
+const TX_EDITING_ENABLED = false;
 function summaryRenderHistory(batchId){
+  { const _cbtn=document.getElementById('summary-corrective-btn'); if(_cbtn) _cbtn.style.display = TX_EDITING_ENABLED ? '' : 'none'; }
   const container = document.getElementById('summary-tx-history');
   const txs = batchTxRecs.filter(t=>t.batchId===batchId);
   if(!txs.length){
@@ -14478,7 +14482,7 @@ function summaryRenderHistory(batchId){
   }
   let html = '<div style="overflow-x:auto;background:#fff;border-radius:var(--radius-sm);border:1px solid var(--border);">';
   html += '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
-  html += '<thead><tr style="background:#f5f5f5;"><th style="padding:6px 8px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Date</th><th style="padding:6px 8px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Type</th><th style="padding:6px 8px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Phase</th><th style="padding:6px 8px;text-align:right;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Qty</th><th style="padding:6px 8px;text-align:right;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Balance</th><th style="padding:6px 8px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Notes</th><th style="padding:6px 8px;text-align:center;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Action</th></tr></thead>';
+  html += '<thead><tr style="background:#f5f5f5;"><th style="padding:6px 8px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Date</th><th style="padding:6px 8px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Type</th><th style="padding:6px 8px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Phase</th><th style="padding:6px 8px;text-align:right;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Qty</th><th style="padding:6px 8px;text-align:right;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Balance</th><th style="padding:6px 8px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Notes</th>'+(TX_EDITING_ENABLED?'<th style="padding:6px 8px;text-align:center;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Action</th>':'')+'</tr></thead>';
   html += '<tbody>'+withQty.map(t=>{
     // "Credit" tx types — ADD plants to the batch's running balance. Both Produced/Received
     // and Seeds Germinated increase the count for the destination batch (Seeds Germinated
@@ -14525,13 +14529,13 @@ function summaryRenderHistory(batchId){
       '<td style="padding:6px 8px;text-align:right;font-family:var(--mono);font-weight:700;color:'+qtyColor+';">'+qtyDisplay+'</td>'+
       '<td style="padding:6px 8px;text-align:right;font-family:var(--mono);font-weight:600;">'+t.runningQty+'</td>'+
       '<td style="padding:6px 8px;font-size:11px;color:var(--text3);max-width:120px;white-space:normal;">'+(t.notes||'')+'</td>'+
-      '<td style="padding:6px 8px;text-align:center;white-space:nowrap;">'+
+      (TX_EDITING_ENABLED ? ('<td style="padding:6px 8px;text-align:center;white-space:nowrap;">'+
         '<button type="button" onclick="summaryTxEditQty('+_txIdArg+')" title="Correct the quantity on this transaction" style="font-size:11px;padding:3px 8px;margin-right:4px;border:1px solid var(--border);background:var(--bg2);border-radius:var(--radius-sm);cursor:pointer;color:var(--text2);">Edit Qty</button>'+
         '<button type="button" onclick="summaryTxEditPhase('+_txIdArg+')" title="Correct which phase this transaction counts in (Veg/Clone vs Flower for CTLS)" style="font-size:11px;padding:3px 8px;margin-right:4px;border:1px solid var(--border);background:var(--bg2);border-radius:var(--radius-sm);cursor:pointer;color:var(--text2);">Phase</button>'+
         '<button type="button" onclick="summaryTxEditDate('+_txIdArg+')" title="Correct the date on this transaction (keeps the matching lifecycle date in sync)" style="font-size:11px;padding:3px 8px;margin-right:4px;border:1px solid var(--border);background:var(--bg2);border-radius:var(--radius-sm);cursor:pointer;color:var(--text2);">Date</button>'+
         '<button type="button" onclick="summaryTxMove('+_txIdArg+')" title="Move this transaction to another batch" style="font-size:11px;padding:3px 8px;margin-right:4px;border:1px solid var(--border);background:var(--bg2);border-radius:var(--radius-sm);cursor:pointer;color:var(--text2);">Move</button>'+
         '<button type="button" onclick="summaryTxDelete('+_txIdArg+')" title="Delete this transaction" style="font-size:11px;padding:3px 8px;border:1px solid var(--red);background:var(--red-pale);border-radius:var(--radius-sm);cursor:pointer;color:var(--red);">Delete</button>'+
-      '</td>'+
+      '</td>') : '')+
       '</tr>';
   }).join('')+'</tbody>';
   html += '</table></div>';
