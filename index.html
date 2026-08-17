@@ -658,6 +658,8 @@ tr:last-child td { border-bottom: none; }
 
     <!-- BATCH LOG -->
     <div class="page active" id="page-batch">
+      <!-- Milestones due today, grouped per batch (populated by renderMilestonesDue) -->
+      <div id="batch-milestones-due" style="display:none;"></div>
       <!-- Active Batches List (top) -->
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
         <div class="section-label" id="batch-list-label" style="margin:0;">Active Batches</div>
@@ -11537,7 +11539,47 @@ function populateBatchFilterDropdown(){
   sel.innerHTML = '<option value="">All batches</option>' + ids.map(b=>'<option'+(b===cur?' selected':'')+'>'+b+'</option>').join('');
 }
 
+// Milestones due TODAY, grouped per batch — shown above the Active Batches list. A milestone is
+// "due today" when its flower-day equals the batch's current flower day. Completed ones show
+// struck through; batches with nothing due today are omitted. Hidden entirely when nothing's due.
+function renderMilestonesDue(){
+  const el = document.getElementById('batch-milestones-due');
+  if(!el) return;
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const today = (typeof localDate === 'function') ? localDate() : new Date().toISOString().slice(0,10);
+  const tasksMap = (typeof FLOWER_DAY_TASKS !== 'undefined' && FLOWER_DAY_TASKS) ? FLOWER_DAY_TASKS : {};
+  const groups = [];
+  batchRecs.filter(b => b && !b.type && !(typeof isBatchClosedRec==='function' && isBatchClosedRec(b))
+      && (b.plantPhase||'') === 'Flower' && b.flowerStart)
+    .sort((a,b)=>(a.batchId||'').localeCompare(b.batchId||''))
+    .forEach(b => {
+      const fd = daysBetween(b.flowerStart, today);
+      if(!fd || fd <= 0) return;
+      const tasks = tasksMap[fd] || tasksMap[String(fd)] || [];
+      if(!tasks.length) return;
+      const items = tasks.map(t => ({ task:t, done: !!(typeof _milestoneCompRec==='function' && _milestoneCompRec(b.batchId, fd, t)) }));
+      groups.push({ batch:b.batchId, cultivar:b.cultivar||'', fd, items });
+    });
+  if(!groups.length){ el.style.display='none'; el.innerHTML=''; return; }
+  let h = '<div class="card" style="margin-bottom:12px;background:var(--amber-pale);border:1px solid var(--amber);">'
+        + '<div class="section-label" style="color:var(--amber);margin-bottom:8px;">Milestones due today</div>';
+  groups.forEach(g => {
+    h += '<div style="margin-bottom:8px;">'
+      +  '<div style="font-weight:700;font-size:13px;margin-bottom:2px;">'+esc(g.batch)
+      +    (g.cultivar ? ' <span style="font-weight:400;color:var(--text3);font-size:12px;">· '+esc(g.cultivar)+'</span>' : '')
+      +    ' <span style="font-family:var(--mono);font-size:11px;color:var(--text3);">F'+g.fd+'</span></div>';
+    g.items.forEach(it => {
+      h += '<div style="font-size:13px;padding:1px 0 1px 10px;color:'+(it.done?'var(--text3)':'var(--text)')+';'+(it.done?'text-decoration:line-through;':'')+'">'
+        +  (it.done ? '✓ ' : '• ') + esc(it.task) + '</div>';
+    });
+    h += '</div>';
+  });
+  h += '</div>';
+  el.innerHTML = h;
+  el.style.display = '';
+}
 function renderBatchLog(){
+  renderMilestonesDue();
   populateBatchFilterDropdown();
   const list = document.getElementById('batch-active-list');
   if(!list) return;
@@ -13744,6 +13786,19 @@ async function summaryUpdateBatch(){
   // each tracking its own plant count. No exclusivity guard on save.
   const status = document.getElementById('summary-status').value;
   const closedDate = status==='Closed' ? document.getElementById('summary-closed-date').value : '';
+  // Guard: a batch can only be Closed once BOTH Quality Assurance logs have at least one record
+  // for it — a Scale Check AND a Flower Moisture reading. Applies only on the Open -> Closed change.
+  if(status === 'Closed' && (batchRecs[idx].status !== 'Closed')){
+    const _hasScale = qaScaleRecs.some(r => r.batch === batchId);
+    const _hasMoist = qaMoistRecs.some(r => r.batch === batchId);
+    if(!_hasScale || !_hasMoist){
+      const _missing = [!_hasScale ? 'Scale Check' : null, !_hasMoist ? 'Flower Moisture' : null].filter(Boolean).join(' and ');
+      toast('Cannot close '+batchId+' — a '+_missing+' record (Quality Assurance) is required for this batch first.', 7000);
+      const _ss = document.getElementById('summary-status'); if(_ss) _ss.value = batchRecs[idx].status || 'Open';
+      if(typeof summaryStatusChanged === 'function') summaryStatusChanged();
+      return;
+    }
+  }
   // Lifecycle dates are now event-driven — preserve existing values from the batch record
   // (they get set automatically by EC Hydration entries, phase changes, and Harvested transactions).
   const _exHyd = batchRecs[idx].hydrationDate || '';
