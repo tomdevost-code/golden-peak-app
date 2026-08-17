@@ -11557,22 +11557,34 @@ function renderMilestonesDue(){
       .forEach(b => {
         const fd = daysBetween(b.flowerStart, today);
         if(!fd || fd <= 0) return;
-        const tasks = tasksMap[fd] || tasksMap[String(fd)] || [];
-        if(!Array.isArray(tasks) || !tasks.length) return;
-        const outstanding = tasks.filter(t => !(typeof _milestoneCompRec==='function' && _milestoneCompRec(b.batchId, fd, t)));
-        if(!outstanding.length) return;
-        groups.push({ batch:b.batchId, cultivar:b.cultivar||'', fd, tasks:outstanding });
+        // Every milestone day at or before today (reached), any task not yet checked off. Tasks
+        // whose day is BEFORE today are overdue; tasks on today's day are simply due.
+        const days = Object.keys(tasksMap).map(x=>parseInt(x,10)).filter(n=>!isNaN(n) && n<=fd).sort((x,y)=>x-y);
+        const items = [];
+        days.forEach(day => {
+          (tasksMap[day]||[]).forEach(t => {
+            if(!(typeof _milestoneCompRec==='function' && _milestoneCompRec(b.batchId, day, t))){
+              items.push({ day, task:t, overdue: day < fd });
+            }
+          });
+        });
+        if(!items.length) return;
+        groups.push({ batch:b.batchId, cultivar:b.cultivar||'', fd, items });
       });
     if(!groups.length){ el.style.display='none'; el.innerHTML=''; return; }
     let h = '<div class="card" style="margin-bottom:12px;background:var(--amber-pale);border:1px solid var(--amber);">'
-          + '<div class="section-label" style="color:var(--amber);margin-bottom:8px;">Milestones due today</div>';
+          + '<div class="section-label" style="color:var(--amber);margin-bottom:8px;">Milestones due / overdue</div>';
     groups.forEach(g => {
       h += '<div style="margin-bottom:8px;">'
         +  '<div style="font-weight:700;font-size:13px;margin-bottom:2px;">'+esc(g.batch)
         +    (g.cultivar ? ' <span style="font-weight:400;color:var(--text3);font-size:12px;">· '+esc(g.cultivar)+'</span>' : '')
         +    ' <span style="font-family:var(--mono);font-size:11px;color:var(--text3);">F'+g.fd+'</span></div>';
-      g.tasks.forEach(t => {
-        h += '<div style="font-size:13px;padding:1px 0 1px 10px;color:var(--text);">• '+esc(t)+'</div>';
+      g.items.forEach(it => {
+        const tag = it.overdue
+          ? ' <span style="font-size:10px;color:var(--red);font-weight:600;text-transform:uppercase;">overdue</span>'
+          : ' <span style="font-size:10px;color:var(--amber);font-weight:600;text-transform:uppercase;">today</span>';
+        h += '<div style="font-size:13px;padding:1px 0 1px 10px;color:var(--text);">'
+          +  '<span style="font-family:var(--mono);font-size:11px;color:var(--text3);">F'+it.day+'</span> · '+esc(it.task)+tag+'</div>';
       });
       h += '</div>';
     });
