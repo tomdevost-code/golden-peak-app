@@ -1605,7 +1605,7 @@ tr:last-child td { border-bottom: none; }
         <div class="section-label">Add Container</div>
         <div class="card">
           <div class="g2" style="margin-bottom:10px;">
-            <div class="field"><label>Container ID</label>
+            <div class="field"><label>Container ID <span id="postdry-bin-hint" style="font-size:10px;color:var(--text3);font-weight:400;"></span></label>
               <input type="text" id="postdry-bin-num" readonly style="background:var(--bg2);color:var(--text);cursor:default;font-family:var(--mono);font-weight:600;" />
             </div>
             <div class="field"><label>Tare Weight (kg)</label>
@@ -1623,7 +1623,7 @@ tr:last-child td { border-bottom: none; }
             <input type="text" id="postdry-type" placeholder="e.g. Black tote 30L, Glass jar 500g..." />
           </div>
           <div class="field" style="margin-bottom:10px;"><label>Sample Type <span style="font-size:10px;color:var(--text3);font-weight:400;">— defaults to Sold (sale inventory). Tag samples so they show separately on the CTLS report.</span></label>
-            <select id="postdry-sampletype">
+            <select id="postdry-sampletype" onchange="postDrySampleTypeChanged()">
               <option value="Sold" selected>Sold (sale inventory)</option>
               <option value="Retention">Retention sample</option>
               <option value="COA">COA sample</option>
@@ -5816,8 +5816,7 @@ function postDrySetupChanged(){
   const dateEl = document.getElementById('postdry-date');
   if(dateEl && !dateEl.value) dateEl.value = localDate();
   // Update the next bin number
-  const binEl = document.getElementById('postdry-bin-num');
-  if(binEl) binEl.value = batch ? ('Container ' + postDryNextBinNum(batch)) : '';
+  if(typeof postDrySampleTypeChanged === 'function') postDrySampleTypeChanged();
   // Enable/disable Save button
   const saveBtn = document.getElementById('postdry-btn');
   const completeBtn = document.getElementById('postdry-complete-btn');
@@ -5839,6 +5838,26 @@ function postDryCalcNet(){
     out.textContent = '— kg';
   }
 }
+function postDrySampleTypeChanged(){
+  // Sold containers get an auto-incrementing "Container N" (read-only). Retention / COA samples let
+  // the user type the Container ID themselves — it doubles as the Sample ID for the sample.
+  const st = (document.getElementById('postdry-sampletype')||{}).value || 'Sold';
+  const binEl = document.getElementById('postdry-bin-num');
+  const hint = document.getElementById('postdry-bin-hint');
+  const batch = (document.getElementById('postdry-batch-select')||{}).value || '';
+  if(!binEl) return;
+  const manual = (st === 'Retention' || st === 'COA');
+  if(manual){
+    binEl.readOnly = false; binEl.style.background = 'var(--bg)'; binEl.style.cursor = 'text';
+    binEl.placeholder = 'Enter Sample ID';
+    if(/^Container\s+/i.test(binEl.value||'')) binEl.value = '';
+    if(hint) hint.textContent = '— enter the Sample ID for this '+st+' sample';
+  } else {
+    binEl.readOnly = true; binEl.style.background = 'var(--bg2)'; binEl.style.cursor = 'default';
+    binEl.value = batch ? ('Container ' + postDryNextBinNum(batch)) : '';
+    if(hint) hint.textContent = '';
+  }
+}
 async function postDrySave(){
   const grower = document.getElementById('postdry-grower').value;
   const batch = document.getElementById('postdry-batch-select').value;
@@ -5854,17 +5873,25 @@ async function postDrySave(){
   if(isNaN(gross) || gross <= 0){ toast('Enter a valid gross weight.'); return; }
   if(gross <= tare){ toast('Gross weight must exceed tare weight ('+tare.toFixed(3)+' kg).',4500); return; }
   const netWeight = Math.round((gross - tare) * 1000) / 1000;
+  const isManualId = (sampleType === 'Retention' || sampleType === 'COA');
+  let manualId = '';
+  if(isManualId){
+    manualId = (((document.getElementById('postdry-bin-num')||{}).value)||'').replace(/^Container\s+/i,'').trim();
+    if(!manualId){ toast('Enter a Sample ID (Container ID) for this '+sampleType+' sample.'); return; }
+  }
   const _pdEditing = postDryEditId != null;
   let rec;
   if(_pdEditing){
     rec = postDryRecs.find(r => String(r.id) === String(postDryEditId));
     if(!rec){ toast('The container being edited was not found.'); postDryEditId=null; return; }
-    Object.assign(rec, { date, grower, batch, tareWeight: tare, grossWeight: gross, netWeight, containerType, sampleType, notes, synced:false });
+    const _upd = { date, grower, batch, tareWeight: tare, grossWeight: gross, netWeight, containerType, sampleType, notes, synced:false };
+    if(isManualId) _upd.binNumber = manualId;
+    Object.assign(rec, _upd);
     lsSet('gp-postdry', postDryRecs);
     postDryEditId = null;
     const _pb = document.getElementById('postdry-btn'); if(_pb) _pb.textContent = 'Save Container';
   } else {
-    const binNumber = postDryNextBinNum(batch);
+    const binNumber = isManualId ? manualId : postDryNextBinNum(batch);
     rec = {
       id: Date.now(), date, grower, batch, binNumber,
       tareWeight: tare, grossWeight: gross, netWeight,
@@ -6000,7 +6027,12 @@ function postDryEditStart(id){
   const tyEl = document.getElementById('postdry-type'); if(tyEl) tyEl.value = rec.containerType || '';
   const stEl = document.getElementById('postdry-sampletype'); if(stEl) stEl.value = rec.sampleType || 'Sold';
   const nEl = document.getElementById('postdry-notes'); if(nEl) nEl.value = rec.notes || '';
-  const binEl = document.getElementById('postdry-bin-num'); if(binEl) binEl.value = 'Container ' + (rec.binNumber != null ? rec.binNumber : '');
+  const binEl = document.getElementById('postdry-bin-num');
+  if(binEl){
+    const _man = (rec.sampleType === 'Retention' || rec.sampleType === 'COA');
+    if(_man){ binEl.value = (rec.binNumber != null ? rec.binNumber : ''); binEl.readOnly=false; binEl.style.background='var(--bg)'; binEl.style.cursor='text'; }
+    else { binEl.value = 'Container ' + (rec.binNumber != null ? rec.binNumber : ''); binEl.readOnly=true; binEl.style.background='var(--bg2)'; binEl.style.cursor='default'; }
+  }
   if(typeof postDryCalcNet === 'function'){ try { postDryCalcNet(); } catch(_){} }
   const btn = document.getElementById('postdry-btn'); if(btn){ btn.disabled=false; btn.textContent = 'Update Container'; }
   toast('Editing container '+(rec.binNumber!=null?rec.binNumber:'')+' — change values and press Update.',4000);
