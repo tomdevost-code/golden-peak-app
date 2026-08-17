@@ -658,7 +658,7 @@ tr:last-child td { border-bottom: none; }
 
     <!-- BATCH LOG -->
     <div class="page active" id="page-batch">
-      <!-- Milestones due today, grouped per batch (populated by renderMilestonesDue) -->
+      <!-- Milestones still outstanding for today, grouped per batch (renderMilestonesDue) -->
       <div id="batch-milestones-due" style="display:none;"></div>
       <!-- Active Batches List (top) -->
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
@@ -11539,47 +11539,50 @@ function populateBatchFilterDropdown(){
   sel.innerHTML = '<option value="">All batches</option>' + ids.map(b=>'<option'+(b===cur?' selected':'')+'>'+b+'</option>').join('');
 }
 
-// Milestones due TODAY, grouped per batch — shown above the Active Batches list. A milestone is
-// "due today" when its flower-day equals the batch's current flower day. Completed ones show
-// struck through; batches with nothing due today are omitted. Hidden entirely when nothing's due.
+// Above the Active Batches list: milestones DUE TODAY that are still OUTSTANDING, grouped per
+// batch. "Due today" = a milestone whose flower-day equals the batch's current flower day.
+// Completed milestones are omitted; a batch with nothing outstanding today isn't listed; the whole
+// panel hides when nothing is due. Read-only (check milestones off on the Summary page).
 function renderMilestonesDue(){
   const el = document.getElementById('batch-milestones-due');
   if(!el) return;
-  const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-  const today = (typeof localDate === 'function') ? localDate() : new Date().toISOString().slice(0,10);
-  const tasksMap = (typeof FLOWER_DAY_TASKS !== 'undefined' && FLOWER_DAY_TASKS) ? FLOWER_DAY_TASKS : {};
-  const groups = [];
-  batchRecs.filter(b => b && !b.type && !(typeof isBatchClosedRec==='function' && isBatchClosedRec(b))
-      && (b.plantPhase||'') === 'Flower' && b.flowerStart)
-    .sort((a,b)=>(a.batchId||'').localeCompare(b.batchId||''))
-    .forEach(b => {
-      const fd = daysBetween(b.flowerStart, today);
-      if(!fd || fd <= 0) return;
-      const tasks = tasksMap[fd] || tasksMap[String(fd)] || [];
-      if(!tasks.length) return;
-      const items = tasks.map(t => ({ task:t, done: !!(typeof _milestoneCompRec==='function' && _milestoneCompRec(b.batchId, fd, t)) }));
-      groups.push({ batch:b.batchId, cultivar:b.cultivar||'', fd, items });
-    });
-  if(!groups.length){ el.style.display='none'; el.innerHTML=''; return; }
-  let h = '<div class="card" style="margin-bottom:12px;background:var(--amber-pale);border:1px solid var(--amber);">'
-        + '<div class="section-label" style="color:var(--amber);margin-bottom:8px;">Milestones due today</div>';
-  groups.forEach(g => {
-    h += '<div style="margin-bottom:8px;">'
-      +  '<div style="font-weight:700;font-size:13px;margin-bottom:2px;">'+esc(g.batch)
-      +    (g.cultivar ? ' <span style="font-weight:400;color:var(--text3);font-size:12px;">· '+esc(g.cultivar)+'</span>' : '')
-      +    ' <span style="font-family:var(--mono);font-size:11px;color:var(--text3);">F'+g.fd+'</span></div>';
-    g.items.forEach(it => {
-      h += '<div style="font-size:13px;padding:1px 0 1px 10px;color:'+(it.done?'var(--text3)':'var(--text)')+';'+(it.done?'text-decoration:line-through;':'')+'">'
-        +  (it.done ? '✓ ' : '• ') + esc(it.task) + '</div>';
+  try {
+    const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+    const today = (typeof localDate === 'function') ? localDate() : new Date().toISOString().slice(0,10);
+    const tasksMap = (typeof FLOWER_DAY_TASKS !== 'undefined' && FLOWER_DAY_TASKS) ? FLOWER_DAY_TASKS : {};
+    const groups = [];
+    batchRecs.filter(b => b && !b.type && !(typeof isBatchClosedRec==='function' && isBatchClosedRec(b))
+        && (b.plantPhase||'') === 'Flower' && b.flowerStart)
+      .sort((a,b)=>(a.batchId||'').localeCompare(b.batchId||''))
+      .forEach(b => {
+        const fd = daysBetween(b.flowerStart, today);
+        if(!fd || fd <= 0) return;
+        const tasks = tasksMap[fd] || tasksMap[String(fd)] || [];
+        if(!Array.isArray(tasks) || !tasks.length) return;
+        const outstanding = tasks.filter(t => !(typeof _milestoneCompRec==='function' && _milestoneCompRec(b.batchId, fd, t)));
+        if(!outstanding.length) return;
+        groups.push({ batch:b.batchId, cultivar:b.cultivar||'', fd, tasks:outstanding });
+      });
+    if(!groups.length){ el.style.display='none'; el.innerHTML=''; return; }
+    let h = '<div class="card" style="margin-bottom:12px;background:var(--amber-pale);border:1px solid var(--amber);">'
+          + '<div class="section-label" style="color:var(--amber);margin-bottom:8px;">Milestones due today</div>';
+    groups.forEach(g => {
+      h += '<div style="margin-bottom:8px;">'
+        +  '<div style="font-weight:700;font-size:13px;margin-bottom:2px;">'+esc(g.batch)
+        +    (g.cultivar ? ' <span style="font-weight:400;color:var(--text3);font-size:12px;">· '+esc(g.cultivar)+'</span>' : '')
+        +    ' <span style="font-family:var(--mono);font-size:11px;color:var(--text3);">F'+g.fd+'</span></div>';
+      g.tasks.forEach(t => {
+        h += '<div style="font-size:13px;padding:1px 0 1px 10px;color:var(--text);">• '+esc(t)+'</div>';
+      });
+      h += '</div>';
     });
     h += '</div>';
-  });
-  h += '</div>';
-  el.innerHTML = h;
-  el.style.display = '';
+    el.innerHTML = h;
+    el.style.display = '';
+  } catch(e){ el.style.display='none'; el.innerHTML=''; }
 }
 function renderBatchLog(){
-  renderMilestonesDue();
+  try{ renderMilestonesDue(); }catch(_){}
   populateBatchFilterDropdown();
   const list = document.getElementById('batch-active-list');
   if(!list) return;
