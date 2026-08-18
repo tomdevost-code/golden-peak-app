@@ -1639,9 +1639,19 @@ tr:last-child td { border-bottom: none; }
       <div class="section">
         <div class="section-label">Containers — Current Batch</div>
         <div class="card" style="padding:0;overflow:hidden;">
-          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--green-pale);border-bottom:1px solid var(--green-light);">
-            <div style="font-size:11px;color:var(--green);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;">Total Post-Drying Weight</div>
-            <div id="postdry-total-net" style="font-size:18px;font-weight:700;font-family:var(--mono);color:var(--green);">0.000 kg</div>
+          <div style="padding:10px 14px;background:var(--green-pale);border-bottom:1px solid var(--green-light);">
+            <div style="display:flex;align-items:center;justify-content:space-between;">
+              <div style="font-size:11px;color:var(--green);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;">Sale Bins</div>
+              <div id="postdry-total-sold" style="font-size:16px;font-weight:700;font-family:var(--mono);color:var(--green);">0.000 kg</div>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-top:4px;">
+              <div style="font-size:11px;color:var(--green);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;">Samples (Retention + COA)</div>
+              <div id="postdry-total-samples" style="font-size:16px;font-weight:700;font-family:var(--mono);color:var(--green);">0.000 kg</div>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px;padding-top:6px;border-top:1px solid var(--green-light);">
+              <div style="font-size:11px;color:var(--green);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;font-weight:700;">Total Post-Drying Weight</div>
+              <div id="postdry-total-net" style="font-size:18px;font-weight:700;font-family:var(--mono);color:var(--green);">0.000 kg</div>
+            </div>
           </div>
           <div id="postdry-bin-list" style="padding:10px 14px;font-size:13px;color:var(--text3);text-align:center;">Select grower and batch to start packaging.</div>
         </div>
@@ -5964,13 +5974,19 @@ function postDryRenderBins(batchId){
     listEl.style.textAlign = 'center';
     listEl.innerHTML = '<span style="color:var(--text3);">Select grower and batch to start packaging.</span>';
     totalEl.textContent = '0.000 kg';
+    { const a=document.getElementById('postdry-total-sold'); if(a) a.textContent='0.000 kg'; const b=document.getElementById('postdry-total-samples'); if(b) b.textContent='0.000 kg'; }
     return;
   }
   const recs = postDryRecs
     .filter(r => r.batch === batchId)
     .sort((a,b)=> (parseInt(a.binNumber)||0) - (parseInt(b.binNumber)||0));
-  const totalNet = recs.reduce((s,r)=> s + (parseFloat(r.netWeight)||0), 0);
+  const _isSample = st => (st === 'Retention' || st === 'COA' || st === 'Testing'); // legacy Testing = COA bucket
+  const soldNet   = recs.filter(r => !_isSample(r.sampleType||'Sold')).reduce((s,r)=> s + (parseFloat(r.netWeight)||0), 0);
+  const sampleNet = recs.filter(r =>  _isSample(r.sampleType||'Sold')).reduce((s,r)=> s + (parseFloat(r.netWeight)||0), 0);
+  const totalNet  = soldNet + sampleNet;
   totalEl.textContent = totalNet.toFixed(3) + ' kg';
+  { const a=document.getElementById('postdry-total-sold'); if(a) a.textContent = soldNet.toFixed(3) + ' kg';
+    const b=document.getElementById('postdry-total-samples'); if(b) b.textContent = sampleNet.toFixed(3) + ' kg'; }
   if(!recs.length){
     listEl.style.padding = '10px 14px';
     listEl.style.textAlign = 'center';
