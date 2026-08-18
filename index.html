@@ -2112,10 +2112,7 @@ tr:last-child td { border-bottom: none; }
           <label>Batch <span style="color:var(--red);font-weight:700;">*</span> <span style="font-size:10px;color:var(--text3);font-weight:400;">(batches with Sold post-drying containers)</span></label>
           <select id="bol-batch" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;box-sizing:border-box;" onchange="bolBatchChanged()"><option value="">-- select batch --</option></select>
         </div>
-        <div class="g2" style="margin-bottom:10px;">
-          <div class="field"><label>Date</label><input type="date" id="bol-date" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;box-sizing:border-box;"></div>
-          <div class="field"><label>Grade</label><input type="text" id="bol-grade" value="A" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;box-sizing:border-box;"></div>
-        </div>
+        <div class="field" style="margin-bottom:10px;"><label>Date</label><input type="date" id="bol-date" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;box-sizing:border-box;"></div>
         <div class="field" style="margin-bottom:10px;"><label>Description (strain)</label><input type="text" id="bol-description" placeholder="auto from batch" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;box-sizing:border-box;"></div>
         <div class="field" style="margin-bottom:10px;"><label>From</label><textarea id="bol-from" rows="3" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;box-sizing:border-box;resize:vertical;">Golden Peak Cannabis Inc.
 247 Arsenault Rd.
@@ -15265,7 +15262,7 @@ function _hppNl2br(s){ return _hppEsc(s).replace(/\n/g,'<br>'); }
 function _hppSoldRows(batch){
   return postDryRecs.filter(r => r.batch === batch && (r.sampleType||'Sold') === 'Sold')
     .sort((a,b)=>(parseInt(a.binNumber)||0)-(parseInt(b.binNumber)||0))
-    .map(r => ({ cid:(r.binNumber!=null?r.binNumber:''), tare:(parseFloat(r.tareWeight)||0), gross:(parseFloat(r.grossWeight)||0), net:(parseFloat(r.netWeight)||0) }));
+    .map(r => ({ cid:(r.binNumber!=null?r.binNumber:''), type:(r.containerType||''), tare:(parseFloat(r.tareWeight)||0), gross:(parseFloat(r.grossWeight)||0), net:(parseFloat(r.netWeight)||0) }));
 }
 function _hppSoldWeight(batch){ return _hppSoldRows(batch).reduce((s,r)=>s+r.net,0); }
 // ---------- Bill of Lading ----------
@@ -15292,8 +15289,8 @@ function bolRenderPreview(batch){
   const rows=_hppSoldRows(batch);
   if(!rows.length){ el.innerHTML='<div style="padding:8px;color:var(--text3);">No Sold containers for this batch.</div>'; return; }
   const total=rows.reduce((s,r)=>s+r.net,0);
-  let h='<table style="width:100%;border-collapse:collapse;"><thead><tr style="background:var(--bg2);">'+['Container','Tare','Gross','Net'].map(x=>'<th style="padding:4px 6px;text-align:right;font-size:10px;color:var(--text3);font-family:var(--mono);">'+x+'</th>').join('')+'</tr></thead><tbody>';
-  rows.forEach(r=>{ h+='<tr><td style="padding:3px 6px;text-align:right;font-family:var(--mono);">'+_hppEsc(r.cid)+'</td><td style="padding:3px 6px;text-align:right;font-family:var(--mono);">'+r.tare.toFixed(3)+'</td><td style="padding:3px 6px;text-align:right;font-family:var(--mono);">'+r.gross.toFixed(3)+'</td><td style="padding:3px 6px;text-align:right;font-family:var(--mono);">'+r.net.toFixed(3)+'</td></tr>'; });
+  let h='<table style="width:100%;border-collapse:collapse;"><thead><tr style="background:var(--bg2);">'+['Container','Grade','Tare','Gross','Net'].map(x=>'<th style="padding:4px 6px;text-align:right;font-size:10px;color:var(--text3);font-family:var(--mono);">'+x+'</th>').join('')+'</tr></thead><tbody>';
+  rows.forEach(r=>{ h+='<tr><td style="padding:3px 6px;text-align:right;font-family:var(--mono);">'+_hppEsc(r.cid)+'</td><td style="padding:3px 6px;text-align:center;font-family:var(--mono);">'+_hppEsc(r.type)+'</td><td style="padding:3px 6px;text-align:right;font-family:var(--mono);">'+r.tare.toFixed(3)+'</td><td style="padding:3px 6px;text-align:right;font-family:var(--mono);">'+r.gross.toFixed(3)+'</td><td style="padding:3px 6px;text-align:right;font-family:var(--mono);">'+r.net.toFixed(3)+'</td></tr>'; });
   h+='</tbody><tfoot><tr style="border-top:1px solid var(--border);font-weight:700;"><td colspan="3" style="padding:4px 6px;text-align:right;">Total (kg):</td><td style="padding:4px 6px;text-align:right;font-family:var(--mono);">'+total.toFixed(3)+'</td></tr></tfoot></table>';
   el.innerHTML=h;
 }
@@ -15350,7 +15347,7 @@ function _bolRenderDoc(x){
   rows.forEach(r=>{ body+='<tr>'
     +'<td style="border:1px solid #000;padding:3px 5px;">'+_hppEsc(x.batch)+'</td>'
     +'<td style="border:1px solid #000;padding:3px 5px;">'+_hppEsc(x.description)+'</td>'
-    +'<td style="border:1px solid #000;padding:3px 5px;text-align:center;">'+_hppEsc(x.grade)+'</td>'
+    +'<td style="border:1px solid #000;padding:3px 5px;text-align:center;">'+_hppEsc(r.type||x.grade)+'</td>'
     +'<td style="border:1px solid #000;padding:3px 5px;text-align:center;">'+_hppEsc(r.cid)+'</td>'
     +'<td style="border:1px solid #000;padding:3px 5px;text-align:right;">'+(parseFloat(r.tare)||0).toFixed(3)+'</td>'
     +'<td style="border:1px solid #000;padding:3px 5px;text-align:right;">'+(parseFloat(r.gross)||0).toFixed(3)+'</td>'
