@@ -15934,6 +15934,7 @@ function sectionTable(title, headers, rows){
     + '  body.print-bol * { visibility: hidden !important; }'
     + '  body.print-bol #bol-print, body.print-bol #bol-print * { visibility: visible !important; }'
     + '  body.print-bol #bol-print { display:block !important; position:absolute !important; inset:0 !important; background:#fff !important; padding:14px !important; }'
+    + '  body.print-bol #bol-print tfoot { display: table-row-group !important; }'  /* total renders once at end, not repeated per page */
     + '  body.print-com * { visibility: hidden !important; }'
     + '  body.print-com #com-print, body.print-com #com-print * { visibility: visible !important; }'
     + '  body.print-com #com-print { display:block !important; position:absolute !important; inset:0 !important; background:#fff !important; padding:14px !important; }'
