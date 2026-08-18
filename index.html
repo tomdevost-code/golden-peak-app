@@ -69,6 +69,12 @@ body.section-sanitation .page[data-section="qa"] { display: none !important; }
 body.section-cultivation .page[data-section="qa"] { display: none !important; }
 body.section-qa .page[data-section="cultivation"] { display: none !important; }
 body.section-qa .page[data-section="sanitation"] { display: none !important; }
+body.section-cultivation .page[data-section="hpp"] { display: none !important; }
+body.section-sanitation .page[data-section="hpp"] { display: none !important; }
+body.section-qa .page[data-section="hpp"] { display: none !important; }
+body.section-hpp .page[data-section="cultivation"] { display: none !important; }
+body.section-hpp .page[data-section="sanitation"] { display: none !important; }
+body.section-hpp .page[data-section="qa"] { display: none !important; }
 /* On wider screens, dock the EC Recent Entries panel to the right so it stays visible while filling out the form */
 @media (min-width: 1100px){
   .ec-recent-section{
@@ -193,6 +199,7 @@ tr:last-child td { border-bottom: none; }
     <button id="section-cultivation-btn" class="active" onclick="setAppSection('cultivation')">Cultivation</button>
     <button id="section-sanitation-btn" onclick="setAppSection('sanitation')">Sanitation</button>
     <button id="section-qa-btn" onclick="setAppSection('qa')">Quality Assurance</button>
+    <button id="section-hpp-btn" onclick="setAppSection('hpp')">Harvest &amp; Post-Harvest</button>
   </div>
 
   <div class="content">
@@ -1502,7 +1509,7 @@ tr:last-child td { border-bottom: none; }
     </div>
 
     <!-- HARVEST LOG -->
-    <div class="page" id="page-harvest">
+    <div class="page" id="page-harvest" data-section="hpp">
       <div class="section">
         <div class="section-label">Harvest Setup</div>
         <div class="card">
@@ -1579,7 +1586,7 @@ tr:last-child td { border-bottom: none; }
     </div>
 
     <!-- POST-DRYING INVENTORY WEIGHT LOG -->
-    <div class="page" id="page-postdry">
+    <div class="page" id="page-postdry" data-section="hpp">
       <div class="section">
         <div class="section-label">Post-Drying Setup</div>
         <div class="card">
@@ -2090,6 +2097,82 @@ tr:last-child td { border-bottom: none; }
       </div>
     </div>
 
+    <!-- ===== HARVEST & POST-HARVEST : Bill of Lading ===== -->
+    <div class="page" id="page-bol" data-section="hpp">
+      <div class="card">
+        <div class="section-label">Bill of Lading</div>
+        <div class="field" style="margin-bottom:10px;">
+          <label>Batch <span style="color:var(--red);font-weight:700;">*</span> <span style="font-size:10px;color:var(--text3);font-weight:400;">(batches with Sold post-drying containers)</span></label>
+          <select id="bol-batch" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;box-sizing:border-box;" onchange="bolBatchChanged()"><option value="">-- select batch --</option></select>
+        </div>
+        <div class="g2" style="margin-bottom:10px;">
+          <div class="field"><label>Date</label><input type="date" id="bol-date" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;box-sizing:border-box;"></div>
+          <div class="field"><label>Grade</label><input type="text" id="bol-grade" value="A" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;box-sizing:border-box;"></div>
+        </div>
+        <div class="field" style="margin-bottom:10px;"><label>Description (strain)</label><input type="text" id="bol-description" placeholder="auto from batch" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;box-sizing:border-box;"></div>
+        <div class="field" style="margin-bottom:10px;"><label>From</label><textarea id="bol-from" rows="3" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;box-sizing:border-box;resize:vertical;">Golden Peak Cannabis Inc.
+247 Arsenault Rd.
+Dieppe, New Brunswick, E1A 7J6</textarea></div>
+        <div class="field" style="margin-bottom:10px;"><label>Sold To</label><textarea id="bol-soldto" rows="3" placeholder="Company name, address" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;box-sizing:border-box;resize:vertical;"></textarea></div>
+        <div class="field" style="margin-bottom:4px;"><label>Shipped To <span style="font-size:10px;color:var(--text3);font-weight:400;">(<a href="#" onclick="document.getElementById('bol-shipto').value=document.getElementById('bol-soldto').value;return false;" style="color:var(--green);">copy from Sold To</a>)</span></label><textarea id="bol-shipto" rows="3" placeholder="Company name, address" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;box-sizing:border-box;resize:vertical;"></textarea></div>
+        <div class="field" style="margin-bottom:10px;"><label>Contact</label><input type="text" id="bol-contact" placeholder="Contact name" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;box-sizing:border-box;"></div>
+        <div style="margin-bottom:10px;">
+          <div style="font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;">Containers (Sold sale-bins)</div>
+          <div id="bol-preview" style="border:1px solid var(--border);border-radius:var(--radius-sm);overflow:auto;font-size:12px;">Select a batch to load containers.</div>
+        </div>
+        <div class="field" style="margin-bottom:10px;"><label>Approved By</label><input type="text" id="bol-approvedby" value="Tom Devost" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;box-sizing:border-box;"></div>
+        <div class="field" style="margin-bottom:12px;"><label>Notes</label><textarea id="bol-notes" rows="2" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;box-sizing:border-box;resize:vertical;"></textarea></div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn-save" onclick="bolSave()" style="flex:1;">Save</button>
+          <button class="btn-primary" onclick="bolPrint()" style="flex:1;background:var(--green);">Print / Save as PDF</button>
+        </div>
+      </div>
+      <div class="card"><div class="section-label">Saved Bills of Lading</div><div id="bol-history" style="font-size:12px;"></div></div>
+    </div>
+    <div id="bol-print" style="display:none;"></div>
+
+    <!-- ===== HARVEST & POST-HARVEST : Certificate of Manufacturer ===== -->
+    <div class="page" id="page-com" data-section="hpp">
+      <div class="card">
+        <div class="section-label">Certificate of Manufacturer &amp; Compliance</div>
+        <div class="field" style="margin-bottom:10px;">
+          <label>Batch (Lot) <span style="color:var(--red);font-weight:700;">*</span></label>
+          <select id="com-batch" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;box-sizing:border-box;" onchange="comBatchChanged()"><option value="">-- select batch --</option></select>
+        </div>
+        <div class="g2" style="margin-bottom:10px;">
+          <div class="field"><label>Strain Name</label><input type="text" id="com-strain" placeholder="auto" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;box-sizing:border-box;"></div>
+          <div class="field"><label>Dosage Form</label><input type="text" id="com-dosage" value="Inhalation" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;box-sizing:border-box;"></div>
+        </div>
+        <div class="g2" style="margin-bottom:10px;">
+          <div class="field"><label>Harvest Date</label><input type="date" id="com-harvest" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;box-sizing:border-box;"></div>
+          <div class="field"><label>Package Date</label><input type="date" id="com-package" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;box-sizing:border-box;"></div>
+        </div>
+        <div class="g2" style="margin-bottom:10px;">
+          <div class="field"><label>Release Quantity</label><input type="text" id="com-release" placeholder="auto (kg)" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;box-sizing:border-box;"></div>
+          <div class="field"><label>Document Date</label><input type="date" id="com-date" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;box-sizing:border-box;"></div>
+        </div>
+        <div class="field" style="margin-bottom:10px;"><label>Expiry Date</label><input type="text" id="com-expiry" value="No expiry date has been determined" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;box-sizing:border-box;"></div>
+        <div class="field" style="margin-bottom:10px;"><label>Storage Conditions</label><input type="text" id="com-storage" value="Ambient (15°C - 22°C)  60-65% RH" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;box-sizing:border-box;"></div>
+        <div class="field" style="margin-bottom:10px;"><label>Name and address of license holder</label><textarea id="com-holder" rows="2" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;box-sizing:border-box;resize:vertical;">Golden Peak Cannabis Inc.
+247 Arsenault Rd, Dieppe, NB</textarea></div>
+        <div class="g2" style="margin-bottom:10px;">
+          <div class="field"><label>License Number</label><input type="text" id="com-license" value="LIC-KQX5Q56DMO" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;box-sizing:border-box;"></div>
+          <div class="field"><label>Analysis Results</label><input type="text" id="com-analysis" value="See certificate of analysis" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;box-sizing:border-box;"></div>
+        </div>
+        <div class="field" style="margin-bottom:10px;"><label>Comments</label><input type="text" id="com-comments" placeholder="e.g. Untrimmed" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;box-sizing:border-box;"></div>
+        <div class="g2" style="margin-bottom:12px;">
+          <div class="field"><label>QAP Name</label><input type="text" id="com-qapname" value="Tom Devost" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;box-sizing:border-box;"></div>
+          <div class="field"><label>QAP Title</label><input type="text" id="com-qaptitle" value="QAP/RPIC" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;box-sizing:border-box;"></div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn-save" onclick="comSave()" style="flex:1;">Save</button>
+          <button class="btn-primary" onclick="comPrint()" style="flex:1;background:var(--green);">Print / Save as PDF</button>
+        </div>
+      </div>
+      <div class="card"><div class="section-label">Saved Certificates</div><div id="com-history" style="font-size:12px;"></div></div>
+    </div>
+    <div id="com-print" style="display:none;"></div>
+
   <nav class="bottom-nav" id="nav-cultivation">
     <button class="bnav-btn" id="bn-seeds" onclick="switchPage('seeds',this)">
       <svg viewBox="0 0 24 24"><path d="M12 22V12M12 12c0-5.5 4-8 8-8 0 5.5-4 8-8 8zM12 12c0-5.5-4-8-8-8 0 5.5 4 8 8 8z"/></svg>
@@ -2122,14 +2205,6 @@ tr:last-child td { border-bottom: none; }
     <button class="bnav-btn" id="bn-destroy" onclick="switchPage('destroy',this)">
       <svg viewBox="0 0 24 24"><path d="M12 2c1 4 4 5 4 9a4 4 0 01-8 0c0-2 1-3 2-4 0 1 1 2 2 2 0-3-1-5-2-7z"/></svg>
       Destroy
-    </button>
-    <button class="bnav-btn" id="bn-harvest" onclick="switchPage('harvest',this)">
-      <svg viewBox="0 0 24 24"><path d="M12 2v8M8 6l4-4 4 4M5 14l7 7 7-7M5 14a7 7 0 0114 0"/></svg>
-      Harvest
-    </button>
-    <button class="bnav-btn" id="bn-postdry" onclick="switchPage('postdry',this)">
-      <svg viewBox="0 0 24 24"><path d="M3 8l9-5 9 5v8l-9 5-9-5V8z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg>
-      Post-Dry
     </button>
     <button class="bnav-btn" id="bn-bio" onclick="switchPage('bio',this)">
       <svg viewBox="0 0 24 24"><path d="M12 2C8 5 6 8 6 12a6 6 0 0012 0c0-4-2-7-6-10z"/><path d="M12 14v6"/></svg>
@@ -2172,6 +2247,24 @@ tr:last-child td { border-bottom: none; }
       Moisture
     </button>
   </nav>
+  <nav class="bottom-nav section-hidden" id="nav-hpp">
+    <button class="bnav-btn" id="bn-harvest" onclick="switchPage('harvest',this)">
+      <svg viewBox="0 0 24 24"><path d="M12 2v8M8 6l4-4 4 4M5 14l7 7 7-7M5 14a7 7 0 0114 0"/></svg>
+      Harvest
+    </button>
+    <button class="bnav-btn" id="bn-postdry" onclick="switchPage('postdry',this)">
+      <svg viewBox="0 0 24 24"><path d="M3 8l9-5 9 5v8l-9 5-9-5V8z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg>
+      Post-Dry
+    </button>
+    <button class="bnav-btn" id="bn-bol" onclick="switchPage('bol',this)">
+      <svg viewBox="0 0 24 24"><path d="M3 7h13l4 4v6H3zM16 7v4h4M6 20a2 2 0 100-4 2 2 0 000 4zM17 20a2 2 0 100-4 2 2 0 000 4z"/></svg>
+      BOL
+    </button>
+    <button class="bnav-btn" id="bn-com" onclick="switchPage('com',this)">
+      <svg viewBox="0 0 24 24"><path d="M6 2h9l5 5v15H6zM15 2v5h5M9 13h6M9 17h6M9 9h2"/></svg>
+      CoM
+    </button>
+  </nav>
 </div>
 <div class="toast" id="toast"></div>
 
@@ -2193,7 +2286,7 @@ tr:last-child td { border-bottom: none; }
 <script>
 const EC_LO=2.2,EC_HI=2.3,PH_EC_LO=6.2,PH_EC_HI=6.3;
 const RO_PH_LO=6.0,RO_PH_HI=6.5,RO_VAR_LO=0.3,RO_VAR_HI=0.5,RO_VAR_ALERT=1.0;
-let ecRecs=[],roRecs=[],wasteRecs=[],batchRecs=[],batchTxRecs=[],harvestRecs=[],postDryRecs=[],bioRecs=[],pestRecs=[],sanCleanRecs=[],sanToolRecs=[],sanEditsRecs=[],seedInvRecs=[],flowRecs=[],destroyRecs=[],phenoPlantRecs=[],phenoObsRecs=[],milestoneCompRecs=[],qaScaleRecs=[],qaMoistRecs=[],cfg={token:'',base:'',ecTbl:'',roTbl:'',wasteTbl:'',batchTbl:'',batchtxTbl:'',harvestTbl:'',postDryTbl:'',bioTbl:'',pestTbl:'',sanCleanTbl:'',sanToolTbl:'',sanEditsTbl:'',seedInvTbl:'',flowTbl:'',destroyTbl:'',fdTasksTbl:'',qaScaleTbl:'',qaMoistTbl:''};
+let ecRecs=[],roRecs=[],wasteRecs=[],batchRecs=[],batchTxRecs=[],harvestRecs=[],postDryRecs=[],bioRecs=[],pestRecs=[],sanCleanRecs=[],sanToolRecs=[],sanEditsRecs=[],seedInvRecs=[],flowRecs=[],destroyRecs=[],phenoPlantRecs=[],phenoObsRecs=[],milestoneCompRecs=[],qaScaleRecs=[],qaMoistRecs=[],bolRecs=[],comRecs=[],cfg={token:'',base:'',ecTbl:'',roTbl:'',wasteTbl:'',batchTbl:'',batchtxTbl:'',harvestTbl:'',postDryTbl:'',bioTbl:'',pestTbl:'',sanCleanTbl:'',sanToolTbl:'',sanEditsTbl:'',seedInvTbl:'',flowTbl:'',destroyTbl:'',fdTasksTbl:'',qaScaleTbl:'',qaMoistTbl:'',bolTbl:'',comTbl:''};
 // Dirty flag for the flower-day milestones single-row config sync. Declared up here (not next to
 // FLOWER_DAY_TASKS lower down) so updatePendingBadge can read it during boot without a TDZ error.
 let fdTasksDirty=false;
@@ -2305,7 +2398,7 @@ function sanGetTasks(template, phase){
 
 function lsGet(k){try{return JSON.parse(localStorage.getItem(k)||'null');}catch(e){return null;}}
 function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
-function loadAll(){ecRecs=lsGet('gp-ec')||[];roRecs=lsGet('gp-ro')||[];wasteRecs=lsGet('gp-waste')||[];batchRecs=lsGet('gp-batch')||[];batchTxRecs=lsGet('gp-batchtx')||[];harvestRecs=lsGet('gp-harvest')||[];postDryRecs=lsGet('gp-postdry')||[];bioRecs=lsGet('gp-bio')||[];pestRecs=lsGet('gp-pest')||[];sanCleanRecs=lsGet('gp-sanclean')||[];sanToolRecs=lsGet('gp-santool')||[];sanEditsRecs=lsGet('gp-sanedits')||[];seedInvRecs=lsGet('gp-seedinv')||[];flowRecs=lsGet('gp-flow')||[];destroyRecs=lsGet('gp-destroy')||[];phenoPlantRecs=lsGet('gp-phenoplant')||[];phenoObsRecs=lsGet('gp-phenoobs')||[];milestoneCompRecs=lsGet('gp-milestonecomp')||[];qaScaleRecs=lsGet('gp-qascale')||[];qaMoistRecs=lsGet('gp-qamoist')||[];try{fdTasksDirty=false;lsSet('gp-fdtasks-dirty',false);}catch(_){}migrateSanTaskEditsToRecs();wasteRecs.forEach(r=>{if(r.type==='Vegetative waste')r.type='Vegetative Waste';});lsSet('gp-waste',wasteRecs);const s=lsGet('gp-cfg');if(s){cfg=s;applySettings();}dedupeBatchRecs();backfillHarvestedTxs();reconcileAllPackagedBatches();try{cleanLocalDuplicates({batchtxSkipTypes:['Destroyed']});}catch(_){}if(window.__SB_MODE){try{cfg.token=cfg.token||'__sb__';cfg.base=cfg.base||'__sb__';const _sbr={ecTbl:'ec_logs',roTbl:'runoff_logs',flowTbl:'flow_logs',wasteTbl:'waste_records',batchTbl:'batches',batchtxTbl:'transactions',harvestTbl:'harvest_records',postDryTbl:'postdry_records',bioTbl:'bio_records',pestTbl:'pest_records',seedInvTbl:'seed_inventory',sanCleanTbl:'sanitation_cleaning',sanToolTbl:'sanitation_tool',sanEditsTbl:'sanitation_task_edits',destroyTbl:'destruction_events',qaScaleTbl:'qa_scale_checks',qaMoistTbl:'qa_moisture_logs'};Object.keys(_sbr).forEach(k=>{if(!cfg[k])cfg[k]=_sbr[k];});}catch(_){}}}
+function loadAll(){ecRecs=lsGet('gp-ec')||[];roRecs=lsGet('gp-ro')||[];wasteRecs=lsGet('gp-waste')||[];batchRecs=lsGet('gp-batch')||[];batchTxRecs=lsGet('gp-batchtx')||[];harvestRecs=lsGet('gp-harvest')||[];postDryRecs=lsGet('gp-postdry')||[];bioRecs=lsGet('gp-bio')||[];pestRecs=lsGet('gp-pest')||[];sanCleanRecs=lsGet('gp-sanclean')||[];sanToolRecs=lsGet('gp-santool')||[];sanEditsRecs=lsGet('gp-sanedits')||[];seedInvRecs=lsGet('gp-seedinv')||[];flowRecs=lsGet('gp-flow')||[];destroyRecs=lsGet('gp-destroy')||[];phenoPlantRecs=lsGet('gp-phenoplant')||[];phenoObsRecs=lsGet('gp-phenoobs')||[];milestoneCompRecs=lsGet('gp-milestonecomp')||[];qaScaleRecs=lsGet('gp-qascale')||[];qaMoistRecs=lsGet('gp-qamoist')||[];bolRecs=lsGet('gp-bol')||[];comRecs=lsGet('gp-com')||[];try{fdTasksDirty=false;lsSet('gp-fdtasks-dirty',false);}catch(_){}migrateSanTaskEditsToRecs();wasteRecs.forEach(r=>{if(r.type==='Vegetative waste')r.type='Vegetative Waste';});lsSet('gp-waste',wasteRecs);const s=lsGet('gp-cfg');if(s){cfg=s;applySettings();}dedupeBatchRecs();backfillHarvestedTxs();reconcileAllPackagedBatches();try{cleanLocalDuplicates({batchtxSkipTypes:['Destroyed']});}catch(_){}if(window.__SB_MODE){try{cfg.token=cfg.token||'__sb__';cfg.base=cfg.base||'__sb__';const _sbr={ecTbl:'ec_logs',roTbl:'runoff_logs',flowTbl:'flow_logs',wasteTbl:'waste_records',batchTbl:'batches',batchtxTbl:'transactions',harvestTbl:'harvest_records',postDryTbl:'postdry_records',bioTbl:'bio_records',pestTbl:'pest_records',seedInvTbl:'seed_inventory',sanCleanTbl:'sanitation_cleaning',sanToolTbl:'sanitation_tool',sanEditsTbl:'sanitation_task_edits',destroyTbl:'destruction_events',qaScaleTbl:'qa_scale_checks',qaMoistTbl:'qa_moisture_logs',bolTbl:'bol_documents',comTbl:'com_documents'};Object.keys(_sbr).forEach(k=>{if(!cfg[k])cfg[k]=_sbr[k];});}catch(_){}}}
 
 // One-time migration of the previous gp-san-task-edits localStorage shape into the new
 // synced sanEditsRecs array. Runs on every boot but only does work the first time.
@@ -4474,7 +4567,7 @@ function setAvg(id,val,lo,hi){const el=document.getElementById(id);if(val===null
 function stageLabel(r){if(!r.stage||!r.day)return'<span style="color:var(--text3)">-</span>';return r.stage==='flower'?'<span class="flower-txt">F'+r.day+'</span>':'<span class="veg-txt">V'+r.day+'</span>';}
 function toast(msg,dur){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),dur||2500);}
 
-function switchPage(page,btn){document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.bnav-btn').forEach(b=>b.classList.remove('active'));document.getElementById('page-'+page).classList.add('active');btn.classList.add('active');if(page==='report'){renderEC();renderRO();ctlsDefaultMonth();}if(page==='waste'){wasteRefreshDate();renderWaste();}if(page==='ec'){ecRefreshDate();}if(page==='ro'){roRefreshDate();}if(page==='batch'){renderBatchLog();}if(page==='summary'){summaryPopulateBatches();}if(page==='harvest'){harvestPopulateBatches();harvestRefreshDate();harvestPopulateBinNumbers();}if(page==='postdry'){postDryPopulateBatches();postDrySetupChanged();}if(page==='bio'){bioRefreshDate();bioSeqUnlock();}if(page==='pest'){pestRefreshDate();pestPopulateBatches();pestSeqUnlock();}if(page==='destroy'){if(typeof destroyEnter==='function')destroyEnter();}if(page==='sancleaning'){sanclEnter();}if(page==='santool'){santoolEnter();}if(page==='seeds'){seedInvEnter();}if(page==='pheno'){phenoEnter();}if(page==='qascale'){qascaleEnter();}if(page==='qamoisture'){qamoistureEnter();}if(page==='settings'){if(typeof fdRenderMilestones==='function')fdRenderMilestones();}
+function switchPage(page,btn){document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.bnav-btn').forEach(b=>b.classList.remove('active'));document.getElementById('page-'+page).classList.add('active');btn.classList.add('active');if(page==='report'){renderEC();renderRO();ctlsDefaultMonth();}if(page==='waste'){wasteRefreshDate();renderWaste();}if(page==='ec'){ecRefreshDate();}if(page==='ro'){roRefreshDate();}if(page==='batch'){renderBatchLog();}if(page==='summary'){summaryPopulateBatches();}if(page==='harvest'){harvestPopulateBatches();harvestRefreshDate();harvestPopulateBinNumbers();}if(page==='postdry'){postDryPopulateBatches();postDrySetupChanged();}if(page==='bio'){bioRefreshDate();bioSeqUnlock();}if(page==='pest'){pestRefreshDate();pestPopulateBatches();pestSeqUnlock();}if(page==='destroy'){if(typeof destroyEnter==='function')destroyEnter();}if(page==='sancleaning'){sanclEnter();}if(page==='santool'){santoolEnter();}if(page==='seeds'){seedInvEnter();}if(page==='pheno'){phenoEnter();}if(page==='qascale'){qascaleEnter();}if(page==='qamoisture'){qamoistureEnter();}if(page==='bol'){bolEnter();}if(page==='com'){comEnter();}if(page==='settings'){if(typeof fdRenderMilestones==='function')fdRenderMilestones();}
 
 // After a successful save, clear the batch selection so the next entry forces a re-select.
 // Grower and Date are intentionally left alone — the same person keeps logging on the same day.
@@ -4500,29 +4593,34 @@ function resetBatchAfterSave(prefix, handler){
 // Switch between the Cultivation and Sanitation sections. Each section has its own bottom
 // nav and its own set of pages (linked via data-section attribute, set in initSections).
 function setAppSection(section){
-  if(section !== 'cultivation' && section !== 'sanitation' && section !== 'qa') section = 'cultivation';
+  if(['cultivation','sanitation','qa','hpp'].indexOf(section) < 0) section = 'cultivation';
   appSection = section;
   lsSet('gp-section', section);
   // Update body class — drives CSS visibility for data-section pages.
   document.body.classList.toggle('section-cultivation', section === 'cultivation');
   document.body.classList.toggle('section-sanitation', section === 'sanitation');
   document.body.classList.toggle('section-qa', section === 'qa');
+  document.body.classList.toggle('section-hpp', section === 'hpp');
   // Toggle button active state.
   const cb = document.getElementById('section-cultivation-btn');
   const sb = document.getElementById('section-sanitation-btn');
   const qb = document.getElementById('section-qa-btn');
+  const hb = document.getElementById('section-hpp-btn');
   if(cb) cb.classList.toggle('active', section === 'cultivation');
   if(sb) sb.classList.toggle('active', section === 'sanitation');
   if(qb) qb.classList.toggle('active', section === 'qa');
+  if(hb) hb.classList.toggle('active', section === 'hpp');
   // Show the section's bottom nav, hide the others.
   const navC = document.getElementById('nav-cultivation');
   const navS = document.getElementById('nav-sanitation');
   const navQ = document.getElementById('nav-qa');
+  const navH = document.getElementById('nav-hpp');
   if(navC) navC.classList.toggle('section-hidden', section !== 'cultivation');
   if(navS) navS.classList.toggle('section-hidden', section !== 'sanitation');
   if(navQ) navQ.classList.toggle('section-hidden', section !== 'qa');
+  if(navH) navH.classList.toggle('section-hidden', section !== 'hpp');
   // Restore the last page visited in this section.
-  const _def = section === 'sanitation' ? 'sancleaning' : (section === 'qa' ? 'qascale' : 'batch');
+  const _def = section === 'sanitation' ? 'sancleaning' : (section === 'qa' ? 'qascale' : (section === 'hpp' ? 'harvest' : 'batch'));
   const lastPage = lastPagePerSection[section] || _def;
   const targetBtn = document.getElementById('bn-' + lastPage) ||
                     document.getElementById('bn-' + lastPage + (section === 'sanitation' && lastPage === 'settings' ? '-san' : ''));
@@ -7848,7 +7946,7 @@ function roClear(){for(let i=1;i<=8;i++){document.getElementById('ro-ec-'+i).val
 
 // Pending badge
 function updatePendingBadge(){
-  const n=(ecRecs.filter(r=>!r.synced).length)+(roRecs.filter(r=>!r.synced).length)+(wasteRecs.filter(r=>!r.synced).length)+(batchRecs.filter(r=>!r.synced).length)+(batchTxRecs.filter(r=>!r.synced).length)+(harvestRecs.filter(r=>!r.synced).length)+(postDryRecs.filter(r=>!r.synced).length)+(bioRecs.filter(r=>!r.synced).length)+(pestRecs.filter(r=>!r.synced).length)+(sanCleanRecs.filter(r=>!r.synced).length)+(sanToolRecs.filter(r=>!r.synced).length)+(sanEditsRecs.filter(r=>!r.synced).length)+(seedInvRecs.filter(r=>!r.synced).length)+(flowRecs.filter(r=>!r.synced).length)+(destroyRecs.filter(r=>!r.synced).length)+(qaScaleRecs.filter(r=>!r.synced).length)+(qaMoistRecs.filter(r=>!r.synced).length);
+  const n=(ecRecs.filter(r=>!r.synced).length)+(roRecs.filter(r=>!r.synced).length)+(wasteRecs.filter(r=>!r.synced).length)+(batchRecs.filter(r=>!r.synced).length)+(batchTxRecs.filter(r=>!r.synced).length)+(harvestRecs.filter(r=>!r.synced).length)+(postDryRecs.filter(r=>!r.synced).length)+(bioRecs.filter(r=>!r.synced).length)+(pestRecs.filter(r=>!r.synced).length)+(sanCleanRecs.filter(r=>!r.synced).length)+(sanToolRecs.filter(r=>!r.synced).length)+(sanEditsRecs.filter(r=>!r.synced).length)+(seedInvRecs.filter(r=>!r.synced).length)+(flowRecs.filter(r=>!r.synced).length)+(destroyRecs.filter(r=>!r.synced).length)+(qaScaleRecs.filter(r=>!r.synced).length)+(qaMoistRecs.filter(r=>!r.synced).length)+(bolRecs.filter(r=>!r.synced).length)+(comRecs.filter(r=>!r.synced).length);
   // Update the Settings badge — Settings only appears in the Cultivation bottom nav now.
   const b=document.getElementById('pending-badge');
   if(b){ if(n>0){b.textContent=n;b.style.display='block';}else{b.style.display='none';} }
@@ -7931,7 +8029,7 @@ function clearAllLocalData(){
   if(!confirm('⚠ RESET LOCAL DATA\n\nThis will permanently delete all locally-stored records: batches, transactions, EC/Runoff/Waste/Harvest/Post-Drying/Bio/Pest/Cleaning logs, seed inventory, and pending sync queue.\n\nAirtable credentials (Settings) will be preserved.\n\nIMPORTANT: Other devices (laptops, phones) using this app still have their own local copies. If you intend to start fresh in production, clear the data on every device — otherwise the un-cleared local data will be re-pushed to Airtable on the next sync.\n\nContinue?')) return;
   const _typed = prompt('Type RESET (in capital letters) to confirm. Anything else cancels.');
   if(_typed !== 'RESET'){ toast('Reset cancelled — no data changed.', 4000); return; }
-  ecRecs=[];roRecs=[];wasteRecs=[];batchRecs=[];batchTxRecs=[];harvestRecs=[];postDryRecs=[];bioRecs=[];pestRecs=[];sanCleanRecs=[];sanToolRecs=[];sanEditsRecs=[];seedInvRecs=[];flowRecs=[];destroyRecs=[];phenoPlantRecs=[];phenoObsRecs=[];qaScaleRecs=[];qaMoistRecs=[];
+  ecRecs=[];roRecs=[];wasteRecs=[];batchRecs=[];batchTxRecs=[];harvestRecs=[];postDryRecs=[];bioRecs=[];pestRecs=[];sanCleanRecs=[];sanToolRecs=[];sanEditsRecs=[];seedInvRecs=[];flowRecs=[];destroyRecs=[];phenoPlantRecs=[];phenoObsRecs=[];qaScaleRecs=[];qaMoistRecs=[];bolRecs=[];comRecs=[];
   lsSet('gp-ec',[]);lsSet('gp-ro',[]);lsSet('gp-waste',[]);lsSet('gp-batch',[]);lsSet('gp-batchtx',[]);lsSet('gp-harvest',[]);lsSet('gp-postdry',[]);lsSet('gp-bio',[]);lsSet('gp-pest',[]);lsSet('gp-sanclean',[]);lsSet('gp-santool',[]);lsSet('gp-sanedits',[]);lsSet('gp-seedinv',[]);lsSet('gp-flow',[]);lsSet('gp-destroy',[]);
   // Also nuke legacy storage keys that would otherwise re-seed records on the next boot:
   //   gp-san-task-edits — pre-sync sanitation template overrides (migrated into gp-sanedits on boot)
@@ -8809,7 +8907,9 @@ async function syncPending(){
   const pendingDestroy=destroyRecs.filter(r=>!r.synced);
   const pendingQaScale=qaScaleRecs.filter(r=>!r.synced);
   const pendingQaMoist=qaMoistRecs.filter(r=>!r.synced);
-  const total=pendingEC.length+pendingRO.length+pendingWaste.length+pendingBatch.length+pendingBatchTx.length+pendingHarvest.length+pendingPostDry.length+pendingBio.length+pendingPest.length+pendingSanClean.length+pendingSanTool.length+pendingSanEdits.length+pendingSeedInv.length+pendingFlow.length+pendingDestroy.length+pendingQaScale.length+pendingQaMoist.length;
+  const pendingBol=bolRecs.filter(r=>!r.synced);
+  const pendingCom=comRecs.filter(r=>!r.synced);
+  const total=pendingEC.length+pendingRO.length+pendingWaste.length+pendingBatch.length+pendingBatchTx.length+pendingHarvest.length+pendingPostDry.length+pendingBio.length+pendingPest.length+pendingSanClean.length+pendingSanTool.length+pendingSanEdits.length+pendingSeedInv.length+pendingFlow.length+pendingDestroy.length+pendingQaScale.length+pendingQaMoist.length+pendingBol.length+pendingCom.length;
   if(!total){if(st){st.style.display='block';st.style.background='var(--green-pale)';st.style.color='var(--green)';st.textContent='No pending records - everything is synced.';}updatePendingBadge();return;}
   if(st){st.style.display='block';st.style.background='var(--bg2)';st.style.color='var(--text2)';st.textContent='Syncing '+total+' record(s)...';}
   if(btn) btn.disabled=true;setSyncPill('ing','Syncing...');
@@ -9000,6 +9100,14 @@ async function syncPending(){
   if(pendingQaMoist.length && cfg.qaMoistTbl){
     for(const r of pendingQaMoist){ try{ const _r=await atPost(cfg.qaMoistTbl, buildQaMoistFields(r)); if(_r&&_r.id) r.airtableId=_r.id; r.synced=true; ok++; }catch(e){fail++;lastErr='Moisture: '+e.message;} }
     lsSet('gp-qamoist', qaMoistRecs);
+  }
+  if(pendingBol.length && cfg.bolTbl){
+    for(const r of pendingBol){ try{ const _r=await atPost(cfg.bolTbl, buildBolFields(r)); if(_r&&_r.id) r.airtableId=_r.id; r.synced=true; ok++; }catch(e){fail++;lastErr='BOL: '+e.message;} }
+    lsSet('gp-bol', bolRecs);
+  }
+  if(pendingCom.length && cfg.comTbl){
+    for(const r of pendingCom){ try{ const _r=await atPost(cfg.comTbl, buildComFields(r)); if(_r&&_r.id) r.airtableId=_r.id; r.synced=true; ok++; }catch(e){fail++;lastErr='CoM: '+e.message;} }
+    lsSet('gp-com', comRecs);
   }
   updatePendingBadge();
   if(btn) btn.disabled=false;
@@ -15138,6 +15246,217 @@ function qamoistRenderRecent(){
   el.innerHTML=h+'</tbody></table></div>';
 }
 
+
+// ═══════════════════════ HARVEST & POST-HARVEST DOCUMENTS ═══════════════════════
+function _hppEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function _hppNl2br(s){ return _hppEsc(s).replace(/\n/g,'<br>'); }
+function _hppSoldRows(batch){
+  return postDryRecs.filter(r => r.batch === batch && (r.sampleType||'Sold') === 'Sold')
+    .sort((a,b)=>(parseInt(a.binNumber)||0)-(parseInt(b.binNumber)||0))
+    .map(r => ({ cid:(r.binNumber!=null?r.binNumber:''), tare:(parseFloat(r.tareWeight)||0), gross:(parseFloat(r.grossWeight)||0), net:(parseFloat(r.netWeight)||0) }));
+}
+function _hppSoldWeight(batch){ return _hppSoldRows(batch).reduce((s,r)=>s+r.net,0); }
+// ---------- Bill of Lading ----------
+function _bolEligibleBatches(){
+  const has={}; postDryRecs.forEach(r=>{ if((r.sampleType||'Sold')==='Sold') has[r.batch]=true; });
+  return batchRecs.filter(b=>b && !b.type && has[b.batchId]).sort((a,b)=>(a.batchId||'').localeCompare(b.batchId||''));
+}
+function bolEnter(){
+  const sel=document.getElementById('bol-batch');
+  if(sel){ const cur=sel.value; sel.innerHTML='<option value="">-- select batch --</option>'+_bolEligibleBatches().map(b=>'<option value="'+b.batchId+'"'+(b.batchId===cur?' selected':'')+'>'+b.batchId+(b.cultivar?' – '+b.cultivar:'')+'</option>').join(''); }
+  const dt=document.getElementById('bol-date'); if(dt && !dt.value) dt.value=localDate();
+  bolBatchChanged();
+  bolRenderHistory();
+}
+function bolBatchChanged(){
+  const batch=(document.getElementById('bol-batch')||{}).value||'';
+  const b=batchRecs.find(r=>r.batchId===batch && !r.type);
+  const desc=document.getElementById('bol-description'); if(desc && b) desc.value=b.cultivar||'';
+  bolRenderPreview(batch);
+}
+function bolRenderPreview(batch){
+  const el=document.getElementById('bol-preview'); if(!el) return;
+  if(!batch){ el.innerHTML='Select a batch to load containers.'; return; }
+  const rows=_hppSoldRows(batch);
+  if(!rows.length){ el.innerHTML='<div style="padding:8px;color:var(--text3);">No Sold containers for this batch.</div>'; return; }
+  const total=rows.reduce((s,r)=>s+r.net,0);
+  let h='<table style="width:100%;border-collapse:collapse;"><thead><tr style="background:var(--bg2);">'+['Container','Tare','Gross','Net'].map(x=>'<th style="padding:4px 6px;text-align:right;font-size:10px;color:var(--text3);font-family:var(--mono);">'+x+'</th>').join('')+'</tr></thead><tbody>';
+  rows.forEach(r=>{ h+='<tr><td style="padding:3px 6px;text-align:right;font-family:var(--mono);">'+_hppEsc(r.cid)+'</td><td style="padding:3px 6px;text-align:right;font-family:var(--mono);">'+r.tare.toFixed(3)+'</td><td style="padding:3px 6px;text-align:right;font-family:var(--mono);">'+r.gross.toFixed(3)+'</td><td style="padding:3px 6px;text-align:right;font-family:var(--mono);">'+r.net.toFixed(3)+'</td></tr>'; });
+  h+='</tbody><tfoot><tr style="border-top:1px solid var(--border);font-weight:700;"><td colspan="3" style="padding:4px 6px;text-align:right;">Total (kg):</td><td style="padding:4px 6px;text-align:right;font-family:var(--mono);">'+total.toFixed(3)+'</td></tr></tfoot></table>';
+  el.innerHTML=h;
+}
+function _bolGather(){
+  const batch=(document.getElementById('bol-batch')||{}).value||'';
+  const rows=_hppSoldRows(batch);
+  const g={ batch, docDate:(document.getElementById('bol-date')||{}).value||localDate(),
+    grade:(document.getElementById('bol-grade')||{}).value||'', description:(document.getElementById('bol-description')||{}).value||'',
+    from:(document.getElementById('bol-from')||{}).value||'', soldTo:(document.getElementById('bol-soldto')||{}).value||'',
+    shippedTo:(document.getElementById('bol-shipto')||{}).value||'', contact:(document.getElementById('bol-contact')||{}).value||'',
+    approvedBy:(document.getElementById('bol-approvedby')||{}).value||'', notes:(document.getElementById('bol-notes')||{}).value||'',
+    rows, totalKg:Math.round(rows.reduce((s,r)=>s+r.net,0)*1000)/1000 };
+  return g;
+}
+function buildBolFields(r){
+  return { 'Batch ID':r.batch, 'Date':r.docDate, 'From':r.from, 'Sold To':r.soldTo, 'Shipped To':r.shippedTo, 'Contact':r.contact,
+    'Grade':r.grade, 'Description':r.description, 'Rows':r.rows, 'Total (kg)':r.totalKg, 'Approved By':r.approvedBy, 'Notes':r.notes };
+}
+async function bolSave(){
+  const g=_bolGather();
+  if(!g.batch){ toast('Pick a batch.'); return; }
+  if(!g.soldTo.trim()){ toast('Enter the Sold To recipient.'); return; }
+  if(!g.rows.length){ toast('No Sold containers to ship for this batch.'); return; }
+  const rec=Object.assign({ id:Date.now()+Math.floor(Math.random()*100000), airtableId:null, synced:false }, g);
+  bolRecs.unshift(rec); lsSet('gp-bol', bolRecs);
+  bolRenderHistory(); if(typeof updatePendingBadge==='function') updatePendingBadge();
+  toast('Bill of Lading saved for '+g.batch+'.');
+  if(cfg.bolTbl){ try{ const res=await atPost(cfg.bolTbl, buildBolFields(rec)); rec.synced=true; if(res&&res.id) rec.airtableId=res.id; lsSet('gp-bol', bolRecs); if(typeof updatePendingBadge==='function') updatePendingBadge(); }catch(e){} }
+}
+async function bolDelete(id){
+  const idx=bolRecs.findIndex(r=>String(r.id)===String(id)); if(idx<0) return;
+  const rec=bolRecs[idx];
+  if(!confirm('Delete this Bill of Lading ('+(rec.batch||'')+(rec.docDate?' · '+rec.docDate:'')+')?')) return;
+  if(rec.airtableId && cfg.bolTbl){ const ok=await atDelete(cfg.bolTbl, rec.airtableId, true); if(!ok){ toast('Delete failed — kept.'); return; } }
+  bolRecs.splice(idx,1); lsSet('gp-bol', bolRecs); bolRenderHistory(); if(typeof updatePendingBadge==='function') updatePendingBadge();
+  toast('Bill of Lading deleted.');
+}
+function bolRenderHistory(){
+  const el=document.getElementById('bol-history'); if(!el) return;
+  const rows=bolRecs.slice().sort((a,b)=>(b.id||0)-(a.id||0));
+  if(!rows.length){ el.innerHTML='<div style="color:var(--text3);padding:6px 2px;">No saved bills of lading.</div>'; return; }
+  el.innerHTML=rows.map(r=>{
+    const to=(r.soldTo||'').split('\n')[0]||'';
+    return '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border-top:1px solid var(--bg2);">'
+      +'<div><span style="font-family:var(--mono);font-weight:600;">'+_hppEsc(r.batch||'')+'</span> <span style="color:var(--text3);">'+_hppEsc(r.docDate||'')+'</span><div style="font-size:11px;color:var(--text3);">'+_hppEsc(to)+' · '+((parseFloat(r.totalKg)||0).toFixed(3))+' kg</div></div>'
+      +'<div style="white-space:nowrap;"><button type="button" onclick="bolPrintRec(\''+r.id+'\')" style="font-size:11px;padding:3px 8px;margin-right:4px;border:1px solid var(--green);background:var(--green-pale);color:var(--green);border-radius:var(--radius-sm);cursor:pointer;">Print</button>'
+      +'<button type="button" onclick="bolDelete(\''+r.id+'\')" style="font-size:11px;padding:3px 6px;border:1px solid var(--red);background:var(--red-pale);color:var(--red);border-radius:var(--radius-sm);cursor:pointer;">✕</button></div></div>';
+  }).join('');
+}
+function _bolRenderDoc(x){
+  const rows=x.rows||[];
+  const total=(x.totalKg!=null?x.totalKg:rows.reduce((s,r)=>s+(parseFloat(r.net)||0),0));
+  let body='';
+  rows.forEach(r=>{ body+='<tr>'
+    +'<td style="border:1px solid #000;padding:3px 5px;">'+_hppEsc(x.batch)+'</td>'
+    +'<td style="border:1px solid #000;padding:3px 5px;">'+_hppEsc(x.description)+'</td>'
+    +'<td style="border:1px solid #000;padding:3px 5px;text-align:center;">'+_hppEsc(x.grade)+'</td>'
+    +'<td style="border:1px solid #000;padding:3px 5px;text-align:center;">'+_hppEsc(r.cid)+'</td>'
+    +'<td style="border:1px solid #000;padding:3px 5px;text-align:right;">'+(parseFloat(r.tare)||0).toFixed(3)+'</td>'
+    +'<td style="border:1px solid #000;padding:3px 5px;text-align:right;">'+(parseFloat(r.gross)||0).toFixed(3)+'</td>'
+    +'<td style="border:1px solid #000;padding:3px 5px;text-align:right;">'+(parseFloat(r.net)||0).toFixed(3)+'</td></tr>'; });
+  return '<div style="max-width:900px;margin:0 auto;padding:24px;font-family:Arial,sans-serif;color:#000;font-size:12px;">'
+    +'<h1 style="text-align:center;font-size:22px;margin:0 0 18px;">Bill of Lading</h1>'
+    +'<table style="width:100%;"><tr><td style="vertical-align:top;"><b>From:</b><br>'+_hppNl2br(x.from)+'</td>'
+    +'<td style="vertical-align:top;text-align:right;"><b>Date:</b> '+_hppEsc(x.docDate)+'</td></tr></table>'
+    +'<table style="width:100%;margin-top:12px;"><tr><td style="vertical-align:top;width:50%;"><b>Sold To:</b><br>'+_hppNl2br(x.soldTo)+(x.contact?('<br>Contact: '+_hppEsc(x.contact)):'')+'</td>'
+    +'<td style="vertical-align:top;width:50%;"><b>Shipped To:</b><br>'+_hppNl2br(x.shippedTo)+'</td></tr></table>'
+    +'<table style="width:100%;border-collapse:collapse;margin-top:16px;font-size:11px;"><thead><tr>'
+    +['Batch ID','Description','Grade','Container ID','Tare Weight (kg)','Gross Weight (kg)','Net Weight (kg)'].map(h=>'<th style="border:1px solid #000;padding:4px 5px;background:#eee;">'+h+'</th>').join('')
+    +'</tr></thead><tbody>'+body+'</tbody>'
+    +'<tfoot><tr><td colspan="6" style="border:1px solid #000;padding:4px 5px;text-align:right;font-weight:700;">Total Quantity (kg):</td><td style="border:1px solid #000;padding:4px 5px;text-align:right;font-weight:700;">'+(parseFloat(total)||0).toFixed(3)+'</td></tr></tfoot></table>'
+    +(x.notes?('<div style="margin-top:10px;"><b>Notes:</b> '+_hppNl2br(x.notes)+'</div>'):'')
+    +'<table style="width:100%;margin-top:48px;"><tr><td style="width:50%;">Approved By: '+_hppEsc(x.approvedBy)+'<br><br>Signature: __________________________</td>'
+    +'<td style="width:50%;">Receiver: __________________________<br><br>Receiver Signature: ______________</td></tr></table></div>';
+}
+function _bolPrintDoc(x){ const c=document.getElementById('bol-print'); if(!c) return; c.innerHTML=_bolRenderDoc(x); document.body.classList.add('print-bol'); try{ window.print(); } finally { setTimeout(()=>document.body.classList.remove('print-bol'),300); } }
+function bolPrint(){ const g=_bolGather(); if(!g.batch){ toast('Pick a batch first.'); return; } if(!g.rows.length){ toast('No Sold containers to ship.'); return; } _bolPrintDoc(g); }
+function bolPrintRec(id){ const r=bolRecs.find(x=>String(x.id)===String(id)); if(r) _bolPrintDoc(r); }
+
+
+// ---------- Certificate of Manufacturer ----------
+function _comSet(id,v){ const e=document.getElementById(id); if(e) e.value=v; }
+function _comVal(id){ const e=document.getElementById(id); return e?e.value:''; }
+function _comEligibleBatches(){
+  const has={}; postDryRecs.forEach(r=>{ has[r.batch]=true; });
+  return batchRecs.filter(b=>b && !b.type && (has[b.batchId] || b.packagedDate)).sort((a,b)=>(a.batchId||'').localeCompare(b.batchId||''));
+}
+function comEnter(){
+  const sel=document.getElementById('com-batch');
+  if(sel){ const cur=sel.value; sel.innerHTML='<option value="">-- select batch --</option>'+_comEligibleBatches().map(b=>'<option value="'+b.batchId+'"'+(b.batchId===cur?' selected':'')+'>'+b.batchId+(b.cultivar?' – '+b.cultivar:'')+'</option>').join(''); }
+  const dt=document.getElementById('com-date'); if(dt && !dt.value) dt.value=localDate();
+  comBatchChanged();
+  comRenderHistory();
+}
+function comBatchChanged(){
+  const batch=(document.getElementById('com-batch')||{}).value||'';
+  const b=batchRecs.find(r=>r.batchId===batch && !r.type);
+  if(!b) return;
+  _comSet('com-strain', b.cultivar||'');
+  _comSet('com-harvest', b.harvestDate||'');
+  _comSet('com-package', b.packagedDate||'');
+  const rq=_hppSoldWeight(batch);
+  _comSet('com-release', rq>0 ? (rq.toFixed(3)+' Kg') : '');
+}
+function _comGather(){
+  const batch=(document.getElementById('com-batch')||{}).value||'';
+  return { batch, docDate:_comVal('com-date')||localDate(), strain:_comVal('com-strain'), dosageForm:_comVal('com-dosage'),
+    lot:batch, harvestDate:_comVal('com-harvest'), packageDate:_comVal('com-package'), releaseQty:_comVal('com-release'),
+    expiry:_comVal('com-expiry'), storage:_comVal('com-storage'), licenseHolder:_comVal('com-holder'), licenseNumber:_comVal('com-license'),
+    analysis:_comVal('com-analysis'), comments:_comVal('com-comments'), qapName:_comVal('com-qapname'), qapTitle:_comVal('com-qaptitle') };
+}
+function buildComFields(r){
+  return { 'Batch ID':r.batch, 'Date':r.docDate, 'Strain':r.strain, 'Dosage Form':r.dosageForm, 'Lot':r.lot,
+    'Harvest Date':r.harvestDate, 'Package Date':r.packageDate, 'Release Quantity':r.releaseQty, 'Expiry':r.expiry,
+    'Storage':r.storage, 'License Holder':r.licenseHolder, 'License Number':r.licenseNumber, 'Analysis':r.analysis,
+    'Comments':r.comments, 'QAP Name':r.qapName, 'QAP Title':r.qapTitle };
+}
+async function comSave(){
+  const g=_comGather();
+  if(!g.batch){ toast('Pick a batch (lot).'); return; }
+  const rec=Object.assign({ id:Date.now()+Math.floor(Math.random()*100000), airtableId:null, synced:false }, g);
+  comRecs.unshift(rec); lsSet('gp-com', comRecs);
+  comRenderHistory(); if(typeof updatePendingBadge==='function') updatePendingBadge();
+  toast('Certificate saved for '+g.batch+'.');
+  if(cfg.comTbl){ try{ const res=await atPost(cfg.comTbl, buildComFields(rec)); rec.synced=true; if(res&&res.id) rec.airtableId=res.id; lsSet('gp-com', comRecs); if(typeof updatePendingBadge==='function') updatePendingBadge(); }catch(e){} }
+}
+async function comDelete(id){
+  const idx=comRecs.findIndex(r=>String(r.id)===String(id)); if(idx<0) return;
+  const rec=comRecs[idx];
+  if(!confirm('Delete this Certificate ('+(rec.batch||'')+(rec.docDate?' · '+rec.docDate:'')+')?')) return;
+  if(rec.airtableId && cfg.comTbl){ const ok=await atDelete(cfg.comTbl, rec.airtableId, true); if(!ok){ toast('Delete failed — kept.'); return; } }
+  comRecs.splice(idx,1); lsSet('gp-com', comRecs); comRenderHistory(); if(typeof updatePendingBadge==='function') updatePendingBadge();
+  toast('Certificate deleted.');
+}
+function comRenderHistory(){
+  const el=document.getElementById('com-history'); if(!el) return;
+  const rows=comRecs.slice().sort((a,b)=>(b.id||0)-(a.id||0));
+  if(!rows.length){ el.innerHTML='<div style="color:var(--text3);padding:6px 2px;">No saved certificates.</div>'; return; }
+  el.innerHTML=rows.map(r=>'<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border-top:1px solid var(--bg2);">'
+    +'<div><span style="font-family:var(--mono);font-weight:600;">'+_hppEsc(r.batch||'')+'</span> <span style="color:var(--text3);">'+_hppEsc(r.docDate||'')+'</span><div style="font-size:11px;color:var(--text3);">'+_hppEsc(r.strain||'')+' · '+_hppEsc(r.releaseQty||'')+'</div></div>'
+    +'<div style="white-space:nowrap;"><button type="button" onclick="comPrintRec(\''+r.id+'\')" style="font-size:11px;padding:3px 8px;margin-right:4px;border:1px solid var(--green);background:var(--green-pale);color:var(--green);border-radius:var(--radius-sm);cursor:pointer;">Print</button>'
+    +'<button type="button" onclick="comDelete(\''+r.id+'\')" style="font-size:11px;padding:3px 6px;border:1px solid var(--red);background:var(--red-pale);color:var(--red);border-radius:var(--radius-sm);cursor:pointer;">✕</button></div></div>').join('');
+}
+function _comRow(label,val){ return '<tr><td style="border:1px solid #000;padding:5px 7px;font-weight:700;width:38%;background:#f3f3f3;">'+_hppEsc(label)+'</td><td style="border:1px solid #000;padding:5px 7px;">'+_hppNl2br(val)+'</td></tr>'; }
+function _comRenderDoc(x){
+  const att1='I hereby certify that the above information is authentic and accurate. This lot of product has been manufactured and packaged at the above mentioned Health Canada licensed facility in full compliance with the Cannabis Act. The cultivation, processing, packaging and record keeping were reviewed and found to be in compliance with the Cannabis Act.';
+  const att2='I have reviewed all relevant production procedures and records and attest that all materials used in the production of the lot meets the criteria of Part 5 for release of product under the Health Canada Good Production Practices (GPP) criteria.';
+  return '<div style="max-width:820px;margin:0 auto;padding:24px;font-family:Arial,sans-serif;color:#000;font-size:12px;">'
+    +'<h1 style="text-align:center;font-size:20px;margin:0 0 18px;">Certificate of Manufacturer and Compliance</h1>'
+    +'<table style="width:100%;border-collapse:collapse;">'
+    +_comRow('Strain Name', x.strain)
+    +_comRow('Dosage Form', x.dosageForm)
+    +_comRow('Lot', x.lot||x.batch)
+    +_comRow('Harvest Date', x.harvestDate)
+    +_comRow('Package Date', x.packageDate)
+    +_comRow('Release Quantity', x.releaseQty)
+    +_comRow('Expiry Date', x.expiry)
+    +_comRow('Storage Conditions', x.storage)
+    +_comRow('Name and address of license holder', x.licenseHolder)
+    +_comRow('License Number', x.licenseNumber)
+    +_comRow('Analysis Results', x.analysis)
+    +_comRow('Comments', x.comments)
+    +'</table>'
+    +'<p style="margin-top:16px;line-height:1.5;">'+_hppEsc(att1)+'</p>'
+    +'<p style="line-height:1.5;">'+_hppEsc(att2)+'</p>'
+    +'<table style="width:100%;margin-top:28px;"><tr><td style="width:60%;">'
+    +'<div>Name: '+_hppEsc(x.qapName)+'</div><div style="margin-top:8px;">Title: '+_hppEsc(x.qapTitle)+'</div>'
+    +'<div style="margin-top:20px;">Signature: __________________________</div>'
+    +'<div style="margin-top:12px;">Date: '+_hppEsc(x.docDate)+'</div>'
+    +'</td></tr></table></div>';
+}
+function _comPrintDoc(x){ const c=document.getElementById('com-print'); if(!c) return; c.innerHTML=_comRenderDoc(x); document.body.classList.add('print-com'); try{ window.print(); } finally { setTimeout(()=>document.body.classList.remove('print-com'),300); } }
+function comPrint(){ const g=_comGather(); if(!g.batch){ toast('Pick a batch first.'); return; } _comPrintDoc(g); }
+function comPrintRec(id){ const r=comRecs.find(x=>String(x.id)===String(id)); if(r) _comPrintDoc(r); }
+
 function openBatchReport(){
   const batchId = document.getElementById('summary-batch-select').value;
   if(!batchId){ toast('Select a batch first.'); return; }
@@ -15608,6 +15927,12 @@ function sectionTable(title, headers, rows){
     + '  body.print-ctls #ctls-report-output tr[id^="ctlsd_"] { display: table-row !important; }'
     + '  body.print-ctls #ctls-report-output span[id^="ctlsd_"][id$="_c"] { visibility: hidden !important; }'
     + '  body.print-ctls #ctls-report-output tr { page-break-inside: avoid; }'
+    + '  body.print-bol * { visibility: hidden !important; }'
+    + '  body.print-bol #bol-print, body.print-bol #bol-print * { visibility: visible !important; }'
+    + '  body.print-bol #bol-print { display:block !important; position:absolute !important; inset:0 !important; background:#fff !important; padding:14px !important; }'
+    + '  body.print-com * { visibility: hidden !important; }'
+    + '  body.print-com #com-print, body.print-com #com-print * { visibility: visible !important; }'
+    + '  body.print-com #com-print { display:block !important; position:absolute !important; inset:0 !important; background:#fff !important; padding:14px !important; }'
     + '  body.print-destroy * { visibility: hidden !important; }'
     + '  body.print-destroy #destroy-print,'
     + '  body.print-destroy #destroy-print * { visibility: visible !important; }'
@@ -17465,17 +17790,20 @@ function buildSeedInvFields(rec){
   const fromMilestoneComp = r => ({ id:r.id, batch:r.batch_id, flowerDay:r.flower_day, task:r.task, grower:r.grower||'', completedDate:dstr(r.completed_date), synced:true });
   const fromQaScale = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, date:dstr(r.date), scaleId:r.scale_id||'', grower:r.grower||'', p50:!!r.pass_50g, p200:!!r.pass_200g, p500:!!r.pass_500g, p2000:!!r.pass_2000g, notes:r.notes||'', synced:true });
   const fromQaMoist = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, date:dstr(r.date), time:r.time||'', moisture:(r.moisture==null||r.moisture===''?null:parseFloat(r.moisture)), grower:r.grower||'', notes:r.notes||'', synced:true });
+  const fromBol = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, docDate:dstr(r.doc_date), from:r.from_addr||'', soldTo:r.sold_to||'', shippedTo:r.shipped_to||'', contact:r.contact||'', grade:r.grade||'', description:r.description||'', rows:(Array.isArray(r.rows)?r.rows:(function(){try{return JSON.parse(r.rows)||[];}catch(_){return [];}})()), totalKg:(r.total_kg==null?null:parseFloat(r.total_kg)), approvedBy:r.approved_by||'', notes:r.notes||'', synced:true });
+  const fromCom = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, docDate:dstr(r.doc_date), strain:r.strain||'', dosageForm:r.dosage_form||'', lot:r.lot||'', harvestDate:dstr(r.harvest_date), packageDate:dstr(r.package_date), releaseQty:r.release_qty||'', expiry:r.expiry||'', storage:r.storage||'', licenseHolder:r.license_holder||'', licenseNumber:r.license_number||'', analysis:r.analysis||'', comments:r.comments||'', qapName:r.qap_name||'', qapTitle:r.qap_title||'', synced:true });
   async function hydrate(){
     // Fetch every table in PARALLEL (was sequential — 17 round-trips ran one-after-another, which
     // made login hang 20-30s). Promise.all issues them concurrently, then we map/assemble locally.
-    const [batches, txs, ec, ro, flow, waste, harvest, postdry, bio, pest, seed, sancl, santl, saned, events, adjs, covs, phPlants, phObs, fmRows, mcompRows, qaScaleRows, qaMoistRows] = await Promise.all([
+    const [batches, txs, ec, ro, flow, waste, harvest, postdry, bio, pest, seed, sancl, santl, saned, events, adjs, covs, phPlants, phObs, fmRows, mcompRows, qaScaleRows, qaMoistRows, bolRows, comRows] = await Promise.all([
       q('batches'), q('transactions'), q('ec_logs'), q('runoff_logs'), q('flow_logs'),
       q('waste_records'), q('harvest_records'), q('postdry_records'), q('bio_records'),
       q('pest_records'), q('seed_inventory'), q('sanitation_cleaning'), q('sanitation_tool'),
       q('sanitation_task_edits'), q('destruction_events'), q('destruction_adjust'), q('destruction_covered'),
       q('pheno_plants'), q('pheno_observations'),
       q('flower_milestones'), q('milestone_completions'),
-      qSoft('qa_scale_checks'), qSoft('qa_moisture_logs')
+      qSoft('qa_scale_checks'), qSoft('qa_moisture_logs'),
+      qSoft('bol_documents'), qSoft('com_documents')
     ]);
     const _batchRows = batches.map(fromBatch);
     ls('gp-batch', _batchRows);
@@ -17508,6 +17836,8 @@ function buildSeedInvFields(rec){
     ls('gp-milestonecomp', (mcompRows||[]).map(fromMilestoneComp));
     ls('gp-qascale', (qaScaleRows||[]).map(fromQaScale));
     ls('gp-qamoist', (qaMoistRows||[]).map(fromQaMoist));
+    ls('gp-bol', (bolRows||[]).map(fromBol));
+    ls('gp-com', (comRows||[]).map(fromCom));
     // destruction — reassemble adjust + coveredKeys from the join tables
     const keyById = {}; waste.forEach(w => { keyById[w.id] = wasteKeyRow(w); });
     const adjBy = {}; adjs.forEach(a => { (adjBy[a.destruction_id] = adjBy[a.destruction_id]||[]).push(a); });
@@ -17553,6 +17883,8 @@ function buildSeedInvFields(rec){
   const M_SANTL={'Date':'date','Grower':'grower','Tool':'tool','Cleaned':'cleaned','Sanitized':'sanitized','Notes':'notes'};
   const M_QASCALE={'Date':'date','Scale ID':'scale_id','Grower':'grower','50g Pass':'pass_50g','200g Pass':'pass_200g','500g Pass':'pass_500g','2000g Pass':'pass_2000g','Notes':'notes'};
   const M_QAMOIST={'Date':'date','Time':'time','Moisture':'moisture','Grower':'grower','Notes':'notes'};
+  const M_BOL={'Date':'doc_date','From':'from_addr','Sold To':'sold_to','Shipped To':'shipped_to','Contact':'contact','Grade':'grade','Description':'description','Rows':'rows','Total (kg)':'total_kg','Approved By':'approved_by','Notes':'notes'};
+  const M_COM={'Date':'doc_date','Strain':'strain','Dosage Form':'dosage_form','Lot':'lot','Harvest Date':'harvest_date','Package Date':'package_date','Release Quantity':'release_qty','Expiry':'expiry','Storage':'storage','License Holder':'license_holder','License Number':'license_number','Analysis':'analysis','Comments':'comments','QAP Name':'qap_name','QAP Title':'qap_title'};
   const mapSanEd = f => { const o={ template:f['Template'] }; if('Removed' in f) o.removed=pj(f['Removed'])||[]; if('Renamed' in f) o.renamed=pj(f['Renamed'])||{}; if('Added' in f) o.added=pj(f['Added'])||[]; return o; };
 
   const T = {
@@ -17572,7 +17904,9 @@ function buildSeedInvFields(rec){
     saned:{table:'sanitation_task_edits',pk:'template',map:mapSanEd},
     destroy:{table:'destruction_events',pk:'id',destroy:true},
     qascale:{table:'qa_scale_checks',pk:'id',map:mk(M_QASCALE)},
-    qamoist:{table:'qa_moisture_logs',pk:'id',map:mk(M_QAMOIST)}
+    qamoist:{table:'qa_moisture_logs',pk:'id',map:mk(M_QAMOIST)},
+    bol:{table:'bol_documents',pk:'id',map:mk(M_BOL)},
+    com:{table:'com_documents',pk:'id',map:mk(M_COM)}
   };
   function tblFor(t){
     if(typeof cfg==='undefined'||!cfg||!t) return null;
@@ -17583,6 +17917,7 @@ function buildSeedInvFields(rec){
     if(t===cfg.sanCleanTbl) return T.sancl; if(t===cfg.sanToolTbl) return T.santl; if(t===cfg.sanEditsTbl) return T.saned;
     if(t===cfg.destroyTbl) return T.destroy;
     if(t===cfg.qaScaleTbl) return T.qascale; if(t===cfg.qaMoistTbl) return T.qamoist;
+    if(t===cfg.bolTbl) return T.bol; if(t===cfg.comTbl) return T.com;
     return null;
   }
   const say=(m,e)=>{ try{ if(typeof toast==='function') toast(m); }catch(_){} if(e) console.error(m,e); };
@@ -17639,7 +17974,7 @@ function buildSeedInvFields(rec){
     if(source!=='manual'){ const a=document.activeElement; if(a && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName||'')) return; const _now=Date.now(); if(_now - _lastAutoRefresh < 3000) return; _lastAutoRefresh=_now; }
     try{ await hydrate(); }catch(e){ console.error('[sbRefresh]', e); return; }
     try{ if(typeof loadAll==='function') loadAll(); }catch(_){}
-    ['populateBatchDropdowns','updatePendingBadge','renderBatchLog','summaryPopulateBatches','renderWaste','renderEC','renderRO','destroyRenderPending','destroyRenderHistory','seedInvRenderList','renderWasteReport','phenoRenderPlants','fdRenderMilestones','milestoneRefreshCurrent','qascaleRenderRecent','qamoistRenderRecent'].forEach(fn=>{ try{ if(typeof window[fn]==='function') window[fn](); }catch(_){} });
+    ['populateBatchDropdowns','updatePendingBadge','renderBatchLog','summaryPopulateBatches','renderWaste','renderEC','renderRO','destroyRenderPending','destroyRenderHistory','seedInvRenderList','renderWasteReport','phenoRenderPlants','fdRenderMilestones','milestoneRefreshCurrent','qascaleRenderRecent','qamoistRenderRecent','bolRenderHistory','comRenderHistory'].forEach(fn=>{ try{ if(typeof window[fn]==='function') window[fn](); }catch(_){} });
     // Push any locally-corrected records up to Supabase so fixes persist and the pending badge
     // clears. A boot reconciler can zero a phantom batch balance and flag that batch unsynced;
     // without a push it would recur every load. Batches use an idempotent upsert (safe to repeat).
@@ -17659,7 +17994,7 @@ function buildSeedInvFields(rec){
     if(_rtChannel){ try{ SBC.removeChannel(_rtChannel); }catch(_){} }
     const bump = () => { console.log('[realtime] change received'); clearTimeout(_rtTimer); _rtTimer=setTimeout(()=>sbRefresh('realtime'), 1500); };
     const ch = SBC.channel('gp-live');
-    ['batches','transactions','ec_logs','runoff_logs','flow_logs','waste_records','harvest_records','postdry_records','bio_records','pest_records','seed_inventory','destruction_events','destruction_adjust','destruction_covered','sanitation_cleaning','sanitation_tool','sanitation_task_edits','pheno_plants','pheno_observations','flower_milestones','milestone_completions','qa_scale_checks','qa_moisture_logs']
+    ['batches','transactions','ec_logs','runoff_logs','flow_logs','waste_records','harvest_records','postdry_records','bio_records','pest_records','seed_inventory','destruction_events','destruction_adjust','destruction_covered','sanitation_cleaning','sanitation_tool','sanitation_task_edits','pheno_plants','pheno_observations','flower_milestones','milestone_completions','qa_scale_checks','qa_moisture_logs','bol_documents','com_documents']
       .forEach(tbl => ch.on('postgres_changes', { event:'*', schema:'public', table:tbl }, bump));
     ch.subscribe((st, err) => {
       console.log('[realtime] status:', st, err||'');
