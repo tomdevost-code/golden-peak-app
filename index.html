@@ -4018,8 +4018,17 @@ function formatHarvestDatesForDisplay(batchId){
   const map = getPerRoomHarvestDates(batchId);
   const rooms = Object.keys(map).sort();
   if(rooms.length === 0) return b.harvestDate || '—';
-  if(rooms.length === 1) return map[rooms[0]] + ' (' + rooms[0] + ')';
-  return rooms.map(r => map[r] + ' (' + r + ')').join(', ');
+  // Per-room label includes the amount harvested from that room (plant count + net kg) when known,
+  // e.g. "2026-08-04 (Flower 1 · 42 plants · 3.116 kg)".
+  const _roomLabel = r => {
+    const p = parseInt(b.harvestedPlants && b.harvestedPlants[r]) || 0;
+    const w = parseFloat(b.harvestedWeights && b.harvestedWeights[r]) || 0;
+    const extra = [];
+    if(p > 0) extra.push(p + ' plant' + (p === 1 ? '' : 's'));
+    if(w > 0) extra.push(w.toFixed(3) + ' kg');
+    return map[r] + ' (' + r + (extra.length ? ' · ' + extra.join(' · ') : '') + ')';
+  };
+  return rooms.map(_roomLabel).join(', ');
 }
 
 function formatBatchRoomsForDisplay(batchRec){
