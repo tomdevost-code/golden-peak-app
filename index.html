@@ -6523,11 +6523,11 @@ function populateBatchDropdowns(){
   // Phase filters per form:
   //   EC:     hide harvested-or-beyond (Drying / Packaged / Delivered) — no more readings needed.
   //   Runoff: Flower phase only — runoff sampling only applies to flowering plants.
-  //   Waste:  hide only Delivered (Drying / Packaged still allow Dry Waste records).
+  //   Waste:  all phases (Delivered included — post-delivery cleanup produces Dry Waste).
   const HARVESTED_PHASES = new Set(['Drying','Packaged','Delivered']);
   const ecList    = list.filter(b => !HARVESTED_PHASES.has(b.plantPhase));
   const roList    = list.filter(b => b.plantPhase === 'Flower');
-  const wasteList = list.filter(b => b.plantPhase !== 'Delivered');
+  const wasteList = list;
   function fillFormSelect(selId,placeholderText,items){
     const sel=document.getElementById(selId);
     if(!sel) return;
@@ -9387,7 +9387,7 @@ function wasteSeqUnlock(){
   //     Trim Room — flower rooms are never valid for Dry Waste, since packaging / trimming
   //     happens exclusively in the Trim Room.
   const _phase = batchRec ? batchRec.plantPhase : '';
-  if(_phase === 'Drying' || _phase === 'Packaged'){
+  if(_phase === 'Drying' || _phase === 'Packaged' || _phase === 'Delivered'){
     batchRooms = ['Trim Room'];
   } else {
     // Pre-harvest filtering — include only rooms with plants, plus Veg if it has the remainder.
@@ -9411,7 +9411,9 @@ function wasteSeqUnlock(){
   // pulled off plants during trimming (Vegetative Waste), so it offers both types. All other
   // rooms get the single phase-driven option: Dry Waste post-harvest, Vegetative Waste before.
   let _wasteTypeOpts;
-  if(room === 'Trim Room'){
+  if(_phaseNow === 'Delivered'){
+    _wasteTypeOpts = ['Dry Waste']; // post-delivery cleanup — dry waste only
+  } else if(room === 'Trim Room'){
     _wasteTypeOpts = ['Vegetative Waste','Dry Waste'];
   } else {
     _wasteTypeOpts = [(_phaseNow === 'Packaged' || _phaseNow === 'Drying') ? 'Dry Waste' : 'Vegetative Waste'];
@@ -9434,7 +9436,7 @@ function wasteBatchSelect(){
   const val=document.getElementById('waste-batch-select').value;
   if(val){
     const _br = batchRecs.find(r=>r.batchId===val && !r.type);
-    const _post = _br && ['Drying','Packaged'].includes(_br.plantPhase);
+    const _post = _br && ['Drying','Packaged','Delivered'].includes(_br.plantPhase);
     if(calcBatchQty(val)<=0 && !_post){
       toast('Batch '+val+' has 0 plants. Add plants on the Summary page first.',4000);
     }
@@ -9545,7 +9547,11 @@ async function wasteSave(){
   // Drying and Packaged batches record Dry Waste; everything earlier is Vegetative Waste.
   // EXCEPTION: the Trim Room accepts BOTH types (dried-flower trim = Dry Waste, leaf/veg material
   // pulled during trimming = Vegetative Waste), so the phase-type match is skipped for it.
-  const _wsExpectedType = (_wsPhase === 'Packaged' || _wsPhase === 'Drying') ? 'Dry Waste' : 'Vegetative Waste';
+  if(_wsPhase === 'Delivered' && type !== 'Dry Waste'){
+    toast('This batch has been delivered — only Dry Waste can be recorded.',5500);
+    return;
+  }
+  const _wsExpectedType = (['Packaged','Drying','Delivered'].includes(_wsPhase)) ? 'Dry Waste' : 'Vegetative Waste';
   if(room !== 'Trim Room' && type !== _wsExpectedType){
     if(_wsExpectedType === 'Vegetative Waste'){
       toast('This batch is still pre-harvest — record Vegetative Waste, not Dry Waste.',5500);
@@ -9559,7 +9565,7 @@ async function wasteSave(){
   // Guard: Dry Waste during Drying or after Packaging only comes from the Trim Room. All
   // trimming and packaging for dried flower happens in the Trim Room — flower rooms are not
   // valid Dry Waste sources (their material has already been removed to drying / packaging).
-  if((_wsPhase === 'Drying' || _wsPhase === 'Packaged') && type === 'Dry Waste' && room !== 'Trim Room'){
+  if((_wsPhase === 'Drying' || _wsPhase === 'Packaged' || _wsPhase === 'Delivered') && type === 'Dry Waste' && room !== 'Trim Room'){
     toast('Dry Waste can only be recorded from the Trim Room.',5000);
     return;
   }
