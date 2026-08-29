@@ -6526,7 +6526,7 @@ function populateBatchDropdowns(){
   //   Waste:  all phases (Delivered included — post-delivery cleanup produces Dry Waste).
   const HARVESTED_PHASES = new Set(['Drying','Packaged','Delivered']);
   const ecList    = list.filter(b => !HARVESTED_PHASES.has(b.plantPhase));
-  const roList    = list.filter(b => b.plantPhase === 'Flower');
+  const roList    = list.filter(b => b.plantPhase === 'Flower' && !isSeedsBatchId(b.batchId) && !b.closed); // Flower-only, excl. Seeds (S-) + harvested
   const wasteList = list;
   function fillFormSelect(selId,placeholderText,items){
     const sel=document.getElementById(selId);
