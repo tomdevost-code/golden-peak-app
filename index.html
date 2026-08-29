@@ -7448,10 +7448,12 @@ function flowPopulateBatches(){
   const sel = document.getElementById('flow-batch-select');
   if(!sel) return;
   const cur = sel.value;
-  // Flow readings live on the EC page — match EC's dropdown: no mom batches (or closed, which
-  // getFormBatchList already excludes). Alphabetical, like the rest.
+  // Flow readings are a watering metric — exclude mom batches, Seeds (S-) batches, and any
+  // harvested batch (the "(harvested)" flag or a post-harvest phase Drying/Packaged/Delivered).
   const list = ((typeof getFormBatchList === 'function') ? getFormBatchList() : [])
     .filter(b => !isMotherBatch(b.batchId))
+    .filter(b => !isSeedsBatchId(b.batchId))
+    .filter(b => !b.closed && !['Drying','Packaged','Delivered'].includes(b.plantPhase||''))
     .sort((a,b)=>(a.batchId||'').localeCompare(b.batchId||''));
   sel.innerHTML = '<option value="">-- select batch --</option>' +
     list.map(b => '<option value="'+b.batchId+'">'+b.batchId+(b.cultivar?' — '+b.cultivar:'')+(b.closed?' (harvested)':'')+'</option>').join('');
