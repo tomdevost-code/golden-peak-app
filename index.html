@@ -17360,7 +17360,7 @@ function ctlsGenerateReport(){
       vegRecSum += vegR; dryRecSum += dryR;
       _evD.push(_ev);
       _vegActD.push(_ev+' — '+vegA.toFixed(3)+' kg');
-      _dryActD.push(_ev+' — '+dryA.toFixed(3)+' kg');
+      if(dryA > 0) _dryActD.push(_ev+' — '+dryA.toFixed(3)+' kg'); // omit 0.000 kg dry-destroyed rows
       _vegLossD.push(_ev+' — recorded '+vegR.toFixed(3)+' − actual '+vegA.toFixed(3)+' = '+(vegR-vegA).toFixed(3)+' kg');
       _dryLossD.push(_ev+' — recorded '+dryR.toFixed(3)+' − actual '+dryA.toFixed(3)+' = '+(dryR-dryA).toFixed(3)+' kg');
     });
