@@ -4768,7 +4768,13 @@ function harvestRenderBins(){
   // Order by when each bin was saved, newest first (record id descending — ids increase with save
   // time and are preserved on edit, so adding a note later doesn't move the row). Most recently
   // saved bin at the top, regardless of the physical bin number entered.
-  const bins = harvestRecs.filter(r=>r.batch===batch && r.room===room).sort((a,b)=>(b.id||0)-(a.id||0));
+  // Newest first by save time. Sort on created_at (ISO string, stable across syncs) rather than
+  // id — harvest_records.id is a UUID in Supabase, so numeric id sorting breaks after a refresh.
+  const bins = harvestRecs.filter(r=>r.batch===batch && r.room===room).sort((a,b)=>{
+    const ca=a.createdAt||'', cb=b.createdAt||'';
+    if(ca !== cb){ if(!ca) return 1; if(!cb) return -1; return cb.localeCompare(ca); }
+    return String(b.id||'').localeCompare(String(a.id||''));
+  });
   const totalNet = bins.reduce((s,b)=>s+(b.netWeight||0),0);
   totalEl.textContent = totalNet.toFixed(3) + ' kg';
   if(bins.length === 0){
@@ -5139,7 +5145,7 @@ async function harvestSave(){
     harvestEditId = null;
     const _hb = document.getElementById('harvest-btn'); if(_hb) _hb.textContent = 'Save Bin';
   } else {
-    rec = { id: Date.now(), date, grower, batch, room, binNumber, tareWeight, totalWeight, netWeight: Math.round(netWeight*1000)/1000, notes, synced: false };
+    rec = { id: Date.now(), date, grower, batch, room, binNumber, tareWeight, totalWeight, netWeight: Math.round(netWeight*1000)/1000, notes, createdAt: new Date().toISOString(), synced: false };
     harvestRecs.unshift(rec);
     lsSet('gp-harvest', harvestRecs);
   }
@@ -17796,7 +17802,7 @@ function buildSeedInvFields(rec){
   const fromRo = r => { const _n=v=>(v==null||v===''||isNaN(parseFloat(v)))?null:parseFloat(v); const _a=arr=>{const v=arr.map(parseFloat).filter(x=>!isNaN(x)&&x>0); return v.length?Math.round(v.reduce((s,b)=>s+b,0)/v.length*100)/100:null;}; const o={ id:r.id, airtableId:r.id, batch:r.batch_id, date:dstr(r.date), room:r.room, grower:r.grower, inputEC:_n(r.input_ec), variance:_n(r.ec_variance), notes:r.notes, synced:true, samples:[] }; for(let i=1;i<=8;i++) o.samples.push({ec:_n(r['s'+i+'_ec']), ph:_n(r['s'+i+'_ph'])}); o.avgEC=_a(o.samples.map(s=>s.ec)); o.avgPH=_a(o.samples.map(s=>s.ph)); o.ecAlert=(o.variance!=null && o.variance>RO_VAR_ALERT); return o; };
   const fromFlow = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, date:dstr(r.date), time:r.time, room:r.room, grower:r.grower, reading:r.reading, notes:r.notes, synced:true });
   const fromWaste = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, date:dstr(r.date), grower:r.grower, room:r.room, type:r.waste_type, subtype:r.sub_category, weight:r.weight_kg, plants:r.plants_destroyed, notes:r.notes, synced:true });
-  const fromHarvest = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, date:dstr(r.date), grower:r.grower, room:r.room, binNumber:r.bin_number, tareWeight:r.tare_weight_kg, totalWeight:r.total_weight_kg, netWeight:r.net_weight_kg, notes:r.notes, synced:true });
+  const fromHarvest = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, date:dstr(r.date), grower:r.grower, room:r.room, binNumber:r.bin_number, tareWeight:r.tare_weight_kg, totalWeight:r.total_weight_kg, netWeight:r.net_weight_kg, notes:r.notes, createdAt:r.created_at||'', synced:true });
   const fromPostdry = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, binNumber:r.container_id, date:dstr(r.date), grower:r.grower, tareWeight:r.tare_weight_kg, grossWeight:r.gross_weight_kg, netWeight:r.net_weight_kg, containerType:r.type_size, sampleType:r.sample_type||'Sold', notes:r.notes, synced:true });
   const fromBio = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, date:dstr(r.date), grower:r.grower, room:r.room, product:r.product, unit:r.unit, reason:r.reason, quantity:r.quantity, notes:r.notes, synced:true });
   const fromPest = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, date:dstr(r.date), grower:r.grower, room:r.room, location:r.location, cardNumber:(r.card!=null&&r.card!==''?parseInt(r.card):null), pests:(function(){ if(r.pests==null) return []; if(Array.isArray(r.pests)) return r.pests; try{ const _p=JSON.parse(r.pests); return Array.isArray(_p)?_p:(_p?[_p]:[]); }catch(_){ return String(r.pests).split(',').map(s=>s.trim()).filter(Boolean); } })(), quantity:r.quantity, notes:r.notes, synced:true });
