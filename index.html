@@ -5172,7 +5172,8 @@ async function harvestSave(){
         'Tare Weight (kg)': rec.tareWeight,
         'Total Weight (kg)': rec.totalWeight,
         'Net Weight (kg)': rec.netWeight,
-        'Notes': rec.notes || undefined
+        'Notes': rec.notes || undefined,
+        'Created At': rec.createdAt || undefined
       };
       Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
       if(_hEditing && rec.airtableId){ await atUpdateById(cfg.harvestTbl, rec.airtableId, f); }
@@ -9002,7 +9003,7 @@ async function syncPending(){
   if(cfg.harvestTbl){
     for(const h of pendingHarvest){
       try{
-        const f = {'Date':h.date,'Grower':h.grower,'Batch ID':h.batch?[h.batch]:undefined,'Room':h.room,'Bin Number':h.binNumber||undefined,'Tare Weight (kg)':h.tareWeight,'Total Weight (kg)':h.totalWeight,'Net Weight (kg)':h.netWeight,'Notes':h.notes||undefined};
+        const f = {'Date':h.date,'Grower':h.grower,'Batch ID':h.batch?[h.batch]:undefined,'Room':h.room,'Bin Number':h.binNumber||undefined,'Tare Weight (kg)':h.tareWeight,'Total Weight (kg)':h.totalWeight,'Net Weight (kg)':h.netWeight,'Notes':h.notes||undefined,'Created At':h.createdAt||undefined};
         Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
         if(h.airtableId){ await atUpdateById(cfg.harvestTbl, h.airtableId, f); }
         else { const _hr=await atPost(cfg.harvestTbl, f); if(_hr && _hr.id) h.airtableId=_hr.id; }
@@ -17905,7 +17906,7 @@ function buildSeedInvFields(rec){
   const M_RO={'Date':'date','Room':'room','Grower':'grower','Input EC':'input_ec','EC Variance':'ec_variance','Notes':'notes','S1 EC':'s1_ec','S2 EC':'s2_ec','S3 EC':'s3_ec','S4 EC':'s4_ec','S5 EC':'s5_ec','S6 EC':'s6_ec','S7 EC':'s7_ec','S8 EC':'s8_ec','S1 pH':'s1_ph','S2 pH':'s2_ph','S3 pH':'s3_ph','S4 pH':'s4_ph','S5 pH':'s5_ph','S6 pH':'s6_ph','S7 pH':'s7_ph','S8 pH':'s8_ph'};
   const M_FLOW={'Date':'date','Time':'time','Room':'room','Grower':'grower','Flow Reading':'reading','Notes':'notes'};
   const M_WASTE={'Date':'date','Grower':'grower','Room':'room','Waste Type':'waste_type','Sub-Category':'sub_category','Weight (kg)':'weight_kg','Plants Destroyed':'plants_destroyed','Notes':'notes'};
-  const M_HARV={'Date':'date','Grower':'grower','Room':'room','Bin Number':'bin_number','Tare Weight (kg)':'tare_weight_kg','Total Weight (kg)':'total_weight_kg','Net Weight (kg)':'net_weight_kg','Notes':'notes'};
+  const M_HARV={'Date':'date','Grower':'grower','Room':'room','Bin Number':'bin_number','Created At':'created_at','Tare Weight (kg)':'tare_weight_kg','Total Weight (kg)':'total_weight_kg','Net Weight (kg)':'net_weight_kg','Notes':'notes'};
   const M_POST={'Date':'date','Grower':'grower','Container ID':'container_id','Tare Weight (kg)':'tare_weight_kg','Gross Weight (kg)':'gross_weight_kg','Net Weight (kg)':'net_weight_kg','Type/Size':'type_size','Sample Type':'sample_type','Notes':'notes'};
   const M_BIO={'Date':'date','Grower':'grower','Room':'room','Product':'product','Quantity':'quantity','Unit':'unit','Reason':'reason','Notes':'notes'};
   const M_PEST={'Date':'date','Grower':'grower','Room':'room','Location':'location','Card Number':'card','Pests Identified':'pests','Quantity':'quantity','Notes':'notes'};
