@@ -16948,17 +16948,32 @@ function ctlsVegMetrics(from, to){
   // (Seedlings crossed to Veg are intentionally omitted from the produced breakdown — see above.)
   producedBreakdown.sort((a,b)=> (a.date||'').localeCompare(b.date||'') || (a.batch||'').localeCompare(b.batch||''));
   // "Brought in from other producer" — Produced/Received qty where the destination batch's
-  // geneticsSource is 'Clones-External' AND this is the FIRST Produced/Received for that batch
-  // (subsequent P/R on the same batch would be cuttings from this batch, not new external imports).
+  // geneticsSource is 'Clones-External'. Everything Produced/Received BEFORE the batch's first
+  // Destroyed event is external intake (brought in); only after plants start being destroyed could
+  // a later Produced/Received be an in-house cutting. So sum ALL pre-destruction P/R in the month
+  // (not just the first) — a batch received across several intakes is counted in full.
   let broughtInExternal = 0;
   const _broughtDetail = [];
   batchRecs.forEach(b => {
     if(!b || b.type) return;
     if(!_isExternalCloneBatch(b.batchId)) return;
-    const firstPR = batchTxRecs
-      .filter(t => t.batchId === b.batchId && t.txType === 'Produced/Received')
+    const _firstDestroy = batchTxRecs
+      .filter(t => t.batchId === b.batchId && t.txType === 'Destroyed')
       .sort((a,c) => (a.date||'').localeCompare(c.date||'') || (a.id||0)-(c.id||0))[0];
-    if(firstPR && _inRange(firstPR.date, from, to)){ broughtInExternal += (parseInt(firstPR.qty)||0); _broughtDetail.push(b.batchId+' — '+(parseInt(firstPR.qty)||0)+' plants'+(firstPR.date?' · '+firstPR.date:'')); }
+    const _dDate = _firstDestroy ? (_firstDestroy.date||'') : null;
+    const _dId   = _firstDestroy ? (_firstDestroy.id||0) : 0;
+    batchTxRecs
+      .filter(t => t.batchId === b.batchId && t.txType === 'Produced/Received')
+      .sort((a,c) => (a.date||'').localeCompare(c.date||'') || (a.id||0)-(c.id||0))
+      .forEach(pr => {
+        const _pd = pr.date||'';
+        const _beforeDestroy = !_dDate || _pd < _dDate || (_pd === _dDate && (pr.id||0) < _dId);
+        if(!_beforeDestroy) return;
+        if(_inRange(pr.date, from, to)){
+          broughtInExternal += (parseInt(pr.qty)||0);
+          _broughtDetail.push(b.batchId+' — '+(parseInt(pr.qty)||0)+' plants'+(pr.date?' · '+pr.date:''));
+        }
+      });
   });
   // Moved to Moms — straight tx count.
   const _movedTx = txs.filter(t => t.txType === 'Moved to Moms');
