@@ -17145,10 +17145,20 @@ function ctlsFreshMetrics(from, to){
   const _hSig = h => [h.batch,h.room,h.binNumber,h.date,(parseFloat(h.netWeight)||0).toFixed(3)].join('|');
   const _hSeen = {}; let _hDupCount=0, _hDupKg=0;
   const _wetDetail = _hSorted.map(h => { const s=_hSig(h); const dup=!!_hSeen[s]; _hSeen[s]=true; if(dup){ _hDupCount++; _hDupKg += (parseFloat(h.netWeight)||0); } return _harvD(h) + (dup ? '  ⚠ DUPLICATE' : ''); });
-  if(_hDupCount > 0){ _wetDetail.unshift('⚠ '+_hDupCount+' duplicate bin(s) = '+_hDupKg.toFixed(3)+' kg · de-duplicated wet total = '+(wetTotal-_hDupKg).toFixed(3)+' kg'); }
+  // Per-batch / per-date subtotals so the source of the total is obvious at a glance.
+  const _byBD = {}; const _byB = {};
+  _hSorted.forEach(h => { const bd=(h.batch||'?')+' · '+(h.date||'?'); _byBD[bd]=(_byBD[bd]||0)+(parseFloat(h.netWeight)||0); _byB[h.batch||'?']=(_byB[h.batch||'?']||0)+(parseFloat(h.netWeight)||0); });
+  const _summary = [];
+  _summary.push('── Subtotals by batch ──');
+  Object.keys(_byB).sort().forEach(b => _summary.push(b + ' = ' + _byB[b].toFixed(3) + ' kg'));
+  _summary.push('── Subtotals by batch & date ──');
+  Object.keys(_byBD).sort().forEach(k => _summary.push(k + ' = ' + _byBD[k].toFixed(3) + ' kg'));
+  if(_hDupCount > 0){ _summary.unshift('⚠ '+_hDupCount+' duplicate bin(s) = '+_hDupKg.toFixed(3)+' kg · de-duplicated wet total = '+(wetTotal-_hDupKg).toFixed(3)+' kg'); }
+  _summary.push('── Individual bins ──');
+  const _wetDetailFull = _summary.concat(_wetDetail);
   const _pdD   = p => p.batch+' — '+(parseFloat(p.netWeight)||0).toFixed(3)+' kg (container '+(p.binNumber||'?')+(p.date?', '+p.date:'')+')';
   return {
-    wetTotal, wetTotalDetail: _wetDetail,
+    wetTotal, wetTotalDetail: _wetDetailFull,
     postDryTotal, postDryTotalDetail: postDrys.map(p => _pdD(p)+' ['+(p.sampleType||'Sold')+']'),
     postDrySold, postDrySoldDetail: _pdSold.map(_pdD),
     postDryRetention, postDryRetentionDetail: _pdRetention.map(_pdD),
