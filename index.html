@@ -17116,9 +17116,25 @@ function ctlsFlowerMetrics(from, to){
 
 // SECTION 4 — Fresh Cannabis (wet) weights
 function ctlsFreshMetrics(from, to){
-  const harvests = _harvestsInRange(from, to);
-  // Total harvested weight (wet) = sum of net weights on Harvest Log records in the month.
-  const wetTotal = harvests.reduce((s,h) => s + (parseFloat(h.netWeight)||0), 0);
+  // Total harvested weight (wet). A room's harvest is attributed to the month its "Complete Harvest"
+  // was clicked (the Harvested-tx date, via getPerRoomHarvestDates) — matching the Batch Management
+  // page — NOT the individual bin dates. So a room harvested across a month boundary counts entirely
+  // in the month it was completed. Room weight uses the harvestedWeights snapshot (what Batch
+  // Management shows) when present, else the current sum of that room's harvest bins.
+  const _wetRooms = [];
+  batchRecs.forEach(b => {
+    if(!b || b.type) return;
+    const _rd = (typeof getPerRoomHarvestDates === 'function') ? getPerRoomHarvestDates(b.batchId) : {};
+    Object.keys(_rd).forEach(room => {
+      const cd = _rd[room];
+      if(!_inRange(cd, from, to)) return;
+      let wt = (b.harvestedWeights && b.harvestedWeights[room] != null) ? (parseFloat(b.harvestedWeights[room])||0) : 0;
+      if(wt <= 0){ wt = harvestRecs.filter(h => h.batch===b.batchId && h.room===room).reduce((s,h)=>s+(parseFloat(h.netWeight)||0),0); }
+      if(wt > 0) _wetRooms.push({ batch:b.batchId, room:room, date:cd, weight:wt });
+    });
+  });
+  _wetRooms.sort((a,b)=> (a.date||'').localeCompare(b.date||'') || (a.batch||'').localeCompare(b.batch||'') || (a.room||'').localeCompare(b.room||''));
+  const wetTotal = _wetRooms.reduce((s,r)=> s + r.weight, 0);
   // Post-drying total — sum of net container weights in the month, broken out by Sample Type.
   // Defaults missing-sampleType records (older data) to 'Sold' so totals stay correct.
   const postDrys = _postDrysInRange(from, to);
@@ -17137,25 +17153,8 @@ function ctlsFreshMetrics(from, to){
   // Fresh sold to processor — Sold tx in the month with Sale Stage = Fresh.
   const _freshTx = _txsInRange(from, to).filter(t => t.txType === 'Sold' && (t.saleStage||'') === 'Fresh');
   const soldFreshToProcessor = _freshTx.reduce((s,t) => s + (parseFloat(t.weight)||0), 0);
-  const _harvD = h => h.batch+' — '+(parseFloat(h.netWeight)||0).toFixed(3)+' kg'+(h.room?' ['+h.room+']':'')+(h.binNumber!=null?' #'+h.binNumber:'')+(h.date?' · '+h.date:'');
-  // Sorted, duplicate-aware harvest detail. The wet total sums RAW harvest records (no de-dup),
-  // so append-only sync duplicates inflate it. Sort by batch/date/room/bin so identical bins sit
-  // adjacent, flag exact-content duplicates, and surface the de-duplicated total.
-  const _hSorted = harvests.slice().sort((a,b)=> (a.batch||'').localeCompare(b.batch||'') || (a.date||'').localeCompare(b.date||'') || (a.room||'').localeCompare(b.room||'') || ((parseInt(a.binNumber)||0)-(parseInt(b.binNumber)||0)));
-  const _hSig = h => [h.batch,h.room,h.binNumber,h.date,(parseFloat(h.netWeight)||0).toFixed(3)].join('|');
-  const _hSeen = {}; let _hDupCount=0, _hDupKg=0;
-  const _wetDetail = _hSorted.map(h => { const s=_hSig(h); const dup=!!_hSeen[s]; _hSeen[s]=true; if(dup){ _hDupCount++; _hDupKg += (parseFloat(h.netWeight)||0); } return _harvD(h) + (dup ? '  ⚠ DUPLICATE' : ''); });
-  // Per-batch / per-date subtotals so the source of the total is obvious at a glance.
-  const _byBD = {}; const _byB = {};
-  _hSorted.forEach(h => { const bd=(h.batch||'?')+' · '+(h.date||'?'); _byBD[bd]=(_byBD[bd]||0)+(parseFloat(h.netWeight)||0); _byB[h.batch||'?']=(_byB[h.batch||'?']||0)+(parseFloat(h.netWeight)||0); });
-  const _summary = [];
-  _summary.push('── Subtotals by batch ──');
-  Object.keys(_byB).sort().forEach(b => _summary.push(b + ' = ' + _byB[b].toFixed(3) + ' kg'));
-  _summary.push('── Subtotals by batch & date ──');
-  Object.keys(_byBD).sort().forEach(k => _summary.push(k + ' = ' + _byBD[k].toFixed(3) + ' kg'));
-  if(_hDupCount > 0){ _summary.unshift('⚠ '+_hDupCount+' duplicate bin(s) = '+_hDupKg.toFixed(3)+' kg · de-duplicated wet total = '+(wetTotal-_hDupKg).toFixed(3)+' kg'); }
-  _summary.push('── Individual bins ──');
-  const _wetDetailFull = _summary.concat(_wetDetail);
+  // Detail: one line per completed room, attributed to its Complete-Harvest date.
+  const _wetDetailFull = _wetRooms.map(r => r.batch+' — '+r.weight.toFixed(3)+' kg ['+r.room+'] · completed '+r.date);
   const _pdD   = p => p.batch+' — '+(parseFloat(p.netWeight)||0).toFixed(3)+' kg (container '+(p.binNumber||'?')+(p.date?', '+p.date:'')+')';
   return {
     wetTotal, wetTotalDetail: _wetDetailFull,
