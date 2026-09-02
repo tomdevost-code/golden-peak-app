@@ -17324,19 +17324,16 @@ function ctlsGenerateReport(){
   html += _ctlsBlock('4. Fresh Cannabis (wet)', [
     {label:'Total harvested weight (wet)', note:'sum of Harvest Log net weights', value: v(fresh.wetTotal, 'kg'), detail:fresh.wetTotalDetail},
     {label:'Post-drying total weight', note:'all containers, all sample types', value: v(fresh.postDryTotal, 'kg'), detail:fresh.postDryTotalDetail},
-    {label:'  — Sold inventory weight', note:'containers tagged Sold', value: v(fresh.postDrySold, 'kg'), detail:fresh.postDrySoldDetail},
-    {label:'  — Retention sample weight', note:'containers tagged Retention', value: v(fresh.postDryRetention, 'kg'), detail:fresh.postDryRetentionDetail},
-    {label:'  — COA sample weight', note:'containers tagged COA', value: v(fresh.postDryCOA, 'kg'), detail:fresh.postDryCOADetail},
     {label:'Loss on drying (wet − post-dry)', value: v(fresh.lossOnDrying, 'kg'), detail:fresh.lossOnDryingDetail},
     {label:'Fresh cannabis sold to processor', note:'Sold tx · Sale Stage = Fresh', value: v(fresh.soldFreshToProcessor, 'kg'), detail:fresh.soldFreshToProcessorDetail}
   ]);
 
   // Section 5 — Dry Cannabis (weights)
   html += _ctlsBlock('5. Dry Cannabis (weights)', [
-    {label:'Retention sample weight', note:'from Post-Drying Sample Type = Retention', value: v(dry.retentionSampleWeight, 'kg'), detail:dry.retentionSampleWeightDetail},
-    {label:'Weight sent for testing samples', note:'Post-Drying Sample Type = COA', value: v(dry.testingSampleWeight, 'kg'), detail:dry.testingSampleWeightDetail},
+    {label:'Sold inventory weight', note:'Post-Drying containers tagged Sold', value: v(fresh.postDrySold, 'kg'), detail:fresh.postDrySoldDetail},
+    {label:'Retention sample weight', note:'Post-Drying containers tagged Retention', value: v(fresh.postDryRetention, 'kg'), detail:fresh.postDryRetentionDetail},
+    {label:'COA sample weight', note:'Post-Drying containers tagged COA', value: v(fresh.postDryCOA, 'kg'), detail:fresh.postDryCOADetail},
     {label:'Weight of dried flower sent to processor for samples', note:'Sent to Lab · Processor · Dry Flower', value: v(dry.processorSampleWeight, 'kg'), detail:dry.processorSampleWeightDetail},
-    {label:'Bill of lading / Quantity Sold', note:'Sold tx · Sale Stage = Dry', value: v(dry.soldWeight, 'kg'), detail:dry.soldWeightDetail},
     {label:'Weight of cannabis destroyed (Dry Waste)', value: v(dry.dryWasteWeight, 'kg'), detail:dry.dryWasteWeightDetail},
     {label:'Loss on drying (cross-ref)', value: v(dry.lossOnDrying, 'kg'), detail:dry.lossOnDryingDetail}
   ]);
