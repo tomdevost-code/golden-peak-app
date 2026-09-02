@@ -11740,7 +11740,7 @@ function renderMilestonesDue(){
     const today = (typeof localDate === 'function') ? localDate() : new Date().toISOString().slice(0,10);
     const tasksMap = (typeof FLOWER_DAY_TASKS !== 'undefined' && FLOWER_DAY_TASKS) ? FLOWER_DAY_TASKS : {};
     const groups = [];
-    batchRecs.filter(b => b && !b.type && !(typeof isBatchClosedRec==='function' && isBatchClosedRec(b))
+    batchRecs.filter(b => b && !b.type && !isMotherBatch(b.batchId) && !(typeof isBatchClosedRec==='function' && isBatchClosedRec(b))
         && (b.plantPhase||'') === 'Flower' && b.flowerStart)
       .sort((a,b)=>(a.batchId||'').localeCompare(b.batchId||''))
       .forEach(b => {
@@ -12260,6 +12260,7 @@ function summaryRenderFlowerAlerts(batchId){
   if(!batchId) return;
   const b = batchRecs.find(r => r.batchId === batchId && !r.type);
   if(!b || b.plantPhase !== 'Flower' || !b.flowerStart) return;
+  if(isMotherBatch(batchId)) return; // milestones don't apply to mother batches
   const fd = daysBetween(b.flowerStart, localDate());
   if(!fd || fd <= 0) return;
   const _esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
