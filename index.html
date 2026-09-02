@@ -17137,10 +17137,18 @@ function ctlsFreshMetrics(from, to){
   // Fresh sold to processor — Sold tx in the month with Sale Stage = Fresh.
   const _freshTx = _txsInRange(from, to).filter(t => t.txType === 'Sold' && (t.saleStage||'') === 'Fresh');
   const soldFreshToProcessor = _freshTx.reduce((s,t) => s + (parseFloat(t.weight)||0), 0);
-  const _harvD = h => h.batch+' — '+(parseFloat(h.netWeight)||0).toFixed(3)+' kg'+(h.room?' ['+h.room+']':'')+(h.date?' · '+h.date:'');
+  const _harvD = h => h.batch+' — '+(parseFloat(h.netWeight)||0).toFixed(3)+' kg'+(h.room?' ['+h.room+']':'')+(h.binNumber!=null?' #'+h.binNumber:'')+(h.date?' · '+h.date:'');
+  // Sorted, duplicate-aware harvest detail. The wet total sums RAW harvest records (no de-dup),
+  // so append-only sync duplicates inflate it. Sort by batch/date/room/bin so identical bins sit
+  // adjacent, flag exact-content duplicates, and surface the de-duplicated total.
+  const _hSorted = harvests.slice().sort((a,b)=> (a.batch||'').localeCompare(b.batch||'') || (a.date||'').localeCompare(b.date||'') || (a.room||'').localeCompare(b.room||'') || ((parseInt(a.binNumber)||0)-(parseInt(b.binNumber)||0)));
+  const _hSig = h => [h.batch,h.room,h.binNumber,h.date,(parseFloat(h.netWeight)||0).toFixed(3)].join('|');
+  const _hSeen = {}; let _hDupCount=0, _hDupKg=0;
+  const _wetDetail = _hSorted.map(h => { const s=_hSig(h); const dup=!!_hSeen[s]; _hSeen[s]=true; if(dup){ _hDupCount++; _hDupKg += (parseFloat(h.netWeight)||0); } return _harvD(h) + (dup ? '  ⚠ DUPLICATE' : ''); });
+  if(_hDupCount > 0){ _wetDetail.unshift('⚠ '+_hDupCount+' duplicate bin(s) = '+_hDupKg.toFixed(3)+' kg · de-duplicated wet total = '+(wetTotal-_hDupKg).toFixed(3)+' kg'); }
   const _pdD   = p => p.batch+' — '+(parseFloat(p.netWeight)||0).toFixed(3)+' kg (container '+(p.binNumber||'?')+(p.date?', '+p.date:'')+')';
   return {
-    wetTotal, wetTotalDetail: harvests.map(_harvD),
+    wetTotal, wetTotalDetail: _wetDetail,
     postDryTotal, postDryTotalDetail: postDrys.map(p => _pdD(p)+' ['+(p.sampleType||'Sold')+']'),
     postDrySold, postDrySoldDetail: _pdSold.map(_pdD),
     postDryRetention, postDryRetentionDetail: _pdRetention.map(_pdD),
