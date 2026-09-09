@@ -4703,7 +4703,7 @@ function harvestPopulateBatches(){
     if(!rooms.length) return false;
     const completed = Array.isArray(b.completedHarvests) ? b.completedHarvests : [];
     return rooms.some(r=>!completed.includes(r));
-  }).sort((a,b)=>a.batchId.localeCompare(b.batchId));
+  }).sort(batchCreatedCmp);
   sel.innerHTML = '<option value="">-- select batch --</option>' + list.map(b=>'<option'+(b.batchId===cur?' selected':'')+' value="'+b.batchId+'">'+b.batchId+(b.cultivar?' – '+b.cultivar:'')+(b.plantPhase==='Drying'?' (drying)':'')+'</option>').join('');
   autoSelectIfSingle('harvest-batch-select');
   harvestSetupChanged();
@@ -5925,7 +5925,7 @@ function postDryPopulateBatches(){
     .filter(b => !b.type && (b.plantPhase === 'Drying' || b.plantPhase === 'Packaged') && !isBatchClosedRec(b))
     .filter(b => _pdMomsOnly === isMotherBatch(b.batchId))  // moms toggle is exclusive
     .slice()
-    .sort((a,b)=> (a.batchId||'').localeCompare(b.batchId||''));
+    .sort(batchCreatedCmp);
   sel.innerHTML = '<option value="">-- select batch --</option>' +
     eligible.map(b => '<option value="'+b.batchId+'"'+(b.batchId===cur?' selected':'')+'>'+b.batchId+(b.plantPhase==='Packaged'?' (packaged — add late sample)':'')+'</option>').join('');
   if(!eligible.length){
@@ -6504,6 +6504,29 @@ function isBatchClosedRec(b){
   return false;
 }
 
+// Sort batches into CREATION ORDER: earliest createdDate first, most-recently-created last.
+// Missing createdDate sorts to the end; ties broken by Batch ID. Used by every batch list/dropdown.
+function batchCreatedCmp(a,b){
+  const ca=(a&&a.createdDate)||'', cb=(b&&b.createdDate)||'';
+  if(ca !== cb){ if(!ca) return 1; if(!cb) return -1; return ca.localeCompare(cb); }
+  return ((a&&a.batchId)||'').localeCompare((b&&b.batchId)||'');
+}
+// A batch is delivered-or-sold once its phase is Delivered OR it has a dry-flower Sold tx.
+function isBatchDeliveredOrSold(b){
+  if(!b) return false;
+  if((b.plantPhase||'') === 'Delivered') return true;
+  return batchTxRecs.some(t => t.batchId===b.batchId && t.txType==='Sold'
+    && ((t.saleStage||'')==='Dry' || (t.saleStage||'')==='Fresh' || t.plantPhase==='Delivered'));
+}
+// Delivered batches stay available on the Waste page for a short dry-waste cleanup window — up to
+// 2 calendar days after the delivered date — then drop off. Sold-but-not-delivered batches (e.g.
+// sold-as-fresh, no delivered date) have no cleanup window.
+function withinDeliveryWasteWindow(b){
+  const dd = (b && b.deliveredDate) || '';
+  if(!dd) return false;
+  const n = daysBetween(dd, localDate()); // inclusive: same day = 1
+  return n != null && n >= 1 && n <= 3;    // day 0,1,2 after delivery
+}
 function getFormBatchList(){
   // Single source of truth for form dropdowns (EC, Runoff, Waste, etc): batches created via
   // the Batches form, with at least one Produced/Received tx, and NOT closed. A freshly
@@ -6521,9 +6544,9 @@ function getFormBatchList(){
     // 'closed' here is the legacy "harvested" indicator (any EC/RO with harvestDate),
     // used to mark drying batches as (harvested). Not the same as actual closed status.
     let closed=[...ecRecs,...roRecs].some(r=>r.batch===b.batchId&&r.harvestDate);
-    list.push({batchId:b.batchId,closed,plantPhase:b.plantPhase||''});
+    list.push({batchId:b.batchId,closed,plantPhase:b.plantPhase||'',createdDate:b.createdDate||'',deliveredDate:b.deliveredDate||''});
   });
-  return list.sort((a,b)=>a.batchId.localeCompare(b.batchId));
+  return list.sort(batchCreatedCmp);
 }
 function populateBatchDropdowns(){
   const list=getFormBatchList();
@@ -6534,7 +6557,7 @@ function populateBatchDropdowns(){
   const HARVESTED_PHASES = new Set(['Drying','Packaged','Delivered']);
   const ecList    = list.filter(b => !HARVESTED_PHASES.has(b.plantPhase));
   const roList    = list.filter(b => b.plantPhase === 'Flower' && !isSeedsBatchId(b.batchId) && !b.closed); // Flower-only, excl. Seeds (S-) + harvested
-  const wasteList = list;
+  const wasteList = list.filter(b => !isBatchDeliveredOrSold(b) || withinDeliveryWasteWindow(b)); // delivered stays 2 days for dry-waste cleanup
   function fillFormSelect(selId,placeholderText,items){
     const sel=document.getElementById(selId);
     if(!sel) return;
@@ -7461,7 +7484,7 @@ function flowPopulateBatches(){
     .filter(b => !isMotherBatch(b.batchId))
     .filter(b => !isSeedsBatchId(b.batchId))
     .filter(b => !b.closed && !['Drying','Packaged','Delivered'].includes(b.plantPhase||''))
-    .sort((a,b)=>(a.batchId||'').localeCompare(b.batchId||''));
+    .sort(batchCreatedCmp);
   sel.innerHTML = '<option value="">-- select batch --</option>' +
     list.map(b => '<option value="'+b.batchId+'">'+b.batchId+(b.cultivar?' — '+b.cultivar:'')+(b.closed?' (harvested)':'')+'</option>').join('');
   sel.value = cur;
@@ -10679,14 +10702,14 @@ let activeBatchId = '';
 // back from) instead of locking it in a Temporal Dead Zone that crashes renderBatchLog.
 var batchTableSort = (function(){
   try{ const s = JSON.parse(localStorage.getItem('gp-batch-list-sort')||'{}'); if(s && s.col) return {col:s.col, dir:(s.dir==='desc'?'desc':'asc')}; }catch(_){}
-  return { col: 'batchId', dir: 'asc' };
+  return { col: 'created', dir: 'asc' };
 })();
 // Click handler for column headers — toggles direction when clicking the same column,
 // otherwise switches to the new column with ascending direction.
 function setBatchTableSort(col){
   // Defensive: if batchTableSort never initialized (earlier boot threw), seed it now.
   if(typeof batchTableSort === 'undefined' || !batchTableSort){
-    batchTableSort = { col: 'batchId', dir: 'asc' };
+    batchTableSort = { col: 'created', dir: 'asc' };
   }
   if(batchTableSort.col === col){
     batchTableSort.dir = (batchTableSort.dir === 'asc') ? 'desc' : 'asc';
@@ -11742,7 +11765,7 @@ function renderMilestonesDue(){
     const groups = [];
     batchRecs.filter(b => b && !b.type && !isMotherBatch(b.batchId) && !(typeof isBatchClosedRec==='function' && isBatchClosedRec(b))
         && (b.plantPhase||'') === 'Flower' && b.flowerStart)
-      .sort((a,b)=>(a.batchId||'').localeCompare(b.batchId||''))
+      .sort(batchCreatedCmp)
       .forEach(b => {
         const fd = daysBetween(b.flowerStart, today);
         if(!fd || fd <= 0) return;
@@ -11821,10 +11844,11 @@ function renderBatchLog(){
       });
       return _max;
     }
+    if(col === 'created'){ return (b.createdDate||''); }
     return '';
   }
   // Defensive fallback if batchTableSort somehow isn't initialized (e.g., earlier boot code threw).
-  const _sortState = (typeof batchTableSort !== 'undefined' && batchTableSort) ? batchTableSort : { col: 'batchId', dir: 'asc' };
+  const _sortState = (typeof batchTableSort !== 'undefined' && batchTableSort) ? batchTableSort : { col: 'created', dir: 'asc' };
   function _cmp(a, b){
     const _ka = _sortKey(a, _sortState.col);
     const _kb = _sortKey(b, _sortState.col);
@@ -11955,7 +11979,7 @@ function summaryPopulateBatches(){
     // Moms toggle is exclusive: hide moms when OFF, show only moms when ON.
     if(_sumMomsOnly !== isMotherBatch(b.batchId)) return false;
     return true;
-  }).sort((a,b)=>(a.batchId||'').localeCompare(b.batchId||''));
+  }).sort(batchCreatedCmp);
   sel.innerHTML = '<option value="">-- select batch --</option>' +
     batches.map(b => '<option value="'+b.batchId+'"'+(b.batchId===cur?' selected':'')+'>'+b.batchId+(b.cultivar?' – '+b.cultivar:'')+(b.closedDate?' [Closed]':'')+'</option>').join('');
   if(cur && batches.some(b=>b.batchId===cur)) summaryBatchChanged();
@@ -15145,7 +15169,7 @@ function _qaGrowerSel(id){ const s=document.getElementById(id); return s?s.value
 function _qaOpenBatches(dryingOnly){
   return batchRecs.filter(b => b && !b.type && !(typeof isBatchClosedRec==='function' && isBatchClosedRec(b))
       && (!dryingOnly || (b.plantPhase||'')==='Drying'))
-    .sort((a,b)=>(a.batchId||'').localeCompare(b.batchId||''));
+    .sort(batchCreatedCmp);
 }
 function _qaFillBatchSel(selId, dryingOnly){
   const sel=document.getElementById(selId); if(!sel) return;
@@ -15293,7 +15317,7 @@ function _hppSoldWeight(batch){ return _hppSoldRows(batch).reduce((s,r)=>s+r.net
 // ---------- Bill of Lading ----------
 function _bolEligibleBatches(){
   const has={}; postDryRecs.forEach(r=>{ if((r.sampleType||'Sold')==='Sold') has[r.batch]=true; });
-  return batchRecs.filter(b=>b && !b.type && has[b.batchId]).sort((a,b)=>(a.batchId||'').localeCompare(b.batchId||''));
+  return batchRecs.filter(b=>b && !b.type && has[b.batchId]).sort(batchCreatedCmp);
 }
 function bolEnter(){
   const sel=document.getElementById('bol-batch');
@@ -15401,7 +15425,7 @@ function _comSet(id,v){ const e=document.getElementById(id); if(e) e.value=v; }
 function _comVal(id){ const e=document.getElementById(id); return e?e.value:''; }
 function _comEligibleBatches(){
   const has={}; postDryRecs.forEach(r=>{ has[r.batch]=true; });
-  return batchRecs.filter(b=>b && !b.type && (has[b.batchId] || b.packagedDate)).sort((a,b)=>(a.batchId||'').localeCompare(b.batchId||''));
+  return batchRecs.filter(b=>b && !b.type && (has[b.batchId] || b.packagedDate)).sort(batchCreatedCmp);
 }
 function comEnter(){
   const sel=document.getElementById('com-batch');
@@ -16038,10 +16062,11 @@ function sanclPopulateBatchOptions(){
   const eligible = batchRecs.filter(b => {
     if(!b || b.type) return false;
     if(isBatchClosedRec && isBatchClosedRec(b)) return false;
+    if(isBatchDeliveredOrSold(b)) return false;
     if(filter.anyBatch) return true;
     if(filter.motherOnly !== isMotherBatch(b.batchId)) return false;
     return true;
-  }).sort((a,b) => (a.batchId||'').localeCompare(b.batchId||''));
+  }).sort(batchCreatedCmp);
   sel.innerHTML = '<option value="">-- select batch --</option>' +
     eligible.map(b => '<option value="'+b.batchId+'"'+(b.batchId===cur?' selected':'')+'>'+b.batchId+(b.cultivar?' – '+b.cultivar:'')+(b.plantPhase?' · '+b.plantPhase:'')+'</option>').join('');
   if(hint){
@@ -16571,8 +16596,8 @@ function santoolEnter(){
   const sel = document.getElementById('santool-batch');
   if(sel){
     const cur = sel.value;
-    const eligible = batchRecs.filter(b => b && !b.type && !(typeof isBatchClosedRec==='function' && isBatchClosedRec(b)))
-                              .sort((a,b) => (a.batchId||'').localeCompare(b.batchId||''));
+    const eligible = batchRecs.filter(b => b && !b.type && !(typeof isBatchClosedRec==='function' && isBatchClosedRec(b)) && !isBatchDeliveredOrSold(b))
+                              .sort(batchCreatedCmp);
     sel.innerHTML = '<option value="">-- no batch --</option>' +
       eligible.map(b => '<option value="'+b.batchId+'"'+(b.batchId===cur?' selected':'')+'>'+b.batchId+(b.cultivar?' – '+b.cultivar:'')+'</option>').join('');
   }
