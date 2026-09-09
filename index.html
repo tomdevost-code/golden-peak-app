@@ -2080,7 +2080,7 @@ tr:last-child td { border-bottom: none; }
       <div class="card">
         <div class="section-label">Flower Moisture Log</div>
         <div class="field" style="margin-bottom:10px;">
-          <label>Batch <span style="color:var(--red);font-weight:700;">*</span> <span style="font-size:10px;color:var(--text3);font-weight:400;">(Drying phase)</span></label>
+          <label>Batch <span style="color:var(--red);font-weight:700;">*</span> <span style="font-size:10px;color:var(--text3);font-weight:400;">(Drying or later — incl. after sold)</span></label>
           <select id="qamoist-batch" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;box-sizing:border-box;"><option value="">-- select batch --</option></select>
         </div>
         <div class="g2" style="margin-bottom:10px;">
@@ -15167,8 +15167,10 @@ async function summaryTxDelete(id){
 const MOISTURE_TARGET_LO = 13, MOISTURE_TARGET_HI = 14.5;
 function _qaGrowerSel(id){ const s=document.getElementById(id); return s?s.value:''; }
 function _qaOpenBatches(dryingOnly){
+  // dryingOnly (Flower Moisture) now means "harvested onward" — Drying, Packaged, or Delivered —
+  // so moisture readings can still be logged after the batch is packaged/sold/delivered.
   return batchRecs.filter(b => b && !b.type && !(typeof isBatchClosedRec==='function' && isBatchClosedRec(b))
-      && (!dryingOnly || (b.plantPhase||'')==='Drying'))
+      && (!dryingOnly || ['Drying','Packaged','Delivered'].includes(b.plantPhase||'')))
     .sort(batchCreatedCmp);
 }
 function _qaFillBatchSel(selId, dryingOnly){
@@ -15261,7 +15263,7 @@ async function qamoistureSave(){
   const mv=(document.getElementById('qamoist-moisture')||{}).value;
   const grower=_qaGrowerSel('qamoist-grower');
   const notes=((document.getElementById('qamoist-notes')||{}).value||'').trim();
-  if(!batch){ toast('Pick a batch (Drying phase).'); return; }
+  if(!batch){ toast('Pick a batch.'); return; }
   const moisture=parseFloat(mv);
   if(isNaN(moisture)){ toast('Enter a moisture %.'); return; }
   if(!grower){ toast('Pick initials / employee.'); return; }
