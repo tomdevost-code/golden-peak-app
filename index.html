@@ -2137,8 +2137,6 @@ Lower Sackville, NS, B4C 3Z2</textarea></div>
       </div>
       <div class="card"><div class="section-label">Saved Bills of Lading</div><div id="bol-history" style="font-size:12px;"></div></div>
     </div>
-    <div id="bol-print" style="display:none;"></div>
-
     <!-- ===== HARVEST & POST-HARVEST : Certificate of Manufacturer ===== -->
     <div class="page" id="page-com" data-section="hpp">
       <div class="card">
@@ -2179,8 +2177,6 @@ Lower Sackville, NS, B4C 3Z2</textarea></div>
       </div>
       <div class="card"><div class="section-label">Saved Certificates</div><div id="com-history" style="font-size:12px;"></div></div>
     </div>
-    <div id="com-print" style="display:none;"></div>
-
   <nav class="bottom-nav" id="nav-cultivation">
     <button class="bnav-btn" id="bn-seeds" onclick="switchPage('seeds',this)">
       <svg viewBox="0 0 24 24"><path d="M12 22V12M12 12c0-5.5 4-8 8-8 0 5.5-4 8-8 8zM12 12c0-5.5-4-8-8-8 0 5.5 4 8 8 8z"/></svg>
@@ -15287,7 +15283,7 @@ async function qamoistDelete(id){
 function qamoistInRange(m){ return m!=null && !isNaN(m) && m>=MOISTURE_TARGET_LO && m<=MOISTURE_TARGET_HI; }
 function qamoistRenderRecent(){
   const el=document.getElementById('qamoist-recent'); if(!el) return;
-  const rows=qaMoistRecs.slice().sort((a,b)=>(b.id||0)-(a.id||0)).slice(0,50);
+  const rows=qaMoistRecs.slice().sort((a,b)=> (b.date||'').localeCompare(a.date||'') || (b.time||'').localeCompare(a.time||'') || (b.id||0)-(a.id||0)).slice(0,50);
   if(!rows.length){ el.innerHTML='<div style="color:var(--text3);padding:6px 2px;">No moisture readings yet.</div>'; return; }
   let h='<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:var(--bg2);">'+
     ['Date','Time','Batch','Moisture','Emp',''].map(x=>'<th style="padding:5px 6px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">'+x+'</th>').join('')+'</tr></thead><tbody>';
@@ -15987,13 +15983,13 @@ function sectionTable(title, headers, rows){
     + '  body.print-ctls #ctls-report-output tr[id^="ctlsd_"] { display: table-row !important; }'
     + '  body.print-ctls #ctls-report-output span[id^="ctlsd_"][id$="_c"] { visibility: hidden !important; }'
     + '  body.print-ctls #ctls-report-output tr { page-break-inside: avoid; }'
-    + '  body.print-bol * { visibility: hidden !important; }'
-    + '  body.print-bol #bol-print, body.print-bol #bol-print * { visibility: visible !important; }'
-    + '  body.print-bol #bol-print { display:block !important; position:absolute !important; inset:0 !important; background:#fff !important; padding:14px !important; }'
+    + '  body.print-bol > *:not(#bol-print) { display: none !important; }'
+    + '  body.print-bol #bol-print { display:block !important; background:#fff !important; }'
+    + '  body.print-bol #bol-print, body.print-com #com-print { page: gpdoc; }'
     + '  body.print-bol #bol-print tfoot { display: table-row-group !important; }'  /* total renders once at end, not repeated per page */
-    + '  body.print-com * { visibility: hidden !important; }'
-    + '  body.print-com #com-print, body.print-com #com-print * { visibility: visible !important; }'
-    + '  body.print-com #com-print { display:block !important; position:absolute !important; inset:0 !important; background:#fff !important; padding:14px !important; }'
+    + '  body.print-com > *:not(#com-print) { display: none !important; }'
+    + '  @page gpdoc { margin: 0; }'
+    + '  body.print-com #com-print { display:block !important; background:#fff !important; }'
     + '  body.print-destroy * { visibility: hidden !important; }'
     + '  body.print-destroy #destroy-print,'
     + '  body.print-destroy #destroy-print * { visibility: visible !important; }'
@@ -18190,5 +18186,7 @@ function buildSeedInvFields(rec){
   init();
 })();
 </script>
+<div id="bol-print" style="display:none;"></div>
+<div id="com-print" style="display:none;"></div>
 </body>
 </html>
