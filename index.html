@@ -13949,6 +13949,11 @@ async function summaryReconcileFromHistory(){
   if(dryD) batchRecs[idx].harvestDate = dryD;
   if(pkgD) batchRecs[idx].packagedDate = pkgD;
   if(delD) batchRecs[idx].deliveredDate = delD;
+  // Sold Date: earliest Sold-tx date, or cleared entirely when the batch has no Sold transaction
+  // (e.g. an erroneous Sold was deleted). buildBatchFields strips empty fields so a plain upsert
+  // can't clear it — the explicit Supabase null below handles that.
+  const _soldDates = batchTxRecs.filter(t => t.batchId === batchId && t.txType === 'Sold').map(t=>t.date).filter(Boolean).sort();
+  batchRecs[idx].soldDate = _soldDates.length ? _soldDates[0] : '';
   batchRecs[idx].synced = false;
   lsSet('gp-batch', batchRecs);
   updatePendingBadge();
@@ -13958,6 +13963,11 @@ async function summaryReconcileFromHistory(){
   if(cfg.batchTbl && cfg.token && cfg.base){
     try { const _r = await atUpsert(cfg.batchTbl, buildBatchFields(batchRecs[idx]), ['Batch ID']); batchRecs[idx].synced = true; const _id=_r&&_r.records&&_r.records[0]&&_r.records[0].id; if(_id) batchRecs[idx].airtableId=_id; lsSet('gp-batch', batchRecs); updatePendingBadge(); } catch(_){}
   }
+  // Explicitly null the sold_date column when cleared (upsert alone leaves stripped-empty fields as-is).
+  if(!batchRecs[idx].soldDate && typeof window !== 'undefined' && window.__SBC){
+    try { await window.__SBC.from('batches').update({ sold_date:null }).eq('batch_id', batchId); } catch(_){}
+  }
+  if(typeof summaryBatchChanged === 'function') summaryBatchChanged();
 }
 async function summaryUpdateBatch(){
   const batchId = document.getElementById('summary-batch-select').value;
@@ -15142,6 +15152,18 @@ async function summaryTxDelete(id){
   }
   batchTxRecs.splice(idx, 1);
   lsSet('gp-batchtx', batchTxRecs);
+  // If the deleted tx was a Sold and the batch now has no Sold transaction at all, clear the batch's
+  // stored Sold Date too (it would otherwise linger). Force the Supabase column to null.
+  if(tx.txType === 'Sold' && tx.batchId){
+    const _bi = batchRecs.findIndex(r => r.batchId === tx.batchId && !r.type);
+    if(_bi >= 0 && batchRecs[_bi].soldDate && !batchTxRecs.some(t => t.batchId === tx.batchId && t.txType === 'Sold')){
+      batchRecs[_bi].soldDate = '';
+      batchRecs[_bi].synced = false;
+      lsSet('gp-batch', batchRecs);
+      if(cfg.batchTbl){ try { await atUpsert(cfg.batchTbl, buildBatchFields(batchRecs[_bi]), ['Batch ID']); batchRecs[_bi].synced = true; lsSet('gp-batch', batchRecs); } catch(_){} }
+      if(typeof window !== 'undefined' && window.__SBC){ try { await window.__SBC.from('batches').update({ sold_date:null }).eq('batch_id', tx.batchId); } catch(_){} }
+    }
+  }
   updatePendingBadge();
   toast('Transaction deleted.');
   // Refresh the count chip, phase display, history table, and the Batches list.
