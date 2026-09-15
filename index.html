@@ -221,7 +221,7 @@ tr:last-child td { border-bottom: none; }
             <div class="field"><label>Grower</label>
               <select id="ec-grower" onchange="ecSeqUnlock()">
                 <option value="">select grower</option>
-                <option>Jordan Elliott</option><option>Brandon Cail</option><option>Tom Devost</option>
+                <option>Jordan Elliott</option><option>Khyell Savoy</option><option>Tom Devost</option>
               </select>
             </div>
             <div class="field"><label>Room</label>
@@ -329,7 +329,7 @@ tr:last-child td { border-bottom: none; }
           </div>
           <div class="g2" style="margin-bottom:10px;">
             <div class="field"><label>Grower</label>
-              <select id="flow-grower"><option value="">select grower</option><option>Jordan Elliott</option><option>Brandon Cail</option><option>Tom Devost</option></select>
+              <select id="flow-grower"><option value="">select grower</option><option>Jordan Elliott</option><option>Khyell Savoy</option><option>Tom Devost</option></select>
             </div>
             <div class="field"><label>Flow Meter Reading (L)</label>
               <input type="number" id="flow-reading" step="1" min="0" placeholder="0" onwheel="this.blur()" />
@@ -364,7 +364,7 @@ tr:last-child td { border-bottom: none; }
             <div class="field"><label>Grower</label>
               <select id="ro-grower">
                 <option value="">select grower</option>
-                <option>Jordan Elliott</option><option>Brandon Cail</option><option>Tom Devost</option>
+                <option>Jordan Elliott</option><option>Khyell Savoy</option><option>Tom Devost</option>
               </select>
             </div>
             <div class="field"><label>Room</label>
@@ -462,7 +462,7 @@ tr:last-child td { border-bottom: none; }
         <div class="filters">
           <select id="f-ec-room" onchange="renderEC()"><option value="">All rooms</option><option>Flower 1</option><option>Flower 2</option><option>Flower 3</option><option>Flower 4</option><option>Flower 5</option><option>Veg</option></select>
           <select id="f-ec-batch" onchange="renderEC()"><option value="">All batches</option></select>
-          <select id="f-ec-grower" onchange="renderEC()"><option value="">All growers</option><option>Jordan Elliott</option><option>Brandon Cail</option><option>Tom Devost</option></select>
+          <select id="f-ec-grower" onchange="renderEC()"><option value="">All growers</option><option>Jordan Elliott</option><option>Khyell Savoy</option><option>Tom Devost</option><option>Brandon Cail</option></select>
           <input type="date" id="f-ec-from" onchange="renderEC()" />
           <input type="date" id="f-ec-to" onchange="renderEC()" />
           <button class="btn-secondary" onclick="exportEC()">CSV</button>
@@ -474,7 +474,7 @@ tr:last-child td { border-bottom: none; }
         <div class="filters">
           <select id="f-ro-room" onchange="renderRO()"><option value="">All rooms</option><option>Flower 1</option><option>Flower 2</option><option>Flower 3</option><option>Flower 4</option><option>Flower 5</option></select>
           <select id="f-ro-batch" onchange="renderRO()"><option value="">All batches</option></select>
-          <select id="f-ro-grower" onchange="renderRO()"><option value="">All growers</option><option>Jordan Elliott</option><option>Brandon Cail</option><option>Tom Devost</option></select>
+          <select id="f-ro-grower" onchange="renderRO()"><option value="">All growers</option><option>Jordan Elliott</option><option>Khyell Savoy</option><option>Tom Devost</option><option>Brandon Cail</option></select>
           <input type="date" id="f-ro-from" onchange="renderRO()" />
           <input type="date" id="f-ro-to" onchange="renderRO()" />
           <button class="btn-secondary" onclick="exportRO()">CSV</button>
@@ -484,7 +484,7 @@ tr:last-child td { border-bottom: none; }
       </div>
       <div id="rep-waste-view" style="display:none;">
         <div class="filters">
-          <select id="rep-f-waste-grower" onchange="renderWasteReport()"><option value="">All growers</option><option>Jordan Elliott</option><option>Brandon Cail</option><option>Tom Devost</option></select>
+          <select id="rep-f-waste-grower" onchange="renderWasteReport()"><option value="">All growers</option><option>Jordan Elliott</option><option>Khyell Savoy</option><option>Tom Devost</option><option>Brandon Cail</option></select>
           <input type="date" id="rep-f-waste-from" onchange="renderWasteReport()" />
           <input type="date" id="rep-f-waste-to" onchange="renderWasteReport()" />
         </div>
@@ -508,7 +508,7 @@ tr:last-child td { border-bottom: none; }
             <div class="field"><label>Grower</label>
               <select id="waste-grower" onchange="wasteSeqUnlock()" disabled style="background:var(--bg2);color:var(--text3);cursor:not-allowed;">
                 <option value="">select grower</option>
-                <option>Jordan Elliott</option><option>Brandon Cail</option><option>Tom Devost</option>
+                <option>Jordan Elliott</option><option>Khyell Savoy</option><option>Tom Devost</option>
               </select>
             </div>
           </div>
@@ -585,7 +585,7 @@ tr:last-child td { border-bottom: none; }
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
           <select id="f-waste-grower" onchange="renderWaste()" style="font-size:12px;font-family:var(--sans);color:var(--text);background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;outline:none;">
             <option value="">All growers</option>
-            <option>Jordan Elliott</option><option>Brandon Cail</option><option>Tom Devost</option>
+            <option>Jordan Elliott</option><option>Khyell Savoy</option><option>Tom Devost</option>
           </select>
           <select id="f-waste-batch" onchange="renderWaste()" style="font-size:12px;font-family:var(--sans);color:var(--text);background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;outline:none;">
             <option value="">All batches</option>
@@ -920,7 +920,7 @@ tr:last-child td { border-bottom: none; }
             <select id="batch-mov-grower" onchange="batchMovGrowerChanged()">
               <option value="">-- select grower --</option>
               <option>Jordan Elliott</option>
-              <option>Brandon Cail</option>
+              <option>Khyell Savoy</option>
               <option>Tom Devost</option>
             </select>
           </div>
@@ -1441,7 +1441,7 @@ tr:last-child td { border-bottom: none; }
           <div class="g2" style="margin-bottom:10px;">
             <div class="field"><label>Date Destroyed</label><input type="date" id="destroy-date" /></div>
             <div class="field"><label>Employee</label>
-              <select id="destroy-employee"><option value="">select employee</option><option>Jordan Elliott</option><option>Brandon Cail</option><option>Tom Devost</option></select>
+              <select id="destroy-employee"><option value="">select employee</option><option>Jordan Elliott</option><option>Khyell Savoy</option><option>Tom Devost</option></select>
             </div>
           </div>
           <div class="g2" style="margin-bottom:10px;">
@@ -1522,7 +1522,7 @@ tr:last-child td { border-bottom: none; }
             <div class="field"><label>Grower</label>
               <select id="harvest-grower" onchange="harvestSetupChanged()">
                 <option value="">select grower</option>
-                <option>Jordan Elliott</option><option>Brandon Cail</option><option>Tom Devost</option>
+                <option>Jordan Elliott</option><option>Khyell Savoy</option><option>Tom Devost</option>
               </select>
             </div>
             <div class="field"><label>Date</label><input type="date" id="harvest-date" readonly style="background:var(--bg2);color:var(--text3);cursor:default;" /></div>
@@ -1599,7 +1599,7 @@ tr:last-child td { border-bottom: none; }
             <div class="field"><label>Grower</label>
               <select id="postdry-grower" onchange="postDrySetupChanged()">
                 <option value="">select grower</option>
-                <option>Jordan Elliott</option><option>Brandon Cail</option><option>Tom Devost</option>
+                <option>Jordan Elliott</option><option>Khyell Savoy</option><option>Tom Devost</option>
               </select>
             </div>
             <div class="field"><label>Date</label><input type="date" id="postdry-date" readonly style="background:var(--bg2);color:var(--text3);cursor:default;" /></div>
@@ -1690,7 +1690,7 @@ tr:last-child td { border-bottom: none; }
             <div class="field"><label>Grower (Initials)</label>
               <select id="bio-grower" onchange="bioSeqUnlock()">
                 <option value="">select grower</option>
-                <option>Jordan Elliott</option><option>Brandon Cail</option><option>Tom Devost</option>
+                <option>Jordan Elliott</option><option>Khyell Savoy</option><option>Tom Devost</option>
               </select>
             </div>
           </div>
@@ -1765,7 +1765,7 @@ tr:last-child td { border-bottom: none; }
             <div class="field"><label>Grower (Initials)</label>
               <select id="pest-grower" onchange="pestSeqUnlock()">
                 <option value="">select grower</option>
-                <option>Jordan Elliott</option><option>Brandon Cail</option><option>Tom Devost</option>
+                <option>Jordan Elliott</option><option>Khyell Savoy</option><option>Tom Devost</option>
               </select>
             </div>
           </div>
@@ -1913,7 +1913,7 @@ tr:last-child td { border-bottom: none; }
           <select id="sancl-grower" onchange="sanclChanged()">
             <option value="">-- select grower --</option>
             <option>Jordan Elliott</option>
-            <option>Brandon Cail</option>
+            <option>Khyell Savoy</option>
             <option>Tom Devost</option>
           </select>
         </div>
@@ -1990,7 +1990,7 @@ tr:last-child td { border-bottom: none; }
           <select id="santool-grower">
             <option value="">-- select grower --</option>
             <option>Jordan Elliott</option>
-            <option>Brandon Cail</option>
+            <option>Khyell Savoy</option>
             <option>Tom Devost</option>
           </select>
         </div>
@@ -2052,7 +2052,7 @@ tr:last-child td { border-bottom: none; }
         </div>
         <div class="field" style="margin-bottom:10px;">
           <label>Employee <span style="color:var(--red);font-weight:700;">*</span></label>
-          <select id="qascale-grower" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;box-sizing:border-box;"><option value="">-- select employee --</option><option>Jordan Elliott</option><option>Brandon Cail</option><option>Tom Devost</option></select>
+          <select id="qascale-grower" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;box-sizing:border-box;"><option value="">-- select employee --</option><option>Jordan Elliott</option><option>Khyell Savoy</option><option>Tom Devost</option></select>
         </div>
         <div class="field" style="margin-bottom:12px;">
           <label>Weight Verification <span style="font-size:10px;color:var(--text3);font-weight:400;">(check each reference weight that passed)</span></label>
@@ -2089,7 +2089,7 @@ tr:last-child td { border-bottom: none; }
         </div>
         <div class="g2" style="margin-bottom:10px;">
           <div class="field"><label>Moisture % <span style="color:var(--red);font-weight:700;">*</span></label><input type="number" step="0.1" min="0" id="qamoist-moisture" placeholder="e.g. 11.0" onwheel="this.blur()" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;box-sizing:border-box;"></div>
-          <div class="field"><label>Initials / Employee <span style="color:var(--red);font-weight:700;">*</span></label><select id="qamoist-grower" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;box-sizing:border-box;"><option value="">-- select employee --</option><option>Jordan Elliott</option><option>Brandon Cail</option><option>Tom Devost</option></select></div>
+          <div class="field"><label>Initials / Employee <span style="color:var(--red);font-weight:700;">*</span></label><select id="qamoist-grower" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;box-sizing:border-box;"><option value="">-- select employee --</option><option>Jordan Elliott</option><option>Khyell Savoy</option><option>Tom Devost</option></select></div>
         </div>
         <div class="field" style="margin-bottom:12px;">
           <label>Notes</label>
@@ -9317,7 +9317,7 @@ function phenoObsList(plantId){
     return `<div style="border-top:1px solid var(--border);padding:6px 0;"><div style="display:flex;justify-content:space-between;align-items:center;"><span style="font-family:var(--mono);font-size:11px;color:var(--text2);">${o.date||'—'}${o.grower?(' · '+_phenoEsc(o.grower)):''}</span>${_delObsBtn}</div>${traits?('<div style="margin-top:3px;">'+traits+'</div>'):''}${o.notes?('<div style="margin-top:3px;font-size:12px;white-space:pre-wrap;">'+_phenoEsc(o.notes)+'</div>'):''}</div>`;
   }).join('');
 }
-function _phenoGrowerOpts(){ return ['','Jordan Elliott','Brandon Cail','Tom Devost'].map(g=>`<option value="${g}">${g||'-- grower --'}</option>`).join(''); }
+function _phenoGrowerOpts(){ return ['','Jordan Elliott','Khyell Savoy','Tom Devost'].map(g=>`<option value="${g}">${g||'-- grower --'}</option>`).join(''); }
 function phenoPlantCard(p){
   const pid=p.id;
   const heading = (phenoMode==='single')
