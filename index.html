@@ -14813,7 +14813,7 @@ async function summaryAddTransaction(){
 
 // Feature flag — transaction editing (per-row Edit Qty / Phase / Date / Move / Delete under the
 // Action column) and the "Add corrective transaction" button. Set to true to re-enable both.
-const TX_EDITING_ENABLED = false;
+const TX_EDITING_ENABLED = true;
 function summaryRenderHistory(batchId){
   { const _cbtn=document.getElementById('summary-corrective-btn'); if(_cbtn) _cbtn.style.display = TX_EDITING_ENABLED ? '' : 'none'; }
   const container = document.getElementById('summary-tx-history');
