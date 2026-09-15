@@ -6553,7 +6553,7 @@ function populateBatchDropdowns(){
   const HARVESTED_PHASES = new Set(['Drying','Packaged','Delivered']);
   const ecList    = list.filter(b => !HARVESTED_PHASES.has(b.plantPhase));
   const roList    = list.filter(b => b.plantPhase === 'Flower' && !isSeedsBatchId(b.batchId) && !b.closed); // Flower-only, excl. Seeds (S-) + harvested
-  const wasteList = list.filter(b => !isBatchDeliveredOrSold(b) || withinDeliveryWasteWindow(b)); // delivered stays 2 days for dry-waste cleanup
+  const wasteList = list; // delivered/sold batches stay available for dry-waste cleanup until the batch is Closed (getFormBatchList already excludes closed)
   function fillFormSelect(selId,placeholderText,items){
     const sel=document.getElementById(selId);
     if(!sel) return;
