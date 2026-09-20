@@ -7490,7 +7490,11 @@ function flowBatchChanged(){
   const roomEl = document.getElementById('flow-room');
   if(roomEl){
     const b = batchRecs.find(r => r.batchId === batch && !r.type);
-    const rooms = (b && Array.isArray(b.rooms)) ? b.rooms.slice() : [];
+    // Only show rooms that currently hold plants (matches EC / Waste), so empty rooms like a
+    // vacated Veg room don't linger just because they're still in the batch's rooms array.
+    const rooms = (b && Array.isArray(b.rooms))
+      ? b.rooms.filter(r => (typeof calcRoomPlantCount === 'function' ? calcRoomPlantCount(batch, r) > 0 : true))
+      : [];
     const cur = roomEl.value;
     roomEl.innerHTML = '<option value="">select room</option>' + rooms.map(r => '<option'+(r===cur?' selected':'')+'>'+r+'</option>').join('');
   }
