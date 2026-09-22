@@ -1885,14 +1885,15 @@ tr:last-child td { border-bottom: none; }
         <button class="btn-save" onclick="clearAllLocalData()" style="margin-top:8px;background:#7B0000;">Clear All Local Data</button>
       </div>
       <div class="settings-card">
-        <h3>Flower-day milestones</h3>
-        <p style="font-size:12px;color:var(--text2);line-height:1.5;margin:0 0 10px;">Tasks that appear as alerts on the Batch Management page when a flowering batch reaches each flower day (F-Day = days since Flower Start). Saved on this device.</p>
+        <h3>Milestones</h3>
+        <p style="font-size:12px;color:var(--text2);line-height:1.5;margin:0 0 10px;">Tasks that appear as alerts on the Batch Management page when a batch reaches a given day within a phase. Grouped by <b>Cloning</b> (days from the clone/germination date), <b>Veg</b> (days from Veg Start), and <b>Flower</b> (days from Flower Start). Saved to the shared database.</p>
         <div id="fd-milestone-list" style="margin-bottom:12px;"></div>
-        <div class="sfield"><label>Flower Day</label><input type="number" id="fd-day" min="1" step="1" placeholder="e.g. 21" /></div>
+        <div class="sfield"><label>Phase</label><select id="fd-phase" style="width:100%;font-size:14px;font-family:var(--sans);border-radius:var(--radius-sm);border:1px solid var(--border);padding:10px;background:var(--card);color:var(--text);outline:none;"><option value="Clone">Cloning</option><option value="Veg">Veg</option><option value="Flower" selected>Flower</option></select></div>
+        <div class="sfield"><label>Day (within phase)</label><input type="number" id="fd-day" min="1" step="1" placeholder="e.g. 21" /></div>
         <div class="sfield"><label>Tasks (one per line)</label><textarea id="fd-tasks" rows="3" placeholder="Deleaf&#10;Install Trellis" style="width:100%;font-size:14px;font-family:var(--sans);border-radius:var(--radius-sm);border:1px solid var(--border);padding:10px;background:var(--card);color:var(--text);outline:none;"></textarea></div>
         <button class="btn-save" onclick="fdSaveMilestone()">Save Milestone</button>
-        <button class="btn-save" onclick="fdResetMilestones()" style="margin-top:8px;background:var(--amber);color:#3B2A00;">Reset to Defaults</button>
-        <div style="font-size:11px;color:var(--text3);margin-top:8px;">Adding a Flower Day that already exists replaces its task list.</div>
+        <button class="btn-save" onclick="fdResetMilestones()" style="margin-top:8px;background:var(--amber);color:#3B2A00;">Reset Flower to Defaults</button>
+        <div style="font-size:11px;color:var(--text3);margin-top:8px;">Adding a Day that already exists in the selected phase replaces its task list.</div>
       </div>
       <div class="settings-card">
         <h3>Grower access</h3>
@@ -11760,28 +11761,29 @@ function renderMilestonesDue(){
   if(!el) return;
   try {
     const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-    const today = (typeof localDate === 'function') ? localDate() : new Date().toISOString().slice(0,10);
-    const tasksMap = (typeof FLOWER_DAY_TASKS !== 'undefined' && FLOWER_DAY_TASKS) ? FLOWER_DAY_TASKS : {};
     const groups = [];
-    batchRecs.filter(b => b && !b.type && !isMotherBatch(b.batchId) && !(typeof isBatchClosedRec==='function' && isBatchClosedRec(b))
-        && (b.plantPhase||'') === 'Flower' && b.flowerStart)
+    batchRecs.filter(b => b && !b.type && !isMotherBatch(b.batchId) && !(typeof isBatchClosedRec==='function' && isBatchClosedRec(b)))
       .sort(batchCreatedCmp)
       .forEach(b => {
-        const fd = daysBetween(b.flowerStart, today);
+        const grp = _msGroupForPhase(b.plantPhase||'');
+        if(!grp) return;
+        const fd = _msPhaseDay(b, grp);
         if(!fd || fd <= 0) return;
+        const map = _msMap(grp);
+        const _p = _msGroupDayPrefix(grp);
         // Every milestone day at or before today (reached), any task not yet checked off. Tasks
         // whose day is BEFORE today are overdue; tasks on today's day are simply due.
-        const days = Object.keys(tasksMap).map(x=>parseInt(x,10)).filter(n=>!isNaN(n) && n<=fd).sort((x,y)=>x-y);
+        const days = Object.keys(map).map(x=>parseInt(x,10)).filter(n=>!isNaN(n) && n<=fd).sort((x,y)=>x-y);
         const items = [];
         days.forEach(day => {
-          (tasksMap[day]||[]).forEach(t => {
-            if(!(typeof _milestoneCompRec==='function' && _milestoneCompRec(b.batchId, day, t))){
-              items.push({ day, task:t, overdue: day < fd });
+          (map[day]||[]).forEach(t => {
+            if(!(typeof _milestoneCompRec==='function' && _milestoneCompRec(b.batchId, grp, day, t))){
+              items.push({ day, task:t, overdue: day < fd, p:_p });
             }
           });
         });
         if(!items.length) return;
-        groups.push({ batch:b.batchId, cultivar:b.cultivar||'', fd, items });
+        groups.push({ batch:b.batchId, cultivar:b.cultivar||'', fd, items, p:_p, gl:(grp==='Clone'?'Cloning':grp) });
       });
     if(!groups.length){ el.style.display='none'; el.innerHTML=''; return; }
     let h = '<div class="card" style="margin-bottom:12px;background:var(--amber-pale);border:1px solid var(--amber);">'
@@ -11790,13 +11792,13 @@ function renderMilestonesDue(){
       h += '<div style="margin-bottom:8px;">'
         +  '<div style="font-weight:700;font-size:13px;margin-bottom:2px;">'+esc(g.batch)
         +    (g.cultivar ? ' <span style="font-weight:400;color:var(--text3);font-size:12px;">· '+esc(g.cultivar)+'</span>' : '')
-        +    ' <span style="font-family:var(--mono);font-size:11px;color:var(--text3);">F'+g.fd+'</span></div>';
+        +    ' <span style="font-family:var(--mono);font-size:11px;color:var(--text3);">'+g.gl+' '+g.p+g.fd+'</span></div>';
       g.items.forEach(it => {
         const tag = it.overdue
           ? ' <span style="font-size:10px;color:var(--red);font-weight:600;text-transform:uppercase;">overdue</span>'
           : ' <span style="font-size:10px;color:var(--amber);font-weight:600;text-transform:uppercase;">today</span>';
         h += '<div style="font-size:13px;padding:1px 0 1px 10px;color:var(--text);">'
-          +  '<span style="font-family:var(--mono);font-size:11px;color:var(--text3);">F'+it.day+'</span> · '+esc(it.task)+tag+'</div>';
+          +  '<span style="font-family:var(--mono);font-size:11px;color:var(--text3);">'+it.p+it.day+'</span> · '+esc(it.task)+tag+'</div>';
       });
       h += '</div>';
     });
@@ -12155,7 +12157,22 @@ let FLOWER_DAY_TASKS = (function(){
   try { const _s = lsGet('gp-fdtasks'); if(_s && typeof _s==='object' && !Array.isArray(_s) && Object.keys(_s).length) return _s; } catch(_){}
   return JSON.parse(JSON.stringify(FLOWER_DAY_TASKS_DEFAULT));
 })();
-function fdPersistMilestones(){ try { lsSet('gp-fdtasks', FLOWER_DAY_TASKS); } catch(_){} }
+// Milestones are grouped by phase: Cloning, Veg, Flower — each a { dayNumber: [tasks] } map.
+// FLOWER_DAY_TASKS stays the Flower group (unchanged); Cloning + Veg are parallel maps.
+let CLONE_DAY_TASKS = (function(){ try{ const s=lsGet('gp-clonetasks'); if(s && typeof s==='object' && !Array.isArray(s)) return s; }catch(_){} return {}; })();
+let VEG_DAY_TASKS = (function(){ try{ const s=lsGet('gp-vegtasks'); if(s && typeof s==='object' && !Array.isArray(s)) return s; }catch(_){} return {}; })();
+const MILESTONE_GROUPS = [ {key:'Clone',label:'Cloning'}, {key:'Veg',label:'Veg'}, {key:'Flower',label:'Flower'} ];
+function _msMap(group){ return group==='Clone' ? CLONE_DAY_TASKS : (group==='Veg' ? VEG_DAY_TASKS : FLOWER_DAY_TASKS); }
+function _msGroupForPhase(phase){ if(phase==='Clones'||phase==='Germination') return 'Clone'; if(phase==='Veg') return 'Veg'; if(phase==='Flower') return 'Flower'; return null; }
+function _msGroupDayPrefix(group){ return group==='Clone' ? 'C' : (group==='Veg' ? 'V' : 'F'); }
+function _msPhaseDay(b, group){
+  if(!b) return null;
+  if(group==='Clone') return b.cloneDate ? daysBetween(b.cloneDate, localDate()) : null;
+  if(group==='Veg')   return b.vegStart  ? daysBetween(b.vegStart,  localDate()) : null;
+  if(group==='Flower')return b.flowerStart ? daysBetween(b.flowerStart, localDate()) : null;
+  return null;
+}
+function fdPersistMilestones(){ try { lsSet('gp-fdtasks', FLOWER_DAY_TASKS); lsSet('gp-clonetasks', CLONE_DAY_TASKS); lsSet('gp-vegtasks', VEG_DAY_TASKS); } catch(_){} }
 // Push the whole milestone list to Airtable as a single upserted row (Key='FlowerDayMilestones').
 // Marks dirty up front so the change is tracked even if the push fails (Sync Pending will retry).
 async function fdSyncMilestones(){
@@ -12164,7 +12181,7 @@ async function fdSyncMilestones(){
   if(!sb){ toast('Saved on this device (not connected).', 4000); return false; }
   if(typeof setSyncPill === 'function') setSyncPill('ing','Syncing...');
   try {
-    const { error } = await sb.from('flower_milestones').upsert({ id:'global', data: FLOWER_DAY_TASKS, updated_at: new Date().toISOString() }, { onConflict:'id' });
+    const { error } = await sb.from('flower_milestones').upsert({ id:'global', data: { flower: FLOWER_DAY_TASKS, clone: CLONE_DAY_TASKS, veg: VEG_DAY_TASKS }, updated_at: new Date().toISOString() }, { onConflict:'id' });
     if(error) throw error;
     if(typeof setSyncPill === 'function') setSyncPill('ok','Synced');
     return true;
@@ -12178,57 +12195,64 @@ function fdRenderMilestones(){
   const el = document.getElementById('fd-milestone-list');
   if(!el) return;
   const _esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
-  const days = Object.keys(FLOWER_DAY_TASKS).map(Number).filter(n=>!isNaN(n)).sort((a,b)=>a-b);
-  if(!days.length){ el.innerHTML = '<div style="font-size:12px;color:var(--text3);">No milestones yet — add one below.</div>'; return; }
-  let html = '<div style="overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius-sm);background:#fff;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#f5f5f5;">'
-    + ['F-Day','Tasks','Actions'].map(h=>'<th style="padding:6px 8px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;border-bottom:1px solid var(--border);">'+h+'</th>').join('')
-    + '</tr></thead><tbody>';
-  days.forEach(d=>{
-    const tasks = FLOWER_DAY_TASKS[d] || [];
-    html += '<tr>'
-      +'<td style="padding:6px 8px;font-family:var(--mono);font-weight:700;color:var(--green);border-top:1px solid var(--border);white-space:nowrap;">F-'+d+'</td>'
-      +'<td style="padding:6px 8px;border-top:1px solid var(--border);">'+tasks.map(_esc).join('<br>')+'</td>'
-      +'<td style="padding:6px 8px;white-space:nowrap;border-top:1px solid var(--border);">'
-        +'<button type="button" onclick="fdEditMilestone('+d+')" style="font-size:11px;padding:3px 8px;margin-right:4px;border:1px solid var(--border);background:var(--bg2);border-radius:var(--radius-sm);cursor:pointer;color:var(--text2);">Edit</button>'
-        +'<button type="button" onclick="fdDeleteMilestone('+d+')" style="font-size:11px;padding:3px 8px;border:1px solid var(--red);background:var(--red-pale);border-radius:var(--radius-sm);cursor:pointer;color:var(--red);">Delete</button>'
-      +'</td></tr>';
+  let html = '';
+  MILESTONE_GROUPS.forEach(g => {
+    const map = _msMap(g.key);
+    const days = Object.keys(map).map(Number).filter(n=>!isNaN(n)).sort((a,b)=>a-b);
+    html += '<div style="font-size:11px;font-weight:700;color:var(--green);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;margin:'+(html?'14px':'0')+' 0 4px;">'+g.label+'</div>';
+    if(!days.length){ html += '<div style="font-size:12px;color:var(--text3);margin-bottom:4px;">No '+g.label+' milestones yet.</div>'; return; }
+    html += '<div style="overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius-sm);background:#fff;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#f5f5f5;">'
+      + ['Day','Tasks','Actions'].map(h=>'<th style="padding:6px 8px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;border-bottom:1px solid var(--border);">'+h+'</th>').join('')
+      + '</tr></thead><tbody>';
+    days.forEach(d=>{
+      const tasks = map[d] || [];
+      html += '<tr>'
+        +'<td style="padding:6px 8px;font-family:var(--mono);font-weight:700;color:var(--green);border-top:1px solid var(--border);white-space:nowrap;">'+_msGroupDayPrefix(g.key)+'-'+d+'</td>'
+        +'<td style="padding:6px 8px;border-top:1px solid var(--border);">'+tasks.map(_esc).join('<br>')+'</td>'
+        +'<td style="padding:6px 8px;white-space:nowrap;border-top:1px solid var(--border);">'
+          +'<button type="button" onclick="fdEditMilestone(\''+g.key+'\','+d+')" style="font-size:11px;padding:3px 8px;margin-right:4px;border:1px solid var(--border);background:var(--bg2);border-radius:var(--radius-sm);cursor:pointer;color:var(--text2);">Edit</button>'
+          +'<button type="button" onclick="fdDeleteMilestone(\''+g.key+'\','+d+')" style="font-size:11px;padding:3px 8px;border:1px solid var(--red);background:var(--red-pale);border-radius:var(--radius-sm);cursor:pointer;color:var(--red);">Delete</button>'
+        +'</td></tr>';
+    });
+    html += '</tbody></table></div>';
   });
-  html += '</tbody></table></div>';
   el.innerHTML = html;
 }
-function fdEditMilestone(d){
+function fdEditMilestone(group, d){
+  const pEl = document.getElementById('fd-phase'); if(pEl) pEl.value = group;
   const dayEl = document.getElementById('fd-day'); if(dayEl) dayEl.value = d;
-  const tEl = document.getElementById('fd-tasks'); if(tEl){ tEl.value = (FLOWER_DAY_TASKS[d]||[]).join('\n'); if(tEl.scrollIntoView) tEl.scrollIntoView({behavior:'smooth',block:'center'}); }
+  const tEl = document.getElementById('fd-tasks'); if(tEl){ tEl.value = (_msMap(group)[d]||[]).join('\n'); if(tEl.scrollIntoView) tEl.scrollIntoView({behavior:'smooth',block:'center'}); }
 }
 function fdSaveMilestone(){
+  const group = (document.getElementById('fd-phase')||{}).value || 'Flower';
   const day = parseInt((document.getElementById('fd-day')||{}).value);
-  if(isNaN(day) || day < 1){ toast('Enter a valid flower day (1 or higher).'); return; }
+  if(isNaN(day) || day < 1){ toast('Enter a valid day (1 or higher).'); return; }
   const tasks = (((document.getElementById('fd-tasks')||{}).value)||'').split('\n').map(s=>s.trim()).filter(Boolean);
   if(!tasks.length){ toast('Enter at least one task (one per line).'); return; }
-  FLOWER_DAY_TASKS[day] = tasks;
+  _msMap(group)[day] = tasks;
   fdPersistMilestones();
   fdRenderMilestones();
   const dEl=document.getElementById('fd-day'); if(dEl) dEl.value='';
   const tEl=document.getElementById('fd-tasks'); if(tEl) tEl.value='';
-  toast('Milestone for F-'+day+' saved.');
+  toast('Milestone for '+_msGroupDayPrefix(group)+'-'+day+' saved.');
   fdSyncMilestones();
   try { const bid=(document.getElementById('summary-batch-select')||{}).value; if(bid && typeof summaryRenderFlowerAlerts==='function') summaryRenderFlowerAlerts(bid); } catch(_){}
 }
-function fdDeleteMilestone(d){
-  if(!confirm('Delete the F-'+d+' milestone?')) return;
-  delete FLOWER_DAY_TASKS[d];
+function fdDeleteMilestone(group, d){
+  if(!confirm('Delete the '+_msGroupDayPrefix(group)+'-'+d+' milestone?')) return;
+  delete _msMap(group)[d];
   fdPersistMilestones();
   fdRenderMilestones();
-  toast('Milestone F-'+d+' deleted.');
+  toast('Milestone '+_msGroupDayPrefix(group)+'-'+d+' deleted.');
   fdSyncMilestones();
   try { const bid=(document.getElementById('summary-batch-select')||{}).value; if(bid && typeof summaryRenderFlowerAlerts==='function') summaryRenderFlowerAlerts(bid); } catch(_){}
 }
 function fdResetMilestones(){
-  if(!confirm('Reset all flower-day milestones to the original defaults? This replaces your current list.')) return;
+  if(!confirm('Reset the FLOWER milestones to the original defaults? Cloning and Veg milestones are not affected.')) return;
   FLOWER_DAY_TASKS = JSON.parse(JSON.stringify(FLOWER_DAY_TASKS_DEFAULT));
   fdPersistMilestones();
   fdRenderMilestones();
-  toast('Milestones reset to defaults.');
+  toast('Flower milestones reset to defaults.');
   fdSyncMilestones();
 }
 fdRenderMilestones();
@@ -12236,8 +12260,8 @@ fdRenderMilestones();
 // ── Milestone completion tracking ────────────────────────────────────────────
 // Per-batch, per-task checkboxes on reached flower-day milestones. Persisted to the
 // milestone_completions table (Supabase-native via window.__SBC) and shown on the Batch Report.
-function _milestoneCompRec(batch, day, task){
-  return milestoneCompRecs.find(m => m && m.batch===batch && (parseInt(m.flowerDay)||0)===day && m.task===task) || null;
+function _milestoneCompRec(batch, group, day, task){
+  return milestoneCompRecs.find(m => m && m.batch===batch && ((m.phase||'Flower')===group) && (parseInt(m.flowerDay)||0)===day && m.task===task) || null;
 }
 function _growerFromEmail(email){
   const lp = String(email||'').split('@')[0] || '';
@@ -12245,32 +12269,48 @@ function _growerFromEmail(email){
   return lp.split(/[._-]+/).filter(Boolean).map(w=>w.charAt(0).toUpperCase()+w.slice(1)).join(' ');
 }
 async function milestoneToggleEl(el, batchId){
+  const group = el.getAttribute('data-mgroup') || 'Flower';
   const day = parseInt(el.getAttribute('data-mday'));
   const idx = parseInt(el.getAttribute('data-midx'));
-  const task = ((FLOWER_DAY_TASKS[day]||[])[idx]) || '';
+  const task = ((_msMap(group)[day]||[])[idx]) || '';
   if(!task) return;
   const checked = el.checked;
   const sb = (typeof window!=='undefined' && window.__SBC) ? window.__SBC : null;
   if(!sb){ toast('Not connected — sign in first.'); el.checked = !checked; return; }
+  const _dropLocal = () => { milestoneCompRecs = milestoneCompRecs.filter(m=>!(m.batch===batchId && ((m.phase||'Flower')===group) && (parseInt(m.flowerDay)||0)===day && m.task===task)); };
   if(checked){
     let grower=''; try{ const { data } = await sb.auth.getUser(); grower = _growerFromEmail(data && data.user ? data.user.email : ''); }catch(_){}
     const cd = localDate();
+    let saved = null;
     try{
       const { data, error } = await sb.from('milestone_completions')
-        .upsert({ batch_id:batchId, flower_day:day, task:task, grower:grower||null, completed_date:cd }, { onConflict:'batch_id,flower_day,task' })
+        .upsert({ batch_id:batchId, phase:group, flower_day:day, task:task, grower:grower||null, completed_date:cd }, { onConflict:'batch_id,phase,flower_day,task' })
         .select().single();
       if(error) throw error;
-      milestoneCompRecs = milestoneCompRecs.filter(m=>!(m.batch===batchId && (parseInt(m.flowerDay)||0)===day && m.task===task));
-      milestoneCompRecs.push({ id:data.id, batch:batchId, flowerDay:day, task:task, grower:grower, completedDate:cd, synced:true });
-      lsSet('gp-milestonecomp', milestoneCompRecs);
-    }catch(e){ toast('Save failed: '+(e.message||e), 5000); el.checked=false; return; }
+      saved = data;
+    }catch(e){
+      // Fallback for a database where the phase column / index hasn't been added yet.
+      try{
+        const { data, error } = await sb.from('milestone_completions')
+          .upsert({ batch_id:batchId, flower_day:day, task:task, grower:grower||null, completed_date:cd }, { onConflict:'batch_id,flower_day,task' })
+          .select().single();
+        if(error) throw error;
+        saved = data;
+      }catch(e2){ toast('Save failed: '+(e2.message||e2), 5000); el.checked=false; return; }
+    }
+    _dropLocal();
+    milestoneCompRecs.push({ id:saved.id, batch:batchId, phase:group, flowerDay:day, task:task, grower:grower, completedDate:cd, synced:true });
+    lsSet('gp-milestonecomp', milestoneCompRecs);
   } else {
     try{
-      const { error } = await sb.from('milestone_completions').delete().match({ batch_id:batchId, flower_day:day, task:task });
+      const { error } = await sb.from('milestone_completions').delete().match({ batch_id:batchId, phase:group, flower_day:day, task:task });
       if(error) throw error;
-      milestoneCompRecs = milestoneCompRecs.filter(m=>!(m.batch===batchId && (parseInt(m.flowerDay)||0)===day && m.task===task));
-      lsSet('gp-milestonecomp', milestoneCompRecs);
-    }catch(e){ toast('Update failed: '+(e.message||e), 5000); el.checked=true; return; }
+    }catch(e){
+      try{ const { error } = await sb.from('milestone_completions').delete().match({ batch_id:batchId, flower_day:day, task:task }); if(error) throw error; }
+      catch(e2){ toast('Update failed: '+(e2.message||e2), 5000); el.checked=true; return; }
+    }
+    _dropLocal();
+    lsSet('gp-milestonecomp', milestoneCompRecs);
   }
   summaryRenderFlowerAlerts(batchId);
 }
@@ -12283,17 +12323,21 @@ function summaryRenderFlowerAlerts(batchId){
   wrap.style.display = 'none'; wrap.innerHTML = '';
   if(!batchId) return;
   const b = batchRecs.find(r => r.batchId === batchId && !r.type);
-  if(!b || b.plantPhase !== 'Flower' || !b.flowerStart) return;
+  if(!b) return;
   if(isMotherBatch(batchId)) return; // milestones don't apply to mother batches
-  const fd = daysBetween(b.flowerStart, localDate());
+  const group = _msGroupForPhase(b.plantPhase||'');
+  if(!group) return;                 // Drying/Packaged/Delivered have no milestone group
+  const fd = _msPhaseDay(b, group);
   if(!fd || fd <= 0) return;
+  const map = _msMap(group);
+  const _p = _msGroupDayPrefix(group);
   const _esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-  const allDays = Object.keys(FLOWER_DAY_TASKS).map(d=>parseInt(d,10)).filter(n=>!isNaN(n)).sort((a,b)=>a-b);
+  const allDays = Object.keys(map).map(d=>parseInt(d,10)).filter(n=>!isNaN(n)).sort((a,b)=>a-b);
   const reached  = allDays.filter(d => d <= fd);
   const upcoming = allDays.filter(d => d > fd && d <= fd + 21).slice(0,3);
   const outstanding = [], completed = [];
-  reached.forEach(day => (FLOWER_DAY_TASKS[day]||[]).forEach((t, idx) => {
-    const rec = _milestoneCompRec(batchId, day, t);
+  reached.forEach(day => (map[day]||[]).forEach((t, idx) => {
+    const rec = _milestoneCompRec(batchId, group, day, t);
     (rec ? completed : outstanding).push({ day, idx, task:t, rec });
   }));
   const total = outstanding.length + completed.length;
@@ -12304,15 +12348,15 @@ function summaryRenderFlowerAlerts(batchId){
     const pct = Math.round((completed.length/total)*100);
     html += '<div style="'+box+'padding:9px 12px;">'
       +  '<div style="display:flex;align-items:center;gap:8px;margin-bottom:'+(outstanding.length?'8px':'0')+';">'
-      +    '<span style="font-family:var(--mono);font-size:11px;color:var(--text2);white-space:nowrap;">F'+fd+' today</span>'
+      +    '<span style="font-family:var(--mono);font-size:11px;color:var(--text2);white-space:nowrap;">'+_p+fd+' today</span>'
       +    '<span style="flex:1;height:6px;background:var(--border);border-radius:99px;overflow:hidden;"><span style="display:block;width:'+pct+'%;height:100%;background:var(--green);"></span></span>'
       +    '<span style="font-size:12px;font-weight:600;white-space:nowrap;">'+completed.length+'/'+total+'</span>'
       +  '</div>';
     outstanding.forEach(o => {
       const isToday = o.day === fd;
       html += '<label style="display:flex;align-items:center;gap:8px;font-size:13px;padding:2px 0;cursor:pointer;">'
-        +  '<input type="checkbox" data-mday="'+o.day+'" data-midx="'+o.idx+'" onchange="milestoneToggleEl(this,\''+_esc(batchId)+'\')" />'
-        +  '<span style="color:var(--text);"><span style="font-family:var(--mono);color:var(--text3);">F'+o.day+'</span> · '+_esc(o.task)+'</span>'
+        +  '<input type="checkbox" data-mgroup="'+group+'" data-mday="'+o.day+'" data-midx="'+o.idx+'" onchange="milestoneToggleEl(this,\''+_esc(batchId)+'\')" />'
+        +  '<span style="color:var(--text);"><span style="font-family:var(--mono);color:var(--text3);">'+_p+o.day+'</span> · '+_esc(o.task)+'</span>'
         +  (isToday ? '<span style="margin-left:auto;font-size:11px;color:var(--amber);font-weight:600;">today</span>' : '')
         +  '</label>';
     });
@@ -12326,8 +12370,8 @@ function summaryRenderFlowerAlerts(batchId){
         completed.forEach(o => {
           const at = (o.rec && (o.rec.grower || o.rec.completedDate)) ? (_esc(o.rec.grower||'') + (o.rec.grower && o.rec.completedDate ? ' · ' : '') + _esc(o.rec.completedDate||'')) : '';
           html += '<label style="display:flex;align-items:center;gap:8px;font-size:13px;padding:2px 0;cursor:pointer;">'
-            +  '<input type="checkbox" checked data-mday="'+o.day+'" data-midx="'+o.idx+'" onchange="milestoneToggleEl(this,\''+_esc(batchId)+'\')" />'
-            +  '<span style="color:var(--text3);text-decoration:line-through;"><span style="font-family:var(--mono);">F'+o.day+'</span> · '+_esc(o.task)+'</span>'
+            +  '<input type="checkbox" checked data-mgroup="'+group+'" data-mday="'+o.day+'" data-midx="'+o.idx+'" onchange="milestoneToggleEl(this,\''+_esc(batchId)+'\')" />'
+            +  '<span style="color:var(--text3);text-decoration:line-through;"><span style="font-family:var(--mono);">'+_p+o.day+'</span> · '+_esc(o.task)+'</span>'
             +  (at ? '<span style="margin-left:auto;font-size:11px;color:var(--text3);white-space:nowrap;">'+at+'</span>' : '')
             +  '</label>';
         });
@@ -12340,12 +12384,12 @@ function summaryRenderFlowerAlerts(batchId){
       +  '<div style="font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;">Upcoming <span style="text-transform:none;letter-spacing:0;">— check off early if done ahead of schedule</span></div>';
     upcoming.forEach(day => {
       const away = day - fd; const inLabel = away===1 ? '1 day' : (away+' days');
-      (FLOWER_DAY_TASKS[day]||[]).forEach((t, idx) => {
-        const rec = _milestoneCompRec(batchId, day, t);
+      (map[day]||[]).forEach((t, idx) => {
+        const rec = _milestoneCompRec(batchId, group, day, t);
         const done = !!rec;
         html += '<label style="display:flex;align-items:center;gap:8px;font-size:13px;padding:2px 0;cursor:pointer;">'
-          +  '<input type="checkbox" '+(done?'checked':'')+' data-mday="'+day+'" data-midx="'+idx+'" onchange="milestoneToggleEl(this,\''+_esc(batchId)+'\')" />'
-          +  '<span style="color:'+(done?'var(--text3)':'var(--text2)')+';'+(done?'text-decoration:line-through;':'')+'"><span style="font-family:var(--mono);font-weight:600;color:var(--green);">F'+day+'</span> <span style="color:var(--text3);">(in '+inLabel+')</span> · '+_esc(t)+'</span>'
+          +  '<input type="checkbox" '+(done?'checked':'')+' data-mgroup="'+group+'" data-mday="'+day+'" data-midx="'+idx+'" onchange="milestoneToggleEl(this,\''+_esc(batchId)+'\')" />'
+          +  '<span style="color:'+(done?'var(--text3)':'var(--text2)')+';'+(done?'text-decoration:line-through;':'')+'"><span style="font-family:var(--mono);font-weight:600;color:var(--green);">'+_p+day+'</span> <span style="color:var(--text3);">(in '+inLabel+')</span> · '+_esc(t)+'</span>'
           +  '</label>';
       });
     });
@@ -15705,15 +15749,20 @@ function renderBatchReport(batchId){
 
   // Completed milestones for this batch (per-task checkboxes ticked on Batch Management)
   {
+    const _grpOrder = { Clone:0, Veg:1, Flower:2 };
     const _mc = milestoneCompRecs.filter(m => m && m.batch === b.batchId)
-      .slice().sort((x,y)=> ((parseInt(x.flowerDay)||0)-(parseInt(y.flowerDay)||0)) || String(x.task||'').localeCompare(String(y.task||'')));
+      .slice().sort((x,y)=> ((_grpOrder[x.phase||'Flower']||0)-(_grpOrder[y.phase||'Flower']||0)) || ((parseInt(x.flowerDay)||0)-(parseInt(y.flowerDay)||0)) || String(x.task||'').localeCompare(String(y.task||'')));
     if(_mc.length){
       const _me = v => String(v==null?'':v).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
       let _tbl = '<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr>'
-        + ['F-Day','Task','Completed by','Date'].map(h=>'<th style="text-align:left;padding:4px 8px;border-bottom:1px solid var(--border);font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">'+h+'</th>').join('')
+        + ['Phase','Day','Task','Completed by','Date'].map(h=>'<th style="text-align:left;padding:4px 8px;border-bottom:1px solid var(--border);font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">'+h+'</th>').join('')
         + '</tr></thead><tbody>';
       _mc.forEach(m => {
-        _tbl += '<tr><td style="padding:4px 8px;font-family:var(--mono);border-top:1px solid var(--border);">F'+(parseInt(m.flowerDay)||0)+'</td>'
+        const _ph = m.phase||'Flower';
+        const _pl = _ph==='Clone'?'Cloning':_ph;
+        const _pf = (typeof _msGroupDayPrefix==='function') ? _msGroupDayPrefix(_ph) : 'F';
+        _tbl += '<tr><td style="padding:4px 8px;border-top:1px solid var(--border);">'+_me(_pl)+'</td>'
+          + '<td style="padding:4px 8px;font-family:var(--mono);border-top:1px solid var(--border);">'+_pf+(parseInt(m.flowerDay)||0)+'</td>'
           + '<td style="padding:4px 8px;border-top:1px solid var(--border);">'+_me(m.task)+'</td>'
           + '<td style="padding:4px 8px;border-top:1px solid var(--border);">'+_me(m.grower||'—')+'</td>'
           + '<td style="padding:4px 8px;font-family:var(--mono);border-top:1px solid var(--border);">'+_me(m.completedDate||'—')+'</td></tr>';
@@ -17900,7 +17949,7 @@ function buildSeedInvFields(rec){
 
   const fromPhenoPlant = r => ({ id:r.id, batch:r.batch_id, plantNumber:r.plant_number, tag:r.tag||'', status:r.status||'Undecided', rating:r.rating||0, notes:r.notes||'', synced:true });
   const fromPhenoObs = r => ({ id:r.id, plantId:r.plant_id, date:dstr(r.date), grower:r.grower||'', notes:r.notes||'', vigor:r.vigor||'', structure:r.structure||'', aroma:r.aroma||'', color:r.color||'', trichomes:r.trichomes||'', synced:true });
-  const fromMilestoneComp = r => ({ id:r.id, batch:r.batch_id, flowerDay:r.flower_day, task:r.task, grower:r.grower||'', completedDate:dstr(r.completed_date), synced:true });
+  const fromMilestoneComp = r => ({ id:r.id, batch:r.batch_id, phase:r.phase||'Flower', flowerDay:r.flower_day, task:r.task, grower:r.grower||'', completedDate:dstr(r.completed_date), synced:true });
   const fromQaScale = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, date:dstr(r.date), scaleId:r.scale_id||'', grower:r.grower||'', p50:!!r.pass_50g, p200:!!r.pass_200g, p500:!!r.pass_500g, p2000:!!r.pass_2000g, notes:r.notes||'', synced:true });
   const fromQaMoist = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, date:dstr(r.date), time:r.time||'', moisture:(r.moisture==null||r.moisture===''?null:parseFloat(r.moisture)), grower:r.grower||'', notes:r.notes||'', synced:true });
   const fromBol = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, docDate:dstr(r.doc_date), from:r.from_addr||'', soldTo:r.sold_to||'', shippedTo:r.shipped_to||'', contact:r.contact||'', grade:r.grade||'', description:r.description||'', rows:(Array.isArray(r.rows)?r.rows:(function(){try{return JSON.parse(r.rows)||[];}catch(_){return [];}})()), totalKg:(r.total_kg==null?null:parseFloat(r.total_kg)), approvedBy:r.approved_by||'', notes:r.notes||'', synced:true });
@@ -17938,11 +17987,20 @@ function buildSeedInvFields(rec){
     ls('gp-sanedits', saned.map(fromSanEdit));
     ls('gp-phenoplant', phPlants.map(fromPhenoPlant));
     ls('gp-phenoobs', phObs.map(fromPhenoObs));
-    // Shared flower-day milestones — apply the single global row to the app's live map + storage.
+    // Shared milestones — one global row. New format is { flower, clone, veg } phase-grouped maps;
+    // legacy rows are a flat { day:[tasks] } map (Flower only). Apply to the live maps + storage.
     try{
       if(fmRows && fmRows.length && fmRows[0] && fmRows[0].data && typeof FLOWER_DAY_TASKS !== 'undefined'){
-        FLOWER_DAY_TASKS = fmRows[0].data;
+        const _md = fmRows[0].data;
+        if(_md && (_md.flower || _md.clone || _md.veg)){
+          FLOWER_DAY_TASKS = _md.flower || {};
+          if(typeof CLONE_DAY_TASKS !== 'undefined') CLONE_DAY_TASKS = _md.clone || {};
+          if(typeof VEG_DAY_TASKS !== 'undefined') VEG_DAY_TASKS = _md.veg || {};
+        } else {
+          FLOWER_DAY_TASKS = _md; // legacy flat = Flower group
+        }
         lsSet('gp-fdtasks', FLOWER_DAY_TASKS);
+        try{ lsSet('gp-clonetasks', CLONE_DAY_TASKS); lsSet('gp-vegtasks', VEG_DAY_TASKS); }catch(_){}
         if(typeof fdRenderMilestones === 'function') fdRenderMilestones();
       }
     }catch(_){}
