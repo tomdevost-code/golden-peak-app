@@ -1874,7 +1874,7 @@ tr:last-child td { border-bottom: none; }
     </div>
     <div class="page" id="page-settings">
       <div class="settings-card">
-        <h3>Airtable access <span style="font-size:11px;color:var(--text3);font-weight:400;">(data tools only)</span></h3>
+        <h3>Database access <span style="font-size:11px;color:var(--text3);font-weight:400;">(data tools only)</span></h3>
         <p style="font-size:12px;color:var(--text2);line-height:1.5;margin:0 0 10px;">The app runs on the shared database — these credentials are only used by the one-off data migration / reconcile tools, which look up the tables automatically. Growers don't need to touch this.</p>
         <div class="sfield"><label>Personal Access Token</label><input type="password" id="s-token" placeholder="patXXXXXXXXXXXXXX" /></div>
         <div class="sfield"><label>Base ID</label><input type="text" id="s-base" placeholder="appXXXXXXXXXXXXXX" /></div>
@@ -1897,7 +1897,7 @@ tr:last-child td { border-bottom: none; }
       </div>
       <div class="settings-card">
         <h3>Grower access</h3>
-        <p style="font-size:13px;color:var(--text2);line-height:1.6;">Share this page URL with Jordan and Brandon. On mobile tap Share then Add to Home Screen to install it like a native app. On desktop bookmark it. All entries sync directly to the shared database in real time.</p>
+        <p style="font-size:13px;color:var(--text2);line-height:1.6;">Share this page URL with Jordan and Khyell. On mobile tap Share then Add to Home Screen to install it like a native app. On desktop bookmark it. All entries sync directly to the shared database in real time.</p>
       </div>
     </div>
 
@@ -2496,7 +2496,7 @@ async function atUpdateById(tbl,recordId,fields){const body={records:[{id:record
 // MULTI-LAPTOP SYNC — PHASE 1: PULL FROM AIRTABLE
 // ============================================================
 // The app is still local-first: writes go to localStorage immediately and
-// POST/PATCH to Airtable as a secondary side-effect. The pull layer below
+// POST/PATCH to the cloud as a secondary side-effect. The pull layer below
 // brings the OTHER direction online — every ~60s (and on boot) we GET every
 // configured Airtable table and merge new/updated rows into the in-memory
 // arrays so a second laptop sees what the first one wrote.
@@ -2514,14 +2514,14 @@ async function atUpdateById(tbl,recordId,fields){const body={records:[{id:record
 
 // Paginated GET. Returns [] when the table is unconfigured. Resolves to an
 // array of Airtable record objects {id, createdTime, fields}.
-// Delete a record from Airtable by its airtableId. Returns true on success, false on failure.
-// Used to clean up Airtable-side duplicate transactions.
+// Delete a record from the cloud by its airtableId. Returns true on success, false on failure.
+// Used to clean up cloud-side duplicate transactions.
 async function atDelete(tbl, recordId, userInitiated){
-  // DATA-INTEGRITY GUARANTEE: a record may only be deleted from Airtable as the direct result of an
+  // DATA-INTEGRITY GUARANTEE: a record may only be deleted from the cloud as the direct result of an
   // explicit USER action — a Delete button, a user-saved edit, or the user-run "Clean Up Duplicates"
   // tool. Every legitimate caller passes userInitiated=true. Any caller that does NOT (i.e. an
   // automatic / background / merge / dedup path) is refused here, so a record can never be removed
-  // from Airtable by the system. The local-only dedup never calls this — it only trims the in-memory
+  // from the cloud by the system. The local-only dedup never calls this — it only trims the in-memory
   // view and leaves Airtable untouched.
   if(userInitiated !== true){
     console.warn('[atDelete] BLOCKED — non-user-initiated delete attempt on '+tbl+'/'+recordId+'. Airtable record left intact.');
@@ -3167,7 +3167,7 @@ function mergeRemote(localArr, remoteRecs, mapper, ctx, table, lsKey){
   //   • natUnlinked[k] → idx of a LOCAL row WITHOUT airtableId. Used to link to a remote
   //     copy of the same record so we don't append a duplicate.
   //   • natAll[k]      → idx of ANY local row matching the natural key. Used to detect
-  //     Airtable-side duplicates (a remote row whose natural key matches a local already
+  //     cloud-side duplicates (a remote row whose natural key matches a local already
   //     linked to a DIFFERENT remote — i.e. orphan record in Airtable).
   const natFn = (table === 'batchtx') ? _batchtxNatKey : NAT_KEY_FN[table];
   const natUnlinked = {};
@@ -3208,10 +3208,10 @@ function mergeRemote(localArr, remoteRecs, mapper, ctx, table, lsKey){
         linked++;
       } else if(k && natAll[k] !== undefined){
         // Local record already linked to a DIFFERENT airtableId. The remote is an
-        // Airtable-side orphan duplicate — skip it so we don't re-create the local
-        // dupe on every pull. The "Clean Up Airtable Duplicates" button removes them.
+        // cloud-side orphan duplicate — skip it so we don't re-create the local
+        // dupe on every pull. The "Clean Up Duplicates" button removes them.
         skippedDupes++;
-        console.warn('[mergeRemote] '+table+' — skipping Airtable-side duplicate. natural key:', k, 'remote airtableId:', rrec.id, 'existing local airtableId:', (localArr[natAll[k]]||{}).airtableId);
+        console.warn('[mergeRemote] '+table+' — skipping cloud-side duplicate. natural key:', k, 'remote airtableId:', rrec.id, 'existing local airtableId:', (localArr[natAll[k]]||{}).airtableId);
         return;
       }
     }
@@ -3235,7 +3235,7 @@ function mergeRemote(localArr, remoteRecs, mapper, ctx, table, lsKey){
         // introduced in the Germination-phase rollout) is NOT a real conflict — it's a
         // one-time migration from an older app version. Suppress the conflict prompt for
         // this exact mismatch, keep the local 'Germination' value, and let the next write
-        // sync it to Airtable.
+        // sync it to the cloud.
         const _isBatchTable = (table === 'batch') || (lsKey === 'gp-batch');
         if(_isBatchTable
            && localArr[idx].plantPhase === 'Germination'
@@ -3336,7 +3336,7 @@ function mergeRemote(localArr, remoteRecs, mapper, ctx, table, lsKey){
   });
   if(repaired) console.log('[mergeRemote] '+table+' — repaired '+repaired+' stale airtableId link(s)');
   if(linked)   console.log('[mergeRemote] '+table+' — linked '+linked+' pre-existing local row(s) to remote by natural key');
-  if(skippedDupes) console.warn('[mergeRemote] '+table+' — '+skippedDupes+' Airtable-side duplicate(s) skipped. Run Settings → "Clean Up Airtable Duplicates" to remove them from Airtable.');
+  if(skippedDupes) console.warn('[mergeRemote] '+table+' — '+skippedDupes+' cloud-side duplicate(s) skipped. Run Settings → "Clean Up Duplicates" to remove them from the cloud.');
   return {added, updated, conflicts, skippedDupes};
 }
 
@@ -3412,8 +3412,8 @@ let lastPullAt = 0;
 async function pullFromAirtable(opts){
   opts = opts||{};
   if(!atReady()){
-    if(opts.manual) toast('Configure Airtable in Settings first');
-    console.log('[pull] skipped — Airtable not configured');
+    if(opts.manual) toast('Configure cloud sync in Settings first');
+    console.log('[pull] skipped — Cloud sync not configured');
     return null;
   }
   if(isPulling){
@@ -3532,7 +3532,7 @@ async function pullFromAirtable(opts){
     try { if(typeof updatePendingBadge==='function') updatePendingBadge(); }catch(_){}
     try { if(typeof renderPullStatus==='function') renderPullStatus(); }catch(_){}
     try { renderConflictBanner(); }catch(_){}
-    // Refresh the Destruction page (history + pending + adjust) so records pulled from Airtable
+    // Refresh the Destruction page (history + pending + adjust) so records pulled from the cloud
     // show up without needing to navigate away and back. Same for the Flow log + Waste table.
     try { if(typeof destroyRenderHistory==='function') destroyRenderHistory(); }catch(_){}
     try { if(typeof destroyRenderPending==='function') destroyRenderPending(); }catch(_){}
@@ -3573,7 +3573,7 @@ function startAutoSync(){
   if(window.__SB_MODE) return; // Supabase edition — no Airtable polling
   if(autoSyncTimer){ clearInterval(autoSyncTimer); autoSyncTimer = null; }
   if(!atReady()){
-    console.log('[autosync] not starting — Airtable not configured');
+    console.log('[autosync] not starting — Cloud sync not configured');
     return;
   }
   console.log('[autosync] started — pulling every '+(AUTO_SYNC_MS/1000)+'s');
@@ -3591,7 +3591,7 @@ function stopAutoSync(){
 function renderPullStatus(){
   const el = document.getElementById('pull-status');
   if(!el) return;
-  if(!lastPullAt){ el.textContent = atReady() ? 'Not pulled yet' : 'Airtable not configured'; return; }
+  if(!lastPullAt){ el.textContent = atReady() ? 'Not pulled yet' : 'Cloud sync not configured'; return; }
   const sec = Math.round((Date.now() - lastPullAt)/1000);
   let txt;
   if(sec < 60) txt = sec+'s ago';
@@ -3628,7 +3628,7 @@ function _conflictDiffFields(local, remote){
   // Returns the keys that actually differ between local and remote, excluding
   // bookkeeping fields (id, airtableId, synced) and LOCAL-ONLY fields that aren't part
   // of the Airtable schema (seedStrain, seedLotNumber, momPhaseCounts). Local-only fields
-  // are populated client-side and never written to Airtable, so they'll always appear
+  // are populated client-side and never written to the cloud, so they'll always appear
   // "missing" on the remote side — they should never count as conflicts.
   const skip = new Set([
     'id','airtableId','synced',
@@ -3726,7 +3726,7 @@ function renderConflictsModal(){
     +     '<h3 style="margin:0;color:var(--amber);">Sync conflicts ('+_pendingConflicts.length+')</h3>'
     +     '<button onclick="closeConflictsModal()" style="background:transparent;border:1px solid var(--border);padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px;">Close</button>'
     +   '</div>'
-    +   '<p style="font-size:12px;color:var(--text2);line-height:1.5;margin:0 0 14px;">These records were edited locally <em>and</em> on another device. Pick which version to keep for each one. "Keep my version" will resync your local changes to Airtable; "Use remote" will overwrite your local copy with the version from the server.</p>'
+    +   '<p style="font-size:12px;color:var(--text2);line-height:1.5;margin:0 0 14px;">These records were edited locally <em>and</em> on another device. Pick which version to keep for each one. "Keep my version" will resync your local changes to the cloud; "Use remote" will overwrite your local copy with the version from the server.</p>'
     +   items
     + '</div>';
 }
@@ -3747,7 +3747,7 @@ async function resolveConflict(idx, choice){
     lsSet(c.lsKey, arr);
     toast('Used remote version');
   } else {
-    // Keep local — push local edits back to Airtable now.
+    // Keep local — push local edits back to the cloud now.
     arr[j].synced = true;
     try {
       if(c.table === 'batch' && cfg.batchTbl){
@@ -4243,7 +4243,7 @@ async function reconcilePackagedBatchBalance(batchId, opts){
     lsSet('gp-batch', batchRecs);
     changed = true;
   }
-  // Sync the Destroyed tx to Airtable if connected
+  // Sync the Destroyed tx to the cloud if connected
   if(tx && opts.syncTx !== false && cfg.batchtxTbl && cfg.token && cfg.base){
     try {
       const f = {
@@ -4452,7 +4452,7 @@ function ensureMomPhaseCounts(batchRec){
   let changed = false;
   if(!batchRec.momPhaseCounts || typeof batchRec.momPhaseCounts !== 'object'){
     // Reconstruct momPhaseCounts from roomDistribution + headline plantPhase. Without this
-    // reconstruction, a mom pulled from Airtable (where momPhaseCounts isn't stored — it's
+    // reconstruction, a mom pulled from the cloud (where momPhaseCounts isn't stored — it's
     // a local-only field) would have all its plants dumped into the headline plantPhase
     // bucket, losing any Veg/Flower split that the original backfill captured. By deriving
     // from roomDistribution (which IS synced), we recover the correct multi-phase counts.
@@ -4873,7 +4873,7 @@ async function harvestDelete(id){
   if(rec.airtableId && cfg.harvestTbl && cfg.token && cfg.base){
     setSyncPill('ing','Deleting...');
     const ok = await atDelete(cfg.harvestTbl, rec.airtableId, true);
-    if(!ok){ setSyncPill('err','Delete failed'); toast('Could not delete from Airtable — bin kept. Try again when online.',5000); return; }
+    if(!ok){ setSyncPill('err','Delete failed'); toast('Could not delete from the cloud — bin kept. Try again when online.',5000); return; }
     setSyncPill('ok','Synced');
   }
   harvestRecs.splice(idx,1);
@@ -5181,7 +5181,7 @@ async function harvestSave(){
   harvestRenderBins();
   updatePendingBadge();
   toast((_hEditing?'Bin updated (net ':'Bin saved (net ')+rec.netWeight.toFixed(3)+' kg)');
-  // Sync to Airtable
+  // Sync to the cloud
   if(cfg.harvestTbl && cfg.token && cfg.base){
     setSyncPill('ing','Syncing...');
     try{
@@ -5205,7 +5205,7 @@ async function harvestSave(){
       setSyncPill('ok','Synced');
     }catch(e){
       setSyncPill('err','Sync failed');
-      toast('Bin saved locally - Airtable: '+(e.message||'sync failed'),5000);
+      toast('Bin saved locally - sync: '+(e.message||'sync failed'),5000);
     }
   }
 
@@ -5392,7 +5392,7 @@ async function bioSave(){
   bioProductChanged(); // reset the unit label/step
   if(_bioEditing){ bioEditId = null; const _bb=document.getElementById('bio-btn'); if(_bb) _bb.textContent='Save Bio Control Entry'; }
   bioRenderHistory(batch, room);
-  // Sync to Airtable. The new single-select 'Product' field carries the product name; 'Quantity'
+  // Sync to the cloud. The new single-select 'Product' field carries the product name; 'Quantity'
   // holds the numeric amount; 'Unit' is the unit string (also configurable as a single-select).
   if(cfg.bioTbl && cfg.token && cfg.base){
     setSyncPill('ing','Syncing...');
@@ -5420,7 +5420,7 @@ async function bioSave(){
       updatePendingBadge();
     }catch(e){
       setSyncPill('err','Sync failed');
-      toast('Saved locally - Airtable: '+(e.message||'sync failed'),5000);
+      toast('Saved locally - sync: '+(e.message||'sync failed'),5000);
     }
   }
 
@@ -5465,7 +5465,7 @@ function bioRenderHistory(batch, room){
   recs.forEach(r => {
     const unit = r.unit || (BIO_PRODUCTS[r.product] && BIO_PRODUCTS[r.product].unit) || '';
     const qtyStr = (r.quantity != null) ? (r.quantity + (unit ? ' ' + unit : '')) : '—';
-    // ids may be numeric (locally created) or strings (pulled from Airtable, e.g. 'bio_recXXX'),
+    // ids may be numeric (locally created) or strings (pulled from the cloud, e.g. 'bio_recXXX'),
     // so pass as a quoted, escaped string literal and match loosely in the handlers.
     const _idArg = "'" + String(r.id).replace(/\\/g,'\\\\').replace(/'/g,"\\'") + "'";
     html += '<tr>'+
@@ -5528,11 +5528,11 @@ async function bioDelete(id){
   if(idx < 0){ toast('Entry not found.'); return; }
   const rec = bioRecs[idx];
   if(!confirm('Delete this Bio Control entry ('+(rec.product||'')+(rec.date?' on '+rec.date:'')+')? This cannot be undone.')) return;
-  // Delete from Airtable FIRST when it's been synced — otherwise the next pull re-adds it.
+  // Delete from the cloud FIRST when it's been synced — otherwise the next pull re-adds it.
   if(rec.airtableId && cfg.bioTbl && cfg.token && cfg.base){
     setSyncPill('ing','Deleting...');
     const ok = await atDelete(cfg.bioTbl, rec.airtableId, true);
-    if(!ok){ setSyncPill('err','Delete failed'); toast('Could not delete from Airtable — entry kept. Try again when online.',5000); return; }
+    if(!ok){ setSyncPill('err','Delete failed'); toast('Could not delete from the cloud — entry kept. Try again when online.',5000); return; }
     setSyncPill('ok','Synced');
   }
   bioRecs.splice(idx, 1);
@@ -5780,7 +5780,7 @@ async function pestSave(){
   if(_pestEditing){ pestEditId = null; const _pb=document.getElementById('pest-btn'); if(_pb) _pb.textContent='Save Pest ID Entry'; }
   pestRenderHistory(batch, room);
   pestSeqUnlock();
-  // Sync to Airtable
+  // Sync to the cloud
   if(cfg.pestTbl && cfg.token && cfg.base){
     setSyncPill('ing','Syncing...');
     try {
@@ -5804,7 +5804,7 @@ async function pestSave(){
       updatePendingBadge();
     } catch(e){
       setSyncPill('err','Sync failed');
-      toast('Saved locally - Airtable: '+(e.message||'sync failed'),5000);
+      toast('Saved locally - sync: '+(e.message||'sync failed'),5000);
     }
   }
 
@@ -5925,7 +5925,7 @@ async function pestDelete(id){
   if(rec.airtableId && cfg.pestTbl && cfg.token && cfg.base){
     setSyncPill('ing','Deleting...');
     const ok = await atDelete(cfg.pestTbl, rec.airtableId, true);
-    if(!ok){ setSyncPill('err','Delete failed'); toast('Could not delete from Airtable — entry kept. Try again when online.',5000); return; }
+    if(!ok){ setSyncPill('err','Delete failed'); toast('Could not delete from the cloud — entry kept. Try again when online.',5000); return; }
     setSyncPill('ok','Synced');
   }
   pestRecs.splice(idx,1);
@@ -6103,7 +6103,7 @@ async function postDrySave(){
       updatePendingBadge();
     } catch(e){
       setSyncPill('err','Sync failed');
-      toast('Container saved locally - Airtable: '+(e.message||'sync failed'),5000);
+      toast('Container saved locally - sync: '+(e.message||'sync failed'),5000);
     }
   }
 
@@ -6207,7 +6207,7 @@ async function postDryDelete(id){
   if(rec.airtableId && cfg.postDryTbl && cfg.token && cfg.base){
     setSyncPill('ing','Deleting...');
     const ok = await atDelete(cfg.postDryTbl, rec.airtableId, true);
-    if(!ok){ setSyncPill('err','Delete failed'); toast('Could not delete from Airtable — container kept. Try again when online.',5000); return; }
+    if(!ok){ setSyncPill('err','Delete failed'); toast('Could not delete from the cloud — container kept. Try again when online.',5000); return; }
     setSyncPill('ok','Synced');
   }
   postDryRecs.splice(idx,1);
@@ -6322,7 +6322,7 @@ async function postDryComplete(){
   // If Summary page is open on this batch, refresh it
   const _sumSel = document.getElementById('summary-batch-select');
   if(_sumSel && _sumSel.value === batch){ summaryBatchChanged(); }
-  // Push to Airtable
+  // Push to the cloud
   if(cfg.batchTbl && cfg.token && cfg.base){
     try{
       const _pdcRes = await atUpsert(cfg.batchTbl, buildBatchFields(batchRecs[idx]), ['Batch ID']);
@@ -6982,7 +6982,7 @@ async function roDelete(id){
   if(rec.airtableId && cfg.roTbl && cfg.token && cfg.base){
     setSyncPill('ing','Deleting...');
     const ok = await atDelete(cfg.roTbl, rec.airtableId, true);
-    if(!ok){ setSyncPill('err','Delete failed'); toast('Could not delete from Airtable — entry kept. Try again when online.',5000); return; }
+    if(!ok){ setSyncPill('err','Delete failed'); toast('Could not delete from the cloud — entry kept. Try again when online.',5000); return; }
     setSyncPill('ok','Synced');
   }
   roRecs.splice(idx, 1);
@@ -7480,7 +7480,7 @@ async function ecDelete(id){
   if(rec.airtableId && cfg.ecTbl && cfg.token && cfg.base){
     setSyncPill('ing','Deleting...');
     const ok = await atDelete(cfg.ecTbl, rec.airtableId, true);
-    if(!ok){ setSyncPill('err','Delete failed'); toast('Could not delete from Airtable — entry kept. Try again when online.',5000); return; }
+    if(!ok){ setSyncPill('err','Delete failed'); toast('Could not delete from the cloud — entry kept. Try again when online.',5000); return; }
     setSyncPill('ok','Synced');
   }
   ecRecs.splice(idx,1);
@@ -7574,7 +7574,7 @@ async function flowSave(){
       if(_flowEditing && rec.airtableId){ await atUpdateById(cfg.flowTbl, rec.airtableId, f); }
       else { const _fRes = await atPost(cfg.flowTbl, f); if(_fRes && _fRes.id) rec.airtableId = _fRes.id; }
       rec.synced = true; lsSet('gp-flow', flowRecs); setSyncPill('ok','Synced'); updatePendingBadge();
-    }catch(e){ setSyncPill('err','Sync failed'); toast('Saved locally - Airtable: '+(e.message||'sync failed'),5000); }
+    }catch(e){ setSyncPill('err','Sync failed'); toast('Saved locally - sync: '+(e.message||'sync failed'),5000); }
   } else {
     toast('Saved locally — set the Flow Meter Table ID in Settings to sync.',4500);
   }
@@ -7638,7 +7638,7 @@ async function flowDelete(id){
   if(rec.airtableId && cfg.flowTbl && cfg.token && cfg.base){
     setSyncPill('ing','Deleting...');
     const ok = await atDelete(cfg.flowTbl, rec.airtableId, true);
-    if(!ok){ setSyncPill('err','Delete failed'); toast('Could not delete from Airtable — reading kept. Try again when online.',5000); return; }
+    if(!ok){ setSyncPill('err','Delete failed'); toast('Could not delete from the cloud — reading kept. Try again when online.',5000); return; }
     setSyncPill('ok','Synced');
   }
   flowRecs.splice(idx,1);
@@ -7837,7 +7837,7 @@ async function ecSave(){
         Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
         await atUpdateById(cfg.ecTbl, _old.airtableId, f);
         _old.synced=true; lsSet('gp-ec',ecRecs); setSyncPill('ok','Synced'); toast('EC entry updated');
-      }catch(e){ setSyncPill('err','Sync failed'); toast('Updated locally - Airtable: '+(e.message||'sync failed'),5000); }
+      }catch(e){ setSyncPill('err','Sync failed'); toast('Updated locally - sync: '+(e.message||'sync failed'),5000); }
     } else {
       toast('EC entry updated locally');
     }
@@ -7892,11 +7892,11 @@ async function ecSave(){
     try{
       const f={'Date':rec.date,'Room':rec.room,'Grower':rec.grower,'Batch ID':rec.batch?[rec.batch]:undefined,'Watering Type':rec.wtype||undefined,'Drip EC Pen 1':rec.dripEcPens[0]||undefined,'Drip EC Pen 2':rec.dripEcPens[1]||undefined,'Drip EC Pen 3':rec.dripEcPens[2]||undefined,'Drip pH Pen 1':rec.dripPhPens[0]||undefined,'Drip pH Pen 2':rec.dripPhPens[1]||undefined,'Drip pH Pen 3':rec.dripPhPens[2]||undefined,'Event 1 ml/plant':rec.events[0]||undefined,'Event 2 ml/plant':rec.events[1]||undefined,'Event 3 ml/plant':rec.events[2]||undefined,'Event 4 ml/plant':rec.events[3]||undefined,'Event 5 ml/plant':rec.events[4]||undefined,'Event 6 ml/plant':rec.events[5]||undefined,'Event 7 ml/plant':rec.events[6]||undefined,'Event 8 ml/plant':rec.events[7]||undefined,'Flow Meter Reading':rec.flow||undefined,'Notes':rec.notes||undefined};
       Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
-      const _ecRes = await atPost(cfg.ecTbl,f);rec.synced=true;if(_ecRes && _ecRes.id) rec.airtableId=_ecRes.id;lsSet('gp-ec',ecRecs);setSyncPill('ok','Synced');toast('Saved and synced to Airtable');
-    }catch(e){setSyncPill('err','Sync failed');toast('Saved locally - Airtable: '+(e.message||'sync failed'),5000);}
+      const _ecRes = await atPost(cfg.ecTbl,f);rec.synced=true;if(_ecRes && _ecRes.id) rec.airtableId=_ecRes.id;lsSet('gp-ec',ecRecs);setSyncPill('ok','Synced');toast('Saved and synced to the cloud');
+    }catch(e){setSyncPill('err','Sync failed');toast('Saved locally - sync: '+(e.message||'sync failed'),5000);}
     document.getElementById('ec-btn').disabled=false;
   }else{toast('Entry saved locally');}
-  // If this entry captured the hydration date or auto-advanced phase, push the batch update to Airtable
+  // If this entry captured the hydration date or auto-advanced phase, push the batch update to the cloud
   if((_hydrationCaptured || _vegAdvanced || _flowerAdvanced) && cfg.batchTbl && cfg.token && cfg.base){
     try{
       const _ecBRes = await atUpsert(cfg.batchTbl, buildBatchFields(_ecBatchRec), ['Batch ID']);
@@ -8011,8 +8011,8 @@ async function roSave(){
       Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
       if(_roEditing && rec.airtableId){ await atUpdateById(cfg.roTbl, rec.airtableId, f); }
       else { const _roRes = await atPost(cfg.roTbl,f); if(_roRes && _roRes.id) rec.airtableId=_roRes.id; }
-      rec.synced=true;lsSet('gp-ro',roRecs);setSyncPill('ok','Synced');toast(_roEditing?'Updated and synced to Airtable':'Saved and synced to Airtable');
-    }catch(e){setSyncPill('err','Sync failed');toast('Saved locally - Airtable sync failed.',3500);}
+      rec.synced=true;lsSet('gp-ro',roRecs);setSyncPill('ok','Synced');toast(_roEditing?'Updated and synced to the cloud':'Saved and synced to the cloud');
+    }catch(e){setSyncPill('err','Sync failed');toast('Saved locally - cloud sync failed.',3500);}
     document.getElementById('ro-btn').disabled=false;
   }else{toast(_roEditing?'Entry updated locally':'Entry saved locally');}
   if(_roEditing) roEditCancel();
@@ -8102,7 +8102,7 @@ function clearAllLocalData(){
   // Two-step confirm for production safety: first a yes/no, then a typed confirmation so
   // accidental clicks don't blow away a season's data. Airtable credentials (gp-cfg) are
   // preserved — only data records are cleared.
-  if(!confirm('⚠ RESET LOCAL DATA\n\nThis will permanently delete all locally-stored records: batches, transactions, EC/Runoff/Waste/Harvest/Post-Drying/Bio/Pest/Cleaning logs, seed inventory, and pending sync queue.\n\nAirtable credentials (Settings) will be preserved.\n\nIMPORTANT: Other devices (laptops, phones) using this app still have their own local copies. If you intend to start fresh in production, clear the data on every device — otherwise the un-cleared local data will be re-pushed to Airtable on the next sync.\n\nContinue?')) return;
+  if(!confirm('⚠ RESET LOCAL DATA\n\nThis will permanently delete all locally-stored records: batches, transactions, EC/Runoff/Waste/Harvest/Post-Drying/Bio/Pest/Cleaning logs, seed inventory, and pending sync queue.\n\nYour saved credentials (Settings) will be preserved.\n\nIMPORTANT: Other devices (laptops, phones) using this app still have their own local copies. If you intend to start fresh in production, clear the data on every device — otherwise the un-cleared local data will be re-pushed to the cloud on the next sync.\n\nContinue?')) return;
   const _typed = prompt('Type RESET (in capital letters) to confirm. Anything else cancels.');
   if(_typed !== 'RESET'){ toast('Reset cancelled — no data changed.', 4000); return; }
   ecRecs=[];roRecs=[];wasteRecs=[];batchRecs=[];batchTxRecs=[];harvestRecs=[];postDryRecs=[];bioRecs=[];pestRecs=[];sanCleanRecs=[];sanToolRecs=[];sanEditsRecs=[];seedInvRecs=[];flowRecs=[];destroyRecs=[];phenoPlantRecs=[];phenoObsRecs=[];qaScaleRecs=[];qaMoistRecs=[];bolRecs=[];comRecs=[];
@@ -8167,7 +8167,7 @@ function dedupeBatchTxLocal(){
     toast('No duplicate transactions found.', 3500);
     return;
   }
-  if(!confirm('Found '+dupes+' duplicate transaction(s) in local storage. (By airtableId: '+byAt+', by id: '+byId+', by natural key: '+byNat+'.) Remove them? (Airtable is not affected — only local duplicates are removed.)')) return;
+  if(!confirm('Found '+dupes+' duplicate transaction(s) in local storage. (By airtableId: '+byAt+', by id: '+byId+', by natural key: '+byNat+'.) Remove them? (the cloud is not affected — only local duplicates are removed.)')) return;
   batchTxRecs = batchTxRecs.filter((_, i) => !removeIdxs.has(i));
   lsSet('gp-batchtx', batchTxRecs);
   updatePendingBadge();
@@ -8380,12 +8380,12 @@ async function _cleanAirtableDupesForTable(tblId, localArr, remoteKeyFn, label){
 
 // Remove duplicate records from AIRTABLE across every child table. Fetches all remote
 // records, groups by natural key (per-table), and for each group with 2+ remote records,
-// deletes all but one from Airtable. The kept record is the one matching a local
+// deletes all but one from the cloud. The kept record is the one matching a local
 // airtableId (so we keep what the app thinks is canonical); if none match, the first
 // is kept.
 //
 // This is the permanent fix for the dedup-then-pull loop — once the orphan records are
-// gone from Airtable, future pulls won't keep re-creating local duplicates.
+// gone from the cloud, future pulls won't keep re-creating local duplicates.
 
 // Collapse LOCAL-only duplicate rows for the child log tables. These arise when an
 // unlinked local row (no airtableId) and its Airtable twin (pulled in with an airtableId)
@@ -8435,7 +8435,7 @@ function cleanLocalDuplicates(opts){
     const drop = new Set();
     Object.values(groups).forEach(idxs => {
       if(idxs.length < 2) return;
-      // Keeper preference: a row already in Airtable (airtableId) > a synced row > the first row.
+      // Keeper preference: a row already in the cloud (airtableId) > a synced row > the first row.
       // We keep exactly one row per identical-key group and drop the rest. This matches the app's
       // own model where identical-key entries collapse to a single record on sync, so it doesn't
       // lose anything sync wouldn't already merge.
@@ -8461,7 +8461,7 @@ function cleanLocalDuplicates(opts){
 }
 
 async function cleanAirtableDuplicateTx(){
-  if(!atReady()){ toast('Configure Airtable in Settings first.'); return; }
+  if(!atReady()){ toast('Configure cloud sync in Settings first.'); return; }
   const el = document.getElementById('clean-air-dupes-status');
   const setStatus = (msg, color) => { if(el){ el.textContent = msg; el.style.color = color || 'var(--text2)'; } };
   // Tables to check. Each entry: { label, tblId, localArr, remoteKeyFn }
@@ -8482,7 +8482,7 @@ async function cleanAirtableDuplicateTx(){
     { label:'Flow Meter',         tblId:cfg.flowTbl,    localArr:flowRecs,     remoteKeyFn:NAT_KEY_FN_REMOTE.flow,     lsKey:'gp-flow' },
     { label:'Destruction Log',    tblId:cfg.destroyTbl, localArr:destroyRecs,  remoteKeyFn:NAT_KEY_FN_REMOTE.destroy,  lsKey:'gp-destroy' }
   ];
-  setStatus('Scanning Airtable for duplicates across '+tables.length+' tables...', 'var(--text2)');
+  setStatus('Scanning the cloud for duplicates across '+tables.length+' tables...', 'var(--text2)');
   // First pass: scan everything and compute the EXACT list of records that would be deleted. We
   // group by the (coarse) natural key, then only mark records that are byte-identical in content
   // to the keeper — never records that merely share the key (see _cleanAirtableDupesForTable). The
@@ -8520,18 +8520,18 @@ async function cleanAirtableDuplicateTx(){
     }
   }
   if(!totalDupes){
-    // No Airtable-side duplicates — but there may still be local-only phantom copies
+    // No cloud-side duplicates — but there may still be local-only phantom copies
     // (an unlinked local row sitting next to its synced Airtable twin). Collapse those.
     const _localRemovedEarly = cleanLocalDuplicates();
     if(_localRemovedEarly){
-      setStatus('No Airtable duplicates. Removed '+_localRemovedEarly+' local duplicate copy(ies).', 'var(--green)');
+      setStatus('No cloud duplicates. Removed '+_localRemovedEarly+' local duplicate copy(ies).', 'var(--green)');
       toast('Removed '+_localRemovedEarly+' local duplicate(s).', 4000);
       try { if(typeof renderWaste==='function') renderWaste(); }catch(_){}
       try { if(typeof renderWasteReport==='function') renderWasteReport(); }catch(_){}
       try { if(typeof renderBatchLog==='function') renderBatchLog(); }catch(_){}
       try { if(typeof updatePendingBadge==='function') updatePendingBadge(); }catch(_){}
     } else {
-      setStatus('No duplicates found (Airtable or local).', 'var(--green)');
+      setStatus('No duplicates found (cloud or local).', 'var(--green)');
       toast('No duplicates found.', 3500);
     }
     return;
@@ -8573,9 +8573,9 @@ async function cleanAirtableDuplicateTx(){
     prev.innerHTML =
       '<div style="margin-top:10px;border:1px solid var(--amber);border-radius:8px;overflow:hidden;">'
       + '<div style="background:var(--amber-pale);color:#3B2A00;padding:8px 10px;font-family:var(--mono);font-size:12px;font-weight:700;">Review — '+totalDupes+' record(s) to delete ('+perTable+')</div>'
-      + '<div style="font-size:11px;color:var(--text2);padding:8px 10px;line-height:1.5;">Each row below is a <b>byte-for-byte identical copy</b> of another record that will be kept. Only these exact duplicates will be removed from Airtable — nothing else. Review, then confirm.</div>'
+      + '<div style="font-size:11px;color:var(--text2);padding:8px 10px;line-height:1.5;">Each row below is a <b>byte-for-byte identical copy</b> of another record that will be kept. Only these exact duplicates will be removed from the cloud — nothing else. Review, then confirm.</div>'
       + '<div style="max-height:320px;overflow:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#f5f5f5;position:sticky;top:0;">'
-      + ['Table','Batch','Record detail','Airtable ID'].map(h=>'<th style="padding:5px 6px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;border-bottom:1px solid var(--border);">'+h+'</th>').join('')
+      + ['Table','Batch','Record detail','Record ID'].map(h=>'<th style="padding:5px 6px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;border-bottom:1px solid var(--border);">'+h+'</th>').join('')
       + '</tr></thead><tbody>'+rows+'</tbody></table></div>'
       + '<div style="display:flex;gap:8px;padding:10px;flex-wrap:wrap;">'
       + '<button class="btn-save" style="background:#7B0000;flex:1;min-width:160px;" onclick="cleanAirtableDupesApply()">Delete these '+totalDupes+' record(s)</button>'
@@ -8601,7 +8601,7 @@ async function cleanAirtableDupesApply(){
   const el = document.getElementById('clean-air-dupes-status');
   const setStatus = (msg, color) => { if(el){ el.textContent = msg; el.style.color = color || 'var(--text2)'; } };
   const totalDupes = scan.reduce((s, x) => s + ((x.toDelete&&x.toDelete.length)||0), 0);
-  setStatus('Deleting '+totalDupes+' duplicate(s) from Airtable...', 'var(--text2)');
+  setStatus('Deleting '+totalDupes+' duplicate(s) from the cloud...', 'var(--text2)');
   let totalDeleted = 0, totalFailed = 0, localPruned = 0;
   for(const s of scan){
     if(!s.toDelete || !s.toDelete.length) continue;
@@ -8622,23 +8622,23 @@ async function cleanAirtableDupesApply(){
   _airDupePendingScan = null;
   const _localDeduped = cleanLocalDuplicates();
   localPruned += _localDeduped;
-  setStatus('Deleted '+totalDeleted+' duplicate(s) from Airtable'+(localPruned?' and removed '+localPruned+' local copy(ies)':'')+'.'+(totalFailed?' '+totalFailed+' delete(s) failed.':''), totalFailed ? 'var(--amber)' : 'var(--green)');
-  toast('Cleaned '+totalDeleted+' Airtable duplicate(s)' + (totalFailed ? ' ('+totalFailed+' failed)' : '') + '.', 5000);
+  setStatus('Deleted '+totalDeleted+' duplicate(s) from the cloud'+(localPruned?' and removed '+localPruned+' local copy(ies)':'')+'.'+(totalFailed?' '+totalFailed+' delete(s) failed.':''), totalFailed ? 'var(--amber)' : 'var(--green)');
+  toast('Cleaned '+totalDeleted+' cloud duplicate(s)' + (totalFailed ? ' ('+totalFailed+' failed)' : '') + '.', 5000);
   pullFromAirtable({manual:true});
   try { if(typeof renderWaste==='function') renderWaste(); }catch(_){}
   try { if(typeof renderWasteReport==='function') renderWasteReport(); }catch(_){}
   try { if(typeof renderBatchLog==='function') renderBatchLog(); }catch(_){}
 }
 
-// Read-only reconciliation diagnostic. Fetches ALL Batch Transactions from Airtable and compares
+// Read-only reconciliation diagnostic. Fetches ALL Batch Transactions from the cloud and compares
 // them to THIS laptop's local transactions. "Extra on Airtable" = a remote transaction whose record
 // id is not linked to any local row — these are what a from-scratch pull (clear local + pull) would
 // ingest but this laptop currently masks, so they explain why two laptops show different counts.
 // Changes nothing.
 async function diagnoseAirtableVsLocal(){
-  if(!atReady()){ toast('Configure Airtable first.'); return; }
+  if(!atReady()){ toast('Configure cloud sync first.'); return; }
   const el = document.getElementById('air-compare-report');
-  if(el){ el.style.display=''; el.innerHTML='<div style="font-size:12px;color:var(--text2);padding:8px;">Fetching Airtable transactions…</div>'; }
+  if(el){ el.style.display=''; el.innerHTML='<div style="font-size:12px;color:var(--text2);padding:8px;">Fetching cloud transactions…</div>'; }
   let remote;
   try { remote = await atFetchAll(cfg.batchtxTbl); }
   catch(e){ if(el) el.innerHTML='<div style="color:var(--red);padding:8px;">Fetch failed: '+(e&&e.message||e)+'</div>'; return; }
@@ -8684,17 +8684,17 @@ async function diagnoseAirtableVsLocal(){
   Object.keys(byBatch).forEach(b=>{ byBatch[b].extra.forEach(rr=>_airCompareExtras.push(rr)); });
   if(!el) return;
   if(!totalExtra){
-    el.innerHTML = '<div style="margin-top:8px;border:1px solid var(--green);background:var(--green-pale);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--green);">This laptop already accounts for every Airtable transaction ('+remote.length+' total). No extras — a fresh pull here would match.</div>';
+    el.innerHTML = '<div style="margin-top:8px;border:1px solid var(--green);background:var(--green-pale);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--green);">This laptop already accounts for every cloud transaction ('+remote.length+' total). No extras — a fresh pull here would match.</div>';
     return;
   }
   el.innerHTML = '<div style="margin-top:8px;border:1px solid var(--amber);border-radius:8px;overflow:hidden;">'
-    + '<div style="background:var(--amber-pale);color:#3B2A00;padding:8px 10px;font-family:var(--mono);font-size:12px;font-weight:700;">'+totalExtra+' Airtable transaction(s) not on this laptop</div>'
-    + '<div style="font-size:11px;color:var(--text2);padding:8px 10px;line-height:1.5;">These records exist in Airtable but this (correct) laptop does not link to them — it treats them as duplicates and skips them, which is why it shows the right counts. A laptop that clears local data and pulls fresh ingests these too, inflating its counts. Review; if they are indeed stray/duplicate, remove them from Airtable so every laptop converges.</div>'
+    + '<div style="background:var(--amber-pale);color:#3B2A00;padding:8px 10px;font-family:var(--mono);font-size:12px;font-weight:700;">'+totalExtra+' cloud transaction(s) not on this laptop</div>'
+    + '<div style="font-size:11px;color:var(--text2);padding:8px 10px;line-height:1.5;">These records exist in the cloud but this (correct) laptop does not link to them — it treats them as duplicates and skips them, which is why it shows the right counts. A laptop that clears local data and pulls fresh ingests these too, inflating its counts. Review; if they are indeed stray/duplicate, remove them from the cloud so every laptop converges.</div>'
     + '<div style="max-height:320px;overflow:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#f5f5f5;position:sticky;top:0;">'
-    + ['Batch (local qty)','Date','Type','Qty','Notes','Airtable ID'].map(h=>'<th style="padding:5px 6px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;border-bottom:1px solid var(--border);">'+h+'</th>').join('')
+    + ['Batch (local qty)','Date','Type','Qty','Notes','Record ID'].map(h=>'<th style="padding:5px 6px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;border-bottom:1px solid var(--border);">'+h+'</th>').join('')
     + '</tr></thead><tbody>'+rows.join('')+'</tbody></table>'
     + '<div style="display:flex;gap:8px;padding:10px;flex-wrap:wrap;">'
-    + '<button class="btn-save" style="background:#7B0000;flex:1;min-width:200px;" onclick="removeAirtableCompareExtras()">Remove these '+totalExtra+' from Airtable</button>'
+    + '<button class="btn-save" style="background:#7B0000;flex:1;min-width:200px;" onclick="removeAirtableCompareExtras()">Remove these '+totalExtra+' from the cloud</button>'
     + '</div></div>';
 }
 let _airCompareExtras = null;
@@ -8704,7 +8704,7 @@ let _airCompareExtras = null;
 async function removeAirtableCompareExtras(){
   const extras = _airCompareExtras || [];
   if(!extras.length){ toast('Nothing to remove — run the compare first.'); return; }
-  if(!confirm('Delete '+extras.length+' stray transaction(s) from Airtable?\n\nThese are records this laptop does not use (orphaned/duplicate). This cannot be undone.\n\nThe records were listed above for review.')) return;
+  if(!confirm('Delete '+extras.length+' stray transaction(s) from the cloud?\n\nThese are records this laptop does not use (orphaned/duplicate). This cannot be undone.\n\nThe records were listed above for review.')) return;
   const el = document.getElementById('air-compare-report');
   let ok=0, fail=0;
   for(const rr of extras){
@@ -8712,19 +8712,19 @@ async function removeAirtableCompareExtras(){
     if(done) ok++; else fail++;
   }
   _airCompareExtras = null;
-  if(el){ el.innerHTML = '<div style="margin-top:8px;border:1px solid '+(fail?'var(--amber)':'var(--green)')+';background:'+(fail?'var(--amber-pale)':'var(--green-pale)')+';border-radius:8px;padding:10px 12px;font-size:12px;color:'+(fail?'#3B2A00':'var(--green)')+';">Removed '+ok+' stray transaction(s) from Airtable'+(fail?' ('+fail+' failed)':'')+'. Other laptops can now clear local data and pull fresh to converge.</div>'; }
+  if(el){ el.innerHTML = '<div style="margin-top:8px;border:1px solid '+(fail?'var(--amber)':'var(--green)')+';background:'+(fail?'var(--amber-pale)':'var(--green-pale)')+';border-radius:8px;padding:10px 12px;font-size:12px;color:'+(fail?'#3B2A00':'var(--green)')+';">Removed '+ok+' stray transaction(s) from the cloud'+(fail?' ('+fail+' failed)':'')+'. Other laptops can now clear local data and pull fresh to converge.</div>'; }
   toast('Removed '+ok+' stray transaction(s)'+(fail?' ('+fail+' failed)':'')+'.', 5000);
 }
 
-// Read-only detector for DUPLICATE Batch Log records in Airtable (same Batch ID stored under two
+// Read-only detector for DUPLICATE Batch Log records in the cloud (same Batch ID stored under two
 // different record ids). The Batch Log is supposed to be upserted by Batch ID, so a second copy is
 // always a sync artifact. The keeper is the record THIS laptop links to (its local airtableId); any
 // other copy of that Batch ID is a phantom to remove. Changes nothing until you confirm.
 let _dupBatchToRemove = null;
 async function diagnoseDuplicateBatchRecords(){
-  if(!atReady()){ toast('Configure Airtable first.'); return; }
+  if(!atReady()){ toast('Configure cloud sync first.'); return; }
   const el = document.getElementById('dup-batch-report');
-  if(el){ el.style.display=''; el.innerHTML='<div style="font-size:12px;color:var(--text2);padding:8px;">Fetching Airtable batch records…</div>'; }
+  if(el){ el.style.display=''; el.innerHTML='<div style="font-size:12px;color:var(--text2);padding:8px;">Fetching cloud batch records…</div>'; }
   let remote;
   try { remote = await atFetchAll(cfg.batchTbl); }
   catch(e){ if(el) el.innerHTML='<div style="color:var(--red);padding:8px;">Fetch failed: '+(e&&e.message||e)+'</div>'; return; }
@@ -8747,7 +8747,7 @@ async function diagnoseDuplicateBatchRecords(){
   _dupBatchToRemove = toRemove;
   if(!el) return;
   if(!toRemove.length && !ambiguous.length){
-    el.innerHTML = '<div style="margin-top:8px;border:1px solid var(--green);background:var(--green-pale);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--green);">No duplicate batch records in Airtable ('+remote.length+' total). Clean.</div>';
+    el.innerHTML = '<div style="margin-top:8px;border:1px solid var(--green);background:var(--green-pale);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--green);">No duplicate batch records in the cloud ('+remote.length+' total). Clean.</div>';
     return;
   }
   const _fields = br => { const f=br.fields||{}; return ['Plant Phase','Status','Created Date','Rooms'].map(k=>f[k]?k+': '+f[k]:'').filter(Boolean).join(' · '); };
@@ -8779,7 +8779,7 @@ async function diagnoseDuplicateBatchRecords(){
 async function removeDuplicateBatchRecords(){
   const list = _dupBatchToRemove || [];
   if(!list.length){ toast('Nothing to remove — run the scan first.'); return; }
-  if(!confirm('Delete '+list.length+' duplicate batch record(s) from Airtable?\n\nThe copy this laptop uses for each Batch ID is kept. This cannot be undone.\n\nMake sure you already removed their stray transactions (Compare tool).')) return;
+  if(!confirm('Delete '+list.length+' duplicate batch record(s) from the cloud?\n\nThe copy this laptop uses for each Batch ID is kept. This cannot be undone.\n\nMake sure you already removed their stray transactions (Compare tool).')) return;
   const el = document.getElementById('dup-batch-report');
   let ok=0, fail=0;
   for(const t of list){
@@ -8798,9 +8798,9 @@ async function removeDuplicateBatchRecords(){
 // keys (the real one); the emptier copies are offered for removal. Read-only until you confirm.
 let _dupDestroyToRemove = null;
 async function diagnoseDuplicateDestroyRecords(){
-  if(!atReady()){ toast('Configure Airtable first.'); return; }
+  if(!atReady()){ toast('Configure cloud sync first.'); return; }
   const el = document.getElementById('dup-destroy-report');
-  if(el){ el.style.display=''; el.innerHTML='<div style="font-size:12px;color:var(--text2);padding:8px;">Fetching Airtable destruction records…</div>'; }
+  if(el){ el.style.display=''; el.innerHTML='<div style="font-size:12px;color:var(--text2);padding:8px;">Fetching cloud destruction records…</div>'; }
   let remote;
   try { remote = await atFetchAll(cfg.destroyTbl); }
   catch(e){ if(el) el.innerHTML='<div style="color:var(--red);padding:8px;">Fetch failed: '+(e&&e.message||e)+'</div>'; return; }
@@ -8818,7 +8818,7 @@ async function diagnoseDuplicateDestroyRecords(){
   _dupDestroyToRemove = toRemove;
   if(!el) return;
   if(!toRemove.length){
-    el.innerHTML = '<div style="margin-top:8px;border:1px solid var(--green);background:var(--green-pale);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--green);">No duplicate destruction records in Airtable ('+remote.length+' total). Clean.</div>';
+    el.innerHTML = '<div style="margin-top:8px;border:1px solid var(--green);background:var(--green-pale);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--green);">No duplicate destruction records in the cloud ('+remote.length+' total). Clean.</div>';
     return;
   }
   let rows = '';
@@ -8843,7 +8843,7 @@ async function diagnoseDuplicateDestroyRecords(){
 async function removeDuplicateDestroyRecords(){
   const list = _dupDestroyToRemove || [];
   if(!list.length){ toast('Nothing to remove — run the scan first.'); return; }
-  if(!confirm('Delete '+list.length+' duplicate destruction record(s) from Airtable?\n\nThe copy with the most covered-waste keys is kept for each event. This cannot be undone.')) return;
+  if(!confirm('Delete '+list.length+' duplicate destruction record(s) from the cloud?\n\nThe copy with the most covered-waste keys is kept for each event. This cannot be undone.')) return;
   const el = document.getElementById('dup-destroy-report');
   let ok=0, fail=0;
   for(const t of list){
@@ -8888,7 +8888,7 @@ async function dataHealthCheck(){
     if(!Array.isArray(arr)) return; const seen={};
     arr.forEach(r=>{ if(name==='batchtx' && r && r.txType==='Destroyed') return; const k=sig(r); if(!k)return; if(seen[k]) localDupes++; else seen[k]=1; });
   });
-  checks.push(localDupes ? {level:'warn', label:'Local duplicate rows', detail: localDupes+' identical row(s) — run "Clean Up Airtable Duplicates" (with preview)'} : {level:'ok', label:'Local rows', detail:'no identical duplicates'});
+  checks.push(localDupes ? {level:'warn', label:'Local duplicate rows', detail: localDupes+' identical row(s) — run "Clean Up Duplicates" (with preview)'} : {level:'ok', label:'Local rows', detail:'no identical duplicates'});
   // Render
   if(!el) return;
   const worst = checks.some(c=>c.level==='err') ? 'err' : (checks.some(c=>c.level==='warn') ? 'warn' : 'ok');
@@ -8956,14 +8956,14 @@ function clearPendingRecords(){
 async function syncPending(){
   migrateRoomNames();
   migrateWaterTypes();
-  if(!atReady()){toast('Configure Airtable connection first.');return;}
+  if(!atReady()){toast('Configure cloud sync first.');return;}
   const st=document.getElementById('sync-pending-status');
   const btn=document.getElementById('sync-pending-btn');
-  // IDEMPOTENCY — pull before push. If a record was already committed to Airtable but the app
+  // IDEMPOTENCY — pull before push. If a record was already committed to the cloud but the app
   // never saw the response (interrupted POST), the pull links that orphan row to its local record
   // and marks it synced, so it drops out of the pending list below and we DON'T post it again
   // (which is what created duplicate rows). Then collapse any exact-duplicate locals.
-  if(st){ st.style.display='block'; st.style.background='var(--bg2)'; st.style.color='var(--text2)'; st.textContent='Checking Airtable first…'; }
+  if(st){ st.style.display='block'; st.style.background='var(--bg2)'; st.style.color='var(--text2)'; st.textContent='Checking the cloud first…'; }
   try { await pullFromAirtable(); } catch(_){}
   try { cleanLocalDuplicates({batchtxSkipTypes:['Destroyed']}); } catch(_){}
   const pendingEC=ecRecs.filter(r=>!r.synced);
@@ -9747,13 +9747,13 @@ async function wasteSave(){
     try{
       const f={'Date':rec.date,'Grower':rec.grower,'Batch ID':rec.batch?[rec.batch]:undefined,'Room':rec.room,'Waste Type':rec.type,'Sub-Category':rec.subtype||undefined,'Weight (kg)':rec.weight,'Plants Destroyed':rec.plants||undefined,'Notes':rec.notes||undefined};
       Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
-      const _wRes = await atPost(cfg.wasteTbl,f);rec.synced=true;if(_wRes && _wRes.id) rec.airtableId=_wRes.id;lsSet('gp-waste',wasteRecs);setSyncPill('ok','Synced');toast('Saved and synced to Airtable');
+      const _wRes = await atPost(cfg.wasteTbl,f);rec.synced=true;if(_wRes && _wRes.id) rec.airtableId=_wRes.id;lsSet('gp-waste',wasteRecs);setSyncPill('ok','Synced');toast('Saved and synced to the cloud');
     }catch(e){setSyncPill('err','Sync failed: Waste '+e.message);toast('Saved locally - sync failed.',3500);}
     document.getElementById('waste-btn').disabled=false;
   } else {
     toast('Saved locally.');
   }
-  // Sync the auto-created Destroyed transaction (if any) to Airtable
+  // Sync the auto-created Destroyed transaction (if any) to the cloud
   if(destroyedTx && cfg.batchtxTbl && cfg.token && cfg.base){
     try{
       let qtyAfter=(destroyedTx.currentQtyBefore||0)-destroyedTx.qty;if(qtyAfter<0)qtyAfter=0;
@@ -9762,7 +9762,7 @@ async function wasteSave(){
       const _dtRes = await atPost(cfg.batchtxTbl,tf);destroyedTx.synced=true;if(_dtRes && _dtRes.id) destroyedTx.airtableId=_dtRes.id;lsSet('gp-batchtx',batchTxRecs);
     }catch(e){toast('Destroyed transaction not synced: '+(e.message||'error'),4000);}
   }
-  // Push the updated batch (with decremented roomDistribution) to Airtable
+  // Push the updated batch (with decremented roomDistribution) to the cloud
   if(_distChanged && cfg.batchTbl && cfg.token && cfg.base){
     try{
       const _wsBRes = await atUpsert(cfg.batchTbl, buildBatchFields(_wsBatchRec), ['Batch ID']);
@@ -9901,7 +9901,7 @@ async function wasteDelete(id){
   if(rec.airtableId && cfg.wasteTbl && cfg.token && cfg.base){
     setSyncPill('ing','Deleting...');
     const ok = await atDelete(cfg.wasteTbl, rec.airtableId, true);
-    if(!ok){ setSyncPill('err','Delete failed'); toast('Could not delete from Airtable — entry kept. Try again when online.',5000); return; }
+    if(!ok){ setSyncPill('err','Delete failed'); toast('Could not delete from the cloud — entry kept. Try again when online.',5000); return; }
     setSyncPill('ok','Synced');
   }
   const b = await wasteReverseDestroyed(rec);
@@ -10095,20 +10095,20 @@ function destroyRenderPending(){
   html += '</tbody></table></div>';
   if(flagged){
     html += '<div style="margin-top:8px;font-size:11px;color:#3B2A00;background:var(--amber-pale);border:1px solid var(--amber);border-radius:6px;padding:8px 10px;line-height:1.5;">'
-      + flagged+' record(s) match waste already destroyed under a different batch — they look mislabeled. Click the <b>Fix</b> button to reassign each to the batch it was destroyed under; once the batch matches, the record drops off this pending list (it was already destroyed). Reassigning also moves any auto-created plant-destruction transaction and re-syncs to Airtable.</div>';
+      + flagged+' record(s) match waste already destroyed under a different batch — they look mislabeled. Click the <b>Fix</b> button to reassign each to the batch it was destroyed under; once the batch matches, the record drops off this pending list (it was already destroyed). Reassigning also moves any auto-created plant-destruction transaction and re-syncs to the cloud.</div>';
   }
   el.innerHTML = html;
 }
 // Reassign a pending (mislabeled) waste record to the batch it was actually destroyed under. Moves
 // the record's batch, its auto-created Destroyed tx (if any), and re-syncs both linked Batch ID
-// fields to Airtable. User-initiated only.
+// fields to the cloud. User-initiated only.
 async function destroyReassignPending(wasteId, toBatch){
   const r = wasteRecs.find(w => String(w.id) === String(wasteId));
   if(!r){ toast('Record not found.'); return; }
   const from = r.batch||'';
-  if(!confirm('Reassign this waste record from '+(from||'(none)')+' to '+toBatch+'?\n\n'+(r.date||'')+' · '+(r.type||'')+' · '+(r.subtype||'')+' · '+(parseFloat(r.weight)||0).toFixed(3)+' kg'+((r.plants||0)?' · '+r.plants+' plants':'')+'\n\nThis also moves its plant-destruction transaction (if any) and re-syncs to Airtable.')) return;
+  if(!confirm('Reassign this waste record from '+(from||'(none)')+' to '+toBatch+'?\n\n'+(r.date||'')+' · '+(r.type||'')+' · '+(r.subtype||'')+' · '+(parseFloat(r.weight)||0).toFixed(3)+' kg'+((r.plants||0)?' · '+r.plants+' plants':'')+'\n\nThis also moves its plant-destruction transaction (if any) and re-syncs to the cloud.')) return;
   r.batch = toBatch;
-  // Move the linked auto-created Destroyed tx, if present. Records pulled from Airtable lose the
+  // Move the linked auto-created Destroyed tx, if present. Records pulled from the cloud lose the
   // destroyedTxId link, so when it's missing we locate the matching auto-created Destroyed tx by
   // content (same source batch, date, plant count, and the auto-create note).
   let tx = null;
@@ -10121,7 +10121,7 @@ async function destroyReassignPending(wasteId, toBatch){
       && /Auto-created from Vegetative Waste/.test(t.notes||''));
   }
   if(tx){ tx.batchId = toBatch; }
-  // Push the new batch DIRECTLY to Airtable now (PATCH the linked Batch ID), then mark synced.
+  // Push the new batch DIRECTLY to the cloud now (PATCH the linked Batch ID), then mark synced.
   // We do NOT route this through syncPending(): that pulls first, and the pull would see the
   // local batch no longer matching the remote record's old batch, judge the airtableId link as
   // "stale", and re-append the OLD-batch copy — which is exactly why a reassigned record kept
@@ -10150,7 +10150,7 @@ async function destroyReassignPending(wasteId, toBatch){
   try { if(typeof renderWaste==='function') renderWaste(); } catch(_){}
   try { if(typeof summaryRefresh==='function') summaryRefresh(); } catch(_){}
   if(_ok) toast('Reassigned to '+toBatch+'.');
-  else toast('Reassigned locally, but the Airtable update failed ('+_failMsg+'). It will retry on the next sync.',6000);
+  else toast('Reassigned locally, but the cloud update failed ('+_failMsg+'). It will retry on the next sync.',6000);
 }
 function destroySetSigMode(mode){
   destroySigMode = (mode==='type') ? 'type' : 'draw';
@@ -10266,7 +10266,7 @@ async function destroySave(){
       const _dRes = await atPost(cfg.destroyTbl, destroyBuildFields(rec));
       rec.synced = true; if(_dRes && _dRes.id) rec.airtableId = _dRes.id;
       lsSet('gp-destroy', destroyRecs); setSyncPill('ok','Synced'); updatePendingBadge();
-    }catch(e){ setSyncPill('err','Sync failed'); toast('Saved locally - Airtable: '+(e.message||'sync failed'),5000); }
+    }catch(e){ setSyncPill('err','Sync failed'); toast('Saved locally - sync: '+(e.message||'sync failed'),5000); }
   } else {
     toast('Saved locally — set the Destruction Log Table ID in Settings to sync.',4500);
   }
@@ -10539,7 +10539,7 @@ function destroyCollectMissing(){
   return out;
 }
 // Restore the deleted waste records covered by past destruction events. They are reconstructed from
-// the stored coveredKeys, marked synced:false so they push to Airtable. Because their keys are
+// the stored coveredKeys, marked synced:false so they push to the cloud. Because their keys are
 // already in a destruction event's coveredKeys, they will NOT re-appear as pending to destroy.
 function destroyRestoreMissing(){
   const miss = destroyCollectMissing();
@@ -10548,7 +10548,7 @@ function destroyRestoreMissing(){
   const totDry = miss.reduce((s,m)=> s + (m.rec.type==='Dry Waste' ? m.rec.weight : 0), 0);
   const byBatch = {}; miss.forEach(m=>{ byBatch[m.rec.batch] = (byBatch[m.rec.batch]||0) + 1; });
   const summary = Object.keys(byBatch).sort().map(b => b+': '+byBatch[b]).join('\n• ');
-  if(!confirm('Restore '+miss.length+' deleted waste record(s)?\n\n• '+summary+'\n\nVegetative: '+totVeg.toFixed(3)+' kg · Dry: '+totDry.toFixed(3)+' kg\n\nThese were covered by past destruction events, so they will NOT re-appear as pending to destroy. They will sync to Airtable.')) return;
+  if(!confirm('Restore '+miss.length+' deleted waste record(s)?\n\n• '+summary+'\n\nVegetative: '+totVeg.toFixed(3)+' kg · Dry: '+totDry.toFixed(3)+' kg\n\nThese were covered by past destruction events, so they will NOT re-appear as pending to destroy. They will sync to the cloud.')) return;
   let added = 0;
   miss.forEach(m=>{
     const r = m.rec;
@@ -10566,7 +10566,7 @@ function destroyRestoreMissing(){
   try { if(typeof renderWaste==='function') renderWaste(); } catch(_){}
   try { destroyReconRender(); } catch(_){}
   try { if(typeof destroyLossToggle==='function'){ const _le=document.getElementById('destroy-loss-report'); if(_le && _le.style.display!=='none' && _le.innerHTML.trim()) destroyLossRender(); } } catch(_){}
-  toast('Restored '+added+' record(s). Syncing to Airtable…');
+  toast('Restored '+added+' record(s). Syncing to the cloud…');
   if(typeof syncPending==='function') syncPending();
 }
 function destroyLossExportCSV(){
@@ -10602,7 +10602,7 @@ async function destroyDelete(id){
   if(rec.airtableId && cfg.destroyTbl && cfg.token && cfg.base){
     setSyncPill('ing','Deleting...');
     const ok = await atDelete(cfg.destroyTbl, rec.airtableId, true);
-    if(!ok){ setSyncPill('err','Delete failed'); toast('Could not delete from Airtable — kept.',5000); return; }
+    if(!ok){ setSyncPill('err','Delete failed'); toast('Could not delete from the cloud — kept.',5000); return; }
     setSyncPill('ok','Synced');
   }
   destroyRecs.splice(idx,1);
@@ -11666,14 +11666,14 @@ async function batchCreate(){
   msg.style.display='block'; msg.style.color='var(--green)'; msg.textContent='Batch '+batchId+' created!';
   renderBatchLog();
   updatePendingBadge();
-  // Sync to Airtable
+  // Sync to the cloud
   if(cfg.batchTbl && cfg.token && cfg.base){
     try{
       const _bcRes = await atUpsert(cfg.batchTbl, buildBatchFields(rec), ['Batch ID']);
       const _bcId = _bcRes && _bcRes.records && _bcRes.records[0] && _bcRes.records[0].id;
       if(_bcId) rec.airtableId = _bcId;
-      rec.synced=true; lsSet('gp-batch',batchRecs); setSyncPill('ok','Synced'); toast('Batch created and synced to Airtable'); updatePendingBadge();
-    }catch(e){ setSyncPill('err','Sync error'); toast('Batch saved locally - Airtable: '+(e.message||'sync failed'),5000); }
+      rec.synced=true; lsSet('gp-batch',batchRecs); setSyncPill('ok','Synced'); toast('Batch created and synced to the cloud'); updatePendingBadge();
+    }catch(e){ setSyncPill('err','Sync error'); toast('Batch saved locally - sync: '+(e.message||'sync failed'),5000); }
   } else { toast('Batch '+batchId+' created!'); }
   // Sync the auto-created intake txs (backfill intake P/R, Phase Change txs, AND the
   // Seeds family intake) one-by-one. Partial failure leaves unsynced ones for Sync Pending.
@@ -12177,7 +12177,7 @@ const FLOWER_DAY_TASKS_DEFAULT = {
   57: ['Deleaf for harvest and remove sachets']
 };
 // Editable copy — loaded from localStorage (gp-fdtasks) so growers can add/modify milestones on
-// the Settings page; falls back to the defaults above. Per-device (not synced to Airtable).
+// the Settings page; falls back to the defaults above. Per-device (not synced to the cloud).
 let FLOWER_DAY_TASKS = (function(){
   try { const _s = lsGet('gp-fdtasks'); if(_s && typeof _s==='object' && !Array.isArray(_s) && Object.keys(_s).length) return _s; } catch(_){}
   return JSON.parse(JSON.stringify(FLOWER_DAY_TASKS_DEFAULT));
@@ -12198,7 +12198,7 @@ function _msPhaseDay(b, group){
   return null;
 }
 function fdPersistMilestones(){ try { lsSet('gp-fdtasks', FLOWER_DAY_TASKS); lsSet('gp-clonetasks', CLONE_DAY_TASKS); lsSet('gp-vegtasks', VEG_DAY_TASKS); } catch(_){} }
-// Push the whole milestone list to Airtable as a single upserted row (Key='FlowerDayMilestones').
+// Push the whole milestone list to the cloud as a single upserted row (Key='FlowerDayMilestones').
 // Marks dirty up front so the change is tracked even if the push fails (Sync Pending will retry).
 async function fdSyncMilestones(){
   fdPersistMilestones();
@@ -12427,7 +12427,7 @@ function summaryRenderFlowerAlerts(batchId){
 // ─── Mother phase distribution UI ────────────────────────────────────────────
 // Mom Purpose change handler. Persists the new purpose to batchRec, updates the hint text,
 // and refreshes any UI that depends on whether the mom can flower (Plant Phase dropdown).
-// Synced to Airtable on the next pending-flush; not pushed eagerly so rapid clicks don't
+// Synced to the cloud on the next pending-flush; not pushed eagerly so rapid clicks don't
 // hammer the API.
 // Build / read the Mom Purpose Counts on a batch record. Returns the counts object with
 // the four keys ('Clone Donor', 'Genetic Preservation', 'Pheno Hunt', 'Seed Production')
@@ -12599,7 +12599,7 @@ function summaryMomPurposeChanged(){
   // Otherwise a stale "no Pheno/Seed plants designated" message can stick around even after the
   // grower has just designated some plants for Pheno/Seed.
   if(typeof momAdvanceToChanged === 'function') momAdvanceToChanged();
-  // Sync to Airtable opportunistically.
+  // Sync to the cloud opportunistically.
   if(cfg.batchTbl && cfg.token && cfg.base && changed){
     (async () => {
       try {
@@ -12695,7 +12695,7 @@ function summaryRefreshMomPhase(batchId){
 // Restore a mother batch's lost intake. Adds a single corrective Produced/Received transaction so
 // the transaction-derived count (calcBatchQty) matches the plants the mom actually has. The saved
 // per-phase distribution (momPhaseCounts) is preserved — only the missing intake credit is added.
-// User-initiated; syncs the new transaction to Airtable.
+// User-initiated; syncs the new transaction to the cloud.
 async function summaryRestoreMomIntake(batchId){
   const b = batchRecs.find(r => r.batchId === batchId && !r.type);
   if(!b || !isMotherBatch(batchId)){ toast('Mother batch not found.'); return; }
@@ -12723,7 +12723,7 @@ async function summaryRestoreMomIntake(batchId){
       const f = { 'Batch ID':[batchId], 'Date':date, 'Transaction Type':'Produced/Received', 'Quantity':missing, 'Plant Phase':_phase, 'Notes':tx.notes };
       const r = await atPost(cfg.batchtxTbl, f);
       if(r && r.id){ tx.airtableId = r.id; tx.synced = true; lsSet('gp-batchtx', batchTxRecs); }
-    } catch(e){ console.error('[restore mom intake] Airtable push failed', e); toast('Added locally; Airtable push failed — will retry on next sync.',5000); }
+    } catch(e){ console.error('[restore mom intake] cloud sync failed', e); toast('Added locally; cloud sync failed — will retry on next sync.',5000); }
   }
   toast('Restored '+missing+' plant'+(missing===1?'':'s')+' to '+batchId+'.');
   summaryRefreshMomPhase(batchId);
@@ -12735,7 +12735,7 @@ async function summaryRestoreMomIntake(batchId){
 // Lets the grower directly set a mom's per-phase + per-Flower-room plant counts to fix a wrong
 // distribution. The Advance Cohort form only moves plants forward, so without this there was no
 // way to correct e.g. "2 in Tent, 1 in Veg". Writes momPhaseCounts, roomDistribution, rooms, and
-// the headline plantPhase, then re-reconciles purpose counts and upserts to Airtable.
+// the headline plantPhase, then re-reconciles purpose counts and upserts to the cloud.
 function summaryMomDistToggle(){
   const ed = document.getElementById('summary-mom-dist-editor');
   const btn = document.getElementById('summary-mom-dist-btn');
@@ -12826,7 +12826,7 @@ async function summaryMomDistSave(){
     }catch(e){
       b.synced = false; lsSet('gp-batch', batchRecs);
       setSyncPill('err','Sync error'); updatePendingBadge();
-      toast('Saved locally — Airtable: '+(e.message||'sync failed'), 5000);
+      toast('Saved locally — sync: '+(e.message||'sync failed'), 5000);
     }
   }
 }
@@ -12905,7 +12905,7 @@ async function momPhaseAdvance(){
   //      dates aren't already set and the To phase has just gained its first plants.
   //   3. Updates batchRec.plantPhase to the highest phase that now has plants.
   //   4. Creates a 'Phase Advance' transaction in batchTxRecs (qty>0, plantPhase=To).
-  //   5. Syncs the tx and the updated batch record to Airtable.
+  //   5. Syncs the tx and the updated batch record to the cloud.
   const batchId = document.getElementById('summary-batch-select').value;
   if(!batchId){ toast('Select a mother batch first.'); return; }
   const b = batchRecs.find(r => r.batchId === batchId && !r.type);
@@ -13042,7 +13042,7 @@ async function momPhaseAdvance(){
   document.getElementById('si-flower-start').textContent = b.flowerStart || '—';
   document.getElementById('si-harvest-date').textContent = formatHarvestDatesForDisplay(b.batchId);
   updatePendingBadge();
-  // Sync the tx to Airtable. Phase Advance carries extra structured metadata that downstream
+  // Sync the tx to the cloud. Phase Advance carries extra structured metadata that downstream
   // features (harvest disposition lookup, history display) depend on:
   //   • From Phase / To Phase — drive the "Veg → Flower (4)" history cell.
   //   • Room               — drives the per-room disposition default on harvest.
@@ -13072,7 +13072,7 @@ async function momPhaseAdvance(){
       setSyncPill('ok','Synced');
     }catch(e){
       setSyncPill('err','Sync error');
-      toast('Phase Advance saved locally — Airtable sync failed.',5000);
+      toast('Phase Advance saved locally — cloud sync failed.',5000);
     }
   }
   // Sync the updated batch record (plantPhase + lifecycle dates may have changed).
@@ -14275,7 +14275,7 @@ async function summaryUpdateBatch(){
   const msg = document.getElementById('summary-update-msg');
   msg.style.display='block'; msg.style.color='var(--green)'; msg.textContent='Batch updated!';
   setTimeout(()=>{ msg.style.display='none'; }, 3000);
-  // Sync to Airtable Batch Log via upsert on Batch ID (updates existing record, creates if missing)
+  // Sync to the cloud Batch Log via upsert on Batch ID (updates existing record, creates if missing)
   if(cfg.batchTbl && cfg.token && cfg.base){
     setSyncPill('ing','Syncing...');
     try{
@@ -14291,7 +14291,7 @@ async function summaryUpdateBatch(){
       lsSet('gp-batch', batchRecs);
       setSyncPill('err','Sync error');
       updatePendingBadge();
-      toast('Update saved locally - Airtable: '+(e.message||'sync failed'),5000);
+      toast('Update saved locally - sync: '+(e.message||'sync failed'),5000);
     }
   }
 }
@@ -14836,7 +14836,7 @@ async function summaryAddTransaction(){
   }
   applyPhaseRoomLock();
   updatePendingBadge();
-  // Sync to Airtable
+  // Sync to the cloud
   if(cfg.batchtxTbl && cfg.token && cfg.base){
     try{
       const currentQty = summaryCalcQty(batchId);
@@ -14844,7 +14844,7 @@ async function summaryAddTransaction(){
       Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
       const _stRes = await atPost(cfg.batchtxTbl, f);
       tx.synced=true; if(_stRes && _stRes.id) tx.airtableId=_stRes.id; lsSet('gp-batchtx',batchTxRecs); setSyncPill('ok','Synced');
-    }catch(e){ setSyncPill('err','Sync error'); toast('Transaction saved locally - Airtable: '+(e.message||'sync failed'),5000); }
+    }catch(e){ setSyncPill('err','Sync error'); toast('Transaction saved locally - sync: '+(e.message||'sync failed'),5000); }
   }
   // Sync the paired Produced/Received tx on the destination mother batch (if any)
   if(_destTx && cfg.batchtxTbl && cfg.token && cfg.base){
@@ -14881,7 +14881,7 @@ async function summaryAddTransaction(){
   }
   // If the Harvested tx auto-advanced the phase to Drying (or zero-qty re-locked to Clones),
   // or the Clone Date was just captured on a Clones-External Produced/Received tx,
-  // push the batch update to Airtable so the change is reflected immediately.
+  // push the batch update to the cloud so the change is reflected immediately.
   if((_phaseAutoChanged || _cloneDateCaptured || _soldDateStamped || _momPhaseChanged) && cfg.batchTbl && cfg.token && cfg.base){
     try{
       const _bi = batchRecs.findIndex(r=>r.batchId===batchId && !r.type);
@@ -15017,18 +15017,18 @@ function summaryRenderHistory(batchId){
 // append-only sync created). The batch plant count is derived from the transaction history, so
 // removing a row recomputes the count automatically: deleting a Destroyed/Harvested restores its
 // plants; deleting a Produced/Received removes them. Phase/room state on the batch record is left
-// as-is (use Manage Batch to adjust those if needed). Removes from Airtable too when synced.
-// Re-push ALL of a batch's transactions to Airtable as fresh rows. Use when Airtable is MISSING a
+// as-is (use Manage Batch to adjust those if needed). Removes from the cloud too when synced.
+// Re-push ALL of a batch's transactions to the cloud as fresh rows. Use when the cloud is missing a
 // batch's transactions (they never synced, or their rows were removed) — clears each local row's
 // airtableId and re-POSTs it linked to this batch. WARNING: if Airtable still has some of them,
-// this creates duplicates (run "Clean Up Airtable Duplicates" after). Intended for the empty case.
+// this creates duplicates (run "Clean Up Duplicates" after). Intended for the empty case.
 async function summaryResyncBatchTx(){
   const batchId = (document.getElementById('summary-batch-select')||{}).value || '';
   if(!batchId){ toast('Select a batch first.'); return; }
-  if(!(cfg.batchtxTbl && cfg.token && cfg.base)){ toast('Airtable not configured.'); return; }
+  if(!(cfg.batchtxTbl && cfg.token && cfg.base)){ toast('Cloud sync not configured.'); return; }
   const txs = batchTxRecs.filter(t => t.batchId === batchId);
   if(!txs.length){ toast('No transactions on '+batchId+' to push.'); return; }
-  if(!confirm('Re-push all '+txs.length+' transaction(s) for '+batchId+' to Airtable?\n\nUse this only when Airtable is MISSING this batch\'s transactions. If Airtable already has some, this will create duplicates (you can clean those up after).')) return;
+  if(!confirm('Re-push all '+txs.length+' transaction(s) for '+batchId+' to the cloud?\n\nUse this only when the cloud is missing this batch\'s transactions. If the cloud already has some, this will create duplicates (you can clean those up after).')) return;
   txs.forEach(t => { t.airtableId = undefined; t.synced = false; });
   lsSet('gp-batchtx', batchTxRecs);
   updatePendingBadge();
@@ -15077,7 +15077,7 @@ async function summaryAddCorrectiveTx(){
       Object.keys(f).forEach(k=>{ if(f[k]===undefined||f[k]===null||f[k]==='') delete f[k]; });
       const _r = await atPost(cfg.batchtxTbl, f); if(_r && _r.id) tx.airtableId = _r.id;
       tx.synced = true; lsSet('gp-batchtx', batchTxRecs); setSyncPill('ok','Synced'); updatePendingBadge();
-    } catch(e){ setSyncPill('err','Sync failed'); toast('Saved locally — Airtable: '+(e.message||'sync failed'),5000); }
+    } catch(e){ setSyncPill('err','Sync failed'); toast('Saved locally — sync: '+(e.message||'sync failed'),5000); }
   }
   toast(type+' ('+_sign+qty+') added to '+batchId+'.');
   if(typeof summaryBatchChanged === 'function') summaryBatchChanged();
@@ -15106,7 +15106,7 @@ async function summaryTxMove(id){
     try {
       await atUpdateById(cfg.batchtxTbl, tx.airtableId, { 'Batch ID':[destRec.batchId] });
       tx.synced = true; lsSet('gp-batchtx', batchTxRecs); setSyncPill('ok','Synced'); updatePendingBadge();
-    } catch(e){ setSyncPill('err','Sync failed'); toast('Moved locally — Airtable: '+(e.message||'sync failed'),5000); }
+    } catch(e){ setSyncPill('err','Sync failed'); toast('Moved locally — sync: '+(e.message||'sync failed'),5000); }
   }
   toast('Moved to '+destRec.batchId+'.');
   if(typeof summaryBatchChanged === 'function') summaryBatchChanged();
@@ -15136,7 +15136,7 @@ async function summaryTxEditQty(id){
   lsSet('gp-batchtx', batchTxRecs);
   if(cfg.token && cfg.base && cfg.batchtxTbl && t.airtableId){
     try { await atUpdateById(cfg.batchtxTbl, t.airtableId, { 'Quantity': newQty }); t.synced = true; lsSet('gp-batchtx', batchTxRecs); }
-    catch(e){ console.error('[summaryTxEditQty] Airtable push failed', e); toast('Updated locally; Airtable push failed — will retry on next sync.',5000); }
+    catch(e){ console.error('[summaryTxEditQty] cloud sync failed', e); toast('Updated locally; cloud sync failed — will retry on next sync.',5000); }
   }
   toast('Quantity corrected to '+newQty+'.');
   try { if(typeof summaryBatchChanged==='function') summaryBatchChanged(); } catch(_){}
@@ -15145,7 +15145,7 @@ async function summaryTxEditQty(id){
 // Correct the plant phase stamped on a transaction. This controls which CTLS section it counts in —
 // e.g. a mother's veg-clone cull auto-tagged 'Flower' (from the headline phase) can be re-tagged
 // 'Veg' so it lands in Section 2 (Destroyed in Veg/Clone) instead of Section 3 (Destroyed in Flower).
-// Does NOT change the plant count — only the classification. Syncs to Airtable.
+// Does NOT change the plant count — only the classification. Syncs to the cloud.
 async function summaryTxEditPhase(id){
   const idx = batchTxRecs.findIndex(t => String(t.id) === String(id));
   if(idx < 0){ toast('Transaction not found.'); return; }
@@ -15162,7 +15162,7 @@ async function summaryTxEditPhase(id){
   lsSet('gp-batchtx', batchTxRecs);
   if(cfg.token && cfg.base && cfg.batchtxTbl && t.airtableId){
     try { await atUpdateById(cfg.batchtxTbl, t.airtableId, { 'Plant Phase': match }); t.synced = true; lsSet('gp-batchtx', batchTxRecs); }
-    catch(e){ console.error('[summaryTxEditPhase] Airtable push failed', e); toast('Updated locally; Airtable push failed — will retry on next sync.',5000); }
+    catch(e){ console.error('[summaryTxEditPhase] cloud sync failed', e); toast('Updated locally; cloud sync failed — will retry on next sync.',5000); }
   }
   toast('Phase corrected to '+match+'.');
   try { if(typeof summaryBatchChanged==='function') summaryBatchChanged(); } catch(_){}
@@ -15170,7 +15170,7 @@ async function summaryTxEditPhase(id){
 }
 // Correct the DATE on a transaction. For a Phase Change, the batch's matching lifecycle date is the
 // same event, so we keep it in sync (Veg→flowerStart, etc.) — that's what keeps the Summary lifecycle
-// date and the Transaction History from drifting apart. Syncs both to Airtable.
+// date and the Transaction History from drifting apart. Syncs both to the cloud.
 async function summaryTxEditDate(id){
   const idx = batchTxRecs.findIndex(t => String(t.id) === String(id));
   if(idx < 0){ toast('Transaction not found.'); return; }
@@ -15197,7 +15197,7 @@ async function summaryTxEditDate(id){
   if(_batch && _fld){ _batch[_fld] = nd; _batch.synced = false; lsSet('gp-batch', batchRecs); }
   if(cfg.token && cfg.base && cfg.batchtxTbl && t.airtableId){
     try { await atUpdateById(cfg.batchtxTbl, t.airtableId, { 'Date': nd }); t.synced = true; lsSet('gp-batchtx', batchTxRecs); }
-    catch(e){ console.error('[summaryTxEditDate] tx push failed', e); toast('Updated locally; Airtable push failed — will retry on next sync.',5000); }
+    catch(e){ console.error('[summaryTxEditDate] tx push failed', e); toast('Updated locally; cloud sync failed — will retry on next sync.',5000); }
   }
   if(_batch && cfg.token && cfg.base && cfg.batchTbl){
     try { await atUpsert(cfg.batchTbl, buildBatchFields(_batch), ['Batch ID']); _batch.synced = true; lsSet('gp-batch', batchRecs); }
@@ -15225,7 +15225,7 @@ async function summaryTxDelete(id){
   if(tx.airtableId && !_sharesAt && cfg.batchtxTbl && cfg.token && cfg.base){
     setSyncPill('ing','Deleting...');
     const ok = await atDelete(cfg.batchtxTbl, tx.airtableId, true);
-    if(!ok){ setSyncPill('err','Delete failed'); toast('Could not delete from Airtable — transaction kept. Try again when online.',5000); return; }
+    if(!ok){ setSyncPill('err','Delete failed'); toast('Could not delete from the cloud — transaction kept. Try again when online.',5000); return; }
     setSyncPill('ok','Synced');
   }
   batchTxRecs.splice(idx, 1);
@@ -16215,13 +16215,13 @@ function sanclSetTemplateEdits(template, edits){
   rec.added   = Array.isArray(edits.added) ? edits.added.slice() : [];
   rec.synced  = false;
   lsSet('gp-sanedits', sanEditsRecs);
-  // Fire-and-forget sync to Airtable — failures stay synced:false and Sync Pending retries.
+  // Fire-and-forget sync to the cloud — failures stay synced:false and Sync Pending retries.
   if(cfg.sanEditsTbl && cfg.token && cfg.base){
     sanclSyncOneEdit(rec).catch(() => {});
   }
   if(typeof updatePendingBadge === 'function') updatePendingBadge();
 }
-// Upsert one edits record to Airtable. Uses Template as the merge field so multi-laptop
+// Upsert one edits record to the cloud. Uses Template as the merge field so multi-laptop
 // saves converge on the same row.
 async function sanclSyncOneEdit(rec){
   if(!rec || !cfg.sanEditsTbl) return;
@@ -16547,7 +16547,7 @@ async function sanclDelete(id){
   if(rec.airtableId && cfg.sanCleanTbl && cfg.token && cfg.base){
     setSyncPill('ing','Deleting...');
     const ok = await atDelete(cfg.sanCleanTbl, rec.airtableId, true);
-    if(!ok){ setSyncPill('err','Delete failed'); toast('Could not delete from Airtable — entry kept. Try again when online.',5000); return; }
+    if(!ok){ setSyncPill('err','Delete failed'); toast('Could not delete from the cloud — entry kept. Try again when online.',5000); return; }
     setSyncPill('ok','Synced');
   }
   sanCleanRecs.splice(idx,1);
@@ -16597,7 +16597,7 @@ function sanclChanged(){
 
 // Save ALL currently-selected tasks as sanCleanRecs in one batch. One record per task,
 // stamped with today's date + current grower + template + batch + room + per-task phase.
-// Records sync to Airtable in parallel; failures stay synced:false and Sync Pending retries.
+// Records sync to the cloud in parallel; failures stay synced:false and Sync Pending retries.
 async function sanclSaveSelectedTasks(){
   const grower   = (document.getElementById('sancl-grower')||{}).value || '';
   const template = (document.getElementById('sancl-template')||{}).value || '';
@@ -16639,7 +16639,7 @@ async function sanclSaveSelectedTasks(){
   // form alone so the grower can adjust and try again.)
   if(savedCount > 0) sanclResetForm();
   if(typeof updatePendingBadge === 'function') updatePendingBadge();
-  // Sync each new record to Airtable in parallel. Failures stay synced:false.
+  // Sync each new record to the cloud in parallel. Failures stay synced:false.
   if(cfg.sanCleanTbl && cfg.token && cfg.base){
     await Promise.all(newRecs.map(async rec => {
       try {
@@ -16677,7 +16677,7 @@ function sanclResetForm(){
 }
 
 // Build the Airtable field payload for a Batch Cleaning Log record.
-// 'Phase' and 'Time' fields have been removed from Airtable + the app.
+// 'Phase' and 'Time' fields have been removed from the cloud + the app.
 function buildSanCleanFields(rec){
   const f = {
     'Batch ID': rec.batch ? [rec.batch] : undefined,
@@ -16811,7 +16811,7 @@ async function santoolDelete(id){
   if(rec.airtableId && cfg.sanToolTbl && cfg.token && cfg.base){
     setSyncPill('ing','Deleting...');
     const ok = await atDelete(cfg.sanToolTbl, rec.airtableId, true);
-    if(!ok){ setSyncPill('err','Delete failed'); toast('Could not delete from Airtable — entry kept. Try again when online.',5000); return; }
+    if(!ok){ setSyncPill('err','Delete failed'); toast('Could not delete from the cloud — entry kept. Try again when online.',5000); return; }
     setSyncPill('ok','Synced');
   }
   sanToolRecs.splice(idx,1);
@@ -16856,7 +16856,7 @@ async function santoolSave(){
   santoolRefreshSuggestions(); // pick up newly-used tool names for next time
   santoolRenderRecent();
   if(typeof updatePendingBadge === 'function') updatePendingBadge();
-  // Sync each new record to Airtable in parallel. Failures stay synced:false.
+  // Sync each new record to the cloud in parallel. Failures stay synced:false.
   if(cfg.sanToolTbl && cfg.token && cfg.base){
     await Promise.all(newRecs.map(async rec => {
       try {
@@ -17749,7 +17749,7 @@ async function seedInvSave(){
   seedInvResetForm();
   seedInvRenderList();
   updatePendingBadge();
-  // Sync to Airtable — update by record id when linked, upsert by Lot Number when new.
+  // Sync to the cloud — update by record id when linked, upsert by Lot Number when new.
   if(cfg.seedInvTbl && cfg.token && cfg.base){
     try {
       const _id = await seedInvPushRemote(rec);
@@ -17820,7 +17820,7 @@ async function seedInvDelete(id){
   const rec = seedInvRecs.find(r => r.id === id);
   if(!rec) return;
   if(!confirm('Delete "'+rec.strain+'" from seed inventory? Existing batches that referenced this strain stay intact.')) return;
-  // Try to delete from Airtable first; even if it fails, remove locally.
+  // Try to delete from the cloud first; even if it fails, remove locally.
   if(rec.airtableId && cfg.seedInvTbl && cfg.token && cfg.base){
     try { await atDelete(cfg.seedInvTbl, rec.airtableId, true); } catch(_) {}
   }
@@ -17868,7 +17868,7 @@ async function seedInvDecrement(idLotOrStrain, qty){
 
 // Build the Airtable field payload for a seed inventory record. Cumulative counts (Acquired,
 // Germinated) are always sent so Airtable's columns stay current — including when they're 0.
-// Push one seed inventory record to Airtable. If the record is already linked
+// Push one seed inventory record to the cloud. If the record is already linked
 // (has airtableId) we update THAT row by id — never upsert by Lot Number, which would
 // create a duplicate row whenever the lot number was edited. Falls back to upsert
 // (create) if the linked row was deleted on the Airtable side. Returns the airtableId.
@@ -17878,7 +17878,7 @@ async function seedInvPushRemote(rec){
   // doesn't exist in the table. Strip the offending field from the payload and retry, up to a
   // few times, so a missing Acquisition Type / Source Mother Batch column doesn't block the
   // entire seed-inventory sync. The dropped field stays local-only until the grower adds the
-  // column to Airtable — at which point the next sync will populate it normally.
+  // column to the cloud — at which point the next sync will populate it normally.
   async function _attempt(payload, fn){
     let attempts = 0;
     while(attempts < 6){
@@ -17913,7 +17913,7 @@ async function seedInvPushRemote(rec){
   try {
     const remLot = rem && rem.fields && rem.fields['Lot Number'];
     if(remLot != null && String(remLot).trim().toLowerCase() !== String(rec.lotNumber||'').trim().toLowerCase()){
-      toast('⚠ Airtable saved Lot "'+rec.lotNumber+'" as "'+remLot+'". Set the Lot Number field type to "Single line text" in Airtable, or duplicates will appear.', 9000);
+      toast('⚠ The cloud saved Lot "'+rec.lotNumber+'" as "'+remLot+'". Check the Lot Number column type, or duplicates will appear.', 9000);
     }
   } catch(_){}
   return rem && rem.id;
