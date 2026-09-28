@@ -4485,6 +4485,24 @@ function ensureMomPhaseCounts(batchRec){
       }
     });
   }
+  // Keep the Flower bucket consistent with the physical flower-room distribution — the synced,
+  // authoritative record of where flowering plants actually are. A cohort advance updates both in
+  // lock-step, but a later Destroyed (junior-first subtract) can drain the Flower bucket without
+  // draining a room, leaving momPhaseCounts.Flower out of sync with roomDistribution (which is what
+  // the Veg-room count derives from). Correcting Flower to the room sum here (shifting the difference
+  // to/from Veg so the total is unchanged) makes the phase-count label and the Veg-room count always
+  // agree, and self-heals any legacy drift on the next read.
+  {
+    const _rd = batchRec.roomDistribution || {};
+    const _fSum = Object.keys(_rd).filter(r => r !== 'Veg').reduce((s, r) => s + (parseInt(_rd[r]) || 0), 0);
+    const _curFlower = parseInt(batchRec.momPhaseCounts.Flower) || 0;
+    if(_curFlower !== _fSum){
+      const _diff = _fSum - _curFlower;
+      batchRec.momPhaseCounts.Flower = _fSum;
+      batchRec.momPhaseCounts.Veg = Math.max(0, (parseInt(batchRec.momPhaseCounts.Veg) || 0) - _diff);
+      changed = true;
+    }
+  }
   if(changed){
     // Persist to localStorage but do NOT flip synced — this is internal bookkeeping.
     lsSet('gp-batch', batchRecs);
