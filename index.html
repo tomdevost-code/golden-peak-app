@@ -4434,6 +4434,10 @@ function getMotherBatchIds(){
 // Mothers cap at Drying; they cannot be Packaged/Delivered/Sold.
 const MOM_PHASES = ['Clones','Veg','Flower','Drying'];
 
+// Set true only while momPhaseAdvance is mid-move: it tells ensureMomPhaseCounts to skip the
+// Flower<->roomDistribution reconciler so a transient in-flight mismatch isn't "corrected".
+var _momPhaseAdvancing = false;
+
 function ensureMomPhaseCounts(batchRec){
   // Lazy-initializes momPhaseCounts on a mother batch. For new mothers (no field set)
   // the entire current quantity is placed in the batch's plantPhase bucket (or Clones
@@ -4496,7 +4500,10 @@ function ensureMomPhaseCounts(batchRec){
     const _rd = batchRec.roomDistribution || {};
     const _fSum = Object.keys(_rd).filter(r => r !== 'Veg').reduce((s, r) => s + (parseInt(_rd[r]) || 0), 0);
     const _curFlower = parseInt(batchRec.momPhaseCounts.Flower) || 0;
-    if(_curFlower !== _fSum){
+    // Skip while a cohort advance is mid-flight — momPhaseCounts and roomDistribution are updated in
+    // separate steps there, so a transient mismatch is expected and must NOT be "corrected".
+    const _advancing = (typeof _momPhaseAdvancing !== 'undefined' && _momPhaseAdvancing);
+    if(!_advancing && _curFlower !== _fSum){
       const _diff = _fSum - _curFlower;
       batchRec.momPhaseCounts.Flower = _fSum;
       batchRec.momPhaseCounts.Veg = Math.max(0, (parseInt(batchRec.momPhaseCounts.Veg) || 0) - _diff);
@@ -12941,7 +12948,10 @@ async function momPhaseAdvance(){
     toast('Not enough plants in '+from+'. Available: '+(c?c[from]||0:0)+', requested: '+qty+'.', 5500);
     return;
   }
-  // Apply the move locally.
+  // Apply the move locally. Guard the flower<->room reconciler in ensureMomPhaseCounts: between the
+  // two momPhaseAdjust calls and the roomDistribution updates below, momPhaseCounts.Flower and the
+  // room map are intentionally out of sync, and the reconciler must not "fix" that transient state.
+  _momPhaseAdvancing = true;
   momPhaseAdjust(b, from, -qty);
   momPhaseAdjust(b, to,   +qty);
   // Stamp lifecycle dates on first-entry into a phase (matches the non-mom flow).
@@ -12976,6 +12986,8 @@ async function momPhaseAdvance(){
       _rem -= _take;
     }
   }
+  // roomDistribution is now consistent with momPhaseCounts again — re-enable the reconciler.
+  _momPhaseAdvancing = false;
   // Bump the batch's primary phase to the highest non-zero bucket.
   b.plantPhase = momPrimaryPhase(b);
   b.synced = false;
