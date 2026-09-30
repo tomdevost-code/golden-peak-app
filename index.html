@@ -1050,6 +1050,14 @@ tr:last-child td { border-bottom: none; }
               <div class="field"></div>
             </div>
           </div>
+          <!-- Samples: retention holds (Post-Dry Sample Type = Retention) + lab/COA samples sent for testing -->
+          <div style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--border);">
+            <div style="font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">Samples</div>
+            <div class="g2">
+              <div class="field"><label>Retention Samples</label><div id="si-retention-samples" style="font-size:13px;font-family:var(--mono);padding:4px 0;color:var(--text2);">—</div></div>
+              <div class="field"><label>Lab Samples (COA)</label><div id="si-coa-samples" style="font-size:13px;font-family:var(--mono);padding:4px 0;color:var(--text2);">—</div></div>
+            </div>
+          </div>
         </div>
 
         <!-- Current Quantity + Current Day highlight -->
@@ -3962,7 +3970,7 @@ function summaryRefreshBatchTotals(batchId){
   //   • Dry waste weight      = sum of weight on 'Dry Waste' records for this batch
   const setText = (id, val) => { const el=document.getElementById(id); if(el) el.textContent = val; };
   if(!batchId){
-    ['si-harvested-count','si-harvest-weight','si-postdry-weight','si-sold-weight','si-destroyed-count','si-vegwaste-weight','si-drywaste-weight']
+    ['si-harvested-count','si-harvest-weight','si-postdry-weight','si-sold-weight','si-destroyed-count','si-vegwaste-weight','si-drywaste-weight','si-retention-samples','si-coa-samples']
       .forEach(id => setText(id, '—'));
     return;
   }
@@ -3983,8 +3991,16 @@ function summaryRefreshBatchTotals(batchId){
     .filter(r => r.batch === batchId && r.type === 'Dry Waste')
     .reduce((s,r) => s + (parseFloat(r.weight)||0), 0);
   const postDry = (b && b.postDryingWeight) ? parseFloat(b.postDryingWeight) : 0;
+  // Samples: Retention holds and COA (lab) samples, both from Post-Drying containers tagged by
+  // Sample Type. Legacy 'Testing' records roll into the COA bucket for backward compatibility.
+  const _pdOf = st => postDryRecs.filter(r => r.batch === batchId && st.includes(r.sampleType||''));
+  const _retRecs = _pdOf(['Retention']);
+  const _coaRecs = _pdOf(['COA','Testing']);
+  const _retKg = _retRecs.reduce((s,r) => s + (parseFloat(r.netWeight)||0), 0);
+  const _coaKg = _coaRecs.reduce((s,r) => s + (parseFloat(r.netWeight)||0), 0);
   const fmtKg = v => (v > 0 ? v.toFixed(3) + ' kg' : '—');
   const fmtCount = v => (v > 0 ? String(v) + ' plants' : '—');
+  const fmtSamples = (n, kg) => (n > 0 ? n + ' sample' + (n===1?'':'s') + ' · ' + kg.toFixed(3) + ' kg' : '—');
   setText('si-harvested-count', fmtCount(harvestedPlantsSum));
   setText('si-harvest-weight', fmtKg(harvestSum));
   setText('si-postdry-weight', fmtKg(postDry));
@@ -3992,6 +4008,8 @@ function summaryRefreshBatchTotals(batchId){
   setText('si-destroyed-count', fmtCount(destroyedSum));
   setText('si-vegwaste-weight', fmtKg(vegWasteSum));
   setText('si-drywaste-weight', fmtKg(dryWasteSum));
+  setText('si-retention-samples', fmtSamples(_retRecs.length, _retKg));
+  setText('si-coa-samples', fmtSamples(_coaRecs.length, _coaKg));
 }
 function getPerRoomHarvestDates(batchId){
   // Returns { room: 'YYYY-MM-DD' } for each completed harvest room. Derives the date from the
@@ -15703,6 +15721,13 @@ function renderBatchReport(batchId){
   const destroyedPlants = txs.filter(t => t.txType === 'Destroyed').reduce((s,t) => s + (parseInt(t.qty)||0), 0);
   const vegWaste = wastes.filter(r => r.type === 'Vegetative Waste').reduce((s,r) => s + (parseFloat(r.weight)||0), 0);
   const dryWaste = wastes.filter(r => r.type === 'Dry Waste').reduce((s,r) => s + (parseFloat(r.weight)||0), 0);
+  // Samples — Retention holds + lab/COA samples, from Post-Drying containers tagged by Sample Type
+  // (legacy 'Testing' rolls into COA). Totals only: sample count + summed net weight.
+  const _retRecs = postDrys.filter(r => (r.sampleType||'') === 'Retention');
+  const _coaRecs = postDrys.filter(r => ['COA','Testing'].includes(r.sampleType||''));
+  const retSamplesN = _retRecs.length, retSamplesKg = _retRecs.reduce((s,r) => s + (parseFloat(r.netWeight)||0), 0);
+  const coaSamplesN = _coaRecs.length, coaSamplesKg = _coaRecs.reduce((s,r) => s + (parseFloat(r.netWeight)||0), 0);
+  const fmtSamples = (n, kg) => (n > 0 ? n + ' sample' + (n===1?'':'s') + ' · ' + kg.toFixed(3) + ' kg' : '—');
 
   const isMom = isMotherBatch(batchId);
 
@@ -15751,6 +15776,14 @@ function renderBatchReport(batchId){
       ['Plants Destroyed',  destroyedPlants > 0 ? (destroyedPlants + ' plants') : '—'],
       ['Veg Waste Weight',  fmtKg(vegWaste)],
       ['Dry Waste Weight',  fmtKg(dryWaste)]
+    ])
+  );
+
+  // Samples — retention holds + lab (COA) samples sent for testing
+  s += sectionCard('Samples',
+    twoCol([
+      ['Retention Samples', fmtSamples(retSamplesN, retSamplesKg)],
+      ['Lab Samples (COA)', fmtSamples(coaSamplesN, coaSamplesKg)]
     ])
   );
 
