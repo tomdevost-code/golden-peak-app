@@ -3903,7 +3903,7 @@ function calcBatchQty(batchId){
   }
   return Math.max(0,qty);
 }
-async function recordPhaseChangeTx(batchId, fromPhase, toPhase, weight, dateOverride){
+async function recordPhaseChangeTx(batchId, fromPhase, toPhase, weight, dateOverride, extraNote){
   // Creates a 'Phase Change' transaction in batchTxRecs to audit-trail phase transitions.
   // qty=0 so it doesn't affect the running balance. Notes describe the transition.
   // Optional `weight` is captured for milestone phases (e.g. Drying → Packaged stamps the total
@@ -3918,7 +3918,7 @@ async function recordPhaseChangeTx(batchId, fromPhase, toPhase, weight, dateOver
     weight: (typeof weight === 'number' && weight > 0) ? Math.round(weight*1000)/1000 : 0,
     currentQtyBefore: calcBatchQty(batchId),
     plantPhase: toPhase,
-    notes: 'Phase changed from ' + (fromPhase || 'unset') + ' to ' + toPhase,
+    notes: 'Phase changed from ' + (fromPhase || 'unset') + ' to ' + toPhase + (extraNote ? ' — ' + extraNote : ''),
     synced: false
   };
   batchTxRecs.unshift(tx);
@@ -14235,8 +14235,17 @@ async function summaryUpdateBatch(){
   // Record an audit-trail phase change transaction when the saved phase differs from the prior phase.
   // Advancing to Delivered stamps the tx with the ACTUAL delivery date rather than today.
   if(plantPhase && plantPhase !== existingPhase){
+    // On a Veg → Flower flip (non-mom), capture how many plants were moved into flower rooms so the
+    // Transaction History notes read e.g. "Phase changed from Veg to Flower — 16 plants flipped to Flower".
+    let _extraNote;
+    if(plantPhase === 'Flower' && existingPhase === 'Veg' && !isMotherBatch(batchId)){
+      const _rd = batchRecs[idx].roomDistribution || {};
+      let _flipped = Object.keys(_rd).filter(r => r !== 'Veg').reduce((s, r) => s + (parseInt(_rd[r]) || 0), 0);
+      if(_flipped <= 0) _flipped = calcBatchQty(batchId); // fallback: whole batch flipped
+      if(_flipped > 0) _extraNote = _flipped + ' plant' + (_flipped === 1 ? '' : 's') + ' flipped to Flower';
+    }
     recordPhaseChangeTx(batchId, existingPhase, plantPhase, undefined,
-      (plantPhase === 'Delivered' ? batchRecs[idx].deliveredDate : undefined));
+      (plantPhase === 'Delivered' ? batchRecs[idx].deliveredDate : undefined), _extraNote);
   }
   // Keep the Delivered phase-change transaction aligned with a corrected delivery date, so the
   // transaction history and the Batch Info Delivered Date always agree.
