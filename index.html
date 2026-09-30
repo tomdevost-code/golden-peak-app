@@ -17524,10 +17524,23 @@ function ctlsGenerateReport(){
       }
       vegRecSum += vegR; dryRecSum += dryR;
       _evD.push(_ev);
-      _vegActD.push(_ev+' — '+vegA.toFixed(3)+' kg');
-      if(dryA > 0) _dryActD.push(_ev+' — '+dryA.toFixed(3)+' kg'); // omit 0.000 kg dry-destroyed rows
-      _vegLossD.push(_ev+' — recorded '+vegR.toFixed(3)+' − actual '+vegA.toFixed(3)+' = '+(vegR-vegA).toFixed(3)+' kg');
-      _dryLossD.push(_ev+' — recorded '+dryR.toFixed(3)+' − actual '+dryA.toFixed(3)+' = '+(dryR-dryA).toFixed(3)+' kg');
+      // Per-type batch attribution: a single destruction event can cover veg waste from one batch
+      // and dry waste from another. Each weight line should name ONLY the batches that contributed
+      // that waste type — derived from the covered waste records (fallback: per-batch adjust rows
+      // carrying a recorded weight of that type; last resort: all batches on the event).
+      const _batchesFor = (type, adjKey) => {
+        let bs = [...new Set(covered.filter(w=>w.type===type && (parseFloat(w.weight)||0) > 0).map(w=>w.batch).filter(Boolean))];
+        if(!bs.length && _adjArr.length) bs = [...new Set(_adjArr.filter(a=>(parseFloat(a[adjKey])||0) > 0).map(a=>a.batch).filter(Boolean))];
+        if(!bs.length) bs = d.batches||[];
+        return bs;
+      };
+      const _lab = bs => (d.date||'')+(d.employee?' · '+d.employee:'')+(bs&&bs.length?' · '+bs.join(', '):'');
+      const _vegBatches = _batchesFor('Vegetative Waste','vegRecorded');
+      const _dryBatches = _batchesFor('Dry Waste','dryRecorded');
+      _vegActD.push(_lab(_vegBatches)+' — '+vegA.toFixed(3)+' kg');
+      if(dryA > 0) _dryActD.push(_lab(_dryBatches)+' — '+dryA.toFixed(3)+' kg'); // omit 0.000 kg dry-destroyed rows
+      _vegLossD.push(_lab(_vegBatches)+' — recorded '+vegR.toFixed(3)+' − actual '+vegA.toFixed(3)+' = '+(vegR-vegA).toFixed(3)+' kg');
+      _dryLossD.push(_lab(_dryBatches)+' — recorded '+dryR.toFixed(3)+' − actual '+dryA.toFixed(3)+' = '+(dryR-dryA).toFixed(3)+' kg');
     });
     totVeg = r3c(totVeg); totDry = r3c(totDry);
     const vegLoss = r3c(vegRecSum - totVeg);
