@@ -12008,7 +12008,11 @@ function summaryPopulateBatches(){
     return true;
   }).sort(batchCreatedCmp);
   sel.innerHTML = '<option value="">-- select batch --</option>' +
-    batches.map(b => '<option value="'+b.batchId+'"'+(b.batchId===cur?' selected':'')+'>'+b.batchId+(b.cultivar?' – '+b.cultivar:'')+(b.closedDate?' [Closed]':'')+'</option>').join('');
+    batches.map(b => {
+      let _ph = '';
+      try { _ph = getDisplayPhase(b); } catch(_){ _ph = b.plantPhase || ''; }
+      return '<option value="'+b.batchId+'"'+(b.batchId===cur?' selected':'')+'>'+b.batchId+(b.cultivar?' – '+b.cultivar:'')+(_ph?' · '+_ph:'')+(b.closedDate?' [Closed]':'')+'</option>';
+    }).join('');
   if(cur && batches.some(b=>b.batchId===cur)) summaryBatchChanged();
   else if(!cur){ document.getElementById('summary-info-card').style.display='none'; }
 }
