@@ -17731,7 +17731,6 @@ function ctlsGenerateReport(){
     {label:'COA sample weight', note:'Post-Drying containers tagged COA', value: v(fresh.postDryCOA, 'kg'), detail:fresh.postDryCOADetail},
     {label:'Weight of dried flower sent to processor for samples', note:'Sent to Lab · Processor · Dry Flower', value: v(dry.processorSampleWeight, 'kg'), detail:dry.processorSampleWeightDetail},
     {label:'Weight of cannabis destroyed (Dry Waste)', value: v(dry.dryWasteWeight, 'kg'), detail:dry.dryWasteWeightDetail},
-    {label:'Retention samples destroyed', note: dry.retentionDestroyedCount ? (dry.retentionDestroyedCount+' sample'+(dry.retentionDestroyedCount===1?'':'s')+' · end of 2-year hold') : 'end of 2-year hold', value: v(dry.retentionDestroyedWeight, 'kg'), detail:dry.retentionDestroyedDetail},
     {label:'Loss on drying (cross-ref)', value: v(dry.lossOnDrying, 'kg'), detail:dry.lossOnDryingDetail}
   ]);
 
@@ -17803,7 +17802,8 @@ function ctlsGenerateReport(){
       {label:'Vegetative waste destroyed (actual)', note:'actual weight destroyed, after drying loss', value: v(totVeg, 'kg'), detail:_vegActD},
       {label:'Dry cannabis destroyed (actual)', note:'actual weight destroyed, after drying loss', value: v(totDry, 'kg'), detail:_dryActD},
       {label:'Vegetative drying loss (recorded − actual)', note:'veg weight lost between waste entry and destruction', value: v(vegLoss, 'kg'), detail:_vegLossD},
-      {label:'Dry drying loss (recorded − actual)', note:'dry weight lost between waste entry and destruction', value: v(dryLoss, 'kg'), detail:_dryLossD}
+      {label:'Dry drying loss (recorded − actual)', note:'dry weight lost between waste entry and destruction', value: v(dryLoss, 'kg'), detail:_dryLossD},
+      {label:'Retention samples destroyed', note: dry.retentionDestroyedCount ? (dry.retentionDestroyedCount+' sample'+(dry.retentionDestroyedCount===1?'':'s')+' · end of 2-year hold') : 'end of 2-year hold', value: v(dry.retentionDestroyedWeight, 'kg'), detail:dry.retentionDestroyedDetail}
     ]);
   }
 
