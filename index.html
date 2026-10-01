@@ -14316,7 +14316,10 @@ async function summaryUpdateBatch(){
   const closedDate = status==='Closed' ? document.getElementById('summary-closed-date').value : '';
   // Guard: a batch can only be Closed once BOTH Quality Assurance logs have at least one record
   // for it — a Scale Check AND a Flower Moisture reading. Applies only on the Open -> Closed change.
-  if(status === 'Closed' && (batchRecs[idx].status !== 'Closed')){
+  // EXEMPT: mother (M-) and experimental/breeding (X-) batches — they produce no sellable dry flower,
+  // so a scale check / moisture reading isn't required to close them.
+  if(status === 'Closed' && (batchRecs[idx].status !== 'Closed')
+     && !isMotherBatch(batchId) && !isExperimentalBatch(batchId)){
     const _hasScale = qaScaleRecs.some(r => r.batch === batchId);
     const _hasMoist = qaMoistRecs.some(r => r.batch === batchId);
     if(!_hasScale || !_hasMoist){
