@@ -2215,6 +2215,30 @@ Lower Sackville, NS, B4C 3Z2</textarea></div>
           </select>
         </div>
       </div>
+
+      <!-- One-time back-entry of existing (legacy) retention samples. Creates Retention records with
+           a free-text Batch ID — no batch is created, works for closed/unknown batches. Flagged legacy
+           so they stay out of the CTLS "set aside" figures but still count when destroyed. -->
+      <div class="card" style="margin-bottom:12px;">
+        <button type="button" onclick="retentionToggleAdd()" id="retention-add-toggle" style="width:100%;text-align:left;background:none;border:none;cursor:pointer;font-family:var(--mono);font-size:12px;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:0.05em;padding:0;">+ Add existing sample</button>
+        <div id="retention-add-form" style="display:none;margin-top:12px;">
+          <div style="font-size:11px;color:var(--text2);line-height:1.5;margin-bottom:10px;">Back-enter a retention sample you already hold. No batch is created — the Batch ID is free text, so closed or pre-app batches are fine.</div>
+          <div class="g2" style="margin-bottom:10px;">
+            <div class="field"><label>Batch ID <span style="color:var(--red);font-weight:700;">*</span></label><input type="text" id="radd-batch" placeholder="e.g. PB-003" oninput="this.value=this.value.toUpperCase()" style="font-size:14px;font-family:var(--mono);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;box-sizing:border-box;" /></div>
+            <div class="field"><label>Sample ID</label><input type="text" id="radd-sample" placeholder="container / sample ID" style="font-size:14px;font-family:var(--mono);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;box-sizing:border-box;" /></div>
+          </div>
+          <div class="g2" style="margin-bottom:10px;">
+            <div class="field"><label>Net Weight (kg) <span style="color:var(--red);font-weight:700;">*</span></label><input type="number" id="radd-weight" step="0.001" min="0" placeholder="0.000" onwheel="this.blur()" style="font-size:14px;font-family:var(--mono);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;box-sizing:border-box;" /></div>
+            <div class="field"><label>Stored date <span style="color:var(--red);font-weight:700;">*</span> <span style="font-size:10px;color:var(--text3);font-weight:400;">— starts the 2-yr clock</span></label><input type="date" id="radd-date" style="font-size:14px;font-family:var(--mono);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;box-sizing:border-box;" /></div>
+          </div>
+          <div class="g2" style="margin-bottom:12px;">
+            <div class="field"><label>Grower</label><select id="radd-grower" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;"><option value="">-- optional --</option><option>Jordan Elliott</option><option>Khyell Savoy</option><option>Tom Devost</option></select></div>
+            <div class="field"><label>Type / Size</label><input type="text" id="radd-type" placeholder="optional" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;box-sizing:border-box;" /></div>
+          </div>
+          <button type="button" class="btn-save" onclick="retentionAddLegacy()" style="width:100%;">Add Retention Sample</button>
+        </div>
+      </div>
+
       <div id="retention-list" style="padding-bottom:72px;"></div>
     </div>
   <nav class="bottom-nav" id="nav-cultivation">
@@ -17458,7 +17482,7 @@ function retentionRender(){
       : '<button type="button" onclick="retentionDestroy('+JSON.stringify(String(r.id))+')" style="font-size:11px;padding:4px 10px;border:1px solid var(--red);background:var(--red-pale);border-radius:var(--radius-sm);cursor:pointer;color:var(--red);font-weight:600;">Destroy</button>';
     html += '<tr style="border-bottom:1px solid var(--bg2);">'
       + '<td style="padding:6px 8px;font-family:var(--mono);">'+esc(r.batch)+closed+'</td>'
-      + '<td style="padding:6px 8px;font-family:var(--mono);">'+esc(r.binNumber||'—')+'</td>'
+      + '<td style="padding:6px 8px;font-family:var(--mono);">'+esc(r.binNumber||'—')+(r.retLegacy?' <span style="font-size:8px;font-weight:700;font-family:var(--mono);color:var(--text3);background:var(--bg2);border-radius:20px;padding:1px 5px;vertical-align:middle;">LEGACY</span>':'')+'</td>'
       + '<td style="padding:6px 8px;font-family:var(--mono);">'+wt+'</td>'
       + '<td style="padding:6px 8px;font-family:var(--mono);color:var(--text3);">'+esc(r.date||'—')+'</td>'
       + '<td style="padding:6px 8px;font-family:var(--mono);">'+esc(x.due||'—')+'</td>'
@@ -17502,6 +17526,64 @@ async function retentionDestroy(id){
   if(typeof updatePendingBadge==='function') updatePendingBadge();
   retentionRender();
 }
+function retentionToggleAdd(){
+  const f = document.getElementById('retention-add-form');
+  const t = document.getElementById('retention-add-toggle');
+  if(!f) return;
+  const show = f.style.display === 'none';
+  f.style.display = show ? 'block' : 'none';
+  if(t) t.textContent = (show ? '− ' : '+ ') + 'Add existing sample';
+}
+// Back-enter an EXISTING retention sample (one-time onboarding of current holdings). Creates a
+// Retention post-dry record with a free-text Batch ID — no batch is created, so closed or pre-app
+// batches are fine — and flags it legacy so it stays out of the CTLS "set aside" figures.
+async function retentionAddLegacy(){
+  const g = id => (document.getElementById(id)||{}).value || '';
+  const batch = g('radd-batch').trim().toUpperCase();
+  const sample = g('radd-sample').trim();
+  const wt = parseFloat(g('radd-weight')) || 0;
+  const date = g('radd-date').trim();
+  const grower = g('radd-grower').trim();
+  const type = g('radd-type').trim();
+  if(!batch){ toast('Enter a Batch ID.'); return; }
+  if(!(wt > 0)){ toast('Enter a net weight greater than 0.'); return; }
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){ toast('Enter the stored date (drives the 2-year clock).'); return; }
+  const rec = {
+    id: Date.now() + Math.floor(Math.random()*1000),
+    batch, binNumber: sample, date, grower,
+    tareWeight: 0, grossWeight: 0, netWeight: Math.round(wt*1000)/1000,
+    containerType: type, sampleType: 'Retention',
+    retDestroyed: false, retDestroyedDate: '', retDestroyedBy: '', retLegacy: true,
+    notes: 'Back-entered existing retention sample', synced: false
+  };
+  postDryRecs.unshift(rec);
+  lsSet('gp-postdry', postDryRecs);
+  try{
+    if(cfg.postDryTbl && cfg.token && cfg.base){
+      const f = {
+        'Batch ID': [batch], 'Container ID': sample || undefined, 'Date': date,
+        'Grower': grower || undefined, 'Tare Weight (kg)': 0, 'Gross Weight (kg)': 0,
+        'Net Weight (kg)': rec.netWeight, 'Type/Size': type || undefined,
+        'Sample Type': 'Retention', 'Retention Legacy': true, 'Notes': rec.notes
+      };
+      Object.keys(f).forEach(k=>{ if(f[k]===undefined) delete f[k]; });
+      const res = await atPost(cfg.postDryTbl, f);
+      rec.synced = true;
+      if(res && res.id) rec.airtableId = res.id;
+      lsSet('gp-postdry', postDryRecs);
+      setSyncPill('ok','Synced');
+    }
+    toast('Retention sample added for '+batch+'.');
+  }catch(e){
+    setSyncPill('err','Sync failed');
+    toast('Added locally — cloud sync failed, will retry.', 5000);
+  }
+  // Clear per-sample fields; keep date + grower for quick repeated entry.
+  ['radd-batch','radd-sample','radd-weight','radd-type'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
+  if(typeof updatePendingBadge==='function') updatePendingBadge();
+  retentionRender();
+  try{ document.getElementById('radd-batch').focus(); }catch(_){}
+}
 
 function ctlsFreshMetrics(from, to){
   // Total harvested weight (wet). A room's harvest is attributed to the month its "Complete Harvest"
@@ -17525,7 +17607,10 @@ function ctlsFreshMetrics(from, to){
   const wetTotal = _wetRooms.reduce((s,r)=> s + r.weight, 0);
   // Post-drying total — sum of net container weights in the month, broken out by Sample Type.
   // Defaults missing-sampleType records (older data) to 'Sold' so totals stay correct.
-  const postDrys = _postDrysInRange(from, to);
+  // Legacy back-entered retention samples are excluded here: they represent existing holdings onboarded
+  // for tracking, already reported in the paper binder, so they must NOT appear as newly set aside /
+  // in post-dry totals / loss-on-drying. (They still count as destroyed via ctlsDryMetrics.)
+  const postDrys = _postDrysInRange(from, to).filter(p => !p.retLegacy);
   const postDryTotal     = postDrys.reduce((s,p) => s + (parseFloat(p.netWeight)||0), 0);
   const _pdSold      = postDrys.filter(p => (p.sampleType||'Sold') === 'Sold');
   const _pdRetention = postDrys.filter(p => (p.sampleType||'') === 'Retention');
@@ -18228,7 +18313,7 @@ function buildSeedInvFields(rec){
   const fromFlow = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, date:dstr(r.date), time:r.time, room:r.room, grower:r.grower, reading:r.reading, notes:r.notes, synced:true });
   const fromWaste = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, date:dstr(r.date), grower:r.grower, room:r.room, type:r.waste_type, subtype:r.sub_category, weight:r.weight_kg, plants:r.plants_destroyed, notes:r.notes, synced:true });
   const fromHarvest = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, date:dstr(r.date), grower:r.grower, room:r.room, binNumber:r.bin_number, tareWeight:r.tare_weight_kg, totalWeight:r.total_weight_kg, netWeight:r.net_weight_kg, notes:r.notes, createdAt:r.created_at||'', synced:true });
-  const fromPostdry = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, binNumber:r.container_id, date:dstr(r.date), grower:r.grower, tareWeight:r.tare_weight_kg, grossWeight:r.gross_weight_kg, netWeight:r.net_weight_kg, containerType:r.type_size, sampleType:r.sample_type||'Sold', notes:r.notes, retDestroyed:!!r.retention_destroyed, retDestroyedDate:dstr(r.retention_destroyed_date), retDestroyedBy:r.retention_destroyed_by||'', synced:true });
+  const fromPostdry = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, binNumber:r.container_id, date:dstr(r.date), grower:r.grower, tareWeight:r.tare_weight_kg, grossWeight:r.gross_weight_kg, netWeight:r.net_weight_kg, containerType:r.type_size, sampleType:r.sample_type||'Sold', notes:r.notes, retDestroyed:!!r.retention_destroyed, retDestroyedDate:dstr(r.retention_destroyed_date), retDestroyedBy:r.retention_destroyed_by||'', retLegacy:!!r.retention_legacy, synced:true });
   const fromBio = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, date:dstr(r.date), grower:r.grower, room:r.room, product:r.product, unit:r.unit, reason:r.reason, quantity:r.quantity, notes:r.notes, synced:true });
   const fromPest = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, date:dstr(r.date), grower:r.grower, room:r.room, location:r.location, cardNumber:(r.card!=null&&r.card!==''?parseInt(r.card):null), pests:(function(){ if(r.pests==null) return []; if(Array.isArray(r.pests)) return r.pests; try{ const _p=JSON.parse(r.pests); return Array.isArray(_p)?_p:(_p?[_p]:[]); }catch(_){ return String(r.pests).split(',').map(s=>s.trim()).filter(Boolean); } })(), quantity:r.quantity, notes:r.notes, synced:true });
   const fromSeed = r => ({ id:r.lot_number, airtableId:r.lot_number, lotNumber:r.lot_number, strain:r.strain, source:r.source, acquisitionType:r.acquisition_type, sourceMomBatch:r.source_mother_batch, qtyOnHand:r.quantity_on_hand, qtyAcquired:r.quantity_acquired, qtyGerminated:r.quantity_germinated, dateReceived:dstr(r.date_received), notes:r.notes, synced:true });
@@ -18340,7 +18425,7 @@ function buildSeedInvFields(rec){
   const M_FLOW={'Date':'date','Time':'time','Room':'room','Grower':'grower','Flow Reading':'reading','Notes':'notes'};
   const M_WASTE={'Date':'date','Grower':'grower','Room':'room','Waste Type':'waste_type','Sub-Category':'sub_category','Weight (kg)':'weight_kg','Plants Destroyed':'plants_destroyed','Notes':'notes'};
   const M_HARV={'Date':'date','Grower':'grower','Room':'room','Bin Number':'bin_number','Created At':'created_at','Tare Weight (kg)':'tare_weight_kg','Total Weight (kg)':'total_weight_kg','Net Weight (kg)':'net_weight_kg','Notes':'notes'};
-  const M_POST={'Date':'date','Grower':'grower','Container ID':'container_id','Tare Weight (kg)':'tare_weight_kg','Gross Weight (kg)':'gross_weight_kg','Net Weight (kg)':'net_weight_kg','Type/Size':'type_size','Sample Type':'sample_type','Notes':'notes','Retention Destroyed':'retention_destroyed','Retention Destroyed Date':'retention_destroyed_date','Retention Destroyed By':'retention_destroyed_by'};
+  const M_POST={'Date':'date','Grower':'grower','Container ID':'container_id','Tare Weight (kg)':'tare_weight_kg','Gross Weight (kg)':'gross_weight_kg','Net Weight (kg)':'net_weight_kg','Type/Size':'type_size','Sample Type':'sample_type','Notes':'notes','Retention Destroyed':'retention_destroyed','Retention Destroyed Date':'retention_destroyed_date','Retention Destroyed By':'retention_destroyed_by','Retention Legacy':'retention_legacy'};
   const M_BIO={'Date':'date','Grower':'grower','Room':'room','Product':'product','Quantity':'quantity','Unit':'unit','Reason':'reason','Notes':'notes'};
   const M_PEST={'Date':'date','Grower':'grower','Room':'room','Location':'location','Card Number':'card','Pests Identified':'pests','Quantity':'quantity','Notes':'notes'};
   const mapPest = f => { const o=mk(M_PEST)(f); if(o.card!=null) o.card=String(o.card); if(o.pests!=null && typeof o.pests!=='string') o.pests=JSON.stringify(o.pests); return o; };
