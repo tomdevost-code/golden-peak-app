@@ -9551,8 +9551,15 @@ function wasteSeqUnlock(){
   //     Trim Room — flower rooms are never valid for Dry Waste, since packaging / trimming
   //     happens exclusively in the Trim Room.
   const _phase = batchRec ? batchRec.plantPhase : '';
+  // S- and X- batches hold multiple cohorts at once (a flowering cohort harvesting/drying while live
+  // Veg clones remain). They need the Veg room available even in Drying/Packaged so vegetative waste
+  // from those live plants can still be recorded (not just Dry Waste from the Trim Room).
+  const _wsMultiCohort = (isSeedsBatchId(batch) || isExperimentalBatch(batch));
   if(_phase === 'Drying' || _phase === 'Packaged' || _phase === 'Delivered'){
     batchRooms = ['Trim Room'];
+    if(_wsMultiCohort && _phase !== 'Delivered' && calcRoomPlantCount(batch, 'Veg') > 0 && !batchRooms.includes('Veg')){
+      batchRooms.push('Veg');
+    }
   } else {
     // Pre-harvest filtering — include only rooms with plants, plus Veg if it has the remainder.
     batchRooms = batchRooms.filter(r=>calcRoomPlantCount(batch, r) > 0);
@@ -9579,6 +9586,8 @@ function wasteSeqUnlock(){
     _wasteTypeOpts = ['Dry Waste']; // post-delivery cleanup — dry waste only
   } else if(room === 'Trim Room'){
     _wasteTypeOpts = ['Vegetative Waste','Dry Waste'];
+  } else if(room === 'Veg'){
+    _wasteTypeOpts = ['Vegetative Waste']; // live Veg plants — vegetative waste regardless of batch phase
   } else {
     _wasteTypeOpts = [(_phaseNow === 'Packaged' || _phaseNow === 'Drying') ? 'Dry Waste' : 'Vegetative Waste'];
   }
@@ -9642,7 +9651,14 @@ function wasteRefreshSubtype(){
   const batch = document.getElementById('waste-batch-select').value;
   const room = document.getElementById('waste-room')?.value || '';
   const batchRec = batch ? batchRecs.find(r=>r.batchId===batch && !r.type) : null;
-  const phase = batchRec ? (batchRec.plantPhase||'') : '';
+  let phase = batchRec ? (batchRec.plantPhase||'') : '';
+  // S-/X- batches harvesting a flowering cohort may still hold live Veg plants. When the Veg room is
+  // picked for one of those batches, drive the sub-category list off Veg (live-plant culls) instead
+  // of the batch's Drying/Packaged headline (which would wrongly offer Harvest / Pre-Harvest De-Leaf).
+  if(room === 'Veg' && !['Clones','Germination'].includes(phase)
+     && batch && (isSeedsBatchId(batch) || isExperimentalBatch(batch))){
+    phase = 'Veg';
+  }
   if(type !== 'Vegetative Waste'){
     wrap.style.display = 'none';
     sel.value = '';
@@ -9716,7 +9732,10 @@ async function wasteSave(){
     return;
   }
   const _wsExpectedType = (['Packaged','Drying','Delivered'].includes(_wsPhase)) ? 'Dry Waste' : 'Vegetative Waste';
-  if(room !== 'Trim Room' && type !== _wsExpectedType){
+  // S-/X- batches harvesting a flowering cohort may still hold live Veg plants — allow Vegetative
+  // Waste from the Veg room (with live plants) even though the batch headline is Drying/Packaged.
+  const _wsVegCohortOk = (isSeedsBatchId(batch) || isExperimentalBatch(batch)) && room === 'Veg' && type === 'Vegetative Waste' && _wsRoomLive > 0;
+  if(room !== 'Trim Room' && !_wsVegCohortOk && type !== _wsExpectedType){
     if(_wsExpectedType === 'Vegetative Waste'){
       toast('This batch is still pre-harvest — record Vegetative Waste, not Dry Waste.',5500);
     } else if(_wsPhase === 'Drying'){
