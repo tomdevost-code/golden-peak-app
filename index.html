@@ -17239,6 +17239,11 @@ function ctlsFlowerMetrics(from, to){
   const flippedToFlowerThisMonth = batchRecs.reduce((sum, b) => {
     if(!b || b.type) return sum;
     if(!b.flowerStart || !_inRange(b.flowerStart, from, to)) return sum;
+    // Mother batches: only Pheno Hunt / Seed Production cohorts ever flower. A mom with no
+    // flowering cohort (Clone Donor / Genetic Preservation) never flips — skip it entirely so a
+    // stale/phantom flowerStart can't inject its whole Veg population into the Flipped total.
+    const _isMom = isMotherBatch(b.batchId);
+    if(_isMom && (typeof momHasFloweringCapacity !== 'function' || !momHasFloweringCapacity(b))) return sum;
     // Prefer per-room distribution when available — that's the user's explicit allocation
     // of plants to Flower rooms.
     let qtyAtFlip = 0;
@@ -17249,8 +17254,10 @@ function ctlsFlowerMetrics(from, to){
         qtyAtFlip = _flowerOnly.reduce((s, [_, cnt]) => s + (parseInt(cnt)||0), 0);
       }
     }
-    // Fallback: derive total batch plants at flowerStart from tx history.
-    if(qtyAtFlip <= 0){
+    // Fallback: derive total batch plants at flowerStart from tx history. NOT used for moms — a
+    // mom's flowerStart marks a cohort flip, not the whole batch, so only its flower-room count
+    // (above) is a valid Flipped figure; the whole-batch fallback would massively over-count.
+    if(qtyAtFlip <= 0 && !_isMom){
       const credits = batchTxRecs
         .filter(t => t.batchId === b.batchId && (t.date||'') <= b.flowerStart
           && (t.txType === 'Produced/Received' || t.txType === 'Seeds Germinated'))
@@ -17281,6 +17288,16 @@ function ctlsFlowerMetrics(from, to){
     if(!b.flowerStart) return sum;
     if(b.flowerStart >= from) return sum;
     if(b.harvestDate && b.harvestDate < from) return sum; // already harvested before this month
+    // Mother batches: a non-flowering mom (Clone Donor / Genetic Preservation) is never "in flower"
+    // — skip it so a stale/phantom flowerStart can't inject its Veg population. A flowering mom
+    // contributes only its Flower cohort, not its whole batch.
+    if(isMotherBatch(b.batchId)){
+      if(typeof momHasFloweringCapacity === 'function' && !momHasFloweringCapacity(b)) return sum;
+      const c = (typeof ensureMomPhaseCounts === 'function') ? ensureMomPhaseCounts(b) : (b.momPhaseCounts||null);
+      const fn = c ? (parseInt(c.Flower)||0) : 0;
+      if(fn > 0) _alreadyDetail.push(b.batchId+' — '+fn+' plants (mom Flower cohort, flower start '+b.flowerStart+')');
+      return sum + Math.max(0, fn);
+    }
     // Snapshot of plants at the start of this month
     const sortedTxs = batchTxRecs
       .filter(t => t.batchId === b.batchId && (t.date||'') < from)
