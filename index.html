@@ -9707,6 +9707,14 @@ async function wasteSave(){
       _dtPhase = 'Flower';
     } else {
       _dtPhase = _hdln;
+      // Mother safeguard: when no room is specified, don't let a stale/phantom 'Flower' headline
+      // mis-tag the cull. A mom with no flowering cohort (Clone Donor / Genetic Preservation only)
+      // keeps all plants in Veg — its culls are Veg-clone culls, never Flower destroys (which would
+      // wrongly land in CTLS Section 3 instead of Section 2).
+      if(_dtPhase === 'Flower' && isMotherBatch(rec.batch)
+         && (typeof momHasFloweringCapacity !== 'function' || !momHasFloweringCapacity(_wsBatchRec))){
+        _dtPhase = 'Veg';
+      }
     }
     destroyedTx={id:Date.now()+1,batchId:rec.batch,date:rec.date,txType:'Destroyed',qty:rec.plants,notes:'Auto-created from Vegetative Waste record',currentQtyBefore:qtyBefore,plantPhase:_dtPhase,room:rec.room,sourceWasteId:rec.id,synced:false};
     rec.destroyedTxId=destroyedTx.id;
