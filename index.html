@@ -6691,7 +6691,11 @@ function populateBatchDropdowns(){
     if(!sel) return;
     const cur=sel.value;
     sel.innerHTML='<option value="">'+placeholderText+'</option>';
-    items.forEach(b=>{const opt=document.createElement('option');opt.value=b.batchId;opt.textContent=b.batchId+(b.closed?' (harvested)':'');if(b.closed)opt.style.color='var(--text3)';sel.appendChild(opt);});
+    items.forEach(b=>{const opt=document.createElement('option');opt.value=b.batchId;
+      // S- batches are multi-cohort (a flowering cohort may be harvested while live Veg clones
+      // remain), so the "(harvested)" label is misleading for them — suppress it and the greying.
+      const _hv=b.closed && !isSeedsBatchId(b.batchId);
+      opt.textContent=b.batchId+(_hv?' (harvested)':'');if(_hv)opt.style.color='var(--text3)';sel.appendChild(opt);});
     sel.value=cur;
   }
   // Apply the per-select Moms toggle on top of the phase-based lists. Default
