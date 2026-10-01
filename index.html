@@ -6142,7 +6142,9 @@ async function postDrySave(){
   {
     const _pdB = batchRecs.find(r => r.batchId === batch && !r.type);
     if(_pdB && _pdB.plantPhase === 'Packaged'){
-      const _tot = postDryRecs.filter(r => r.batch === batch).reduce((s,r)=> s + (parseFloat(r.netWeight)||0), 0);
+      // Exclude legacy back-entered retention samples — they're onboarded holdings, not part of this
+      // batch's actual post-drying output, so they must never fold into its Post-Drying Weight total.
+      const _tot = postDryRecs.filter(r => r.batch === batch && !r.retLegacy).reduce((s,r)=> s + (parseFloat(r.netWeight)||0), 0);
       _pdB.postDryingWeight = Math.round(_tot * 1000) / 1000;
       _pdB.synced = false;
       lsSet('gp-batch', batchRecs);
