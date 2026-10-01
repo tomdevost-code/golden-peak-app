@@ -636,7 +636,7 @@ tr:last-child td { border-bottom: none; }
             </select>
           </div>
           <div class="field" style="margin-bottom:10px;display:none;" id="seed-momsrc-wrap">
-            <label>Source Mother Batch <span style="color:var(--red);font-weight:700;">*</span> <span style="font-size:10px;color:var(--text3);font-weight:400;">— the mother batch that produced these seeds</span></label>
+            <label>Source Batch <span style="color:var(--red);font-weight:700;">*</span> <span style="font-size:10px;color:var(--text3);font-weight:400;">— the mother (M-) or breeding (X-) batch that produced these seeds</span></label>
             <select id="seed-momsrc">
               <option value="">-- select a mother batch --</option>
             </select>
@@ -703,7 +703,7 @@ tr:last-child td { border-bottom: none; }
         <!-- Step 1: Batch ID -->
         <div class="field" style="margin-bottom:10px;">
           <label>Batch ID <span style="font-size:10px;color:var(--text3);font-weight:400;">(XXX-NNN, e.g. SPK-001 — or M-XXX-NNN for a mother batch, e.g. M-SPK-001)</span></label>
-          <input type="text" id="batch-id-input" placeholder="e.g. SPK-001 (regular), M-SPK-001 (mom), or S-LK-001 (seeds)" style="font-family:var(--mono);text-transform:uppercase;" oninput="this.value=this.value.toUpperCase();batchIdCheck()" onblur="batchIdAutoComplete()" />
+          <input type="text" id="batch-id-input" placeholder="e.g. SPK-001 (regular), M-SPK-001 (mom), S-LK-001 (seeds), X-SP-001 (breeding)" style="font-family:var(--mono);text-transform:uppercase;" oninput="this.value=this.value.toUpperCase();batchIdCheck()" onblur="batchIdAutoComplete()" />
           <div id="batch-id-msg" style="display:none;font-size:11px;margin-top:4px;"></div>
         </div>
 
@@ -4474,12 +4474,19 @@ function calcStage(vs,fs,d){if(fs&&d>=fs){const fd=daysBetween(fs,d);return{stag
 const BATCH_ID_RE        = /^[A-Za-z]{2,3}-\d{3}$/;
 const MOTHER_BATCH_ID_RE = /^M-[A-Za-z]{2,3}-\d{3}$/i;
 const SEEDS_BATCH_ID_RE  = /^S-[A-Za-z]{2,3}-\d{3}$/i;
-const BATCH_ID_RE_ANY    = /^(M-|S-)?[A-Za-z]{2,3}-\d{3}$/i;
+const EXPERIMENTAL_BATCH_ID_RE = /^X-[A-Za-z]{2,3}-\d{3}$/i;  // breeding / experimental batches
+const BATCH_ID_RE_ANY    = /^(M-|S-|X-)?[A-Za-z]{2,3}-\d{3}$/i;
 function isMotherBatch(batchId){
   return MOTHER_BATCH_ID_RE.test((batchId||'').toString().trim());
 }
 function isSeedsBatchId(batchId){
   return SEEDS_BATCH_ID_RE.test((batchId||'').toString().trim());
+}
+// Experimental / breeding batches (X-XXX-NNN): clones taken from a mom, sex-reversed to make pollen,
+// used to pollinate plants and produce seeds for the seed bank. Lifecycle terminates like a mom
+// (Clones→Veg→Flower→Drying); never sold, never Packaged/Delivered. Plants still count in CTLS.
+function isExperimentalBatch(batchId){
+  return EXPERIMENTAL_BATCH_ID_RE.test((batchId||'').toString().trim());
 }
 // Extract the core letter prefix from any Batch ID format. Strips an optional M- or S-
 // prefix first so the comparison key is the inner letter segment.
@@ -4491,8 +4498,8 @@ function isSeedsBatchId(batchId){
 function batchIdLetterPrefix(batchId){
   const id = (batchId||'').toString().trim().toUpperCase();
   if(!id) return '';
-  // Strip optional M- or S- format prefix.
-  const stripped = id.replace(/^(M|S)-/i, '');
+  // Strip optional M- / S- / X- format prefix.
+  const stripped = id.replace(/^(M|S|X)-/i, '');
   const m = stripped.match(/^([A-Za-z]+)-\d+$/i);
   return m ? m[1].toUpperCase() : '';
 }
@@ -4801,6 +4808,7 @@ function harvestPopulateBatches(){
     if(isBatchClosedRec(b)) return false; // closed batches never show in operational dropdowns
     // Moms toggle: hide moms when OFF, show only moms when ON.
     if(_harvestMomsOnly !== isMotherBatch(b.batchId)) return false;
+    if(isExperimentalBatch(b.batchId)) return false; // X- breeding batches don't use the Harvest flow
     if(!['Flower','Drying'].includes(b.plantPhase)) return false;
     // Must have at least one flower room that's still unharvested
     const rooms = Array.isArray(b.rooms) ? b.rooms.filter(r=>r!=='Veg') : [];
@@ -6028,6 +6036,7 @@ function postDryPopulateBatches(){
   const eligible = batchRecs
     .filter(b => !b.type && (b.plantPhase === 'Drying' || b.plantPhase === 'Packaged') && !isBatchClosedRec(b))
     .filter(b => _pdMomsOnly === isMotherBatch(b.batchId))  // moms toggle is exclusive
+    .filter(b => !isExperimentalBatch(b.batchId))           // X- breeding batches don't use the Post-Dry flow
     .slice()
     .sort(batchCreatedCmp);
   sel.innerHTML = '<option value="">-- select batch --</option>' +
@@ -6329,9 +6338,10 @@ async function postDryComplete(){
   }
   const totalNet = recs.reduce((s,r)=> s + (parseFloat(r.netWeight)||0), 0);
   const _isMom = isMotherBatch(batch);
-  const _stayInDrying = _isMom;
-  const _promptMsg = _isMom
-    ? ('Complete Post-Drying for mother batch '+batch+'?\n\nTotal: '+totalNet.toFixed(3)+' kg across '+recs.length+' container(s).\n\nThis records the post-drying weight. Mother batches stay in Drying — set Status=Closed when done.')
+  const _isExp = isExperimentalBatch(batch);
+  const _stayInDrying = _isMom || _isExp; // moms + experimental breeding batches never advance to Packaged
+  const _promptMsg = _stayInDrying
+    ? ('Complete Post-Drying for '+batch+'?\n\nTotal: '+totalNet.toFixed(3)+' kg across '+recs.length+' container(s).\n\nThis records the post-drying weight. '+(_isExp?'Experimental':'Mother')+' batches stay in Drying — set Status=Closed when done.')
     : ('Complete Post-Drying for '+batch+'?\n\nTotal: '+totalNet.toFixed(3)+' kg across '+recs.length+' container(s).\n\nThis will advance the batch to Packaged.');
   if(!confirm(_promptMsg)){ return; }
   const idx = batchRecs.findIndex(r => r.batchId === batch && !r.type);
@@ -10908,6 +10918,17 @@ function batchIdCheck(){
       gs.style.cursor = 'not-allowed';
       batchGeneticsChange();
       msg.style.display='block'; msg.style.color='var(--green)'; msg.textContent='Seeds batch — Source of Genetics locked to Seeds. Pick a seed lot from inventory below.';
+    } else if(isExperimentalBatch(val)){
+      // Experimental / breeding batch (X-): clones taken from a mom, sex-reversed for pollen, used
+      // to make seeds. Treated as Clones-Internal under the hood (counts as normal produced plants),
+      // but the source mom can be ANY M- batch (a cross), and it terminates like a mom.
+      gs.value = 'Clones-Internal';
+      gs.disabled = true;
+      gs.style.background = 'var(--bg2)';
+      gs.style.color = 'var(--text2)';
+      gs.style.cursor = 'not-allowed';
+      batchGeneticsChange();
+      msg.style.display='block'; msg.style.color='var(--green)'; msg.textContent='Experimental breeding batch — clones from a source mom (any genetics). Pick the source mother below. Never sold; terminates at Drying.';
     } else {
       // Regular batch — let the user choose the source. If we previously auto-locked
       // it (because they had typed an M- or S- ID and then backspaced), unlock it now.
@@ -10933,7 +10954,7 @@ function batchIdCheck(){
     document.getElementById('batch-mother-wrap').style.display='none';
     document.getElementById('batch-external-wrap').style.display='none';
     if(val.length > 0 && !formatOk){
-      msg.style.display='block'; msg.style.color='var(--amber)'; msg.textContent='Format must be XXX-NNN (regular), M-XXX-NNN (mother), or S-XXX-NNN (seeds).';
+      msg.style.display='block'; msg.style.color='var(--amber)'; msg.textContent='Format must be XXX-NNN (regular), M-XXX-NNN (mother), S-XXX-NNN (seeds), or X-XXX-NNN (breeding).';
     } else if(exists){
       msg.style.display='block'; msg.style.color='var(--red)'; msg.textContent='Batch ID already exists.';
     } else { msg.style.display='none'; }
@@ -11007,27 +11028,35 @@ function batchGeneticsChange(){
   // Example: a new SP-001 → eligible moms are M-SP-* only. A new SPK-001 →
   // eligible moms are M-SPK-* only. Cultivar is NOT considered.
   if(sel === 'Clones-Internal' && !newBatchIsMother){
-    // Extract the new batch's letter prefix (the chars before the first dash).
-    // For "SP-001" this is "SP"; for "SPK-001" it's "SPK". Empty until the user
-    // types something valid.
-    const _idMatch = newBatchId.match(/^([A-Z]{2,3})-\d{3}$/i);
+    // Experimental (X-) breeding batches can clone from ANY open mom (a cross between genetics),
+    // so they skip the same-prefix filter. Regular Clones-Internal batches still require a
+    // same-letter-prefix mother donor.
+    const _isExp = isExperimentalBatch(newBatchId);
+    // Extract the new batch's letter prefix (strip an optional X- first). Empty until valid.
+    const _idMatch = newBatchId.match(/^(?:X-)?([A-Z]{2,3})-\d{3}$/i);
     const newPrefix = _idMatch ? _idMatch[1].toUpperCase() : '';
-    // Filter open moms by letter-prefix match against M-<PREFIX>-NNN.
-    const options = newPrefix
-      ? getMotherBatchIds().filter(mId => {
-          const m = mId.match(/^M-([A-Z]{2,3})-\d{3}$/i);
-          return m && m[1].toUpperCase() === newPrefix;
-        })
-      : [];
+    const options = _isExp
+      ? getMotherBatchIds() // breeding source: any open mom
+      : (newPrefix
+          ? getMotherBatchIds().filter(mId => {
+              const m = mId.match(/^M-([A-Z]{2,3})-\d{3}$/i);
+              return m && m[1].toUpperCase() === newPrefix;
+            })
+          : []);
     if(momLbl){
-      momLbl.innerHTML = 'Mother ID <span style="color:var(--red);font-weight:700;">*</span> <span id="batch-mother-hint" style="font-size:10px;color:var(--text3);font-weight:400;">(M-' + (newPrefix || 'XXX') + '-NNN — same-prefix clone donor)</span>';
+      momLbl.innerHTML = _isExp
+        ? 'Source Mother <span style="color:var(--red);font-weight:700;">*</span> <span id="batch-mother-hint" style="font-size:10px;color:var(--text3);font-weight:400;">(clone donor for this cross — any M- batch)</span>'
+        : 'Mother ID <span style="color:var(--red);font-weight:700;">*</span> <span id="batch-mother-hint" style="font-size:10px;color:var(--text3);font-weight:400;">(M-' + (newPrefix || 'XXX') + '-NNN — same-prefix clone donor)</span>';
     }
     momSel.innerHTML = '<option value="">-- select mother batch --</option>'
       + options.map(o => '<option value="'+o+'">'+o+'</option>').join('');
     momWrap.style.display='';
     momSel.disabled = false; momSel.style.cursor='';
     momMsg.style.color = 'var(--amber)';
-    if(!newPrefix){
+    if(_isExp){
+      if(!options.length){ momMsg.style.color = 'var(--red)'; momMsg.textContent = 'No open mother batches to clone from. Create a mother batch first.'; }
+      else { momMsg.textContent = 'Required — which mother batch are these breeding clones taken from?'; }
+    } else if(!newPrefix){
       momMsg.textContent = 'Enter a valid Batch ID (XX-NNN or XXX-NNN) first — the mother list filters to M-* batches with the same letter prefix.';
     } else if(!options.length){
       momMsg.textContent = 'No open mother batches found for prefix "'+newPrefix+'". Create M-'+newPrefix+'-NNN first on this page.';
@@ -11398,7 +11427,7 @@ function batchUpdateCreateBtn(){
 async function batchCreate(){
   const batchId = document.getElementById('batch-id-input').value.trim().toUpperCase();
   if(!batchId){ toast('Enter a Batch ID.'); return; }
-  if(!BATCH_ID_RE_ANY.test(batchId)){ toast('Invalid Batch ID format. Use XXX-NNN, M-XXX-NNN (mother), S-XXX-NNN (seeds), or T-XXX-NNN (pheno-hunt test).', 6000); return; }
+  if(!BATCH_ID_RE_ANY.test(batchId)){ toast('Invalid Batch ID format. Use XXX-NNN, M-XXX-NNN (mother), S-XXX-NNN (seeds), or X-XXX-NNN (experimental/breeding).', 6000); return; }
   if(batchRecs.some(r=>r.batchId===batchId)){ toast('Batch ID already exists.'); return; }
   const cultivar = document.getElementById('batch-cultivar').value.trim();
   const mother = document.getElementById('batch-mother').value.trim();
@@ -11415,6 +11444,12 @@ async function batchCreate(){
   }
   if(geneticsSource === 'Seeds' && !isSeedsBatchId(batchId)){
     toast('Seeds-genetics batches must use an S-XXX-NNN Batch ID (e.g. S-LK-001).', 5500);
+    return;
+  }
+  // X- prefix is reserved for experimental / breeding batches (clones from a mom). They can't be
+  // Seeds-genetics. batchIdCheck already locks their genetics to Clones-Internal in the UI.
+  if(isExperimentalBatch(batchId) && geneticsSource === 'Seeds'){
+    toast('X- (experimental/breeding) batches are clones from a mother — they can\'t use Seeds genetics.', 6000);
     return;
   }
   // Mother ID required for REGULAR Clones-Internal batches (mother batches no
@@ -11436,11 +11471,14 @@ async function batchCreate(){
     }
     // Prefix match — the mother's letter prefix (after "M-") must equal this batch's prefix.
     // e.g. SP-001 can only descend from M-SP-NNN. Cultivar is not enforced here anymore.
-    const _newM = (batchId.match(/^([A-Z]{2,3})-\d{3}$/i) || [])[1];
-    const _momM = (mother.match(/^M-([A-Z]{2,3})-\d{3}$/i) || [])[1];
-    if(!_newM || !_momM || _newM.toUpperCase() !== _momM.toUpperCase()){
-      toast('Prefix mismatch — '+mother+' can\'t be the mother of '+batchId+'. Mother and clone must share the same letter prefix (e.g. SP-001 ⟵ M-SP-NNN).', 6500);
-      return;
+    // SKIPPED for experimental (X-) breeding batches: a cross can take clones from any mom.
+    if(!isExperimentalBatch(batchId)){
+      const _newM = (batchId.match(/^([A-Z]{2,3})-\d{3}$/i) || [])[1];
+      const _momM = (mother.match(/^M-([A-Z]{2,3})-\d{3}$/i) || [])[1];
+      if(!_newM || !_momM || _newM.toUpperCase() !== _momM.toUpperCase()){
+        toast('Prefix mismatch — '+mother+' can\'t be the mother of '+batchId+'. Mother and clone must share the same letter prefix (e.g. SP-001 ⟵ M-SP-NNN).', 6500);
+        return;
+      }
     }
   }
   // Seeds genetics — must pick a lot from inventory AND specify how many seeds are being
@@ -12124,9 +12162,13 @@ function summaryBatchChanged(){
     updatePendingBadge();
   }
   document.getElementById('summary-info-card').style.display='';
-  document.getElementById('si-batchid').innerHTML = b.batchId + (isMotherBatch(b.batchId)
-    ? ' <span style="display:inline-block;background:var(--green-pale);color:var(--green);font-size:10px;font-weight:700;font-family:var(--mono);padding:2px 6px;border-radius:8px;letter-spacing:0.05em;vertical-align:middle;margin-left:4px;">MOTHER</span>'
-    : '');
+  document.getElementById('si-batchid').innerHTML = b.batchId
+    + (isMotherBatch(b.batchId)
+      ? ' <span style="display:inline-block;background:var(--green-pale);color:var(--green);font-size:10px;font-weight:700;font-family:var(--mono);padding:2px 6px;border-radius:8px;letter-spacing:0.05em;vertical-align:middle;margin-left:4px;">MOTHER</span>'
+      : '')
+    + (isExperimentalBatch(b.batchId)
+      ? ' <span style="display:inline-block;background:var(--amber-pale);color:var(--amber);font-size:10px;font-weight:700;font-family:var(--mono);padding:2px 6px;border-radius:8px;letter-spacing:0.05em;vertical-align:middle;margin-left:4px;">EXPERIMENTAL</span>'
+      : '');
   document.getElementById('si-cultivar').textContent = b.cultivar||'—';
   // Mother ID slot — context-aware label based on the batch's genetics source:
   //   • Seeds (S-XXX-NNN)             → "Seed Lot Number" + the donor seed lot from inventory.
@@ -13657,6 +13699,7 @@ function getAllowedPhases(currentPhase, batchId){
   // no automatic Clones→Veg signal that fits the multi-cohort model.
   if(!currentPhase) return ['Clones'];
   const isMother = batchId ? isMotherBatch(batchId) : false;
+  const isExp = batchId ? isExperimentalBatch(batchId) : false;
   // Mom Purpose gate: a mom can advance to Flower if it has ANY plants designated for
   // Pheno Hunt or Seed Production (per momPurposeCounts). Clone-Donor and Genetic
   // Preservation moms stay in Veg permanently.
@@ -13675,9 +13718,9 @@ function getAllowedPhases(currentPhase, batchId){
       // own flowering).
       if(isMother && !_momCanFlower) return ['Veg'];
       return ['Veg','Flower'];
-    case 'Flower':   return ['Flower'];
-    case 'Drying':   return ['Drying']; // Drying → Packaged is event-driven (Complete Post-Drying)
-    case 'Packaged': return isMother ? ['Packaged'] : ['Packaged','Delivered'];
+    case 'Flower':   return isExp ? ['Flower','Drying'] : ['Flower']; // X- has no Harvest flow — allow manual Flower→Drying
+    case 'Drying':   return ['Drying']; // terminal for moms + experimental; Drying → Packaged is event-driven (Complete Post-Drying) for regular batches
+    case 'Packaged': return (isMother || isExp) ? ['Packaged'] : ['Packaged','Delivered'];
     case 'Delivered':return ['Delivered']; // terminal — only Close (via Status) remains
     case 'Seeds':    return ['Seeds','Germination']; // legacy migration path
     default:         return [currentPhase];
@@ -14075,6 +14118,14 @@ function summaryUpdateTxTypeOptions(batchId){
       opts = ['Produced/Received', ...opts];
     }
   }
+  // Experimental / breeding batches (X-): never Sold (not a product) and no Moved to Moms. More
+  // breeding clones can be added, so keep Produced/Received available through Clones/Veg/Flower.
+  if(isExperimentalBatch(batchId)){
+    opts = opts.filter(o => o !== 'Sold' && o !== 'Moved to Moms');
+    if(['Clones','Veg','Flower'].includes(phase) && !opts.includes('Produced/Received')){
+      opts = ['Produced/Received', ...opts];
+    }
+  }
   sel.innerHTML = '<option value="">-- select type --</option>' + opts.map(o=>'<option'+(o===prev?' selected':'')+'>'+o+'</option>').join('');
   autoSelectIfSingle('tx-type');
   // Refresh the conditional source/destination dropdowns against the (possibly new)
@@ -14447,6 +14498,11 @@ async function summaryAddTransaction(){
   const _bSoldPhase = _bSoldRec ? (_bSoldRec.plantPhase||'') : '';
   const _isLivePlantSale = isSold && (_bSoldPhase === 'Clones' || _bSoldPhase === 'Veg');
   if(isSold){
+    // Experimental / breeding batches (X-) are never sold — their output is seeds for the bank.
+    if(isExperimentalBatch(batchId)){
+      toast('Experimental (X-) batches can\'t be sold — their output is seeds for the seed bank.',5500);
+      return;
+    }
     // Moms may sell LIVE plants (Clones/Veg) to another licensed producer, but never dry flower.
     if(isMotherBatch(batchId) && !_isLivePlantSale){
       toast('Mother batches can only sell live plants (Clones/Veg) to a licensed producer.',5000);
@@ -17884,13 +17940,19 @@ function ctlsGenerateReport(){
     totVeg = r3c(totVeg); totDry = r3c(totDry);
     const vegLoss = r3c(vegRecSum - totVeg);
     const dryLoss = r3c(dryRecSum - totDry);
+    // Retention samples currently held (not yet destroyed) — a point-in-time inventory snapshot
+    // across ALL batches (includes back-entered legacy holdings), independent of the report month.
+    const _retHeld   = postDryRecs.filter(p => p && (p.sampleType||'') === 'Retention' && !p.retDestroyed);
+    const _retHeldKg = _retHeld.reduce((s,p) => s + (parseFloat(p.netWeight)||0), 0);
+    const _retHeldDetail = _retHeld.map(p => p.batch+' — '+(parseFloat(p.netWeight)||0).toFixed(3)+' kg (sample '+(p.binNumber||'?')+(p.date?', stored '+p.date:'')+')');
     html += _ctlsBlock('6. Waste Destruction', [
       {label:'Destruction events in the month', value: v(dEvents.length, 'events'), detail:_evD},
       {label:'Vegetative waste destroyed (actual)', note:'actual weight destroyed, after drying loss', value: v(totVeg, 'kg'), detail:_vegActD},
       {label:'Dry cannabis destroyed (actual)', note:'actual weight destroyed, after drying loss', value: v(totDry, 'kg'), detail:_dryActD},
       {label:'Vegetative drying loss (recorded − actual)', note:'veg weight lost between waste entry and destruction', value: v(vegLoss, 'kg'), detail:_vegLossD},
       {label:'Dry drying loss (recorded − actual)', note:'dry weight lost between waste entry and destruction', value: v(dryLoss, 'kg'), detail:_dryLossD},
-      {label:'Retention samples destroyed', note: dry.retentionDestroyedCount ? (dry.retentionDestroyedCount+' sample'+(dry.retentionDestroyedCount===1?'':'s')+' · end of 2-year hold') : 'end of 2-year hold', value: v(dry.retentionDestroyedWeight, 'kg'), detail:dry.retentionDestroyedDetail}
+      {label:'Retention samples destroyed', note: dry.retentionDestroyedCount ? (dry.retentionDestroyedCount+' sample'+(dry.retentionDestroyedCount===1?'':'s')+' · end of 2-year hold') : 'end of 2-year hold', value: v(dry.retentionDestroyedWeight, 'kg'), detail:dry.retentionDestroyedDetail},
+      {label:'Retention samples held (not destroyed)', note: _retHeld.length ? (_retHeld.length+' sample'+(_retHeld.length===1?'':'s')+' · current holdings, all time') : 'current holdings', value: v(_retHeldKg, 'kg'), detail:_retHeldDetail}
     ]);
   }
 
@@ -18018,18 +18080,19 @@ function seedInvAcqChanged(){
         lotInput.value = nextProducedLotNumber();
       }
     }
-    // Populate with all mother batches, sorted by ID. Include closed moms because a closed
-    // mom may well be the one that produced the seeds (the close happened post-harvest).
+    // Populate with the batches that can produce seeds: mother batches (Seed Production cohorts) AND
+    // experimental breeding batches (X-), sorted by ID. Include closed ones — a breeding batch is
+    // usually closed after its seeds are harvested.
     const moms = batchRecs
-      .filter(r => r && !r.type && r.batchId && isMotherBatch(r.batchId))
-      .map(r => ({ id: r.batchId, closed: !!r.closedDate || (r.status||'').toLowerCase()==='closed', cultivar: r.cultivar||'' }))
+      .filter(r => r && !r.type && r.batchId && (isMotherBatch(r.batchId) || isExperimentalBatch(r.batchId)))
+      .map(r => ({ id: r.batchId, closed: !!r.closedDate || (r.status||'').toLowerCase()==='closed', cultivar: r.cultivar||'', exp: isExperimentalBatch(r.batchId) }))
       .sort((a,b) => a.id.localeCompare(b.id));
     const cur = sel.value;
     if(!moms.length){
-      sel.innerHTML = '<option value="">-- no mother batches in the system yet --</option>';
+      sel.innerHTML = '<option value="">-- no mother / breeding batches in the system yet --</option>';
     } else {
-      sel.innerHTML = '<option value="">-- select a mother batch --</option>'
-        + moms.map(m => '<option value="'+m.id+'"'+(m.id===cur?' selected':'')+'>'+m.id+(m.cultivar?(' · '+m.cultivar):'')+(m.closed?' (closed)':'')+'</option>').join('');
+      sel.innerHTML = '<option value="">-- select a source batch --</option>'
+        + moms.map(m => '<option value="'+m.id+'"'+(m.id===cur?' selected':'')+'>'+m.id+(m.exp?' [breeding]':'')+(m.cultivar?(' · '+m.cultivar):'')+(m.closed?' (closed)':'')+'</option>').join('');
     }
     wrap.style.display = '';
   } else {
@@ -18062,8 +18125,8 @@ async function seedInvSave(){
   let sourceMomBatch = '';
   if(acquisitionType === 'Produced'){
     sourceMomBatch = ((document.getElementById('seed-momsrc')||{}).value || '').trim();
-    if(!sourceMomBatch){ toast('Pick the mother batch that produced these seeds.', 5000); return; }
-    if(!isMotherBatch(sourceMomBatch)){ toast('Source must be a mother batch (M-XXX-NNN).', 4500); return; }
+    if(!sourceMomBatch){ toast('Pick the source batch that produced these seeds.', 5000); return; }
+    if(!isMotherBatch(sourceMomBatch) && !isExperimentalBatch(sourceMomBatch)){ toast('Source must be a mother (M-XXX-NNN) or breeding (X-XXX-NNN) batch.', 5000); return; }
   }
   if(!lotNumber){ toast('Enter a Lot / Batch Number. This is the primary identifier.'); return; }
   if(!strain){ toast('Enter a strain name.'); return; }
