@@ -4169,6 +4169,31 @@ function getDisplayPhase(batchRec){
     .filter(t => (t.saleStage||'') === 'Clone')
     .reduce((s,t) => s + (parseInt(t.qty)||0), 0);
   const phase = batchRec.plantPhase || '—';
+  // S-/X- batches are multi-cohort: they can simultaneously hold newly-taken Clones, living Veg
+  // plants, a Flowering cohort, and a harvested/Drying cohort. calcBatchQty counts only LIVING
+  // plants (harvested ones are debited), so the harvested/drying count is derived from the Harvested
+  // transactions separately. Show the full breakdown so veg plants aren't mislabeled as drying.
+  if(!isMotherBatch(batchRec.batchId)
+     && (isSeedsBatchId(batchRec.batchId) || isExperimentalBatch(batchRec.batchId))){
+    const _bid = batchRec.batchId;
+    const _cc  = parseInt(batchRec.cloneCohort) || 0;
+    const _tot = calcBatchQty(_bid); // living plants only (harvested excluded)
+    const _rd  = batchRec.roomDistribution || {};
+    const _flower = Object.keys(_rd).filter(r => r !== 'Veg').reduce((s,r)=>s+(parseInt(_rd[r])||0),0);
+    const _drying = batchTxRecs.filter(t => t.batchId===_bid && t.txType==='Harvested').reduce((s,t)=>s+(parseInt(t.qty)||0),0);
+    const _veg = Math.max(0, _tot - _cc - _flower);
+    const parts = [];
+    if(_cc > 0)     parts.push('Clones ('+_cc+')');
+    if(_veg > 0)    parts.push('Veg ('+_veg+')');
+    if(_flower > 0) parts.push('Flower ('+_flower+')');
+    if(_drying > 0) parts.push('Drying ('+_drying+')');
+    if(parts.length > 1){
+      let lbl = parts.join(' / ');
+      if(_livePlantsSold > 0) lbl += ' · ' + _livePlantsSold + ' sold';
+      return lbl;
+    }
+    // single cohort → fall through to the normal single-phase label below
+  }
   if(phase === 'Drying' && Array.isArray(batchRec.rooms)){
     const stillFlowering = batchRec.rooms.some(r => r !== 'Veg' && calcRoomPlantCount(batchRec.batchId, r) > 0);
     if(stillFlowering) return 'Drying / Flower';
