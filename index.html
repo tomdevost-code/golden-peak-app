@@ -14150,9 +14150,11 @@ function summaryUpdateTxTypeOptions(batchId){
   // (where it's normally blocked for non-mom non-Seeds batches).
   if(b && (b.geneticsSource||'').toLowerCase() === 'seeds'){
     if(!opts.includes('Seeds Germinated')) opts.unshift('Seeds Germinated');
-    // Ensure P/R is available across the S-batch's growth phases (Germination/Clones/Veg/Flower)
-    // since cuttings can be added throughout. Excluded in Drying/Packaged/Delivered.
-    if(['Germination','Clones','Veg','Flower'].includes(phase)){
+    // Cuttings can be added throughout the S-batch's growth (Germination/Clones/Veg/Flower), and
+    // even while a flowering cohort is Drying/Packaged IF live Veg clones remain — so the grower can
+    // keep cloning from the veg plants while the rest of the batch dries.
+    const _sHasVeg = (typeof calcRoomPlantCount === 'function') && calcRoomPlantCount(batchId, 'Veg') > 0;
+    if(['Germination','Clones','Veg','Flower'].includes(phase) || ((phase === 'Drying' || phase === 'Packaged') && _sHasVeg)){
       if(!opts.includes('Produced/Received')) opts.unshift('Produced/Received');
     }
   } else {
@@ -14778,9 +14780,10 @@ async function summaryAddTransaction(){
     return;
   }
   // Guard: in Drying phase, only Harvested rows are allowed (multi-day harvest) —
-  // EXCEPT mother batches, where Produced/Received is allowed to seed the next round.
+  // EXCEPT mother batches AND S- batches, where Produced/Received is allowed to keep cloning
+  // from the live Veg plants while the flowering cohort dries.
   if(_bGuard && _bGuard.plantPhase==='Drying' && txType!=='Harvested'
-     && !(_isMomBatch && txType==='Produced/Received')){
+     && !((_isMomBatch || _isSeedsBatch) && txType==='Produced/Received')){
     toast('In Drying phase, only Harvested transactions are allowed. Complete Post-Drying first.',5500);
     return;
   }
