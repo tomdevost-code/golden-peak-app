@@ -2186,6 +2186,37 @@ Lower Sackville, NS, B4C 3Z2</textarea></div>
       </div>
       <div class="card"><div class="section-label">Saved Certificates</div><div id="com-history" style="font-size:12px;"></div></div>
     </div>
+
+    <!-- Retention Samples — registry of all Post-Drying Retention containers across every batch
+         (open AND closed). Each is held 2 years from its post-dry date, then destroyed here without
+         reopening the batch. -->
+    <div class="page" id="page-retention" data-section="hpp">
+      <div class="card" style="margin-bottom:12px;">
+        <div class="section-label">Retention Samples</div>
+        <div style="font-size:12px;color:var(--text2);line-height:1.5;margin:-2px 0 12px;">Retention samples are held <b>2 years</b> from their post-dry date, then destroyed. This list covers every batch — including closed ones. Destroying a sample here records a dated destruction (it flows into the CTLS report) and leaves the batch closed.</div>
+        <div id="retention-stats" class="g2" style="margin-bottom:12px;"></div>
+        <div class="field" style="margin-bottom:10px;">
+          <label>Show</label>
+          <select id="retention-filter" onchange="retentionRender()" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;">
+            <option value="active">Active (not yet destroyed)</option>
+            <option value="overdue">Overdue (past 2 years)</option>
+            <option value="duesoon">Due soon (within 60 days)</option>
+            <option value="destroyed">Destroyed</option>
+            <option value="all">All</option>
+          </select>
+        </div>
+        <div class="field" style="margin-bottom:4px;">
+          <label>Destroyed by <span style="font-size:10px;color:var(--text3);font-weight:400;">— stamped when you destroy a sample</span></label>
+          <select id="retention-grower" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;">
+            <option value="">-- select grower --</option>
+            <option>Jordan Elliott</option>
+            <option>Khyell Savoy</option>
+            <option>Tom Devost</option>
+          </select>
+        </div>
+      </div>
+      <div id="retention-list"></div>
+    </div>
   <nav class="bottom-nav" id="nav-cultivation">
     <button class="bnav-btn" id="bn-seeds" onclick="switchPage('seeds',this)">
       <svg viewBox="0 0 24 24"><path d="M12 22V12M12 12c0-5.5 4-8 8-8 0 5.5-4 8-8 8zM12 12c0-5.5-4-8-8-8 0 5.5 4 8 8 8z"/></svg>
@@ -2276,6 +2307,11 @@ Lower Sackville, NS, B4C 3Z2</textarea></div>
     <button class="bnav-btn" id="bn-com" onclick="switchPage('com',this)">
       <svg viewBox="0 0 24 24"><path d="M6 2h9l5 5v15H6zM15 2v5h5M9 13h6M9 17h6M9 9h2"/></svg>
       CoM
+    </button>
+    <button class="bnav-btn" id="bn-retention" onclick="switchPage('retention',this)" style="position:relative;">
+      <svg viewBox="0 0 24 24"><path d="M5 8h14l-1 12H6L5 8zM9 8V5a3 3 0 016 0v3M9 12v4M15 12v4"/></svg>
+      Retention
+      <span id="retention-badge" style="display:none;position:absolute;top:6px;right:10px;background:var(--red);color:white;font-size:9px;font-weight:700;font-family:var(--mono);border-radius:20px;padding:1px 5px;min-width:16px;text-align:center;"></span>
     </button>
   </nav>
 </div>
@@ -3539,6 +3575,7 @@ async function pullFromAirtable(opts){
     try { if(typeof summaryRender==='function') summaryRender(); }catch(_){}
     try { if(typeof updatePendingBadge==='function') updatePendingBadge(); }catch(_){}
     try { if(typeof renderPullStatus==='function') renderPullStatus(); }catch(_){}
+    try { if(typeof retentionRender==='function') retentionRender(); }catch(_){} // updates list + overdue nav badge
     try { renderConflictBanner(); }catch(_){}
     // Refresh the Destruction page (history + pending + adjust) so records pulled from the cloud
     // show up without needing to navigate away and back. Same for the Flow log + Waste table.
@@ -4627,7 +4664,7 @@ function setAvg(id,val,lo,hi){const el=document.getElementById(id);if(val===null
 function stageLabel(r){if(!r.stage||!r.day)return'<span style="color:var(--text3)">-</span>';return r.stage==='flower'?'<span class="flower-txt">F'+r.day+'</span>':'<span class="veg-txt">V'+r.day+'</span>';}
 function toast(msg,dur){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),dur||2500);}
 
-function switchPage(page,btn){document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.bnav-btn').forEach(b=>b.classList.remove('active'));document.getElementById('page-'+page).classList.add('active');btn.classList.add('active');if(page==='report'){renderEC();renderRO();ctlsDefaultMonth();}if(page==='waste'){wasteRefreshDate();renderWaste();}if(page==='ec'){ecRefreshDate();}if(page==='ro'){roRefreshDate();}if(page==='batch'){renderBatchLog();}if(page==='summary'){summaryPopulateBatches();}if(page==='harvest'){harvestPopulateBatches();harvestRefreshDate();harvestPopulateBinNumbers();}if(page==='postdry'){postDryPopulateBatches();postDrySetupChanged();}if(page==='bio'){bioRefreshDate();bioSeqUnlock();}if(page==='pest'){pestRefreshDate();pestPopulateBatches();pestSeqUnlock();}if(page==='destroy'){if(typeof destroyEnter==='function')destroyEnter();}if(page==='sancleaning'){sanclEnter();}if(page==='santool'){santoolEnter();}if(page==='seeds'){seedInvEnter();}if(page==='pheno'){phenoEnter();}if(page==='qascale'){qascaleEnter();}if(page==='qamoisture'){qamoistureEnter();}if(page==='bol'){bolEnter();}if(page==='com'){comEnter();}if(page==='settings'){if(typeof fdRenderMilestones==='function')fdRenderMilestones();}
+function switchPage(page,btn){document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.bnav-btn').forEach(b=>b.classList.remove('active'));document.getElementById('page-'+page).classList.add('active');btn.classList.add('active');if(page==='report'){renderEC();renderRO();ctlsDefaultMonth();}if(page==='waste'){wasteRefreshDate();renderWaste();}if(page==='ec'){ecRefreshDate();}if(page==='ro'){roRefreshDate();}if(page==='batch'){renderBatchLog();}if(page==='summary'){summaryPopulateBatches();}if(page==='harvest'){harvestPopulateBatches();harvestRefreshDate();harvestPopulateBinNumbers();}if(page==='postdry'){postDryPopulateBatches();postDrySetupChanged();}if(page==='bio'){bioRefreshDate();bioSeqUnlock();}if(page==='pest'){pestRefreshDate();pestPopulateBatches();pestSeqUnlock();}if(page==='destroy'){if(typeof destroyEnter==='function')destroyEnter();}if(page==='sancleaning'){sanclEnter();}if(page==='santool'){santoolEnter();}if(page==='seeds'){seedInvEnter();}if(page==='pheno'){phenoEnter();}if(page==='qascale'){qascaleEnter();}if(page==='qamoisture'){qamoistureEnter();}if(page==='bol'){bolEnter();}if(page==='com'){comEnter();}if(page==='retention'){if(typeof retentionRender==='function')retentionRender();}if(page==='settings'){if(typeof fdRenderMilestones==='function')fdRenderMilestones();}
 
 // After a successful save, clear the batch selection so the next entry forces a re-select.
 // Grower and Date are intentionally left alone — the same person keeps logging on the same day.
@@ -17345,6 +17382,127 @@ function ctlsFlowerMetrics(from, to){
 }
 
 // SECTION 4 — Fresh Cannabis (wet) weights
+// ── RETENTION SAMPLES ─────────────────────────────────────────────────────────
+// Retention samples are Post-Drying containers tagged Sample Type = 'Retention'. Held 2 years from
+// the sample's post-dry date, then destroyed (recorded in place on the post-dry row via retDestroyed
+// / retDestroyedDate / retDestroyedBy). Works across ALL batches including closed ones — destroying
+// a sample updates the post-dry row, not the batch, so closed-batch write guards don't apply.
+const RETENTION_YEARS = 2;
+const RETENTION_DUE_SOON_DAYS = 60;
+function _retAddDays(dateStr, years, days){
+  if(!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return '';
+  const [y,m,d] = dateStr.split('-').map(Number);
+  const dt = new Date(y + (years||0), m-1, d + (days||0));
+  const mm = String(dt.getMonth()+1).padStart(2,'0');
+  const dd = String(dt.getDate()).padStart(2,'0');
+  return dt.getFullYear()+'-'+mm+'-'+dd;
+}
+function _retentionDestroyBy(dateStr){ return _retAddDays(dateStr, RETENTION_YEARS, 0); }      // post-dry date + 2 years
+function _retentionSamples(){ return postDryRecs.filter(r => r && (r.sampleType||'') === 'Retention'); }
+function _retentionStatus(r, today){
+  if(r.retDestroyed) return 'destroyed';
+  const due = _retentionDestroyBy(r.date);
+  if(!due) return 'active';
+  if(today >= due) return 'overdue';
+  const warn = _retAddDays(due, 0, -RETENTION_DUE_SOON_DAYS);
+  if(warn && today >= warn) return 'duesoon';
+  return 'active';
+}
+function retentionRender(){
+  const listEl = document.getElementById('retention-list');
+  if(!listEl) return;
+  const statsEl = document.getElementById('retention-stats');
+  const today = localDate();
+  const all = _retentionSamples();
+  let nActive=0, nOverdue=0, nDueSoon=0, nDestroyed=0;
+  all.forEach(r => {
+    const st = _retentionStatus(r, today);
+    if(st==='destroyed'){ nDestroyed++; return; }
+    nActive++;
+    if(st==='overdue') nOverdue++;
+    else if(st==='duesoon') nDueSoon++;
+  });
+  const badge = document.getElementById('retention-badge');
+  if(badge){ if(nOverdue>0){ badge.style.display=''; badge.textContent = nOverdue; } else badge.style.display='none'; }
+  if(statsEl){
+    const sc = (label,val,color) => '<div class="card" style="text-align:center;padding:10px;"><div style="font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px;">'+label+'</div><div style="font-size:22px;font-weight:700;font-family:var(--mono);color:'+color+';">'+val+'</div></div>';
+    statsEl.innerHTML = sc('Held (active)', nActive, 'var(--green)')
+      + sc('Overdue', nOverdue, nOverdue>0?'var(--red)':'var(--text3)')
+      + sc('Due soon', nDueSoon, nDueSoon>0?'var(--amber)':'var(--text3)')
+      + sc('Destroyed', nDestroyed, 'var(--text3)');
+  }
+  const filter = (document.getElementById('retention-filter')||{}).value || 'active';
+  let rows = all.map(r => ({ r, st:_retentionStatus(r, today), due:_retentionDestroyBy(r.date) }));
+  if(filter==='active')        rows = rows.filter(x => x.st!=='destroyed');
+  else if(filter==='overdue')  rows = rows.filter(x => x.st==='overdue');
+  else if(filter==='duesoon')  rows = rows.filter(x => x.st==='duesoon');
+  else if(filter==='destroyed')rows = rows.filter(x => x.st==='destroyed');
+  rows.sort((a,b) => (filter==='destroyed')
+    ? (b.r.retDestroyedDate||'').localeCompare(a.r.retDestroyedDate||'')
+    : ((a.due||'9999').localeCompare(b.due||'9999') || (a.r.batch||'').localeCompare(b.r.batch||'')));
+  if(!rows.length){ listEl.innerHTML = '<div class="card" style="text-align:center;color:var(--text3);font-size:13px;padding:18px;">No retention samples'+(filter!=='all'?' in this view':'')+'.</div>'; return; }
+  const esc = s => String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const stPill = st => {
+    const m = {active:['Active','var(--green)','var(--green-pale)'],duesoon:['Due soon','var(--amber)','var(--amber-pale)'],overdue:['Overdue','var(--red)','var(--red-pale)'],destroyed:['Destroyed','var(--text3)','var(--bg2)']}[st];
+    return '<span style="font-size:10px;font-weight:700;font-family:var(--mono);padding:2px 7px;border-radius:20px;color:'+m[1]+';background:'+m[2]+';">'+m[0]+'</span>';
+  };
+  let html = '<div style="overflow-x:auto;background:#fff;border-radius:var(--radius-sm);border:1px solid var(--border);"><table style="width:100%;border-collapse:collapse;font-size:12px;">';
+  html += '<thead><tr style="background:#f5f5f5;">'+['Batch','Sample ID','Weight','Post-dry','Destroy by','Status','Action'].map(h=>'<th style="padding:6px 8px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">'+h+'</th>').join('')+'</tr></thead><tbody>';
+  rows.forEach(x => {
+    const r = x.r;
+    const bRec = batchRecs.find(z=>z.batchId===r.batch && !z.type);
+    const closed = (bRec && bRec.closedDate) ? ' <span style="font-size:9px;color:var(--text3);">[closed]</span>' : '';
+    const wt = (parseFloat(r.netWeight)||0).toFixed(3)+' kg';
+    const action = (x.st==='destroyed')
+      ? '<span style="font-size:11px;color:var(--text3);">'+esc(r.retDestroyedDate||'')+(r.retDestroyedBy?' · '+esc(r.retDestroyedBy):'')+'</span>'
+      : '<button type="button" onclick="retentionDestroy('+JSON.stringify(String(r.id))+')" style="font-size:11px;padding:4px 10px;border:1px solid var(--red);background:var(--red-pale);border-radius:var(--radius-sm);cursor:pointer;color:var(--red);font-weight:600;">Destroy</button>';
+    html += '<tr style="border-bottom:1px solid var(--bg2);">'
+      + '<td style="padding:6px 8px;font-family:var(--mono);">'+esc(r.batch)+closed+'</td>'
+      + '<td style="padding:6px 8px;font-family:var(--mono);">'+esc(r.binNumber||'—')+'</td>'
+      + '<td style="padding:6px 8px;font-family:var(--mono);">'+wt+'</td>'
+      + '<td style="padding:6px 8px;font-family:var(--mono);color:var(--text3);">'+esc(r.date||'—')+'</td>'
+      + '<td style="padding:6px 8px;font-family:var(--mono);">'+esc(x.due||'—')+'</td>'
+      + '<td style="padding:6px 8px;">'+stPill(x.st)+'</td>'
+      + '<td style="padding:6px 8px;white-space:nowrap;">'+action+'</td>'
+      + '</tr>';
+  });
+  html += '</tbody></table></div>';
+  listEl.innerHTML = html;
+}
+async function retentionDestroy(id){
+  const r = postDryRecs.find(x => String(x.id) === String(id));
+  if(!r){ toast('Sample not found.'); return; }
+  if(r.retDestroyed){ toast('This sample is already destroyed.'); return; }
+  const grower = (document.getElementById('retention-grower')||{}).value || '';
+  if(!grower){ toast('Pick who is destroying the sample (Destroyed by) first.', 4000); return; }
+  const wt = (parseFloat(r.netWeight)||0).toFixed(3);
+  if(!confirm('Destroy retention sample?\n\nBatch '+r.batch+' · Sample '+(r.binNumber||'?')+' · '+wt+' kg\nPost-dry date: '+(r.date||'?')+'\n\nThis records a dated destruction ('+localDate()+', '+grower+') and marks the sample destroyed. The batch stays closed. This cannot be undone here.')) return;
+  r.retDestroyed = true;
+  r.retDestroyedDate = localDate();
+  r.retDestroyedBy = grower;
+  r.synced = false;
+  lsSet('gp-postdry', postDryRecs);
+  // Persist in place — updates the post-dry row (not the batch), so a closed batch is fine.
+  try{
+    if(r.airtableId && cfg.postDryTbl && cfg.token && cfg.base){
+      await atUpdateById(cfg.postDryTbl, r.airtableId, {
+        'Retention Destroyed': true,
+        'Retention Destroyed Date': r.retDestroyedDate,
+        'Retention Destroyed By': r.retDestroyedBy
+      });
+      r.synced = true;
+      lsSet('gp-postdry', postDryRecs);
+      setSyncPill('ok','Synced');
+    }
+    toast('Retention sample destroyed.');
+  }catch(e){
+    setSyncPill('err','Sync failed');
+    toast('Marked destroyed locally — cloud sync failed, will retry.', 5000);
+  }
+  if(typeof updatePendingBadge==='function') updatePendingBadge();
+  retentionRender();
+}
+
 function ctlsFreshMetrics(from, to){
   // Total harvested weight (wet). A room's harvest is attributed to the month its "Complete Harvest"
   // was clicked (the Harvested-tx date, via getPerRoomHarvestDates) — matching the Batch Management
@@ -17413,9 +17571,17 @@ function ctlsDryMetrics(from, to){
   const processorSampleWeight = _procTx.reduce((s,t) => s + (parseFloat(t.weight)||0), 0);
   // Cross-ref fresh section for sample weights + loss on drying.
   const fresh = ctlsFreshMetrics(from, to);
+  // Retention samples destroyed in the month — retention Post-Drying containers whose destruction
+  // (recorded on the Retention Samples page, typically ~2 years after they were set aside) falls in
+  // range. Counts the sample's net weight as dry cannabis destroyed.
+  const _retDestroyed = postDryRecs.filter(p => p && (p.sampleType||'') === 'Retention' && p.retDestroyed && _inRange(p.retDestroyedDate, from, to));
+  const retentionDestroyedWeight = _retDestroyed.reduce((s,p) => s + (parseFloat(p.netWeight)||0), 0);
+  const retentionDestroyedCount = _retDestroyed.length;
   const _wD = t => t.batchId+' — '+(parseFloat(t.weight)||0).toFixed(3)+' kg'+(t.date?' · '+t.date:'');
   return {
     retentionSampleWeight: fresh.postDryRetention, retentionSampleWeightDetail: fresh.postDryRetentionDetail,
+    retentionDestroyedWeight: retentionDestroyedWeight || null, retentionDestroyedCount,
+    retentionDestroyedDetail: _retDestroyed.map(p => p.batch+' — '+(parseFloat(p.netWeight)||0).toFixed(3)+' kg (sample '+(p.binNumber||'?')+(p.retDestroyedDate?', destroyed '+p.retDestroyedDate:'')+(p.retDestroyedBy?' · '+p.retDestroyedBy:'')+')'),
     testingSampleWeight:   fresh.postDryCOA + fresh.postDryTesting, testingSampleWeightDetail: (fresh.postDryCOADetail||[]).concat(fresh.postDryTestingDetail||[]),
     processorSampleWeight: processorSampleWeight || null, processorSampleWeightDetail: _procTx.map(_wD),
     soldWeight, soldWeightDetail: _soldTx.map(_wD),
@@ -17565,6 +17731,7 @@ function ctlsGenerateReport(){
     {label:'COA sample weight', note:'Post-Drying containers tagged COA', value: v(fresh.postDryCOA, 'kg'), detail:fresh.postDryCOADetail},
     {label:'Weight of dried flower sent to processor for samples', note:'Sent to Lab · Processor · Dry Flower', value: v(dry.processorSampleWeight, 'kg'), detail:dry.processorSampleWeightDetail},
     {label:'Weight of cannabis destroyed (Dry Waste)', value: v(dry.dryWasteWeight, 'kg'), detail:dry.dryWasteWeightDetail},
+    {label:'Retention samples destroyed', note: dry.retentionDestroyedCount ? (dry.retentionDestroyedCount+' sample'+(dry.retentionDestroyedCount===1?'':'s')+' · end of 2-year hold') : 'end of 2-year hold', value: v(dry.retentionDestroyedWeight, 'kg'), detail:dry.retentionDestroyedDetail},
     {label:'Loss on drying (cross-ref)', value: v(dry.lossOnDrying, 'kg'), detail:dry.lossOnDryingDetail}
   ]);
 
@@ -18061,7 +18228,7 @@ function buildSeedInvFields(rec){
   const fromFlow = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, date:dstr(r.date), time:r.time, room:r.room, grower:r.grower, reading:r.reading, notes:r.notes, synced:true });
   const fromWaste = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, date:dstr(r.date), grower:r.grower, room:r.room, type:r.waste_type, subtype:r.sub_category, weight:r.weight_kg, plants:r.plants_destroyed, notes:r.notes, synced:true });
   const fromHarvest = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, date:dstr(r.date), grower:r.grower, room:r.room, binNumber:r.bin_number, tareWeight:r.tare_weight_kg, totalWeight:r.total_weight_kg, netWeight:r.net_weight_kg, notes:r.notes, createdAt:r.created_at||'', synced:true });
-  const fromPostdry = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, binNumber:r.container_id, date:dstr(r.date), grower:r.grower, tareWeight:r.tare_weight_kg, grossWeight:r.gross_weight_kg, netWeight:r.net_weight_kg, containerType:r.type_size, sampleType:r.sample_type||'Sold', notes:r.notes, synced:true });
+  const fromPostdry = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, binNumber:r.container_id, date:dstr(r.date), grower:r.grower, tareWeight:r.tare_weight_kg, grossWeight:r.gross_weight_kg, netWeight:r.net_weight_kg, containerType:r.type_size, sampleType:r.sample_type||'Sold', notes:r.notes, retDestroyed:!!r.retention_destroyed, retDestroyedDate:dstr(r.retention_destroyed_date), retDestroyedBy:r.retention_destroyed_by||'', synced:true });
   const fromBio = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, date:dstr(r.date), grower:r.grower, room:r.room, product:r.product, unit:r.unit, reason:r.reason, quantity:r.quantity, notes:r.notes, synced:true });
   const fromPest = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, date:dstr(r.date), grower:r.grower, room:r.room, location:r.location, cardNumber:(r.card!=null&&r.card!==''?parseInt(r.card):null), pests:(function(){ if(r.pests==null) return []; if(Array.isArray(r.pests)) return r.pests; try{ const _p=JSON.parse(r.pests); return Array.isArray(_p)?_p:(_p?[_p]:[]); }catch(_){ return String(r.pests).split(',').map(s=>s.trim()).filter(Boolean); } })(), quantity:r.quantity, notes:r.notes, synced:true });
   const fromSeed = r => ({ id:r.lot_number, airtableId:r.lot_number, lotNumber:r.lot_number, strain:r.strain, source:r.source, acquisitionType:r.acquisition_type, sourceMomBatch:r.source_mother_batch, qtyOnHand:r.quantity_on_hand, qtyAcquired:r.quantity_acquired, qtyGerminated:r.quantity_germinated, dateReceived:dstr(r.date_received), notes:r.notes, synced:true });
@@ -18173,7 +18340,7 @@ function buildSeedInvFields(rec){
   const M_FLOW={'Date':'date','Time':'time','Room':'room','Grower':'grower','Flow Reading':'reading','Notes':'notes'};
   const M_WASTE={'Date':'date','Grower':'grower','Room':'room','Waste Type':'waste_type','Sub-Category':'sub_category','Weight (kg)':'weight_kg','Plants Destroyed':'plants_destroyed','Notes':'notes'};
   const M_HARV={'Date':'date','Grower':'grower','Room':'room','Bin Number':'bin_number','Created At':'created_at','Tare Weight (kg)':'tare_weight_kg','Total Weight (kg)':'total_weight_kg','Net Weight (kg)':'net_weight_kg','Notes':'notes'};
-  const M_POST={'Date':'date','Grower':'grower','Container ID':'container_id','Tare Weight (kg)':'tare_weight_kg','Gross Weight (kg)':'gross_weight_kg','Net Weight (kg)':'net_weight_kg','Type/Size':'type_size','Sample Type':'sample_type','Notes':'notes'};
+  const M_POST={'Date':'date','Grower':'grower','Container ID':'container_id','Tare Weight (kg)':'tare_weight_kg','Gross Weight (kg)':'gross_weight_kg','Net Weight (kg)':'net_weight_kg','Type/Size':'type_size','Sample Type':'sample_type','Notes':'notes','Retention Destroyed':'retention_destroyed','Retention Destroyed Date':'retention_destroyed_date','Retention Destroyed By':'retention_destroyed_by'};
   const M_BIO={'Date':'date','Grower':'grower','Room':'room','Product':'product','Quantity':'quantity','Unit':'unit','Reason':'reason','Notes':'notes'};
   const M_PEST={'Date':'date','Grower':'grower','Room':'room','Location':'location','Card Number':'card','Pests Identified':'pests','Quantity':'quantity','Notes':'notes'};
   const mapPest = f => { const o=mk(M_PEST)(f); if(o.card!=null) o.card=String(o.card); if(o.pests!=null && typeof o.pests!=='string') o.pests=JSON.stringify(o.pests); return o; };
