@@ -15951,16 +15951,24 @@ function renderBatchReport(batchId){
 
   // Post-Dry log
   if(postDrys.length){
-    const rows = postDrys.map(r => [
-      r.date||'—',
-      r.grower||'—',
-      fmtN(r.binNumber),
-      fmtN(r.containerType),
-      fmtKg(parseFloat(r.tareWeight)||0),
-      fmtKg(parseFloat(r.grossWeight)||0),
-      fmtKg(parseFloat(r.netWeight)||0),
-      r.notes||''
-    ]);
+    const rows = postDrys.map(r => {
+      // Tag the Notes column with the sample type for Retention / COA (legacy Testing → COA)
+      // containers so it's clear which containers are samples vs. sale inventory.
+      const _st = r.sampleType || '';
+      const _stTag = (_st === 'Retention') ? 'Retention sample'
+                   : (_st === 'COA' || _st === 'Testing') ? 'COA sample' : '';
+      const _noteCell = [_stTag, (r.notes || '')].filter(Boolean).join(' — ');
+      return [
+        r.date||'—',
+        r.grower||'—',
+        fmtN(r.binNumber),
+        fmtN(r.containerType),
+        fmtKg(parseFloat(r.tareWeight)||0),
+        fmtKg(parseFloat(r.grossWeight)||0),
+        fmtKg(parseFloat(r.netWeight)||0),
+        _noteCell
+      ];
+    });
     s += sectionTable('Post-Drying Containers ('+postDrys.length+')', ['Date','Grower','Container #','Type/Size','Tare','Gross','Net','Notes'], rows);
   }
 
