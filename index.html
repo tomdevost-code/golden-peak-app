@@ -1336,6 +1336,7 @@ tr:last-child td { border-bottom: none; }
               <option>Produced/Received</option>
               <option>Seeds Germinated</option>
               <option>Moved to Moms</option>
+              <option>Moved to Experimental</option>
               <option>Sold</option>
               <option>Sent to Lab</option>
               <option>Harvested</option>
@@ -1358,6 +1359,16 @@ tr:last-child td { border-bottom: none; }
               <option value="">-- select mother batch --</option>
             </select>
             <div id="tx-dest-mom-msg" style="font-size:11px;color:var(--text3);margin-top:4px;"></div>
+          </div>
+          <!-- Destination Experimental Batch: shown only for 'Moved to Experimental'. Moves live
+               plants (e.g. a mom's Veg plant) INTO an X- breeding batch. Saving creates a paired
+               Produced/Received on the X-batch and debits the source. -->
+          <div class="field" style="margin-bottom:10px;display:none;" id="tx-dest-exp-wrap">
+            <label>Destination Experimental Batch <span style="color:var(--red);font-weight:700;">*</span></label>
+            <select id="tx-dest-exp" style="font-size:14px;font-family:var(--sans);color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;outline:none;width:100%;">
+              <option value="">-- select X- batch --</option>
+            </select>
+            <div id="tx-dest-exp-msg" style="font-size:11px;color:var(--text3);margin-top:4px;"></div>
           </div>
           <!-- Source Batch (for mom Produced/Received): where the cuttings came from. Either
                the current mom batch itself (self-source, the typical case) OR an open non-mom
@@ -13783,7 +13794,7 @@ function txTypeChanged(){
   // Default the Plant Count label back to "Plant Count" — overridden below for Seeds Germinated.
   const pcLbl = document.getElementById('tx-plant-count-label');
   if(pcLbl) pcLbl.textContent = 'Plant Count';
-  if(t === 'Produced/Received' || t === 'Moved to Moms' || t === 'Seeds Germinated'){
+  if(t === 'Produced/Received' || t === 'Moved to Moms' || t === 'Moved to Experimental' || t === 'Seeds Germinated'){
     pcWrap.style.display = '';
     wetInp.value = '';
     // Plant Count input editable
@@ -13922,6 +13933,31 @@ function txTypeChanged(){
     } else {
       destWrap.style.display = 'none';
       destSel.value = '';
+    }
+  }
+  // Destination Experimental Batch: only for 'Moved to Experimental' — lists every OPEN X- batch
+  // (a cross can take plants from any mom, so no prefix filter). The moved plants arrive as Veg.
+  const expWrap = document.getElementById('tx-dest-exp-wrap');
+  const expSel  = document.getElementById('tx-dest-exp');
+  const expMsg  = document.getElementById('tx-dest-exp-msg');
+  if(expWrap && expSel){
+    if(t === 'Moved to Experimental'){
+      const _srcBatch = document.getElementById('summary-batch-select').value;
+      const _xs = batchRecs
+        .filter(r => r && !r.type && r.batchId && isExperimentalBatch(r.batchId)
+          && r.batchId !== _srcBatch && (r.status||'') !== 'Closed')
+        .map(r => r.batchId).sort();
+      expSel.innerHTML = _xs.length
+        ? '<option value="">-- select X- batch --</option>' + _xs.map(x => '<option value="'+x+'">'+x+'</option>').join('')
+        : '<option value="">-- no open X- batches --</option>';
+      expWrap.style.display = '';
+      if(expMsg){
+        if(!_xs.length){ expMsg.style.color = 'var(--red)'; expMsg.textContent = 'No open experimental (X-) batches. Create one on the Batches page first.'; }
+        else { expMsg.style.color = 'var(--amber)'; expMsg.textContent = 'Plants move INTO the X- batch as Veg; a paired Produced/Received is added there and the source is debited.'; }
+      }
+    } else {
+      expWrap.style.display = 'none';
+      expSel.value = '';
     }
   }
   // Cutting Source Batch: only relevant for a Produced/Received tx ON a mother
@@ -14125,6 +14161,12 @@ function summaryUpdateTxTypeOptions(batchId){
     if(['Clones','Veg','Flower'].includes(phase) && !opts.includes('Produced/Received')){
       opts = ['Produced/Received', ...opts];
     }
+  }
+  // Moved to Experimental — relocate live plants INTO an X- breeding batch (e.g. a mom's Veg plant).
+  // Offered on any non-X batch that currently has plants in a movable phase, when an open X- batch exists.
+  if(!isExperimentalBatch(batchId) && ['Clones','Veg','Flower'].includes(phase)){
+    const _hasOpenX = batchRecs.some(r => r && !r.type && isExperimentalBatch(r.batchId) && (r.status||'') !== 'Closed' && r.batchId !== batchId);
+    if(_hasOpenX && calcBatchQty(batchId) > 0 && !opts.includes('Moved to Experimental')) opts.push('Moved to Experimental');
   }
   sel.innerHTML = '<option value="">-- select type --</option>' + opts.map(o=>'<option'+(o===prev?' selected':'')+'>'+o+'</option>').join('');
   autoSelectIfSingle('tx-type');
@@ -14662,6 +14704,26 @@ async function summaryAddTransaction(){
       return;
     }
   }
+  // Moved to Experimental: destination must be an OPEN X- breeding batch (different from source).
+  // For a mother source the plants come from its Veg bucket (breeding plants are veg).
+  let _destExpBatchId = '';
+  if(txType === 'Moved to Experimental'){
+    _destExpBatchId = (document.getElementById('tx-dest-exp')?.value || '').trim();
+    if(isExperimentalBatch(batchId)){ toast('Experimental batches don\'t move plants to other experimental batches.', 5000); return; }
+    if(!_destExpBatchId){ toast('Pick the experimental (X-) batch to move the plants into.', 4500); return; }
+    if(!isExperimentalBatch(_destExpBatchId)){ toast('Destination must be an experimental (X-) batch.', 4500); return; }
+    const _dx = batchRecs.find(r => r.batchId === _destExpBatchId && !r.type);
+    if(!_dx){ toast('Destination '+_destExpBatchId+' not found.', 4500); return; }
+    if((_dx.status||'') === 'Closed'){ toast('Destination '+_destExpBatchId+' is closed — pick another.', 4500); return; }
+    if(_destExpBatchId === batchId){ toast('Source and destination must be different batches.', 4500); return; }
+    if(qty <= 0){ toast('Enter how many plants to move.', 4000); return; }
+    if(isMotherBatch(batchId)){
+      const _srcRec = batchRecs.find(r => r.batchId === batchId && !r.type);
+      const _mc = _srcRec ? ensureMomPhaseCounts(_srcRec) : null;
+      const _vegAvail = _mc ? (parseInt(_mc.Veg)||0) : 0;
+      if(qty > _vegAvail){ toast('Only '+_vegAvail+' Veg plant'+(_vegAvail===1?'':'s')+' available in '+batchId+'. Reduce the quantity.', 6000); return; }
+    }
+  }
   const notes = document.getElementById('tx-notes').value.trim();
   const date = localDate();
   const currentQtyBefore = summaryCalcQty(batchId);
@@ -14767,6 +14829,8 @@ async function summaryAddTransaction(){
   let _txNotes = notes;
   if(txType === 'Moved to Moms' && _destMomBatchId){
     _txNotes = (notes ? notes + ' — ' : '') + 'Moved to ' + _destMomBatchId;
+  } else if(txType === 'Moved to Experimental' && _destExpBatchId){
+    _txNotes = (notes ? notes + ' — ' : '') + 'Moved to ' + _destExpBatchId + ' (breeding)';
   } else if(txType === 'Produced/Received' && _srcCuttingBatchId){
     const _srcLabel = (_srcCuttingBatchId === batchId)
       ? 'Cuttings from this batch'
@@ -14775,6 +14839,7 @@ async function summaryAddTransaction(){
   }
   const tx = { id: Date.now(), batchId, date, txType, qty, weight, notes: _txNotes, currentQtyBefore, plantPhase: _txPhase, synced: false };
   if(txType === 'Moved to Moms' && _destMomBatchId) tx.destBatchId = _destMomBatchId;
+  if(txType === 'Moved to Experimental' && _destExpBatchId) tx.destBatchId = _destExpBatchId;
   if(txType === 'Produced/Received' && _srcCuttingBatchId) tx.sourceBatchId = _srcCuttingBatchId;
   if(txType === 'Sold' && _saleStage) tx.saleStage = _saleStage;
   if(txType === 'Sold' && _saleBuyer) tx.saleBuyer = _saleBuyer;
@@ -14828,6 +14893,11 @@ async function summaryAddTransaction(){
       _momPhaseChanged = true;
     } else if(txType === 'Moved to Moms' && qty > 0){
       momPhaseSubtractJunior(_txBatchRec, qty);
+      momPurposeSubtractJunior(_txBatchRec, qty);
+      _momPhaseChanged = true;
+    } else if(txType === 'Moved to Experimental' && qty > 0){
+      // Breeding plants leave the mom from the Veg bucket (validated above). Drain Veg + a purpose slot.
+      momPhaseAdjust(_txBatchRec, 'Veg', -qty);
       momPurposeSubtractJunior(_txBatchRec, qty);
       _momPhaseChanged = true;
     } else if(txType === 'Sold' && qty > 0){
@@ -14912,6 +14982,39 @@ async function summaryAddTransaction(){
       }
     }
   }
+  // Moved to Experimental: create the paired Produced/Received on the destination X- breeding batch
+  // (a non-mom). The source debit was already applied above. Incoming plants arrive as Veg, which
+  // advances the X- batch to Veg if it was still in Clones. Reuses _destTx so the sync block below
+  // pushes the paired tx and the updated destination batch.
+  if(txType === 'Moved to Experimental' && _destExpBatchId && qty > 0){
+    const _xQtyBefore = calcBatchQty(_destExpBatchId);
+    _destTx = {
+      id: Date.now() + 2 + Math.floor(Math.random()*1000),
+      batchId: _destExpBatchId,
+      date,
+      txType: 'Produced/Received',
+      qty,
+      weight: 0,
+      notes: 'Received from ' + batchId + ' (breeding, as Veg)',
+      currentQtyBefore: _xQtyBefore,
+      plantPhase: 'Veg',
+      sourceBatchId: batchId,
+      synced: false
+    };
+    batchTxRecs.unshift(_destTx);
+    lsSet('gp-batchtx', batchTxRecs);
+    const _xIdx = batchRecs.findIndex(r => r.batchId === _destExpBatchId && !r.type);
+    if(_xIdx >= 0){
+      if(!batchRecs[_xIdx].cloneDate) batchRecs[_xIdx].cloneDate = date;
+      const _xRank = { 'Germination':0, 'Clones':0, 'Veg':1, 'Flower':2, 'Drying':3 };
+      if((_xRank['Veg']||0) > (_xRank[batchRecs[_xIdx].plantPhase||'Clones']||0)) batchRecs[_xIdx].plantPhase = 'Veg';
+      if(!batchRecs[_xIdx].vegStart) batchRecs[_xIdx].vegStart = date;
+      if(!Array.isArray(batchRecs[_xIdx].rooms)) batchRecs[_xIdx].rooms = [];
+      if(!batchRecs[_xIdx].rooms.includes('Veg')) batchRecs[_xIdx].rooms.push('Veg');
+      batchRecs[_xIdx].synced = false;
+      lsSet('gp-batch', batchRecs);
+    }
+  }
   // Stamp Sold Date on the batch record when the first Sold tx lands. Independent of the
   // Status=Closed flow that previously set soldDate — selling and closing aren't the same event.
   let _soldDateStamped = false;
@@ -14958,6 +15061,8 @@ async function summaryAddTransaction(){
   const _cdWrap = document.getElementById('tx-clone-date-wrap'); if(_cdWrap) _cdWrap.style.display = 'none';
   const _dmInp = document.getElementById('tx-dest-mom'); if(_dmInp) _dmInp.value = '';
   const _dmWrap = document.getElementById('tx-dest-mom-wrap'); if(_dmWrap) _dmWrap.style.display = 'none';
+  const _deInp = document.getElementById('tx-dest-exp'); if(_deInp) _deInp.value = '';
+  const _deWrap = document.getElementById('tx-dest-exp-wrap'); if(_deWrap) _deWrap.style.display = 'none';
   const _sbInp = document.getElementById('tx-src-batch'); if(_sbInp) _sbInp.value = '';
   const _sbWrap = document.getElementById('tx-src-batch-wrap'); if(_sbWrap) _sbWrap.style.display = 'none';
   const msg = document.getElementById('tx-msg');
