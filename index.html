@@ -12067,9 +12067,11 @@ function renderBatchLog(){
     if(fType === 'mother' && !isMotherBatch(b.batchId)) return false;
     return true;
   }).sort(function(a,c){
-    // Group order: Mother batches first, then Seeds (S-) batches, then regular. Within each
-    // group, fall back to the active column sort.
-    const fr = x => isMotherBatch(x.batchId) ? 0 : ((typeof isSeedsBatchId==='function' && isSeedsBatchId(x.batchId)) ? 1 : 2);
+    // Group order: Mother batches first, then Seeds (S-), then Experimental (X-), then regular.
+    // Within each group, fall back to the active column sort.
+    const fr = x => isMotherBatch(x.batchId) ? 0
+      : ((typeof isSeedsBatchId==='function' && isSeedsBatchId(x.batchId)) ? 1
+      : ((typeof isExperimentalBatch==='function' && isExperimentalBatch(x.batchId)) ? 2 : 3));
     const d = fr(a) - fr(c);
     return d !== 0 ? d : _cmp(a,c);
   });
@@ -12106,7 +12108,10 @@ function renderBatchLog(){
     _hdr('Current Day', 'day',      'border-left:1px solid var(--border);')+
   '</tr></thead><tbody>';
   let _lastFam = null;
-  const _famName = x => isMotherBatch(x.batchId) ? 'Mother Batches' : ((typeof isSeedsBatchId==='function' && isSeedsBatchId(x.batchId)) ? 'Seeds (S) Batches' : 'Regular Batches');
+  const _famName = x => isMotherBatch(x.batchId) ? 'Mother Batches'
+    : ((typeof isSeedsBatchId==='function' && isSeedsBatchId(x.batchId)) ? 'Seeds (S) Batches'
+    : ((typeof isExperimentalBatch==='function' && isExperimentalBatch(x.batchId)) ? 'Experimental (X) Batches'
+    : 'Regular Batches'));
   active.forEach(b => {
     // Group header row whenever the batch family changes (moms → S → regular).
     const _fam = _famName(b);
