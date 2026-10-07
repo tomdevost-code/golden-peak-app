@@ -7534,27 +7534,31 @@ function ecRenderRecent(batch /*, room — ignored: filters by batch only */){
     '</tr>';
   });
   html += '</tbody></table></div>';
-  // Per-entry editable list for the current form date — so a mistyped reading can be fixed right
-  // after saving. Scoped to that day's entries (agreed scope); older days stay in the summary above.
-  const _ecEditDate = (document.getElementById('ec-date')||{}).value || localDate();
-  const _ecTodayRecs = recs.filter(r => r.date === _ecEditDate).sort((a,b)=>(b.id||0)-(a.id||0));
-  if(_ecTodayRecs.length){
-    html += '<div style="margin-top:12px;"><div style="font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;margin-bottom:6px;">Edit / delete entries for '+_ecEditDate+'</div>';
+  // Per-entry editable list for the last 5 days — so a mistyped reading can be corrected within a
+  // reasonable window (not just the same day). daysBetween(date, today) is inclusive (same day = 1).
+  const _ecToday = localDate();
+  const _ecEditRecs = recs
+    .filter(r => { const d = daysBetween(r.date, _ecToday); return d != null && d >= 1 && d <= 5; })
+    .sort((a,b)=> (b.date||'').localeCompare(a.date||'') || (b.id||0)-(a.id||0));
+  if(_ecEditRecs.length){
+    html += '<div style="margin-top:12px;"><div style="font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;font-weight:600;margin-bottom:6px;">Edit / delete entries (last 5 days)</div>';
     html += '<div style="border:1px solid var(--border);border-radius:var(--radius-sm);background:#fff;overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#f5f5f5;">'+
-      '<th style="padding:6px 8px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Type</th>'+
+      '<th style="padding:6px 8px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">Date</th>'+
+      '<th style="padding:6px 8px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;border-left:1px solid var(--border);">Type</th>'+
       '<th style="padding:6px 8px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;border-left:1px solid var(--border);">Room</th>'+
       '<th style="padding:6px 8px;text-align:center;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;border-left:1px solid var(--border);">EC</th>'+
       '<th style="padding:6px 8px;text-align:center;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;border-left:1px solid var(--border);">pH</th>'+
       '<th style="padding:6px 8px;text-align:center;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;border-left:1px solid var(--border);">ml</th>'+
       '<th style="padding:6px 8px;text-align:center;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;border-left:1px solid var(--border);">Actions</th>'+
     '</tr></thead><tbody>';
-    _ecTodayRecs.forEach(r => {
+    _ecEditRecs.forEach(r => {
       const _ecIdArg = "'" + String(r.id).replace(/\\/g,'\\\\').replace(/'/g,"\\'") + "'";
       const _ecv = (r.dripEc!=null && !isNaN(parseFloat(r.dripEc)))?parseFloat(r.dripEc).toFixed(2):'—';
       const _phv = (r.dripPh!=null && !isNaN(parseFloat(r.dripPh)))?parseFloat(r.dripPh).toFixed(2):'—';
       const _mlv = (r.totalML!=null && !isNaN(parseFloat(r.totalML)))?parseFloat(r.totalML).toFixed(0):'—';
       html += '<tr>'+
-        '<td style="padding:5px 8px;border-top:1px solid var(--border);">'+(r.wtype||'—')+'</td>'+
+        '<td style="padding:5px 8px;border-top:1px solid var(--border);font-family:var(--mono);color:var(--text3);white-space:nowrap;">'+(r.date||'—')+'</td>'+
+        '<td style="padding:5px 8px;border-top:1px solid var(--border);border-left:1px solid var(--border);">'+(r.wtype||'—')+'</td>'+
         '<td style="padding:5px 8px;border-top:1px solid var(--border);border-left:1px solid var(--border);font-family:var(--mono);">'+(r.room||'—')+'</td>'+
         '<td style="padding:5px 8px;border-top:1px solid var(--border);border-left:1px solid var(--border);text-align:center;font-family:var(--mono);">'+_ecv+'</td>'+
         '<td style="padding:5px 8px;border-top:1px solid var(--border);border-left:1px solid var(--border);text-align:center;font-family:var(--mono);">'+_phv+'</td>'+
@@ -8565,6 +8569,10 @@ function cleanLocalDuplicates(opts){
     const groups = {};
     t.arr.forEach((r, i) => {
       if(t.lsKey === 'gp-batchtx' && r && _btSkip.indexOf(r.txType) >= 0) return; // protected from auto-collapse
+      // Retention Post-Drying samples are NEVER auto-collapsed: multiple physical retention jars for
+      // the same batch can legitimately be byte-identical (same weight, same date, no unique ID), so
+      // treating them as duplicates would wrongly discard real samples.
+      if(t.lsKey === 'gp-postdry' && r && (r.sampleType||'') === 'Retention') return;
       const k = sig(r); if(!k) return; (groups[k] = groups[k] || []).push(i);
     });
     const drop = new Set();
