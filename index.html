@@ -7972,8 +7972,18 @@ async function ecSave(){
     if(atReady() && _old.airtableId){
       setSyncPill('ing','Syncing...');
       try{
-        const f={'Date':_old.date,'Room':_old.room,'Grower':_old.grower,'Batch ID':_old.batch?[_old.batch]:undefined,'Watering Type':_old.wtype||undefined,'Drip EC Pen 1':_old.dripEcPens[0]||undefined,'Drip EC Pen 2':_old.dripEcPens[1]||undefined,'Drip EC Pen 3':_old.dripEcPens[2]||undefined,'Drip pH Pen 1':_old.dripPhPens[0]||undefined,'Drip pH Pen 2':_old.dripPhPens[1]||undefined,'Drip pH Pen 3':_old.dripPhPens[2]||undefined,'Event 1 ml/plant':_old.events[0]||undefined,'Event 2 ml/plant':_old.events[1]||undefined,'Event 3 ml/plant':_old.events[2]||undefined,'Event 4 ml/plant':_old.events[3]||undefined,'Event 5 ml/plant':_old.events[4]||undefined,'Event 6 ml/plant':_old.events[5]||undefined,'Event 7 ml/plant':_old.events[6]||undefined,'Event 8 ml/plant':_old.events[7]||undefined,'Flow Meter Reading':_old.flow||undefined,'Notes':_old.notes||undefined};
-        Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
+        // On an EDIT we must send cleared/zeroed fields as explicit null so they OVERWRITE the old
+        // cloud value — otherwise lowering ML by zeroing some events (e.g. 500 → 0) silently leaves
+        // the old values in the cloud and the record reverts on the next sync.
+        const _nz = v => (v==null || v==='' || (typeof v==='number' && isNaN(v))) ? null : v;
+        const f={'Date':_old.date,'Room':_old.room,'Grower':_old.grower,'Batch ID':_old.batch?[_old.batch]:undefined,'Watering Type':_old.wtype||undefined,
+          'Drip EC Pen 1':_nz(_old.dripEcPens[0]),'Drip EC Pen 2':_nz(_old.dripEcPens[1]),'Drip EC Pen 3':_nz(_old.dripEcPens[2]),
+          'Drip pH Pen 1':_nz(_old.dripPhPens[0]),'Drip pH Pen 2':_nz(_old.dripPhPens[1]),'Drip pH Pen 3':_nz(_old.dripPhPens[2]),
+          'Event 1 ml/plant':_nz(_old.events[0]),'Event 2 ml/plant':_nz(_old.events[1]),'Event 3 ml/plant':_nz(_old.events[2]),'Event 4 ml/plant':_nz(_old.events[3]),
+          'Event 5 ml/plant':_nz(_old.events[4]),'Event 6 ml/plant':_nz(_old.events[5]),'Event 7 ml/plant':_nz(_old.events[6]),'Event 8 ml/plant':_nz(_old.events[7]),
+          'Flow Meter Reading':_nz(_old.flow),'Notes':_nz(_old.notes)};
+        // Only drop truly-absent keys (undefined); KEEP nulls so cleared values are written to the cloud.
+        Object.keys(f).forEach(k=>{if(f[k]===undefined)delete f[k];});
         await atUpdateById(cfg.ecTbl, _old.airtableId, f);
         _old.synced=true; lsSet('gp-ec',ecRecs); setSyncPill('ok','Synced'); toast('EC entry updated');
       }catch(e){ setSyncPill('err','Sync failed'); toast('Updated locally - sync: '+(e.message||'sync failed'),5000); }
@@ -8145,9 +8155,17 @@ async function roSave(){
   if(atReady()){
     setSyncPill('ing','Syncing...');document.getElementById('ro-btn').disabled=true;
     try{
-      const f={'Date':rec.date,'Room':rec.room,'Grower':rec.grower,'Batch ID':rec.batch?[rec.batch]:undefined,'Input EC':rec.inputEC||undefined,'EC Variance':rec.variance||undefined,'Notes':rec.notes||undefined};
-      rec.samples.forEach((s,i)=>{if(s.ec)f['S'+(i+1)+' EC']=s.ec;if(s.ph)f['S'+(i+1)+' pH']=s.ph;});
-      Object.keys(f).forEach(k=>{if(f[k]===undefined||f[k]===null||f[k]==='')delete f[k];});
+      const _nz = v => (v==null || v==='' || (typeof v==='number' && isNaN(v))) ? null : v;
+      const f={'Date':rec.date,'Room':rec.room,'Grower':rec.grower,'Batch ID':rec.batch?[rec.batch]:undefined,'Input EC':_nz(rec.inputEC),'EC Variance':_nz(rec.variance),'Notes':_nz(rec.notes)};
+      rec.samples.forEach((s,i)=>{ f['S'+(i+1)+' EC']=_nz(s.ec); f['S'+(i+1)+' pH']=_nz(s.ph); });
+      if(_roEditing){
+        // EDIT: keep nulls so cleared samples/fields OVERWRITE the old cloud values (otherwise the
+        // record reverts on the next sync). Only drop truly-absent keys.
+        Object.keys(f).forEach(k=>{ if(f[k]===undefined) delete f[k]; });
+      } else {
+        // INSERT: drop empties so column defaults apply.
+        Object.keys(f).forEach(k=>{ if(f[k]===undefined||f[k]===null||f[k]==='') delete f[k]; });
+      }
       if(_roEditing && rec.airtableId){ await atUpdateById(cfg.roTbl, rec.airtableId, f); }
       else { const _roRes = await atPost(cfg.roTbl,f); if(_roRes && _roRes.id) rec.airtableId=_roRes.id; }
       rec.synced=true;lsSet('gp-ro',roRecs);setSyncPill('ok','Synced');toast(_roEditing?'Updated and synced to the cloud':'Saved and synced to the cloud');
