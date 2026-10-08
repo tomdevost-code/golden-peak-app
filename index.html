@@ -551,6 +551,16 @@ tr:last-child td { border-bottom: none; }
               <input type="number" id="waste-plants" step="1" min="0" placeholder="0" disabled style="background:var(--bg2);color:var(--text3);cursor:not-allowed;" />
             </div>
           </div>
+          <!-- Plant Type (Veg room, clone-cohort batches only): is the destroyed plant a Clone or a
+               Veg plant? Drives which cohort the auto-Destroyed tx reduces so the Clones/Veg split
+               on the Batch Summary stays accurate. -->
+          <div class="field" id="waste-plantstage-wrap" style="display:none;margin-top:10px;">
+            <label>Plant Type <span style="font-size:10px;color:var(--text3);font-weight:400;">— which cohort is being destroyed</span></label>
+            <select id="waste-plantstage" style="width:100%;">
+              <option value="Veg">Veg plant</option>
+              <option value="Clone">Clone (cutting)</option>
+            </select>
+          </div>
         </div>
       </div>
       <div class="section">
@@ -9696,6 +9706,18 @@ function wastePlantsToggle(){
   plantsEl.style.color = allowPlants ? '' : 'var(--text3)';
   plantsEl.style.cursor = allowPlants ? '' : 'not-allowed';
   if(!allowPlants) plantsEl.value = '';
+  // Plant Type selector: only for Veg-room culls on a batch that currently has a clone cohort, so the
+  // grower can mark a destroyed plant as a Clone (reduces the clone cohort) vs a Veg plant.
+  const _wpWrap = document.getElementById('waste-plantstage-wrap');
+  if(_wpWrap){
+    const _wpRoom = document.getElementById('waste-room')?.value || '';
+    const _wpBatch = document.getElementById('waste-batch-select')?.value || '';
+    const _wpRec = _wpBatch ? batchRecs.find(r=>r.batchId===_wpBatch && !r.type) : null;
+    const _wpHasClones = _wpRec && (parseInt(_wpRec.cloneCohort)||0) > 0;
+    const _showStage = allowPlants && _wpRoom === 'Veg' && _wpHasClones;
+    _wpWrap.style.display = _showStage ? '' : 'none';
+    if(!_showStage){ const s=document.getElementById('waste-plantstage'); if(s) s.value='Veg'; }
+  }
 }
 
 function wasteRefreshSubtype(){
@@ -9857,10 +9879,15 @@ async function wasteSave(){
     // Flower destroys in CTLS Section 3 instead of Veg/Clone destroys in Section 2.
     const _hdln = _wsBatchRec ? (_wsBatchRec.plantPhase||'') : '';
     const _flowerRooms = ['Flower 1','Flower 2','Flower 3','Flower 4','Flower 5','Tent'];
+    // Clone-vs-veg choice (Veg room, non-mom batch with a clone cohort): when the grower marks the
+    // cull as clones, reduce the clone cohort (so Clones/Veg stays accurate) and tag the tx 'Clones'.
+    const _wpStage = (document.getElementById('waste-plantstage')||{}).value || 'Veg';
+    const _wpIsClone = (rec.room === 'Veg') && (_wpStage === 'Clone')
+      && _wsBatchRec && !isMotherBatch(rec.batch) && (parseInt(_wsBatchRec.cloneCohort)||0) > 0;
     let _dtPhase;
     if(rec.room === 'Veg'){
       // Veg-room plants are Veg/Clone-phase even when the batch headline is further along.
-      _dtPhase = (_hdln === 'Clones' || _hdln === 'Germination') ? _hdln : 'Veg';
+      _dtPhase = _wpIsClone ? 'Clones' : ((_hdln === 'Clones' || _hdln === 'Germination') ? _hdln : 'Veg');
     } else if(_flowerRooms.includes(rec.room)){
       _dtPhase = 'Flower';
     } else {
@@ -9892,6 +9919,14 @@ async function wasteSave(){
     if(_wsBatchRec && isMotherBatch(rec.batch)){
       momPhaseSubtractJunior(_wsBatchRec, rec.plants);
       momPurposeSubtractJunior(_wsBatchRec, rec.plants);
+    }
+    // Non-mom clone cull: drop the clone cohort by the destroyed count so the Clones/Veg split stays
+    // right (otherwise a destroyed clone would wrongly shrink the Veg side).
+    if(_wpIsClone){
+      _wsBatchRec.cloneCohort = Math.max(0, (parseInt(_wsBatchRec.cloneCohort)||0) - rec.plants);
+      _wsBatchRec.synced = false;
+      lsSet('gp-batch', batchRecs);
+      _distChanged = true; // triggers the batch upsert below so clone_cohort syncs
     }
   }
   populateBatchDropdowns();renderWaste();updatePendingBadge();
