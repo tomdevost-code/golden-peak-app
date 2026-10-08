@@ -1077,7 +1077,7 @@ tr:last-child td { border-bottom: none; }
             <div id="si-currentqty" style="font-size:32px;font-weight:700;font-family:var(--mono);color:var(--green);">0</div>
             <div style="font-size:11px;color:var(--text3);margin-top:4px;">plants</div>
           </div>
-          <div class="card" style="text-align:center;background:var(--bg2);border-color:var(--border);">
+          <div class="card" id="si-currentday-card" style="text-align:center;background:var(--bg2);border-color:var(--border);">
             <div style="font-size:11px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">Current Day</div>
             <div id="si-currentday" style="font-size:32px;font-weight:700;font-family:var(--mono);color:var(--text);">—</div>
             <div id="si-currentday-label" style="font-size:11px;color:var(--text3);margin-top:4px;">—</div>
@@ -12210,7 +12210,8 @@ function renderBatchLog(){
     // Current Day label — uses the same shared helper as the Batch Management page so the
     // two views stay in lock-step (mothers show multi-phase, Flower+Veg-room split shows both,
     // multi-day Drying shows per-room).
-    const _parts = (typeof computeBatchDayParts === 'function') ? computeBatchDayParts(b, today) : [];
+    // Mother batches don't track a Current Day (plants span multiple phases/cohorts at once).
+    const _parts = (!isMotherBatch(b.batchId) && typeof computeBatchDayParts === 'function') ? computeBatchDayParts(b, today) : [];
     let dayLabel = '—';
     if(_parts.length === 1){
       dayLabel = _parts[0].label;
@@ -13455,6 +13456,11 @@ function summaryRefreshCurrentDay(batchId){
   if(!_dayEl || !_dayLbl) return;
   const b = batchRecs.find(r=>r.batchId===batchId && !r.type);
   if(!b){ _dayEl.textContent = '—'; _dayLbl.textContent = '—'; return; }
+  // Mother batches don't track a Current Day (plants sit across multiple phases/cohorts at once) —
+  // hide the card entirely for moms; show it for everyone else.
+  const _dayCard = document.getElementById('si-currentday-card');
+  if(isMotherBatch(b.batchId)){ if(_dayCard) _dayCard.style.display = 'none'; return; }
+  if(_dayCard) _dayCard.style.display = '';
   const _today = localDate();
   // Use the same shared helper as the Batches list so the two views stay in lock-step.
   const parts = computeBatchDayParts(b, _today);
