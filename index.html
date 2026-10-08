@@ -15618,23 +15618,26 @@ async function summaryTxDelete(id){
 // Flower-moisture target drying range (highlight). Adjust these two numbers to change the range.
 const MOISTURE_TARGET_LO = 13, MOISTURE_TARGET_HI = 14.5;
 function _qaGrowerSel(id){ const s=document.getElementById(id); return s?s.value:''; }
-function _qaOpenBatches(dryingOnly){
+function _qaOpenBatches(dryingOnly, regularOnly){
   // dryingOnly (Flower Moisture) now means "harvested onward" — Drying, Packaged, or Delivered —
   // so moisture readings can still be logged after the batch is packaged/sold/delivered.
+  // regularOnly (Scale Check) limits the list to regular production batches — excludes mother (M-),
+  // Seeds (S-) and experimental (X-) batches.
   return batchRecs.filter(b => b && !b.type && !(typeof isBatchClosedRec==='function' && isBatchClosedRec(b))
-      && (!dryingOnly || ['Drying','Packaged','Delivered'].includes(b.plantPhase||'')))
+      && (!dryingOnly || ['Drying','Packaged','Delivered'].includes(b.plantPhase||''))
+      && (!regularOnly || (!isMotherBatch(b.batchId) && !isSeedsBatchId(b.batchId) && !isExperimentalBatch(b.batchId))))
     .sort(batchCreatedCmp);
 }
-function _qaFillBatchSel(selId, dryingOnly){
+function _qaFillBatchSel(selId, dryingOnly, regularOnly){
   const sel=document.getElementById(selId); if(!sel) return;
   const cur=sel.value;
-  const list=_qaOpenBatches(dryingOnly);
+  const list=_qaOpenBatches(dryingOnly, regularOnly);
   sel.innerHTML='<option value="">-- select batch --</option>'+
     list.map(b=>'<option value="'+b.batchId+'"'+(b.batchId===cur?' selected':'')+'>'+b.batchId+(b.cultivar?' – '+b.cultivar:'')+'</option>').join('');
 }
 // ---- Scale Check ----
 function qascaleEnter(){
-  _qaFillBatchSel('qascale-batch', false);
+  _qaFillBatchSel('qascale-batch', false, true); // regular production batches only (no M-/S-/X-)
   const dt=document.getElementById('qascale-date'); if(dt && !dt.value) dt.value=localDate();
   qascaleRenderRecent();
 }
