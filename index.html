@@ -12227,7 +12227,10 @@ function summaryPopulateBatches(){
     // Moms toggle is exclusive: hide moms when OFF, show only moms when ON.
     if(_sumMomsOnly !== isMotherBatch(b.batchId)) return false;
     return true;
-  }).sort(batchCreatedCmp); // newest created on top (shared comparator)
+  }).sort(closedOnly
+    // Closed-only view: order by Closed Date, most-recently-closed on top, oldest at the bottom.
+    ? (a,c) => { const da=a.closedDate||'', dc=c.closedDate||''; if(da!==dc){ if(!da) return 1; if(!dc) return -1; return dc.localeCompare(da); } return (a.batchId||'').localeCompare(c.batchId||''); }
+    : batchCreatedCmp); // open view: newest created on top (shared comparator)
   sel.innerHTML = '<option value="">-- select batch --</option>' +
     batches.map(b => {
       let _ph = '';
