@@ -9835,7 +9835,16 @@ async function wasteSave(){
   // (The previous version checked the batch total, which let users destroy more from one room
   // than that room actually held.)
   if(type==='Vegetative Waste' && plants>0){
-    const _roomCount = calcRoomPlantCount(batch, room);
+    let _roomCount = calcRoomPlantCount(batch, room);
+    // EDIT: the record being edited still has its original plants deducted from the room count right
+    // now (they get reversed below), so add them back before checking capacity — otherwise raising
+    // a 20-plant record to 22 is wrongly blocked as "only 2 available".
+    if(wasteEditId != null){
+      const _editOld = wasteRecs.find(r => String(r.id) === String(wasteEditId));
+      if(_editOld && _editOld.batch === batch && _editOld.room === room && _editOld.type === 'Vegetative Waste'){
+        _roomCount += (parseInt(_editOld.plants)||0);
+      }
+    }
     if(plants > _roomCount){
       toast('Cannot destroy '+plants+' plant(s) from '+room+' — only '+_roomCount+' plant(s) in that room.',5500);
       return;
