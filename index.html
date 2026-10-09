@@ -12373,7 +12373,12 @@ function summaryBatchChanged(){
       const _nonMom = !isMotherBatch(b.batchId);
       const _tot = (typeof calcBatchQty==='function') ? calcBatchQty(b.batchId) : 0;
       const _cc = parseInt(b.cloneCohort)||0;
-      const _show = _nonMom && _tot>0 && (['Veg','Flower','Drying'].includes(b.plantPhase||'') || _cc>0);
+      // Regular production batches (non-mom, non-S, non-X): once every plant has moved into a flower
+      // room (no Veg-room plants left), the clone-cohort tracker no longer applies — hide it.
+      const _isRegular = _nonMom && !isSeedsBatchId(b.batchId) && !isExperimentalBatch(b.batchId);
+      const _vegLive = (typeof calcRoomPlantCount==='function') ? calcRoomPlantCount(b.batchId,'Veg') : 0;
+      const _allInFlower = _isRegular && _tot>0 && _vegLive===0 && ['Flower','Drying'].includes(b.plantPhase||'');
+      const _show = _nonMom && _tot>0 && (['Veg','Flower','Drying'].includes(b.plantPhase||'') || _cc>0) && !_allInFlower;
       _ccCard.style.display = _show ? '' : 'none';
       if(_show){
         const _in=document.getElementById('summary-clone-cohort'); if(_in) _in.value=_cc;
