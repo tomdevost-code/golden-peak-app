@@ -12154,12 +12154,19 @@ function renderBatchLog(){
     return true;
   }).sort(function(a,c){
     // Group order: Mother batches first, then Seeds (S-), then Experimental (X-), then regular.
-    // Within each group, fall back to the active column sort.
     const fr = x => isMotherBatch(x.batchId) ? 0
       : ((typeof isSeedsBatchId==='function' && isSeedsBatchId(x.batchId)) ? 1
       : ((typeof isExperimentalBatch==='function' && isExperimentalBatch(x.batchId)) ? 2 : 3));
     const d = fr(a) - fr(c);
-    return d !== 0 ? d : _cmp(a,c);
+    if(d !== 0) return d;
+    // Regular batches always order by Created Date, newest first (oldest at the bottom).
+    if(fr(a) === 3){
+      const da=a.createdDate||'', dc=c.createdDate||'';
+      if(da!==dc){ if(!da) return 1; if(!dc) return -1; return dc.localeCompare(da); }
+      return (a.batchId||'').localeCompare(c.batchId||'');
+    }
+    // Other groups follow the active column sort.
+    return _cmp(a,c);
   });
   if(!active.length){
     const filtered = (fId || fCultivar || fPhase || fType);
