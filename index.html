@@ -15884,8 +15884,28 @@ function _hppSoldRows(batch){
 }
 function _hppSoldWeight(batch){ return _hppSoldRows(batch).reduce((s,r)=>s+r.net,0); }
 // ---------- Bill of Lading ----------
+// A batch sold as Fresh / Fresh Frozen skips drying, so it has no Post-Drying "Sold" containers —
+// its shippable units are the Harvest Log bins (same tare/gross/net shape). Detect that case.
+function _bolIsFreshBatch(batch){
+  return batchTxRecs.some(t => t.batchId===batch && t.txType==='Sold' && (t.saleStage||'')==='Fresh');
+}
+// BOL line items: dried-flower batches use their Sold Post-Drying containers; fresh/fresh-frozen
+// batches (no post-dry) use their Harvest Log bins, tagged "Fresh Frozen".
+function _bolRows(batch){
+  const dry = _hppSoldRows(batch);
+  if(dry.length) return dry;
+  if(_bolIsFreshBatch(batch)){
+    return harvestRecs.filter(h => h.batch===batch)
+      .sort((a,b)=> (a.date||'').localeCompare(b.date||'') || (parseInt(a.binNumber)||0)-(parseInt(b.binNumber)||0))
+      .map(h => ({ cid:(h.binNumber!=null?h.binNumber:''), type:'Fresh Frozen', tare:(parseFloat(h.tareWeight)||0), gross:(parseFloat(h.totalWeight)||0), net:(parseFloat(h.netWeight)||0) }));
+  }
+  return [];
+}
 function _bolEligibleBatches(){
-  const has={}; postDryRecs.forEach(r=>{ if((r.sampleType||'Sold')==='Sold') has[r.batch]=true; });
+  const has={};
+  postDryRecs.forEach(r=>{ if((r.sampleType||'Sold')==='Sold') has[r.batch]=true; });
+  // Fresh / fresh-frozen batches: eligible once they have a Fresh Sold tx (ship the harvest bins).
+  batchTxRecs.forEach(t=>{ if(t.txType==='Sold' && (t.saleStage||'')==='Fresh') has[t.batchId]=true; });
   return batchRecs.filter(b=>b && !b.type && has[b.batchId]).sort(batchCreatedCmp);
 }
 function bolEnter(){
@@ -15899,13 +15919,15 @@ function bolBatchChanged(){
   const batch=(document.getElementById('bol-batch')||{}).value||'';
   const b=batchRecs.find(r=>r.batchId===batch && !r.type);
   const desc=document.getElementById('bol-description'); if(desc && b) desc.value=b.cultivar||'';
+  // Fresh / fresh-frozen batch: default the Grade to "Fresh Frozen" if the field is empty.
+  const gr=document.getElementById('bol-grade'); if(gr && batch && _bolIsFreshBatch(batch) && !gr.value) gr.value='Fresh Frozen';
   bolRenderPreview(batch);
 }
 function bolRenderPreview(batch){
   const el=document.getElementById('bol-preview'); if(!el) return;
   if(!batch){ el.innerHTML='Select a batch to load containers.'; return; }
-  const rows=_hppSoldRows(batch);
-  if(!rows.length){ el.innerHTML='<div style="padding:8px;color:var(--text3);">No Sold containers for this batch.</div>'; return; }
+  const rows=_bolRows(batch);
+  if(!rows.length){ el.innerHTML='<div style="padding:8px;color:var(--text3);">No Sold containers / fresh harvest bins for this batch.</div>'; return; }
   const total=rows.reduce((s,r)=>s+r.net,0);
   let h='<table style="width:100%;border-collapse:collapse;"><thead><tr style="background:var(--bg2);">'+['Container','Grade','Tare','Gross','Net'].map(x=>'<th style="padding:4px 6px;text-align:right;font-size:10px;color:var(--text3);font-family:var(--mono);">'+x+'</th>').join('')+'</tr></thead><tbody>';
   rows.forEach(r=>{ h+='<tr><td style="padding:3px 6px;text-align:right;font-family:var(--mono);">'+_hppEsc(r.cid)+'</td><td style="padding:3px 6px;text-align:center;font-family:var(--mono);">'+_hppEsc(r.type)+'</td><td style="padding:3px 6px;text-align:right;font-family:var(--mono);">'+r.tare.toFixed(3)+'</td><td style="padding:3px 6px;text-align:right;font-family:var(--mono);">'+r.gross.toFixed(3)+'</td><td style="padding:3px 6px;text-align:right;font-family:var(--mono);">'+r.net.toFixed(3)+'</td></tr>'; });
@@ -15914,7 +15936,7 @@ function bolRenderPreview(batch){
 }
 function _bolGather(){
   const batch=(document.getElementById('bol-batch')||{}).value||'';
-  const rows=_hppSoldRows(batch);
+  const rows=_bolRows(batch);
   const g={ batch, docDate:(document.getElementById('bol-date')||{}).value||localDate(),
     grade:(document.getElementById('bol-grade')||{}).value||'', description:(document.getElementById('bol-description')||{}).value||'',
     from:(document.getElementById('bol-from')||{}).value||'', soldTo:(document.getElementById('bol-soldto')||{}).value||'',
@@ -15931,7 +15953,7 @@ async function bolSave(){
   const g=_bolGather();
   if(!g.batch){ toast('Pick a batch.'); return; }
   if(!g.soldTo.trim()){ toast('Enter the Sold To recipient.'); return; }
-  if(!g.rows.length){ toast('No Sold containers to ship for this batch.'); return; }
+  if(!g.rows.length){ toast('No Sold containers / fresh harvest bins to ship for this batch.'); return; }
   const rec=Object.assign({ id:Date.now()+Math.floor(Math.random()*100000), airtableId:null, synced:false }, g);
   bolRecs.unshift(rec); lsSet('gp-bol', bolRecs);
   bolRenderHistory(); if(typeof updatePendingBadge==='function') updatePendingBadge();
