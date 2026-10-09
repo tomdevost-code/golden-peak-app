@@ -12247,7 +12247,7 @@ function renderBatchLog(){
     // it still has unallocated plants. Dash when the batch has no rooms (post-Packaged).
     const roomsLabel = (typeof formatBatchRoomsForDisplay === 'function') ? formatBatchRoomsForDisplay(b) : ((b.rooms && b.rooms.length) ? b.rooms.join(', ') : '—');
     html += '<tr'+rowStyle+'>'+
-      '<td style="padding:7px 6px;font-family:var(--mono);font-weight:700;overflow-wrap:anywhere;color:'+(rowIsClosed?'var(--text3)':'var(--green)')+';">'+b.batchId+closedTag+'</td>'+
+      '<td style="padding:7px 6px;font-family:var(--mono);font-weight:700;overflow-wrap:anywhere;color:'+(rowIsClosed?'var(--text3)':'var(--green)')+';"><span onclick="goToBatchSummary(\''+b.batchId+'\')" style="cursor:pointer;text-decoration:underline;" title="Open '+b.batchId+' in Batch Management">'+b.batchId+'</span>'+closedTag+'</td>'+
       '<td style="padding:7px 6px;border-left:1px solid var(--border);overflow-wrap:anywhere;">'+(b.cultivar || '—')+'</td>'+
       '<td style="padding:7px 6px;border-left:1px solid var(--border);color:var(--text2);overflow-wrap:anywhere;">'+phase+qtyChip+'</td>'+
       '<td style="padding:7px 6px;border-left:1px solid var(--border);color:var(--text2);font-family:var(--mono);font-size:11px;overflow-wrap:anywhere;">'+roomsLabel+'</td>'+
@@ -12256,6 +12256,25 @@ function renderBatchLog(){
   });
   html += '</tbody></table></div>';
   list.innerHTML = html;
+}
+// Open a batch on the Batch Management page from the Batches list (Batch ID link). Switches the
+// page, matches the Closed + Moms filters to the batch so it appears in the dropdown, selects it,
+// and renders its summary.
+function goToBatchSummary(batchId){
+  if(!batchId) return;
+  const b = batchRecs.find(r=>r.batchId===batchId && !r.type);
+  const isClosed = !!(b && (b.closedDate || (b.status && b.status !== 'Open')));
+  const isMom = isMotherBatch(batchId);
+  if(typeof switchPage === 'function') switchPage('summary', document.getElementById('bn-summary'));
+  const cc = document.getElementById('summary-show-closed'); if(cc) cc.checked = isClosed;
+  if(typeof momsOnlyFilter === 'function' && momsOnlyFilter('summary-batch-select') !== isMom
+     && typeof toggleMomsFilter === 'function'){
+    toggleMomsFilter('summary-batch-select');
+  }
+  if(typeof summaryPopulateBatches === 'function') summaryPopulateBatches();
+  const sel = document.getElementById('summary-batch-select');
+  if(sel){ sel.value = batchId; if(typeof summaryBatchChanged === 'function') summaryBatchChanged(); }
+  try{ window.scrollTo({top:0, behavior:'smooth'}); }catch(_){}
 }
 // ── BATCH SUMMARY ────────────────────────────────────────────────────────────
 function summaryPopulateBatches(){
