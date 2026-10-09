@@ -4175,7 +4175,9 @@ function getDisplayPhase(batchRec){
   const _hasDryFlowerSold = _bSoldTxs.some(t => (t.saleStage||'') === 'Dry' || (t.saleStage||'') === 'Fresh' || t.plantPhase === 'Delivered');
   if(_hasDryFlowerSold) return 'Sold';
   // Tally live-plant (Clone-stage) sales for the partial-sale indicator below.
-  const _livePlantsSold = _bSoldTxs
+  // Mother batches: don't surface a "· N sold" annotation in the phase label — mom live-plant sales
+  // don't need to be shown on the Batches list / Summary phase cell.
+  const _livePlantsSold = isMotherBatch(batchRec.batchId) ? 0 : _bSoldTxs
     .filter(t => (t.saleStage||'') === 'Clone')
     .reduce((s,t) => s + (parseInt(t.qty)||0), 0);
   const phase = batchRec.plantPhase || '—';
