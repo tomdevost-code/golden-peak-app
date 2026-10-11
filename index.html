@@ -307,7 +307,9 @@ tr:last-child td { border-bottom: none; }
       <button class="btn-primary" id="ec-btn" onclick="ecSave()">Save EC Entry</button>
       <button class="btn-secondary" style="width:100%;margin-top:8px;" onclick="ecClearConfirm()">Clear Form</button>
 
-      <div class="section" style="margin-top:20px;">
+      <!-- Standalone Flow Meter card — hidden (flow is now entered with the watering on the EC form,
+           auto-timestamped). Kept in the DOM so it can be re-enabled by removing display:none. -->
+      <div class="section" style="margin-top:20px;display:none;">
         <div class="section-label">Flow Meter Reading</div>
         <div class="card">
           <div style="font-size:11px;color:var(--text3);margin-bottom:10px;line-height:1.4;">You can now enter a flow reading <b>with the watering above</b> (on the EC form) — the time is recorded automatically. Use this card only to log a reading on its own (e.g. timed to a prior light cycle) or to correct an existing one. The meter is zeroed per batch, so the highest reading is the total water used.</div>
