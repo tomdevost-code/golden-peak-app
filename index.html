@@ -284,8 +284,8 @@ tr:last-child td { border-bottom: none; }
                 <option>Full Saturation</option><option>Feed</option><option>Flush</option><option>Fade</option><option>RO Water</option>
               </select>
             </div>
-            <div class="field" style="display:none;"><label>Flow meter (L)</label>
-              <input type="number" id="ec-flow" step="0.01" placeholder="0.00" />
+            <div class="field"><label>Flow Meter Reading (L) <span style="font-size:10px;color:var(--text3);font-weight:400;">— optional; time auto-recorded</span></label>
+              <input type="number" id="ec-flow" step="1" min="0" placeholder="0" onwheel="this.blur()" />
             </div>
           </div>
           <!-- Events as chips + Add Event pill -->
@@ -310,7 +310,7 @@ tr:last-child td { border-bottom: none; }
       <div class="section" style="margin-top:20px;">
         <div class="section-label">Flow Meter Reading</div>
         <div class="card">
-          <div style="font-size:11px;color:var(--text3);margin-bottom:10px;line-height:1.4;">Log a flow-meter total for a room. Set the date &amp; time the reading belongs to (e.g. the prior light cycle), pick the room, and enter the cumulative meter reading. The meter is zeroed per batch, so the highest reading is the total water used.</div>
+          <div style="font-size:11px;color:var(--text3);margin-bottom:10px;line-height:1.4;">You can now enter a flow reading <b>with the watering above</b> (on the EC form) — the time is recorded automatically. Use this card only to log a reading on its own (e.g. timed to a prior light cycle) or to correct an existing one. The meter is zeroed per batch, so the highest reading is the total water used.</div>
           <div class="g2" style="margin-bottom:10px;">
             <div class="field"><label>Batch</label>
               <select id="flow-batch-select" onchange="flowBatchChanged()"><option value="">-- select batch --</option></select>
@@ -8000,7 +8000,7 @@ async function ecSave(){
   const fs=document.getElementById('ec-flower').value,{stage,day}=calcStage(vs,fs,date);
   const evts=[];let totalML=0;for(let i=1;i<=8;i++){const v=parseFloat(document.getElementById('ec-evt-'+i).value)||null;evts.push(v);if(v)totalML+=v;}
   if(!totalML){toast('Enter at least one watering event.');return;}
-  const rec={id:Date.now(),date,room:document.getElementById('ec-room').value,grower,batch:document.getElementById('ec-batch').value.trim(),hydrationDate:hydrationDate||null,vegStart:vs,flowerStart:fs,harvestDate:harvestDate||null,stage,day,dripEcPens,dripPhPens,dripEc,dripPh,wtype,events:evts,totalML:totalML||null,flow:parseFloat(document.getElementById('ec-flow').value)||null,notes:document.getElementById('ec-notes').value.trim(),synced:false};
+  const rec={id:Date.now(),date,room:document.getElementById('ec-room').value,grower,batch:document.getElementById('ec-batch').value.trim(),hydrationDate:hydrationDate||null,vegStart:vs,flowerStart:fs,harvestDate:harvestDate||null,stage,day,dripEcPens,dripPhPens,dripEc,dripPh,wtype,events:evts,totalML:totalML||null,flow:null,notes:document.getElementById('ec-notes').value.trim(),synced:false};
   // EDIT MODE: update the existing entry in place + sync, WITHOUT re-firing phase/hydration
   // side-effects (those fired when the entry was first saved). Limited to the current day's entries.
   if(ecEditId != null){
@@ -8037,6 +8037,28 @@ async function ecSave(){
     return;
   }
   ecRecs.unshift(rec);lsSet('gp-ec',ecRecs);saveBatchRoom(rec.batch,rec.room);populateBatchDropdowns();
+  // Flow meter reading entered with the watering → log it to the Flow Meter log with an AUTO
+  // timestamp (no manual time needed). Uses this entry's batch/room/grower/date, so there's no
+  // re-entry, and it feeds the same water-used total as the standalone Flow Meter card.
+  {
+    const _ecFlowVal = parseFloat((document.getElementById('ec-flow')||{}).value);
+    if(!isNaN(_ecFlowVal) && _ecFlowVal > 0 && rec.batch && rec.room){
+      const _now = new Date();
+      const _hhmm = String(_now.getHours()).padStart(2,'0')+':'+String(_now.getMinutes()).padStart(2,'0');
+      const _flowRec = { id: Date.now()+2, batch: rec.batch, room: rec.room, date: rec.date, time: _hhmm, grower: rec.grower, reading: Math.round(_ecFlowVal), notes: 'Logged with watering'+(rec.wtype?(' ('+rec.wtype+')'):''), synced: false };
+      flowRecs.unshift(_flowRec); lsSet('gp-flow', flowRecs);
+      if(cfg.flowTbl && cfg.token && cfg.base){
+        try{
+          const ff = { 'Batch ID': [_flowRec.batch], 'Date': _flowRec.date, 'Time': _flowRec.time, 'Room': _flowRec.room, 'Grower': _flowRec.grower, 'Flow Reading': _flowRec.reading, 'Notes': _flowRec.notes };
+          Object.keys(ff).forEach(k=>{ if(ff[k]===undefined||ff[k]===null||ff[k]==='') delete ff[k]; });
+          const _fr = await atPost(cfg.flowTbl, ff);
+          _flowRec.synced = true; if(_fr && _fr.id) _flowRec.airtableId = _fr.id;
+          lsSet('gp-flow', flowRecs);
+        }catch(_){ /* Sync Pending retries */ }
+      }
+      if(typeof flowRenderRecent === 'function'){ try{ flowRenderRecent(); }catch(_){} }
+    }
+  }
   // Capture hydration date on the batch if this EC entry is the trigger
   let _hydrationCaptured = false;
   if(_willSetHydration && _ecBatchRec){
