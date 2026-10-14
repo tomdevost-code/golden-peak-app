@@ -10586,10 +10586,23 @@ function destroyRenderHistory(){
   // Pheno-sample destructions (logged on the Retention Samples page) — shown here so all dry cannabis
   // destruction is in one place. Weight = remaining net (net minus any portion already sent to the lab).
   const _remainOf = p => Math.max(0, (parseFloat(p.netWeight)||0) - (Array.isArray(p.labDraws)?p.labDraws:[]).reduce((s,d)=> s + (parseFloat(d&&d.kg)||0), 0));
-  const _phenoDes = postDryRecs.filter(p => p && (p.sampleType||'')==='Pheno Samples' && p.retDestroyed).map(p => ({
-    kind:'sample', id:'pd-'+p.id, date:p.retDestroyedDate||'', employee:p.retDestroyedBy||'',
-    batches:p.batch||'', bin:p.binNumber||'', veg:0, dry:_remainOf(p), records:1
-  }));
+  // Pheno destructions are grouped by day: all samples destroyed on the same date collapse into one
+  // row (distinct batches + employees joined, weights and sample counts summed) — matching how a
+  // weigh-out event groups many waste records into a single line.
+  const _phMap = {};
+  postDryRecs.forEach(p => {
+    if(!p || (p.sampleType||'')!=='Pheno Samples' || !p.retDestroyed) return;
+    const day = p.retDestroyedDate||'';
+    const g = _phMap[day] || (_phMap[day] = { kind:'sample', id:'pd-'+day, date:day, emps:new Set(), bats:new Set(), dry:0, records:0 });
+    if(p.retDestroyedBy) g.emps.add(p.retDestroyedBy);
+    if(p.batch) g.bats.add(p.batch);
+    g.dry += _remainOf(p);
+    g.records += 1;
+  });
+  const _phenoDes = Object.keys(_phMap).map(day => { const g=_phMap[day]; return {
+    kind:'sample', id:g.id, date:g.date, employee:[...g.emps].join(', '),
+    batches:[...g.bats].join(', '), veg:0, dry:g.dry, records:g.records
+  }; });
   const recs = _events.concat(_phenoDes).sort((a,b)=> (b.date||'').localeCompare(a.date||'') || (String(b.id).localeCompare(String(a.id))));
   if(!recs.length){ el.innerHTML = '<div style="font-size:12px;color:var(--text3);">No destructions recorded yet.</div>'; return; }
   const _histCap = recs.length > 5 ? 'max-height:200px;overflow-y:auto;' : '';
@@ -10598,7 +10611,7 @@ function destroyRenderHistory(){
     +'</tr></thead><tbody>';
   recs.forEach(r=>{
     const _tag = (r.kind==='sample')
-      ? ' <span style="font-size:8px;font-weight:700;font-family:var(--mono);color:var(--room4);background:var(--bg2);border-radius:20px;padding:1px 5px;vertical-align:middle;">PHENO SAMPLE'+(r.bin?' '+r.bin:'')+'</span>'
+      ? ' <span style="font-size:8px;font-weight:700;font-family:var(--mono);color:var(--room4);background:var(--bg2);border-radius:20px;padding:1px 5px;vertical-align:middle;">PHENO SAMPLE'+(r.records>1?'S':'')+'</span>'
       : '';
     const _actions = (r.kind==='event')
       ? '<button type="button" onclick="destroyPrint(\''+String(r.id).replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\')" style="font-size:11px;padding:3px 8px;border:1px solid var(--border);background:var(--bg2);border-radius:var(--radius-sm);cursor:pointer;color:var(--text2);">Print</button>'
@@ -18449,8 +18462,20 @@ function ctlsGenerateReport(){
     const _phenoHeld   = postDryRecs.filter(p => p && (p.sampleType||'') === 'Pheno Samples' && !p.retDestroyed);
     const _phenoHeldKg = _phenoHeld.reduce((s,p) => s + _remainHeld(p), 0);
     const _phenoHeldDetail = _phenoHeld.map(p => p.batch+' — '+_remainHeld(p).toFixed(3)+' kg (sample '+(p.binNumber||'?')+(p.date?', stored '+p.date:'')+')');
+    // Pheno-sample destructions in the month count as destruction events too — grouped by day (all
+    // samples destroyed on the same date = one event), matching how they appear on the Destruction page.
+    const _phDestMonth = postDryRecs.filter(p => p && (p.sampleType||'')==='Pheno Samples' && p.retDestroyed && p.retDestroyedDate && p.retDestroyedDate >= from && p.retDestroyedDate < to);
+    const _phByDay = {};
+    _phDestMonth.forEach(p => { const d=p.retDestroyedDate||''; (_phByDay[d]=_phByDay[d]||[]).push(p); });
+    const _phEventCount = Object.keys(_phByDay).length;
+    const _phEvD = Object.keys(_phByDay).sort().map(day => {
+      const arr=_phByDay[day];
+      const emps=[...new Set(arr.map(p=>p.retDestroyedBy).filter(Boolean))].join(', ');
+      const bs=[...new Set(arr.map(p=>p.batch).filter(Boolean))].join(', ');
+      return day+(emps?' · '+emps:'')+(bs?' · '+bs:'')+' — '+arr.length+' pheno sample'+(arr.length===1?'':'s')+' destroyed';
+    });
     html += _ctlsBlock('6. Waste Destruction', [
-      {label:'Destruction events in the month', value: v(dEvents.length, 'events'), detail:_evD},
+      {label:'Destruction events in the month', value: v(dEvents.length + _phEventCount, 'events'), detail:_evD.concat(_phEvD)},
       {label:'Vegetative waste destroyed (actual)', note:'actual weight destroyed, after drying loss', value: v(totVeg, 'kg'), detail:_vegActD},
       {label:'Dry cannabis destroyed (actual)', note:'actual weight destroyed, after drying loss — includes destroyed pheno samples', value: v(r3c(totDry + (dry.phenoDestroyedWeight||0)), 'kg'), detail:_dryActD.concat(dry.phenoDestroyedDetail||[])},
       {label:'Vegetative drying loss (recorded − actual)', note:'veg weight lost between waste entry and destruction', value: v(vegLoss, 'kg'), detail:_vegLossD},
