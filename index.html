@@ -6139,6 +6139,21 @@ function postDrySetupChanged(){
   const batch = document.getElementById('postdry-batch-select').value;
   const dateEl = document.getElementById('postdry-date');
   if(dateEl && !dateEl.value) dateEl.value = localDate();
+  // "Pheno Samples" sample type is only offered for Seeds (S-) batches — add/remove the option
+  // based on the selected batch.
+  {
+    const _stSel = document.getElementById('postdry-sampletype');
+    if(_stSel){
+      const _isS = isSeedsBatchId(batch);
+      const _hasPheno = Array.from(_stSel.options).some(o => o.value === 'Pheno Samples');
+      if(_isS && !_hasPheno){
+        const o = document.createElement('option'); o.value = 'Pheno Samples'; o.textContent = 'Pheno sample'; _stSel.appendChild(o);
+      } else if(!_isS && _hasPheno){
+        if(_stSel.value === 'Pheno Samples') _stSel.value = 'Sold';
+        Array.from(_stSel.options).forEach(o => { if(o.value === 'Pheno Samples') o.remove(); });
+      }
+    }
+  }
   // Update the next bin number
   if(typeof postDrySampleTypeChanged === 'function') postDrySampleTypeChanged();
   // Enable/disable Save button
@@ -6170,7 +6185,7 @@ function postDrySampleTypeChanged(){
   const hint = document.getElementById('postdry-bin-hint');
   const batch = (document.getElementById('postdry-batch-select')||{}).value || '';
   if(!binEl) return;
-  const manual = (st === 'Retention' || st === 'COA');
+  const manual = (st === 'Retention' || st === 'COA' || st === 'Pheno Samples');
   if(manual){
     binEl.readOnly = false; binEl.style.background = 'var(--bg)'; binEl.style.cursor = 'text';
     binEl.placeholder = 'Enter Sample ID';
@@ -6198,7 +6213,7 @@ async function postDrySave(){
   if(gross <= tare){ toast('Gross weight must exceed tare weight ('+tare.toFixed(3)+' kg).',4500); return; }
   if(!containerType){ toast('Select a Type / Size (A, B, Large or Small).'); return; }
   const netWeight = Math.round((gross - tare) * 1000) / 1000;
-  const isManualId = (sampleType === 'Retention' || sampleType === 'COA');
+  const isManualId = (sampleType === 'Retention' || sampleType === 'COA' || sampleType === 'Pheno Samples');
   let manualId = '';
   if(isManualId){
     manualId = (((document.getElementById('postdry-bin-num')||{}).value)||'').replace(/^Container\s+/i,'').trim();
@@ -6297,7 +6312,7 @@ function postDryRenderBins(batchId){
   const recs = postDryRecs
     .filter(r => r.batch === batchId)
     .sort((a,b)=> (parseInt(a.binNumber)||0) - (parseInt(b.binNumber)||0));
-  const _isSample = st => (st === 'Retention' || st === 'COA' || st === 'Testing'); // legacy Testing = COA bucket
+  const _isSample = st => (st === 'Retention' || st === 'COA' || st === 'Testing' || st === 'Pheno Samples'); // legacy Testing = COA bucket
   const soldNet   = recs.filter(r => !_isSample(r.sampleType||'Sold')).reduce((s,r)=> s + (parseFloat(r.netWeight)||0), 0);
   const sampleNet = recs.filter(r =>  _isSample(r.sampleType||'Sold')).reduce((s,r)=> s + (parseFloat(r.netWeight)||0), 0);
   const totalNet  = soldNet + sampleNet;
@@ -6362,7 +6377,7 @@ function postDryEditStart(id){
   const nEl = document.getElementById('postdry-notes'); if(nEl) nEl.value = rec.notes || '';
   const binEl = document.getElementById('postdry-bin-num');
   if(binEl){
-    const _man = (rec.sampleType === 'Retention' || rec.sampleType === 'COA');
+    const _man = (rec.sampleType === 'Retention' || rec.sampleType === 'COA' || rec.sampleType === 'Pheno Samples');
     if(_man){ binEl.value = (rec.binNumber != null ? rec.binNumber : ''); binEl.readOnly=false; binEl.style.background='var(--bg)'; binEl.style.cursor='text'; }
     else { binEl.value = 'Container ' + (rec.binNumber != null ? rec.binNumber : ''); binEl.readOnly=true; binEl.style.background='var(--bg2)'; binEl.style.cursor='default'; }
   }
@@ -18028,11 +18043,13 @@ function ctlsFreshMetrics(from, to){
   const _pdRetention = postDrys.filter(p => (p.sampleType||'') === 'Retention');
   const _pdCOA       = postDrys.filter(p => (p.sampleType||'') === 'COA');
   const _pdTesting   = postDrys.filter(p => (p.sampleType||'') === 'Testing');
+  const _pdPheno     = postDrys.filter(p => (p.sampleType||'') === 'Pheno Samples'); // S-batch pheno-evaluation samples
   const postDrySold      = _pdSold.reduce((s,p) => s + (parseFloat(p.netWeight)||0), 0);
   const postDryRetention = _pdRetention.reduce((s,p) => s + (parseFloat(p.netWeight)||0), 0);
   const postDryCOA       = _pdCOA.reduce((s,p) => s + (parseFloat(p.netWeight)||0), 0);
   const postDryTesting   = _pdTesting.reduce((s,p) => s + (parseFloat(p.netWeight)||0), 0);
-  const postDrySampleTotal = postDryRetention + postDryCOA + postDryTesting;
+  const postDryPheno     = _pdPheno.reduce((s,p) => s + (parseFloat(p.netWeight)||0), 0);
+  const postDrySampleTotal = postDryRetention + postDryCOA + postDryTesting + postDryPheno;
   // Loss on drying — difference between wet and post-dry. Negative-or-positive depending on data.
   const lossOnDrying = (wetTotal && postDryTotal) ? (wetTotal - postDryTotal) : null;
   // Fresh sold to processor — Sold tx in the month with Sale Stage = Fresh.
@@ -18048,6 +18065,7 @@ function ctlsFreshMetrics(from, to){
     postDryRetention, postDryRetentionDetail: _pdRetention.map(_pdD),
     postDryCOA, postDryCOADetail: _pdCOA.map(_pdD),
     postDryTesting, postDryTestingDetail: _pdTesting.map(_pdD),
+    postDryPheno, postDryPhenoDetail: _pdPheno.map(_pdD),
     postDrySampleTotal,
     lossOnDrying, lossOnDryingDetail: (wetTotal && postDryTotal) ? ['Wet harvest: '+wetTotal.toFixed(3)+' kg', 'Post-dry total: '+postDryTotal.toFixed(3)+' kg', 'Loss = '+(wetTotal-postDryTotal).toFixed(3)+' kg'] : [],
     soldFreshToProcessor: soldFreshToProcessor || null, soldFreshToProcessorDetail: _freshTx.map(t => t.batchId+' — '+(parseFloat(t.weight)||0).toFixed(3)+' kg'+(t.date?' · '+t.date:''))
@@ -18226,6 +18244,7 @@ function ctlsGenerateReport(){
     {label:'Sold inventory weight', note:'Post-Drying containers tagged Sold', value: v(fresh.postDrySold, 'kg'), detail:fresh.postDrySoldDetail},
     {label:'Retention sample weight', note:'Post-Drying containers tagged Retention', value: v(fresh.postDryRetention, 'kg'), detail:fresh.postDryRetentionDetail},
     {label:'COA sample weight', note:'Post-Drying containers tagged COA', value: v(fresh.postDryCOA, 'kg'), detail:fresh.postDryCOADetail},
+    {label:'Pheno sample weight', note:'Post-Drying containers tagged Pheno Samples (S- batches)', value: v(fresh.postDryPheno, 'kg'), detail:fresh.postDryPhenoDetail},
     {label:'Weight of dried flower sent to processor for samples', note:'Sent to Lab · Processor · Dry Flower', value: v(dry.processorSampleWeight, 'kg'), detail:dry.processorSampleWeightDetail},
     {label:'Weight of cannabis destroyed (Dry Waste)', value: v(dry.dryWasteWeight, 'kg'), detail:dry.dryWasteWeightDetail},
     {label:'Loss on drying (cross-ref)', value: v(dry.lossOnDrying, 'kg'), detail:dry.lossOnDryingDetail}
