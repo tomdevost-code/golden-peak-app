@@ -10577,24 +10577,41 @@ async function destroySave(){
 function destroyRenderHistory(){
   const el = document.getElementById('destroy-history');
   if(!el) return;
-  const recs = destroyRecs.slice().sort((a,b)=> (b.date||'').localeCompare(a.date||'') || (b.id||0)-(a.id||0));
+  // Signed weigh-out destruction events.
+  const _events = destroyRecs.map(r => ({
+    kind:'event', id:r.id, date:r.date||'', employee:r.employee||'',
+    batches:(r.batches||[]).join(', '), veg:parseFloat(r.vegWeight)||0, dry:parseFloat(r.dryWeight)||0,
+    records:(r.coveredKeys||[]).length
+  }));
+  // Pheno-sample destructions (logged on the Retention Samples page) — shown here so all dry cannabis
+  // destruction is in one place. Weight = remaining net (net minus any portion already sent to the lab).
+  const _remainOf = p => Math.max(0, (parseFloat(p.netWeight)||0) - (Array.isArray(p.labDraws)?p.labDraws:[]).reduce((s,d)=> s + (parseFloat(d&&d.kg)||0), 0));
+  const _phenoDes = postDryRecs.filter(p => p && (p.sampleType||'')==='Pheno Samples' && p.retDestroyed).map(p => ({
+    kind:'sample', id:'pd-'+p.id, date:p.retDestroyedDate||'', employee:p.retDestroyedBy||'',
+    batches:p.batch||'', bin:p.binNumber||'', veg:0, dry:_remainOf(p), records:1
+  }));
+  const recs = _events.concat(_phenoDes).sort((a,b)=> (b.date||'').localeCompare(a.date||'') || (String(b.id).localeCompare(String(a.id))));
   if(!recs.length){ el.innerHTML = '<div style="font-size:12px;color:var(--text3);">No destructions recorded yet.</div>'; return; }
   const _histCap = recs.length > 5 ? 'max-height:200px;overflow-y:auto;' : '';
   let html = '<div style="overflow-x:auto;'+_histCap+'border:1px solid var(--border);border-radius:var(--radius-sm);background:#fff;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#f5f5f5;">'
     +['Date','Employee','Batches','Veg (kg)','Dry (kg)','Records','Actions'].map(h=>'<th style="position:sticky;top:0;background:#f5f5f5;z-index:1;padding:6px 8px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;border-bottom:1px solid var(--border);">'+h+'</th>').join('')
     +'</tr></thead><tbody>';
   recs.forEach(r=>{
-    const _dIdArg = "'" + String(r.id).replace(/\\/g,'\\\\').replace(/'/g,"\\'") + "'";
+    const _tag = (r.kind==='sample')
+      ? ' <span style="font-size:8px;font-weight:700;font-family:var(--mono);color:var(--room4);background:var(--bg2);border-radius:20px;padding:1px 5px;vertical-align:middle;">PHENO SAMPLE'+(r.bin?' '+r.bin:'')+'</span>'
+      : '';
+    const _actions = (r.kind==='event')
+      ? '<button type="button" onclick="destroyPrint(\''+String(r.id).replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\')" style="font-size:11px;padding:3px 8px;border:1px solid var(--border);background:var(--bg2);border-radius:var(--radius-sm);cursor:pointer;color:var(--text2);">Print</button>'
+      : '<span style="font-size:10px;color:var(--text3);">Retention page</span>';
     html += '<tr>'
       +'<td style="padding:5px 8px;font-family:var(--mono);border-top:1px solid var(--border);white-space:nowrap;">'+(r.date||'—')+'</td>'
       +'<td style="padding:5px 8px;border-top:1px solid var(--border);">'+(r.employee||'—')+'</td>'
-      +'<td style="padding:5px 8px;font-family:var(--mono);font-size:11px;border-top:1px solid var(--border);">'+((r.batches||[]).join(', ')||'—')+'</td>'
-      +'<td style="padding:5px 8px;font-family:var(--mono);text-align:right;border-top:1px solid var(--border);">'+(parseFloat(r.vegWeight)||0).toFixed(3)+'</td>'
-      +'<td style="padding:5px 8px;font-family:var(--mono);text-align:right;border-top:1px solid var(--border);">'+(parseFloat(r.dryWeight)||0).toFixed(3)+'</td>'
-      +'<td style="padding:5px 8px;font-family:var(--mono);text-align:right;border-top:1px solid var(--border);">'+((r.coveredKeys||[]).length)+'</td>'
-      +'<td style="padding:5px 8px;white-space:nowrap;border-top:1px solid var(--border);">'
-        +'<button type="button" onclick="destroyPrint('+_dIdArg+')" style="font-size:11px;padding:3px 8px;border:1px solid var(--border);background:var(--bg2);border-radius:var(--radius-sm);cursor:pointer;color:var(--text2);">Print</button>'
-      +'</td></tr>';
+      +'<td style="padding:5px 8px;font-family:var(--mono);font-size:11px;border-top:1px solid var(--border);">'+(r.batches||'—')+_tag+'</td>'
+      +'<td style="padding:5px 8px;font-family:var(--mono);text-align:right;border-top:1px solid var(--border);">'+(r.veg||0).toFixed(3)+'</td>'
+      +'<td style="padding:5px 8px;font-family:var(--mono);text-align:right;border-top:1px solid var(--border);">'+(r.dry||0).toFixed(3)+'</td>'
+      +'<td style="padding:5px 8px;font-family:var(--mono);text-align:right;border-top:1px solid var(--border);">'+(r.records||0)+'</td>'
+      +'<td style="padding:5px 8px;white-space:nowrap;border-top:1px solid var(--border);">'+_actions+'</td>'
+      +'</tr>';
   });
   html += '</tbody></table></div>';
   el.innerHTML = html;
@@ -17975,6 +17992,7 @@ async function retentionDestroy(id){
   }
   if(typeof updatePendingBadge==='function') updatePendingBadge();
   retentionRender();
+  try{ if(typeof destroyRenderHistory==='function') destroyRenderHistory(); }catch(_){}
 }
 // Draw a portion of a held retention / pheno sample and send it to the lab for COA / testing.
 // Records the draw on the source post-dry row's labDraws[] (keeps the row's full net weight, so its
@@ -18434,12 +18452,11 @@ function ctlsGenerateReport(){
     html += _ctlsBlock('6. Waste Destruction', [
       {label:'Destruction events in the month', value: v(dEvents.length, 'events'), detail:_evD},
       {label:'Vegetative waste destroyed (actual)', note:'actual weight destroyed, after drying loss', value: v(totVeg, 'kg'), detail:_vegActD},
-      {label:'Dry cannabis destroyed (actual)', note:'actual weight destroyed, after drying loss', value: v(totDry, 'kg'), detail:_dryActD},
+      {label:'Dry cannabis destroyed (actual)', note:'actual weight destroyed, after drying loss — includes destroyed pheno samples', value: v(r3c(totDry + (dry.phenoDestroyedWeight||0)), 'kg'), detail:_dryActD.concat(dry.phenoDestroyedDetail||[])},
       {label:'Vegetative drying loss (recorded − actual)', note:'veg weight lost between waste entry and destruction', value: v(vegLoss, 'kg'), detail:_vegLossD},
       {label:'Dry drying loss (recorded − actual)', note:'dry weight lost between waste entry and destruction', value: v(dryLoss, 'kg'), detail:_dryLossD},
       {label:'Retention samples destroyed', note: dry.retentionDestroyedCount ? (dry.retentionDestroyedCount+' sample'+(dry.retentionDestroyedCount===1?'':'s')+' · end of 2-year hold') : 'end of 2-year hold', value: v(dry.retentionDestroyedWeight, 'kg'), detail:dry.retentionDestroyedDetail},
       {label:'Retention samples held (not destroyed)', note: _retHeld.length ? (_retHeld.length+' sample'+(_retHeld.length===1?'':'s')+' · current holdings, all time') : 'current holdings', value: v(_retHeldKg, 'kg'), detail:_retHeldDetail},
-      {label:'Pheno samples destroyed', note: dry.phenoDestroyedCount ? (dry.phenoDestroyedCount+' sample'+(dry.phenoDestroyedCount===1?'':'s')) : 'S- batch pheno samples', value: v(dry.phenoDestroyedWeight, 'kg'), detail:dry.phenoDestroyedDetail},
       {label:'Pheno samples held (not destroyed)', note: _phenoHeld.length ? (_phenoHeld.length+' sample'+(_phenoHeld.length===1?'':'s')+' · current holdings, all time') : 'current holdings', value: v(_phenoHeldKg, 'kg'), detail:_phenoHeldDetail}
     ]);
   }
