@@ -17911,13 +17911,21 @@ function retentionRender(){
     const r = x.r;
     const bRec = batchRecs.find(z=>z.batchId===r.batch && !z.type);
     const closed = (bRec && bRec.closedDate) ? ' <span style="font-size:9px;color:var(--text3);">[closed]</span>' : '';
-    const wt = (parseFloat(r.netWeight)||0).toFixed(3)+' kg';
+    const _net   = parseFloat(r.netWeight)||0;
+    const _drawn = (Array.isArray(r.labDraws)?r.labDraws:[]).reduce((s,d)=> s + (parseFloat(d&&d.kg)||0), 0);
+    const _remain = Math.max(0, _net - _drawn);
+    const wt = (_drawn > 0)
+      ? _remain.toFixed(3)+' kg <span style="font-size:9px;color:var(--text3);">of '+_net.toFixed(3)+' · '+_drawn.toFixed(3)+' to lab</span>'
+      : _net.toFixed(3)+' kg';
     const _typeLbl = _retIsPheno(r) ? 'Pheno' : 'Retention';
     const _dueCell = _retIsPheno(r) ? '—' : esc(x.due||'—'); // pheno has no 2-year clock
+    const _labBtn = (x.st!=='destroyed' && _remain > 0)
+      ? '<button type="button" onclick="retentionSendToLab('+_idArg(r.id)+')" title="Draw a portion of this sample and send it to the lab for COA / testing" style="font-size:11px;padding:4px 8px;margin-left:4px;border:1px solid var(--blue);background:var(--blue-pale);border-radius:var(--radius-sm);cursor:pointer;color:var(--blue);font-weight:600;">To lab</button>'
+      : '';
     const _delBtn = '<button type="button" onclick="retentionDelete('+_idArg(r.id)+')" title="Delete this record (for a mistaken or duplicate entry — does not record a destruction)" style="font-size:11px;padding:4px 8px;margin-left:4px;border:1px solid var(--border);background:var(--bg2);border-radius:var(--radius-sm);cursor:pointer;color:var(--text2);">Delete</button>';
     const action = ((x.st==='destroyed')
       ? '<span style="font-size:11px;color:var(--text3);">'+esc(r.retDestroyedDate||'')+(r.retDestroyedBy?' · '+esc(r.retDestroyedBy):'')+'</span>'
-      : '<button type="button" onclick="retentionDestroy('+_idArg(r.id)+')" style="font-size:11px;padding:4px 10px;border:1px solid var(--red);background:var(--red-pale);border-radius:var(--radius-sm);cursor:pointer;color:var(--red);font-weight:600;">Destroy</button>') + _delBtn;
+      : '<button type="button" onclick="retentionDestroy('+_idArg(r.id)+')" style="font-size:11px;padding:4px 10px;border:1px solid var(--red);background:var(--red-pale);border-radius:var(--radius-sm);cursor:pointer;color:var(--red);font-weight:600;">Destroy</button>') + _labBtn + _delBtn;
     html += '<tr style="border-bottom:1px solid var(--bg2);">'
       + '<td style="padding:6px 8px;font-family:var(--mono);">'+esc(r.batch)+closed+'</td>'
       + '<td style="padding:6px 8px;font-family:var(--mono);color:var(--text3);">'+_typeLbl+'</td>'
@@ -17938,9 +17946,11 @@ async function retentionDestroy(id){
   if(r.retDestroyed){ toast('This sample is already destroyed.'); return; }
   const grower = (document.getElementById('retention-grower')||{}).value || '';
   if(!grower){ toast('Pick who is destroying the sample (Destroyed by) first.', 4000); return; }
-  const wt = (parseFloat(r.netWeight)||0).toFixed(3);
+  const _net = parseFloat(r.netWeight)||0;
+  const _drawn = (Array.isArray(r.labDraws)?r.labDraws:[]).reduce((s,d)=> s + (parseFloat(d&&d.kg)||0), 0);
+  const wt = Math.max(0, _net - _drawn).toFixed(3);
   const _kind = _retIsPheno(r) ? 'pheno' : 'retention';
-  if(!confirm('Destroy '+_kind+' sample as dry cannabis?\n\nBatch '+r.batch+' · Sample '+(r.binNumber||'?')+' · '+wt+' kg\nPost-dry date: '+(r.date||'?')+'\n\nThis records a dated destruction ('+localDate()+', '+grower+') and marks the sample destroyed. The batch stays closed. This cannot be undone here.')) return;
+  if(!confirm('Destroy '+_kind+' sample as dry cannabis?\n\nBatch '+r.batch+' · Sample '+(r.binNumber||'?')+' · '+wt+' kg'+(_drawn>0?(' remaining (after '+_drawn.toFixed(3)+' kg sent to lab)'):'')+'\nPost-dry date: '+(r.date||'?')+'\n\nThis records a dated destruction ('+localDate()+', '+grower+') and marks the sample destroyed. The batch stays closed. This cannot be undone here.')) return;
   r.retDestroyed = true;
   r.retDestroyedDate = localDate();
   r.retDestroyedBy = grower;
@@ -17962,6 +17972,48 @@ async function retentionDestroy(id){
   }catch(e){
     setSyncPill('err','Sync failed');
     toast('Marked destroyed locally — cloud sync failed, will retry.', 5000);
+  }
+  if(typeof updatePendingBadge==='function') updatePendingBadge();
+  retentionRender();
+}
+// Draw a portion of a held retention / pheno sample and send it to the lab for COA / testing.
+// Records the draw on the source post-dry row's labDraws[] (keeps the row's full net weight, so its
+// original set-aside month is unchanged); the Retention page shows the reduced remaining weight and
+// the CTLS report counts the draw as testing-sample weight (Section 5) in the month it was sent.
+async function retentionSendToLab(id){
+  const r = postDryRecs.find(x => String(x.id) === String(id));
+  if(!r){ toast('Sample not found.'); return; }
+  if(r.retDestroyed){ toast('This sample is already destroyed — nothing left to send.'); return; }
+  const grower = (document.getElementById('retention-grower')||{}).value || '';
+  if(!grower){ toast('Pick who is sending the sample (Destroyed by) first.', 4000); return; }
+  const _net   = parseFloat(r.netWeight)||0;
+  const _drawn = (Array.isArray(r.labDraws)?r.labDraws:[]).reduce((s,d)=> s + (parseFloat(d&&d.kg)||0), 0);
+  const _remain = Math.max(0, _net - _drawn);
+  if(_remain <= 0){ toast('No weight remaining on this sample.'); return; }
+  const _kind = _retIsPheno(r) ? 'pheno' : 'retention';
+  const ansW = prompt('Weight to draw and send to the lab (kg)?\n\nBatch '+r.batch+' · Sample '+(r.binNumber||'?')+'\nRemaining: '+_remain.toFixed(3)+' kg', _remain.toFixed(3));
+  if(ansW === null) return;
+  const w = parseFloat(String(ansW).trim());
+  if(!(w > 0)){ toast('Enter a weight greater than 0.'); return; }
+  if(w > _remain + 1e-9){ toast('Only '+_remain.toFixed(3)+' kg remaining — cannot send '+w.toFixed(3)+' kg.', 5000); return; }
+  const dest = (prompt('Lab / destination name (optional):', '') || '').trim();
+  if(!confirm('Send '+w.toFixed(3)+' kg to the lab from this '+_kind+' sample?\n\nBatch '+r.batch+' · Sample '+(r.binNumber||'?')+(dest?('\nDestination: '+dest):'')+'\nDate: '+localDate()+' · '+grower+'\n\nThis records the draw as testing-sample weight in the CTLS report for this month and lowers the remaining held weight. This cannot be undone here.')) return;
+  if(!Array.isArray(r.labDraws)) r.labDraws = [];
+  r.labDraws.push({ kg: Math.round(w*1000)/1000, date: localDate(), by: grower, dest: dest });
+  r.synced = false;
+  lsSet('gp-postdry', postDryRecs);
+  try{
+    if(r.airtableId && cfg.postDryTbl && cfg.token && cfg.base){
+      setSyncPill('ing','Saving...');
+      await atUpdateById(cfg.postDryTbl, r.airtableId, { 'Lab Draws': r.labDraws });
+      r.synced = true;
+      lsSet('gp-postdry', postDryRecs);
+      setSyncPill('ok','Synced');
+    }
+    toast(w.toFixed(3)+' kg sent to lab.');
+  }catch(e){
+    setSyncPill('err','Sync failed');
+    toast('Saved locally — cloud sync failed, will retry.', 5000);
   }
   if(typeof updatePendingBadge==='function') updatePendingBadge();
   retentionRender();
@@ -18085,6 +18137,18 @@ function ctlsFreshMetrics(from, to){
   const postDrySampleTotal = postDryRetention + postDryCOA + postDryTesting + postDryPheno;
   // Loss on drying — difference between wet and post-dry. Negative-or-positive depending on data.
   const lossOnDrying = (wetTotal && postDryTotal) ? (wetTotal - postDryTotal) : null;
+  // Lab-draw samples — portions drawn from held retention / pheno samples and sent to the lab for
+  // COA / testing, recorded on the source post-dry row's labDraws[]. Keyed to the DRAW date (not the
+  // sample's set-aside date), scanned across ALL post-dry rows. The source row keeps its full net
+  // weight, so this does NOT touch post-dry totals / loss-on-drying above — it only feeds the
+  // Section 5 testing-sample weight.
+  const _labDrawRows = [];
+  postDryRecs.forEach(p => {
+    if(!p || !Array.isArray(p.labDraws)) return;
+    p.labDraws.forEach(d => { if(d && _inRange(d.date, from, to)) _labDrawRows.push({ batch:p.batch, bin:p.binNumber, kg:parseFloat(d.kg)||0, date:d.date, by:d.by||'', dest:d.dest||'' }); });
+  });
+  const labDrawWeight  = _labDrawRows.reduce((s,d)=> s + d.kg, 0);
+  const labDrawDetail  = _labDrawRows.map(d => d.batch+' — '+d.kg.toFixed(3)+' kg (from sample '+(d.bin||'?')+', sent '+d.date+(d.dest?' → '+d.dest:'')+(d.by?' · '+d.by:'')+')');
   // Fresh sold to processor — Sold tx in the month with Sale Stage = Fresh.
   const _freshTx = _txsInRange(from, to).filter(t => t.txType === 'Sold' && (t.saleStage||'') === 'Fresh');
   const soldFreshToProcessor = _freshTx.reduce((s,t) => s + (parseFloat(t.weight)||0), 0);
@@ -18100,6 +18164,7 @@ function ctlsFreshMetrics(from, to){
     postDryTesting, postDryTestingDetail: _pdTesting.map(_pdD),
     postDryPheno, postDryPhenoDetail: _pdPheno.map(_pdD),
     postDrySampleTotal,
+    labDrawWeight: labDrawWeight || null, labDrawDetail,
     lossOnDrying, lossOnDryingDetail: (wetTotal && postDryTotal) ? ['Wet harvest: '+wetTotal.toFixed(3)+' kg', 'Post-dry total: '+postDryTotal.toFixed(3)+' kg', 'Loss = '+(wetTotal-postDryTotal).toFixed(3)+' kg'] : [],
     soldFreshToProcessor: soldFreshToProcessor || null, soldFreshToProcessorDetail: _freshTx.map(t => t.batchId+' — '+(parseFloat(t.weight)||0).toFixed(3)+' kg'+(t.date?' · '+t.date:''))
   };
@@ -18122,14 +18187,17 @@ function ctlsDryMetrics(from, to){
   // Retention samples destroyed in the month — retention Post-Drying containers whose destruction
   // (recorded on the Retention Samples page, typically ~2 years after they were set aside) falls in
   // range. Counts the sample's net weight as dry cannabis destroyed.
+  // Remaining weight = net weight minus any portions already drawn off to the lab (those draws are
+  // counted as testing-sample weight in Section 5, so only the remainder is destroyed here).
+  const _remainOf = p => Math.max(0, (parseFloat(p.netWeight)||0) - (Array.isArray(p.labDraws)?p.labDraws:[]).reduce((s,d)=> s + (parseFloat(d&&d.kg)||0), 0));
   const _retDestroyed = postDryRecs.filter(p => p && (p.sampleType||'') === 'Retention' && p.retDestroyed && _inRange(p.retDestroyedDate, from, to));
-  const retentionDestroyedWeight = _retDestroyed.reduce((s,p) => s + (parseFloat(p.netWeight)||0), 0);
+  const retentionDestroyedWeight = _retDestroyed.reduce((s,p) => s + _remainOf(p), 0);
   const retentionDestroyedCount = _retDestroyed.length;
   // Pheno samples destroyed in the month — same mechanism, counted as dry cannabis destroyed.
   const _phenoDestroyed = postDryRecs.filter(p => p && (p.sampleType||'') === 'Pheno Samples' && p.retDestroyed && _inRange(p.retDestroyedDate, from, to));
-  const phenoDestroyedWeight = _phenoDestroyed.reduce((s,p) => s + (parseFloat(p.netWeight)||0), 0);
+  const phenoDestroyedWeight = _phenoDestroyed.reduce((s,p) => s + _remainOf(p), 0);
   const phenoDestroyedCount = _phenoDestroyed.length;
-  const _sampD = p => p.batch+' — '+(parseFloat(p.netWeight)||0).toFixed(3)+' kg (sample '+(p.binNumber||'?')+(p.retDestroyedDate?', destroyed '+p.retDestroyedDate:'')+(p.retDestroyedBy?' · '+p.retDestroyedBy:'')+')';
+  const _sampD = p => p.batch+' — '+_remainOf(p).toFixed(3)+' kg (sample '+(p.binNumber||'?')+(p.retDestroyedDate?', destroyed '+p.retDestroyedDate:'')+(p.retDestroyedBy?' · '+p.retDestroyedBy:'')+')';
   const _wD = t => t.batchId+' — '+(parseFloat(t.weight)||0).toFixed(3)+' kg'+(t.date?' · '+t.date:'');
   return {
     retentionSampleWeight: fresh.postDryRetention, retentionSampleWeightDetail: fresh.postDryRetentionDetail,
@@ -18137,7 +18205,7 @@ function ctlsDryMetrics(from, to){
     retentionDestroyedDetail: _retDestroyed.map(_sampD),
     phenoDestroyedWeight: phenoDestroyedWeight || null, phenoDestroyedCount,
     phenoDestroyedDetail: _phenoDestroyed.map(_sampD),
-    testingSampleWeight:   fresh.postDryCOA + fresh.postDryTesting, testingSampleWeightDetail: (fresh.postDryCOADetail||[]).concat(fresh.postDryTestingDetail||[]),
+    testingSampleWeight:   fresh.postDryCOA + fresh.postDryTesting + (fresh.labDrawWeight||0), testingSampleWeightDetail: (fresh.postDryCOADetail||[]).concat(fresh.postDryTestingDetail||[], fresh.labDrawDetail||[]),
     processorSampleWeight: processorSampleWeight || null, processorSampleWeightDetail: _procTx.map(_wD),
     soldWeight, soldWeightDetail: _soldTx.map(_wD),
     dryWasteWeight, dryWasteWeightDetail: _dryW.map(w => w.batch+' — '+(parseFloat(w.weight)||0).toFixed(3)+' kg'+(w.room?' ['+w.room+']':'')+(w.date?' · '+w.date:'')),
@@ -18355,13 +18423,14 @@ function ctlsGenerateReport(){
     const dryLoss = r3c(dryRecSum - totDry);
     // Retention samples currently held (not yet destroyed) — a point-in-time inventory snapshot
     // across ALL batches (includes back-entered legacy holdings), independent of the report month.
+    const _remainHeld = p => Math.max(0, (parseFloat(p.netWeight)||0) - (Array.isArray(p.labDraws)?p.labDraws:[]).reduce((s,d)=> s + (parseFloat(d&&d.kg)||0), 0));
     const _retHeld   = postDryRecs.filter(p => p && (p.sampleType||'') === 'Retention' && !p.retDestroyed);
-    const _retHeldKg = _retHeld.reduce((s,p) => s + (parseFloat(p.netWeight)||0), 0);
-    const _retHeldDetail = _retHeld.map(p => p.batch+' — '+(parseFloat(p.netWeight)||0).toFixed(3)+' kg (sample '+(p.binNumber||'?')+(p.date?', stored '+p.date:'')+')');
+    const _retHeldKg = _retHeld.reduce((s,p) => s + _remainHeld(p), 0);
+    const _retHeldDetail = _retHeld.map(p => p.batch+' — '+_remainHeld(p).toFixed(3)+' kg (sample '+(p.binNumber||'?')+(p.date?', stored '+p.date:'')+')');
     // Pheno samples currently held (not yet destroyed) — same point-in-time snapshot.
     const _phenoHeld   = postDryRecs.filter(p => p && (p.sampleType||'') === 'Pheno Samples' && !p.retDestroyed);
-    const _phenoHeldKg = _phenoHeld.reduce((s,p) => s + (parseFloat(p.netWeight)||0), 0);
-    const _phenoHeldDetail = _phenoHeld.map(p => p.batch+' — '+(parseFloat(p.netWeight)||0).toFixed(3)+' kg (sample '+(p.binNumber||'?')+(p.date?', stored '+p.date:'')+')');
+    const _phenoHeldKg = _phenoHeld.reduce((s,p) => s + _remainHeld(p), 0);
+    const _phenoHeldDetail = _phenoHeld.map(p => p.batch+' — '+_remainHeld(p).toFixed(3)+' kg (sample '+(p.binNumber||'?')+(p.date?', stored '+p.date:'')+')');
     html += _ctlsBlock('6. Waste Destruction', [
       {label:'Destruction events in the month', value: v(dEvents.length, 'events'), detail:_evD},
       {label:'Vegetative waste destroyed (actual)', note:'actual weight destroyed, after drying loss', value: v(totVeg, 'kg'), detail:_vegActD},
@@ -18797,7 +18866,7 @@ function buildSeedInvFields(rec){
   const fromFlow = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, date:dstr(r.date), time:r.time, room:r.room, grower:r.grower, reading:r.reading, notes:r.notes, synced:true });
   const fromWaste = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, date:dstr(r.date), grower:r.grower, room:r.room, type:r.waste_type, subtype:r.sub_category, weight:r.weight_kg, plants:r.plants_destroyed, notes:r.notes, synced:true });
   const fromHarvest = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, date:dstr(r.date), grower:r.grower, room:r.room, binNumber:r.bin_number, tareWeight:r.tare_weight_kg, totalWeight:r.total_weight_kg, netWeight:r.net_weight_kg, notes:r.notes, createdAt:r.created_at||'', synced:true });
-  const fromPostdry = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, binNumber:r.container_id, date:dstr(r.date), grower:r.grower, tareWeight:r.tare_weight_kg, grossWeight:r.gross_weight_kg, netWeight:r.net_weight_kg, containerType:r.type_size, sampleType:r.sample_type||'Sold', notes:r.notes, retDestroyed:!!r.retention_destroyed, retDestroyedDate:dstr(r.retention_destroyed_date), retDestroyedBy:r.retention_destroyed_by||'', retLegacy:!!r.retention_legacy, synced:true });
+  const fromPostdry = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, binNumber:r.container_id, date:dstr(r.date), grower:r.grower, tareWeight:r.tare_weight_kg, grossWeight:r.gross_weight_kg, netWeight:r.net_weight_kg, containerType:r.type_size, sampleType:r.sample_type||'Sold', notes:r.notes, retDestroyed:!!r.retention_destroyed, retDestroyedDate:dstr(r.retention_destroyed_date), retDestroyedBy:r.retention_destroyed_by||'', retLegacy:!!r.retention_legacy, labDraws:(function(x){ if(Array.isArray(x)) return x; if(typeof x==='string' && x){ try{ var a=JSON.parse(x); return Array.isArray(a)?a:[]; }catch(_){ return []; } } return []; })(r.lab_draws), synced:true });
   const fromBio = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, date:dstr(r.date), grower:r.grower, room:r.room, product:r.product, unit:r.unit, reason:r.reason, quantity:r.quantity, notes:r.notes, synced:true });
   const fromPest = r => ({ id:r.id, airtableId:r.id, batch:r.batch_id, date:dstr(r.date), grower:r.grower, room:r.room, location:r.location, cardNumber:(r.card!=null&&r.card!==''?parseInt(r.card):null), pests:(function(){ if(r.pests==null) return []; if(Array.isArray(r.pests)) return r.pests; try{ const _p=JSON.parse(r.pests); return Array.isArray(_p)?_p:(_p?[_p]:[]); }catch(_){ return String(r.pests).split(',').map(s=>s.trim()).filter(Boolean); } })(), quantity:r.quantity, notes:r.notes, synced:true });
   const fromSeed = r => ({ id:r.lot_number, airtableId:r.lot_number, lotNumber:r.lot_number, strain:r.strain, source:r.source, acquisitionType:r.acquisition_type, sourceMomBatch:r.source_mother_batch, qtyOnHand:r.quantity_on_hand, qtyAcquired:r.quantity_acquired, qtyGerminated:r.quantity_germinated, dateReceived:dstr(r.date_received), notes:r.notes, synced:true });
@@ -18910,6 +18979,7 @@ function buildSeedInvFields(rec){
   const M_WASTE={'Date':'date','Grower':'grower','Room':'room','Waste Type':'waste_type','Sub-Category':'sub_category','Weight (kg)':'weight_kg','Plants Destroyed':'plants_destroyed','Notes':'notes'};
   const M_HARV={'Date':'date','Grower':'grower','Room':'room','Bin Number':'bin_number','Created At':'created_at','Tare Weight (kg)':'tare_weight_kg','Total Weight (kg)':'total_weight_kg','Net Weight (kg)':'net_weight_kg','Notes':'notes'};
   const M_POST={'Date':'date','Grower':'grower','Container ID':'container_id','Tare Weight (kg)':'tare_weight_kg','Gross Weight (kg)':'gross_weight_kg','Net Weight (kg)':'net_weight_kg','Type/Size':'type_size','Sample Type':'sample_type','Notes':'notes','Retention Destroyed':'retention_destroyed','Retention Destroyed Date':'retention_destroyed_date','Retention Destroyed By':'retention_destroyed_by','Retention Legacy':'retention_legacy'};
+  const mapPost = f => { const o=mk(M_POST)(f); if('Lab Draws' in f) o.lab_draws=pj(f['Lab Draws']); return o; };
   const M_BIO={'Date':'date','Grower':'grower','Room':'room','Product':'product','Quantity':'quantity','Unit':'unit','Reason':'reason','Notes':'notes'};
   const M_PEST={'Date':'date','Grower':'grower','Room':'room','Location':'location','Card Number':'card','Pests Identified':'pests','Quantity':'quantity','Notes':'notes'};
   const mapPest = f => { const o=mk(M_PEST)(f); if(o.card!=null) o.card=String(o.card); if(o.pests!=null && typeof o.pests!=='string') o.pests=JSON.stringify(o.pests); return o; };
@@ -18931,7 +19001,7 @@ function buildSeedInvFields(rec){
     flow:{table:'flow_logs',pk:'id',map:mk(M_FLOW)},
     waste:{table:'waste_records',pk:'id',map:mk(M_WASTE)},
     harvest:{table:'harvest_records',pk:'id',map:mk(M_HARV)},
-    postdry:{table:'postdry_records',pk:'id',map:mk(M_POST)},
+    postdry:{table:'postdry_records',pk:'id',map:mapPost},
     bio:{table:'bio_records',pk:'id',map:mk(M_BIO)},
     pest:{table:'pest_records',pk:'id',map:mapPest},
     seed:{table:'seed_inventory',pk:'lot_number',map:mapSeed},
