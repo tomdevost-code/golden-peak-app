@@ -16113,7 +16113,22 @@ function _bolRenderDoc(x){
     +'<table style="width:100%;margin-top:48px;"><tr><td style="width:50%;">Approved By: '+_hppEsc(x.approvedBy)+'<br><br>Signature: __________________________</td>'
     +'<td style="width:50%;">Receiver: __________________________<br><br>Receiver Signature: ______________</td></tr></table></div>';
 }
-function _bolPrintDoc(x){ const c=document.getElementById('bol-print'); if(!c) return; c.innerHTML=_bolRenderDoc(x); document.body.classList.add('print-bol'); try{ window.print(); } finally { setTimeout(()=>document.body.classList.remove('print-bol'),300); } }
+// Render into the hidden print container, then wait for any images (the letterhead logo) to finish
+// loading before calling window.print() — otherwise print fires before the logo loads and the banner
+// prints with a blank logo. A 1.5s fallback guarantees the print dialog always opens.
+function _printDocContainer(containerId, html, bodyClass){
+  const c=document.getElementById(containerId); if(!c) return;
+  c.innerHTML=html;
+  document.body.classList.add(bodyClass);
+  const done=()=>{ try{ window.print(); } finally { setTimeout(()=>document.body.classList.remove(bodyClass),300); } };
+  const pending=Array.from(c.querySelectorAll('img')).filter(im=>!im.complete || im.naturalWidth===0);
+  if(!pending.length){ done(); return; }
+  let n=pending.length, fired=false;
+  const go=()=>{ if(fired) return; fired=true; done(); };
+  pending.forEach(im=>{ im.addEventListener('load', ()=>{ if(--n<=0) go(); }); im.addEventListener('error', ()=>{ if(--n<=0) go(); }); });
+  setTimeout(go, 1500);
+}
+function _bolPrintDoc(x){ _printDocContainer('bol-print', _bolRenderDoc(x), 'print-bol'); }
 function bolPrint(){ const g=_bolGather(); if(!g.batch){ toast('Pick a batch first.'); return; } if(!g.rows.length){ toast('No Sold containers to ship.'); return; } _bolPrintDoc(g); }
 function bolPrintRec(id){ const r=bolRecs.find(x=>String(x.id)===String(id)); if(r) _bolPrintDoc(r); }
 
@@ -16210,7 +16225,7 @@ function _comRenderDoc(x){
     +'<div style="margin-top:12px;">Date: '+_hppEsc(x.docDate)+'</div>'
     +'</td></tr></table></div>';
 }
-function _comPrintDoc(x){ const c=document.getElementById('com-print'); if(!c) return; c.innerHTML=_comRenderDoc(x); document.body.classList.add('print-com'); try{ window.print(); } finally { setTimeout(()=>document.body.classList.remove('print-com'),300); } }
+function _comPrintDoc(x){ _printDocContainer('com-print', _comRenderDoc(x), 'print-com'); }
 function comPrint(){ const g=_comGather(); if(!g.batch){ toast('Pick a batch first.'); return; } _comPrintDoc(g); }
 function comPrintRec(id){ const r=comRecs.find(x=>String(x.id)===String(id)); if(r) _comPrintDoc(r); }
 
