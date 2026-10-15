@@ -15979,12 +15979,23 @@ function _bolRows(batch){
   }
   return [];
 }
+// A batch counts as "harvested" once its flower has been cut — harvest date stamped, a Harvested or
+// Fresh-Sold tx exists, harvest bins were logged, or it has reached Drying/Packaged/Delivered.
+function _batchIsHarvested(b){
+  if(!b) return false;
+  if(b.harvestDate) return true;
+  if(['Drying','Packaged','Delivered'].includes(b.plantPhase||'')) return true;
+  if(harvestRecs.some(h=>h.batch===b.batchId)) return true;
+  if(batchTxRecs.some(t=>t.batchId===b.batchId && (t.txType==='Harvested' || (t.txType==='Sold' && (t.saleStage||'')==='Fresh')))) return true;
+  return false;
+}
 function _bolEligibleBatches(){
   const has={};
   postDryRecs.forEach(r=>{ if((r.sampleType||'Sold')==='Sold') has[r.batch]=true; });
   // Fresh / fresh-frozen batches: eligible once they have a Fresh Sold tx (ship the harvest bins).
   batchTxRecs.forEach(t=>{ if(t.txType==='Sold' && (t.saleStage||'')==='Fresh') has[t.batchId]=true; });
-  return batchRecs.filter(b=>b && !b.type && has[b.batchId]).sort(batchCreatedCmp);
+  // Only harvested batches, and never closed batches.
+  return batchRecs.filter(b=>b && !b.type && has[b.batchId] && !isBatchClosedRec(b) && _batchIsHarvested(b)).sort(batchCreatedCmp);
 }
 function bolEnter(){
   const sel=document.getElementById('bol-batch');
@@ -16094,7 +16105,8 @@ function _comSet(id,v){ const e=document.getElementById(id); if(e) e.value=v; }
 function _comVal(id){ const e=document.getElementById(id); return e?e.value:''; }
 function _comEligibleBatches(){
   const has={}; postDryRecs.forEach(r=>{ has[r.batch]=true; });
-  return batchRecs.filter(b=>b && !b.type && (has[b.batchId] || b.packagedDate)).sort(batchCreatedCmp);
+  // Only harvested batches, and never closed batches.
+  return batchRecs.filter(b=>b && !b.type && (has[b.batchId] || b.packagedDate) && !isBatchClosedRec(b) && _batchIsHarvested(b)).sort(batchCreatedCmp);
 }
 function comEnter(){
   const sel=document.getElementById('com-batch');
