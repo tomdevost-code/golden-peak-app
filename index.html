@@ -455,6 +455,19 @@ tr:last-child td { border-bottom: none; }
         <div id="ctls-report-output" style="margin-top:14px;"></div>
       </div>
 
+      <!-- Batch Yield Summary — one row per regular batch (open + closed) with harvest weight,
+           plants harvested, post-drying weight, and vegetative/dry waste weights. -->
+      <div class="card" style="margin-bottom:14px;">
+        <div class="section-label">Batch Yield Summary</div>
+        <p style="font-size:12px;color:var(--text2);line-height:1.5;margin:-4px 0 10px;">All regular batches (open and closed) with harvest weight, plants harvested, post-drying weight, and waste (vegetative / dry).</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          <button class="btn-save" onclick="batchYieldReport()" style="white-space:nowrap;background:var(--green);">Generate Report</button>
+          <button class="btn-secondary report-no-print" onclick="batchYieldExportCSV()" style="white-space:nowrap;">Export CSV</button>
+          <button class="btn-secondary report-no-print" onclick="batchYieldPrint()" style="white-space:nowrap;">Save as PDF / Print</button>
+        </div>
+        <div id="batchyield-report-output" style="margin-top:14px;"></div>
+      </div>
+
       <div class="rep-tabs">
         <button class="rep-tab active" onclick="switchRepTab('ec',this)">EC Log</button>
         <button class="rep-tab" onclick="switchRepTab('ro',this)">Runoff Log</button>
@@ -16742,6 +16755,11 @@ function sectionTable(title, headers, rows){
     + '  body.print-destroy #destroy-print { position: absolute !important; inset: 0 !important; background: #fff !important; padding: 16px !important; color: #000 !important; }'
     + '  body.print-destroy #destroy-print .dblock { page-break-inside: avoid; margin-bottom: 22px; }'
     + '  body.print-destroy #destroy-print .dbreak { page-break-before: always; }'
+    + '  body.print-batchyield * { visibility: hidden !important; }'
+    + '  body.print-batchyield #batchyield-report-output,'
+    + '  body.print-batchyield #batchyield-report-output * { visibility: visible !important; }'
+    + '  body.print-batchyield #batchyield-report-output { position: absolute !important; inset: 0 !important; background: #fff !important; padding: 14px !important; max-width: 100% !important; max-height: none !important; overflow: visible !important; }'
+    + '  body.print-batchyield #batchyield-report-output tr { page-break-inside: avoid; }'
     + '  .report-no-print { display: none !important; }'
     + '}';
   document.head.appendChild(style);
@@ -16759,6 +16777,83 @@ function printBatchReport(){
 function printCtlsReport(){
   document.body.classList.add('print-ctls');
   try { window.print(); } finally { setTimeout(() => document.body.classList.remove('print-ctls'), 100); }
+}
+
+// ── Batch Yield Summary report ───────────────────────────────────────────────
+// One row per REGULAR batch (open + closed; excludes mother / S / X families) with:
+//   Harvest weight (kg) — sum of harvestedWeights per room, falling back to the harvest-bin nets.
+//   Plants harvested    — sum of harvestedPlants per room, falling back to Harvested-tx quantities.
+//   Post-drying weight  — batchRec.postDryingWeight, falling back to the sum of non-legacy post-dry nets.
+//   Vegetative / Dry waste (kg) — summed from the Waste Log by waste type.
+function _batchYieldRows(){
+  const rows=[];
+  batchRecs.forEach(b=>{
+    if(!b || b.type || !b.batchId) return;
+    if(isMotherBatch(b.batchId) || isSeedsBatchId(b.batchId) || isExperimentalBatch(b.batchId)) return;
+    const hw=b.harvestedWeights||{};
+    let harvestKg=Object.keys(hw).reduce((a,k)=>a+(parseFloat(hw[k])||0),0);
+    if(harvestKg<=0) harvestKg=harvestRecs.filter(h=>h.batch===b.batchId).reduce((a,h)=>a+(parseFloat(h.netWeight)||0),0);
+    const hp=b.harvestedPlants||{};
+    let plants=Object.keys(hp).reduce((a,k)=>a+(parseInt(hp[k])||0),0);
+    if(plants<=0) plants=batchTxRecs.filter(t=>t.batchId===b.batchId && t.txType==='Harvested').reduce((a,t)=>a+(parseInt(t.qty)||0),0);
+    const postDryKg=(b.postDryingWeight!=null && parseFloat(b.postDryingWeight)>0)
+      ? parseFloat(b.postDryingWeight)
+      : postDryRecs.filter(p=>p.batch===b.batchId && !p.retLegacy).reduce((a,p)=>a+(parseFloat(p.netWeight)||0),0);
+    const vegKg=wasteRecs.filter(w=>w.batch===b.batchId && (w.type||'')==='Vegetative Waste').reduce((a,w)=>a+(parseFloat(w.weight)||0),0);
+    const dryKg=wasteRecs.filter(w=>w.batch===b.batchId && (w.type||'')==='Dry Waste').reduce((a,w)=>a+(parseFloat(w.weight)||0),0);
+    rows.push({ batchId:b.batchId, cultivar:b.cultivar||'', status:(isBatchClosedRec(b)?'Closed':(b.plantPhase||'')), harvestKg, plants, postDryKg, vegKg, dryKg });
+  });
+  rows.sort((a,b)=> String(a.batchId).localeCompare(String(b.batchId)));
+  return rows;
+}
+function batchYieldReport(){
+  const el=document.getElementById('batchyield-report-output'); if(!el) return;
+  const rows=_batchYieldRows();
+  if(!rows.length){ el.innerHTML='<div style="font-size:13px;color:var(--text3);padding:10px;">No regular batches found.</div>'; return; }
+  const n3=v=>(Math.round((v||0)*1000)/1000).toFixed(3);
+  const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const tot={harvestKg:0,plants:0,postDryKg:0,vegKg:0,dryKg:0};
+  rows.forEach(r=>{ tot.harvestKg+=r.harvestKg; tot.plants+=r.plants; tot.postDryKg+=r.postDryKg; tot.vegKg+=r.vegKg; tot.dryKg+=r.dryKg; });
+  const headCells=['Batch','Cultivar','Status','Harvest (kg)','Plants harvested','Post-dry (kg)','Veg waste (kg)','Dry waste (kg)'];
+  let html='<div style="font-size:12px;color:var(--text3);margin-bottom:8px;">'+rows.length+' regular batch'+(rows.length===1?'':'es')+' · generated '+localDate()+'</div>';
+  html+='<div style="overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius-sm);background:#fff;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#f5f5f5;">'
+    +headCells.map((h,i)=>'<th style="padding:6px 8px;text-align:'+(i>=3?'right':'left')+';font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;border-bottom:1px solid var(--border);white-space:nowrap;">'+h+'</th>').join('')
+    +'</tr></thead><tbody>';
+  rows.forEach(r=>{
+    html+='<tr>'
+      +'<td style="padding:5px 8px;font-family:var(--mono);border-top:1px solid var(--bg2);">'+esc(r.batchId)+'</td>'
+      +'<td style="padding:5px 8px;border-top:1px solid var(--bg2);">'+esc(r.cultivar||'—')+'</td>'
+      +'<td style="padding:5px 8px;border-top:1px solid var(--bg2);color:var(--text3);">'+esc(r.status||'—')+'</td>'
+      +'<td style="padding:5px 8px;font-family:var(--mono);text-align:right;border-top:1px solid var(--bg2);">'+n3(r.harvestKg)+'</td>'
+      +'<td style="padding:5px 8px;font-family:var(--mono);text-align:right;border-top:1px solid var(--bg2);">'+(r.plants||0)+'</td>'
+      +'<td style="padding:5px 8px;font-family:var(--mono);text-align:right;border-top:1px solid var(--bg2);">'+n3(r.postDryKg)+'</td>'
+      +'<td style="padding:5px 8px;font-family:var(--mono);text-align:right;border-top:1px solid var(--bg2);">'+n3(r.vegKg)+'</td>'
+      +'<td style="padding:5px 8px;font-family:var(--mono);text-align:right;border-top:1px solid var(--bg2);">'+n3(r.dryKg)+'</td>'
+      +'</tr>';
+  });
+  html+='<tr style="background:#f5f5f5;font-weight:700;"><td style="padding:6px 8px;border-top:2px solid var(--border);">Total</td>'
+    +'<td style="border-top:2px solid var(--border);"></td><td style="border-top:2px solid var(--border);"></td>'
+    +'<td style="padding:6px 8px;font-family:var(--mono);text-align:right;border-top:2px solid var(--border);">'+n3(tot.harvestKg)+'</td>'
+    +'<td style="padding:6px 8px;font-family:var(--mono);text-align:right;border-top:2px solid var(--border);">'+tot.plants+'</td>'
+    +'<td style="padding:6px 8px;font-family:var(--mono);text-align:right;border-top:2px solid var(--border);">'+n3(tot.postDryKg)+'</td>'
+    +'<td style="padding:6px 8px;font-family:var(--mono);text-align:right;border-top:2px solid var(--border);">'+n3(tot.vegKg)+'</td>'
+    +'<td style="padding:6px 8px;font-family:var(--mono);text-align:right;border-top:2px solid var(--border);">'+n3(tot.dryKg)+'</td></tr>';
+  html+='</tbody></table></div>';
+  el.innerHTML=html;
+}
+function batchYieldExportCSV(){
+  const rows=_batchYieldRows();
+  if(!rows.length){ toast('No batches to export.'); return; }
+  const n3=v=>(Math.round((v||0)*1000)/1000).toFixed(3);
+  const data=[['Batch ID','Cultivar','Status','Harvest Weight (kg)','Plants Harvested','Post-Drying Weight (kg)','Vegetative Waste (kg)','Dry Waste (kg)'],
+    ...rows.map(r=>[r.batchId,'"'+String(r.cultivar||'').replace(/"/g,'""')+'"',r.status,n3(r.harvestKg),r.plants,n3(r.postDryKg),n3(r.vegKg),n3(r.dryKg)])];
+  dlCSV(data,'Batch_Yield_Summary_GoldenPeak.csv');
+}
+function batchYieldPrint(){
+  const el=document.getElementById('batchyield-report-output');
+  if(!el || !el.innerHTML.trim()) batchYieldReport();
+  document.body.classList.add('print-batchyield');
+  try{ window.print(); } finally { setTimeout(()=>document.body.classList.remove('print-batchyield'),100); }
 }
 
 // ════════════════════════════════════════════════════════════════════════════════
