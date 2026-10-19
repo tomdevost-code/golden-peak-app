@@ -4243,7 +4243,7 @@ function getDisplayPhase(batchRec){
     if(_cc > 0)     parts.push('Clones ('+_cc+')');
     if(_veg > 0)    parts.push('Veg ('+_veg+')');
     if(_flower > 0) parts.push('Flower ('+_flower+')');
-    if(_drying > 0) parts.push('Drying ('+_drying+')');
+    if(_drying > 0) parts.push((phase === 'Trimmed' ? 'Trimmed' : 'Drying')+' ('+_drying+')');
     if(parts.length > 1){
       let lbl = parts.join(' / ');
       if(_livePlantsSold > 0) lbl += ' · ' + _livePlantsSold + ' sold';
