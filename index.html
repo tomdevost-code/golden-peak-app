@@ -14016,6 +14016,7 @@ function getAllowedPhases(currentPhase, batchId){
   if(!currentPhase) return ['Clones'];
   const isMother = batchId ? isMotherBatch(batchId) : false;
   const isExp = batchId ? isExperimentalBatch(batchId) : false;
+  const isSeeds = batchId ? isSeedsBatchId(batchId) : false;
   // Mom Purpose gate: a mom can advance to Flower if it has ANY plants designated for
   // Pheno Hunt or Seed Production (per momPurposeCounts). Clone-Donor and Genetic
   // Preservation moms stay in Veg permanently.
@@ -14035,7 +14036,7 @@ function getAllowedPhases(currentPhase, batchId){
       if(isMother && !_momCanFlower) return ['Veg'];
       return ['Veg','Flower'];
     case 'Flower':   return isExp ? ['Flower','Drying'] : ['Flower']; // X- has no Harvest flow — allow manual Flower→Drying
-    case 'Drying':   return ['Drying']; // Drying → Packaged (regular) / Trimmed (S + X) is event-driven via Complete Post-Drying; moms stay in Drying
+    case 'Drying':   return (isExp || isSeeds) ? ['Drying','Trimmed'] : ['Drying']; // S + X can also advance to Trimmed manually; Complete Post-Drying does it automatically. Regular: Drying → Packaged is event-driven. Moms stay in Drying.
     case 'Trimmed':  return ['Trimmed']; // terminal for S + X batches — awaiting lab results, then Close via Status
     case 'Packaged': return (isMother || isExp) ? ['Packaged'] : ['Packaged','Delivered'];
     case 'Delivered':return ['Delivered']; // terminal — only Close (via Status) remains
@@ -19354,10 +19355,12 @@ function buildSeedInvFields(rec){
     if(document.getElementById('sb-badge')) return;
     const b = document.createElement('div');
     b.id = 'sb-badge';
-    b.style.cssText = 'position:fixed;bottom:10px;right:10px;z-index:2147483000;background:#0f5223;color:#eaffea;font:12px system-ui,sans-serif;padding:6px 10px;border-radius:20px;box-shadow:0 2px 10px rgba(0,0,0,.3);display:flex;gap:8px;align-items:center;opacity:.92;';
-    b.appendChild(Object.assign(document.createElement('span'),{textContent:'Supabase · '+(email||'signed in')}));
+    b.style.cssText = 'position:fixed;bottom:10px;right:10px;z-index:2147483000;max-width:calc(100vw - 20px);box-sizing:border-box;background:#0f5223;color:#eaffea;font:12px system-ui,sans-serif;padding:6px 10px;border-radius:20px;box-shadow:0 2px 10px rgba(0,0,0,.3);display:flex;gap:8px;align-items:center;opacity:.92;';
+    const lbl = Object.assign(document.createElement('span'),{textContent:'Supabase · '+(email||'signed in'),title:(email||'signed in')});
+    lbl.style.cssText = 'flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+    b.appendChild(lbl);
     const btn = Object.assign(document.createElement('button'),{textContent:'Sign out'});
-    btn.style.cssText = 'background:#38b24a;color:#fff;border:none;border-radius:12px;padding:3px 8px;font-size:11px;cursor:pointer;';
+    btn.style.cssText = 'flex:0 0 auto;background:#38b24a;color:#fff;border:none;border-radius:12px;padding:3px 8px;font-size:11px;cursor:pointer;white-space:nowrap;';
     btn.onclick = async () => { try{ await SBC.auth.signOut(); }catch(_){} sessionStorage.removeItem('sb-hydrated'); location.reload(); };
     b.appendChild(btn);
     document.body.appendChild(b);
