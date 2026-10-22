@@ -1977,10 +1977,9 @@ tr:last-child td { border-bottom: none; }
         </div>
 
         <div class="field" id="sancl-batch-field" style="margin-bottom:10px;">
-          <label>Batch <span id="sancl-batch-req" style="color:var(--red);font-weight:700;">*</span> <span style="font-size:10px;color:var(--text3);font-weight:400;" id="sancl-batch-hint"></span></label>
-          <select id="sancl-batch" onchange="sanclChanged()">
-            <option value="">-- select batch --</option>
-          </select>
+          <label>Batch(es) <span id="sancl-batch-req" style="color:var(--red);font-weight:700;">*</span> <span style="font-size:10px;color:var(--text3);font-weight:400;" id="sancl-batch-hint"></span></label>
+          <div style="font-size:10px;color:var(--text3);margin-bottom:4px;">Tap to select one or more (e.g. two batches drying in the same room). Tap again to deselect.</div>
+          <select id="sancl-batch" multiple size="4" onchange="sanclChanged()" style="min-height:96px;"></select>
         </div>
 
         <div class="field" style="margin-bottom:10px;">
@@ -16895,6 +16894,13 @@ function batchYieldPrint(){
 
 // Populate the Batch dropdown on the Sanitation Cleaning Log based on the current template.
 // Hides the Batch field entirely for batch-optional templates (Utility Areas).
+// Batch Cleaning Log now supports selecting MORE THAN ONE batch (e.g. two batches drying in the same
+// dry room). This returns the currently-selected batch IDs as an array.
+function sanclSelectedBatches(){
+  const sel = document.getElementById('sancl-batch');
+  if(!sel) return [];
+  return Array.from(sel.selectedOptions||[]).map(o=>o.value).filter(Boolean);
+}
 function sanclPopulateBatchOptions(){
   const sel = document.getElementById('sancl-batch');
   const field = document.getElementById('sancl-batch-field');
@@ -16902,11 +16908,10 @@ function sanclPopulateBatchOptions(){
   if(!sel){ console.log('[sancl] populate: sancl-batch select not found'); return; }
   const tmpEl = document.getElementById('sancl-template');
   const template = (tmpEl||{}).value || '';
-  console.log('[sancl] populate called. template=', JSON.stringify(template), 'tmpEl exists=', !!tmpEl, 'batchRecs.length=', batchRecs.length);
-  const cur = sel.value;
+  const curSet = new Set(sanclSelectedBatches());
   const hint = document.getElementById('sancl-batch-hint');
   if(!template){
-    sel.innerHTML = '<option value="">-- pick a template first --</option>';
+    sel.innerHTML = '<option value="" disabled>-- pick a template first --</option>';
     if(hint) hint.textContent = '';
     if(field) field.style.display = '';
     return;
@@ -16914,7 +16919,7 @@ function sanclPopulateBatchOptions(){
   const filter = SAN_TEMPLATE_BATCH_FILTER[template] || { motherOnly:false, phases:[], batchOptional:false };
   // Utility Areas (batchOptional) — hide the Batch field entirely; record saves with no batch.
   if(filter.batchOptional){
-    sel.value = '';
+    Array.from(sel.options).forEach(o=>{ o.selected = false; });
     if(field) field.style.display = 'none';
     return;
   }
@@ -16935,15 +16940,14 @@ function sanclPopulateBatchOptions(){
     if(filter.motherOnly !== isMotherBatch(b.batchId)) return false;
     return true;
   }).sort(batchCreatedCmp);
-  sel.innerHTML = '<option value="">-- select batch --</option>' +
-    eligible.map(b => '<option value="'+b.batchId+'"'+(b.batchId===cur?' selected':'')+'>'+b.batchId+(b.cultivar?' – '+b.cultivar:'')+(b.plantPhase?' · '+b.plantPhase:'')+'</option>').join('');
+  sel.innerHTML = eligible.map(b => '<option value="'+b.batchId+'"'+(curSet.has(b.batchId)?' selected':'')+'>'+b.batchId+(b.cultivar?' – '+b.cultivar:'')+(b.plantPhase?' · '+b.plantPhase:'')+'</option>').join('');
   if(hint){
     if(!eligible.length){
       hint.textContent = filter.anyBatch ? '— no open batches yet'
                        : filter.motherOnly ? '— no open mother batches yet'
                        : '— no open batches yet';
     } else {
-      hint.textContent = filter.anyBatch ? '— any open batch'
+      hint.textContent = filter.anyBatch ? '— any open batch(es)'
                        : filter.motherOnly ? '— mother batches only'
                        : '— open batches';
     }
@@ -17066,18 +17070,17 @@ function sanclPopulateRoomOptions(){
   //   • batchRec.harvestedPlants[room] > 0 (post-harvest cleaning of a room we grew in).
   // Rooms a batch never used (e.g. Flower 4/5 if you only used Flower 1/2/3) are hidden.
   if(template === 'Grow Room'){
-    const _bId = (document.getElementById('sancl-batch')||{}).value || '';
-    const _bRec = _bId ? batchRecs.find(r => r && !r.type && r.batchId === _bId) : null;
-    if(_bRec){
-      const _dist = _bRec.roomDistribution || {};
-      const _completed = Array.isArray(_bRec.completedHarvests) ? _bRec.completedHarvests : [];
-      const _harvPlants = _bRec.harvestedPlants || {};
-      options = options.filter(room => {
-        const live = parseInt(_dist[room])||0;
-        const wasHarvested = _completed.includes(room);
-        const heldPlantsAtHarvest = (parseInt(_harvPlants[room])||0) > 0;
-        return live > 0 || wasHarvested || heldPlantsAtHarvest;
-      });
+    const _bIds = (typeof sanclSelectedBatches === 'function') ? sanclSelectedBatches() : [];
+    const _recs = _bIds.map(id => batchRecs.find(r => r && !r.type && r.batchId === id)).filter(Boolean);
+    if(_recs.length){
+      // Union of qualifying rooms across every selected batch — a room shows if ANY selected batch
+      // held plants there (live, previously harvested, or held plants at harvest).
+      options = options.filter(room => _recs.some(_bRec => {
+        const _dist = _bRec.roomDistribution || {};
+        const _completed = Array.isArray(_bRec.completedHarvests) ? _bRec.completedHarvests : [];
+        const _harvPlants = _bRec.harvestedPlants || {};
+        return (parseInt(_dist[room])||0) > 0 || _completed.includes(room) || (parseInt(_harvPlants[room])||0) > 0;
+      }));
     }
   }
   // If there's only one possible room, auto-select it so the grower doesn't have to. Otherwise
@@ -17105,16 +17108,21 @@ function sanclRenderBatchInfo(){
   const el = document.getElementById('sancl-batch-info');
   const strip = document.getElementById('sancl-room-strip');
   if(!el) return;
-  const bid = (document.getElementById('sancl-batch')||{}).value || '';
-  if(!bid){ el.style.display='none'; if(strip) strip.style.background='var(--green)'; return; }
-  const b = batchRecs.find(r => r.batchId === bid && !r.type);
-  if(!b){ el.style.display='none'; return; }
-  const rooms = (typeof formatBatchRoomsForDisplay === 'function') ? formatBatchRoomsForDisplay(b) : ((b.rooms||[]).join(', ') || '—');
-  el.innerHTML = '<strong>'+b.batchId+'</strong> · '+(b.cultivar||'—')+' · '+(b.plantPhase||'—')+' · '+rooms;
+  const bids = (typeof sanclSelectedBatches === 'function') ? sanclSelectedBatches() : [];
+  if(!bids.length){ el.style.display='none'; if(strip) strip.style.background='var(--green)'; return; }
+  const recs = bids.map(id => batchRecs.find(r => r.batchId === id && !r.type)).filter(Boolean);
+  if(!recs.length){ el.style.display='none'; return; }
+  if(recs.length === 1){
+    const b = recs[0];
+    const rooms = (typeof formatBatchRoomsForDisplay === 'function') ? formatBatchRoomsForDisplay(b) : ((b.rooms||[]).join(', ') || '—');
+    el.innerHTML = '<strong>'+b.batchId+'</strong> · '+(b.cultivar||'—')+' · '+(b.plantPhase||'—')+' · '+rooms;
+  } else {
+    el.innerHTML = '<strong>'+recs.length+' batches</strong> · '+recs.map(b => b.batchId+(b.cultivar?' ('+b.cultivar+')':'')).join(', ');
+  }
   el.style.display='';
-  // Colour the strip to match the first flower room (visual cue for which room is being cleaned).
+  // Colour the strip to match the first batch's first flower room (visual cue for the room cleaned).
   if(strip){
-    const firstFlower = (b.rooms||[]).find(r => r !== 'Veg');
+    const firstFlower = (recs[0].rooms||[]).find(r => r !== 'Veg');
     const colours = { 'Flower 1':'#C0392B','Flower 2':'#E67E22','Flower 3':'#27AE60','Flower 4':'#8E44AD','Flower 5':'#6D4C41' };
     strip.style.background = colours[firstFlower] || 'var(--green)';
   }
@@ -17129,11 +17137,11 @@ function sanclRenderTasks(){
   const label = document.getElementById('sancl-tasks-label');
   if(!card || !list) return;
   const template = (document.getElementById('sancl-template')||{}).value || '';
-  const batch    = (document.getElementById('sancl-batch')||{}).value || '';
+  const batches  = (typeof sanclSelectedBatches === 'function') ? sanclSelectedBatches() : [];
   const room     = (document.getElementById('sancl-room')||{}).value || '';
   const grower   = (document.getElementById('sancl-grower')||{}).value || '';
   const tplCfg   = SAN_TEMPLATE_BATCH_FILTER[template] || null;
-  const batchOk  = !!batch || (tplCfg && tplCfg.batchOptional);
+  const batchOk  = batches.length > 0 || (tplCfg && tplCfg.batchOptional);
   if(!template || !grower || !room || !batchOk){
     card.style.display='none';
     return;
@@ -17147,9 +17155,15 @@ function sanclRenderTasks(){
     return;
   }
   const today = (typeof localDate === 'function') ? localDate() : new Date().toISOString().slice(0,10);
-  // Has a given task been logged TODAY for this batch + room + template?
+  // Has a given task been logged TODAY for EVERY selected batch (+ room + template)? Only fully-logged
+  // tasks fade; a task still outstanding for any selected batch stays selectable (save dedups per batch).
   function loggedToday(taskName){
-    return sanCleanRecs.find(r => (r.batch||'')===batch && r.template===template && r.room===room && r.task===taskName && r.date===today);
+    if(batches.length){
+      const allDone = batches.every(bid => sanCleanRecs.some(r => (r.batch||'')===bid && r.template===template && r.room===room && r.task===taskName && r.date===today));
+      if(!allDone) return null;
+      return sanCleanRecs.find(r => batches.includes(r.batch||'') && r.template===template && r.room===room && r.task===taskName && r.date===today);
+    }
+    return sanCleanRecs.find(r => (r.batch||'')==='' && r.template===template && r.room===room && r.task===taskName && r.date===today);
   }
   // Build the rows. Every task — SOP or custom — gets ✎ (rename) and × (delete) buttons.
   list.innerHTML = allTasks.map(t => {
@@ -17286,10 +17300,10 @@ function sanclRenderRecent(){
   const card = document.getElementById('sancl-recent-card');
   const list = document.getElementById('sancl-recent-list');
   if(!card || !list) return;
-  const batch = (document.getElementById('sancl-batch')||{}).value || '';
-  if(!batch){ card.style.display='none'; return; }
+  const batches = (typeof sanclSelectedBatches === 'function') ? sanclSelectedBatches() : [];
+  if(!batches.length){ card.style.display='none'; return; }
   const recs = sanCleanRecs
-    .filter(r => r.batch === batch)
+    .filter(r => batches.includes(r.batch))
     .sort((a,b) => (b.date||'').localeCompare(a.date||'') || (b.id||0)-(a.id||0))
     .slice(0,10);
   if(!recs.length){ card.style.display='none'; return; }
@@ -17297,7 +17311,7 @@ function sanclRenderRecent(){
   list.innerHTML = recs.map(r => {
     const initials = (r.grower||'').split(' ').map(s=>s[0]||'').join('').toUpperCase();
     const _scIdArg = "'" + String(r.id).replace(/\\/g,'\\\\').replace(/'/g,"\\'") + "'";
-    const txt = (r.date||'')+' · '+(r.template||'')+' · '+(r.phase||'')+' · '+(r.task||'')+' · '+initials;
+    const txt = (r.date||'')+' · '+(r.batch||'—')+' · '+(r.template||'')+' · '+(r.task||'')+' · '+initials;
     return '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:5px 0;border-bottom:1px solid var(--bg2);">'
       +'<span style="font-size:12px;">'+txt+'</span>'
       +'<button type="button" onclick="sanclDelete('+_scIdArg+')" style="font-size:10px;padding:2px 7px;border:1px solid var(--red);background:var(--red-pale);border-radius:var(--radius-sm);cursor:pointer;color:var(--red);flex-shrink:0;">Delete</button>'
@@ -17366,33 +17380,37 @@ function sanclChanged(){
 async function sanclSaveSelectedTasks(){
   const grower   = (document.getElementById('sancl-grower')||{}).value || '';
   const template = (document.getElementById('sancl-template')||{}).value || '';
-  const batch    = (document.getElementById('sancl-batch')||{}).value || '';
+  const batches  = (typeof sanclSelectedBatches === 'function') ? sanclSelectedBatches() : [];
   const room     = (document.getElementById('sancl-room')||{}).value || '';
   const notes    = (document.getElementById('sancl-notes')||{}).value || '';
   const tplCfg   = SAN_TEMPLATE_BATCH_FILTER[template];
-  const batchOk  = !!batch || (tplCfg && tplCfg.batchOptional);
+  const batchOk  = batches.length > 0 || (tplCfg && tplCfg.batchOptional);
   if(!grower){ toast('Pick a grower first.'); return; }
   if(!template){ toast('Pick a template first.'); return; }
-  if(!batchOk){ toast('Pick a batch first.'); return; }
+  if(!batchOk){ toast('Pick at least one batch first.'); return; }
   if(!room){ toast('Pick a room first.'); return; }
   if(sanclSelectedTasks.size === 0){ toast('Tap one or more tasks to select them first.'); return; }
   const today = (typeof localDate === 'function') ? localDate() : new Date().toISOString().slice(0,10);
+  // One record per selected task PER selected batch (so two batches drying in the same room each get
+  // their own cleaning record). batchOptional templates (Utility Areas) save a single no-batch record.
+  const _targets = batches.length ? batches : [''];
   const newRecs = [];
   let skipped = 0;
   sanclSelectedTasks.forEach(taskName => {
-    // Skip anything that's already logged today (defensive — selected rows shouldn't include them).
-    const dupe = sanCleanRecs.find(r => (r.batch||'')===batch && r.template===template && r.room===room && r.task===taskName && r.date===today);
-    if(dupe){ skipped++; return; }
-    const rec = {
-      id: Date.now() + Math.floor(Math.random()*1000000),
-      date: today,
-      grower, batch, room,
-      template, task: taskName,
-      notes: notes || '',
-      synced: false
-    };
-    sanCleanRecs.unshift(rec);
-    newRecs.push(rec);
+    _targets.forEach(bid => {
+      const dupe = sanCleanRecs.find(r => (r.batch||'')===bid && r.template===template && r.room===room && r.task===taskName && r.date===today);
+      if(dupe){ skipped++; return; }
+      const rec = {
+        id: Date.now() + Math.floor(Math.random()*1000000),
+        date: today,
+        grower, batch: bid, room,
+        template, task: taskName,
+        notes: notes || '',
+        synced: false
+      };
+      sanCleanRecs.unshift(rec);
+      newRecs.push(rec);
+    });
   });
   lsSet('gp-sanclean', sanCleanRecs);
   const savedCount = newRecs.length;
