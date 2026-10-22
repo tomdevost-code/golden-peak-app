@@ -14570,9 +14570,15 @@ async function summaryUpdateBatch(){
     toast('Total plants across Flower rooms ('+_distTotal+') exceeds batch quantity ('+_bQty+').',5500);
     return;
   }
-  // Validation: if advancing to Flower phase, every checked Flower room must have a count > 0
+  // Validation: if advancing to Flower phase, every checked Flower room must have a count > 0.
+  // Skip for post-harvest batches (Drying / Trimmed / Packaged / Delivered) and when closing the
+  // batch — their flower rooms have legitimately been harvested down to 0, so requiring a count
+  // there would block routine closes. Only enforced for batches still actively in a growing phase.
+  const _phaseForValidation = batchRecs[idx].plantPhase || '';
+  const _closingNow = (document.getElementById('summary-status')||{}).value === 'Closed';
+  const _postHarvestPhase = ['Drying','Trimmed','Packaged','Delivered'].includes(_phaseForValidation);
   const _flowerRoomsChecked = rooms.filter(r=>r!=='Veg');
-  if(_flowerRoomsChecked.length > 0){
+  if(_flowerRoomsChecked.length > 0 && !_postHarvestPhase && !_closingNow){
     for(const fr of _flowerRoomsChecked){
       if(!roomDistribution[fr] || roomDistribution[fr] <= 0){
         toast('Enter a plant count for ' + fr + '.',5000);
