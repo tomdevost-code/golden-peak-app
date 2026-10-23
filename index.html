@@ -1977,9 +1977,9 @@ tr:last-child td { border-bottom: none; }
         </div>
 
         <div class="field" id="sancl-batch-field" style="margin-bottom:10px;">
-          <label>Batch(es) <span id="sancl-batch-req" style="color:var(--red);font-weight:700;">*</span> <span style="font-size:10px;color:var(--text3);font-weight:400;" id="sancl-batch-hint"></span></label>
-          <div style="font-size:10px;color:var(--text3);margin-bottom:4px;">Tap to select one or more (e.g. two batches drying in the same room). Tap again to deselect.</div>
-          <select id="sancl-batch" multiple size="4" onchange="sanclChanged()" style="min-height:96px;"></select>
+          <label><span id="sancl-batch-label">Batch</span> <span id="sancl-batch-req" style="color:var(--red);font-weight:700;">*</span> <span style="font-size:10px;color:var(--text3);font-weight:400;" id="sancl-batch-hint"></span></label>
+          <div id="sancl-batch-multi-hint" style="font-size:10px;color:var(--text3);margin-bottom:4px;display:none;">Tap to select one or more (e.g. two batches drying in the same room). Tap again to deselect.</div>
+          <select id="sancl-batch" onchange="sanclChanged()"></select>
         </div>
 
         <div class="field" style="margin-bottom:10px;">
@@ -16925,6 +16925,16 @@ function sanclPopulateBatchOptions(){
   }
   if(field) field.style.display = '';
   if(req) req.style.display = '';
+  // Multi-batch selection is ONLY for the Drying template (two batches can dry in the same room),
+  // and ONLY for regular batches (not mother / S / X). Every other template uses a single-batch
+  // dropdown with its normal eligibility.
+  const _multi = (template === 'Drying');
+  sel.multiple = _multi;
+  if(_multi){ sel.size = 4; sel.style.minHeight = '96px'; } else { sel.removeAttribute('size'); sel.style.minHeight = ''; }
+  const _multiHint = document.getElementById('sancl-batch-multi-hint');
+  if(_multiHint) _multiHint.style.display = _multi ? '' : 'none';
+  const _lbl = document.getElementById('sancl-batch-label');
+  if(_lbl) _lbl.textContent = _multi ? 'Batch(es)' : 'Batch';
   // Filter rules:
   //   anyBatch:true   → every open batch shows (mother + regular) — used for templates that
   //                     can apply to any kind of batch (Mother-Veg, Trimming).
@@ -16936,11 +16946,14 @@ function sanclPopulateBatchOptions(){
     if(!b || b.type) return false;
     if(isBatchClosedRec && isBatchClosedRec(b)) return false;
     if(isBatchDeliveredOrSold(b)) return false;
+    // Drying template: regular batches only (no mother / S / X).
+    if(_multi && (isMotherBatch(b.batchId) || isSeedsBatchId(b.batchId) || isExperimentalBatch(b.batchId))) return false;
     if(filter.anyBatch) return true;
     if(filter.motherOnly !== isMotherBatch(b.batchId)) return false;
     return true;
   }).sort(batchCreatedCmp);
-  sel.innerHTML = eligible.map(b => '<option value="'+b.batchId+'"'+(curSet.has(b.batchId)?' selected':'')+'>'+b.batchId+(b.cultivar?' – '+b.cultivar:'')+(b.plantPhase?' · '+b.plantPhase:'')+'</option>').join('');
+  sel.innerHTML = (_multi ? '' : '<option value="">-- select batch --</option>') +
+    eligible.map(b => '<option value="'+b.batchId+'"'+(curSet.has(b.batchId)?' selected':'')+'>'+b.batchId+(b.cultivar?' – '+b.cultivar:'')+(b.plantPhase?' · '+b.plantPhase:'')+'</option>').join('');
   if(hint){
     if(!eligible.length){
       hint.textContent = filter.anyBatch ? '— no open batches yet'
