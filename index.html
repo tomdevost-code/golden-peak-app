@@ -11307,7 +11307,9 @@ function batchGeneticsChange(){
     const newPrefix = _idMatch ? _idMatch[1].toUpperCase() : '';
     const options = _isExp
       ? batchRecs.filter(b => b && !b.type && !isBatchClosedRec(b) && b.batchId !== newBatchId
-          && !isExperimentalBatch(b.batchId) && !isSeedsBatchId(b.batchId)) // breeding source: any open mother OR regular batch (not X-, not S-)
+          && !isExperimentalBatch(b.batchId) && !isSeedsBatchId(b.batchId) // breeding source: a mother OR regular batch (not X-, not S-)
+          // Must have clonable living plants — exclude harvested regular batches, and moms with no live plants.
+          && (isMotherBatch(b.batchId) ? (calcBatchQty(b.batchId) > 0) : !_batchIsHarvested(b)))
           .sort(batchCreatedCmp).map(b => b.batchId)
       : (newPrefix
           ? getMotherBatchIds().filter(mId => {
