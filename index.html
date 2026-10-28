@@ -11306,7 +11306,9 @@ function batchGeneticsChange(){
     const _idMatch = newBatchId.match(/^(?:X-)?([A-Z]{2,3})-\d{3}$/i);
     const newPrefix = _idMatch ? _idMatch[1].toUpperCase() : '';
     const options = _isExp
-      ? getMotherBatchIds() // breeding source: any open mom
+      ? batchRecs.filter(b => b && !b.type && !isBatchClosedRec(b) && b.batchId !== newBatchId
+          && !isExperimentalBatch(b.batchId) && !isSeedsBatchId(b.batchId)) // breeding source: any open mother OR regular batch (not X-, not S-)
+          .sort(batchCreatedCmp).map(b => b.batchId)
       : (newPrefix
           ? getMotherBatchIds().filter(mId => {
               const m = mId.match(/^M-([A-Z]{2,3})-\d{3}$/i);
@@ -11315,7 +11317,7 @@ function batchGeneticsChange(){
           : []);
     if(momLbl){
       momLbl.innerHTML = _isExp
-        ? 'Source Mother <span style="color:var(--red);font-weight:700;">*</span> <span id="batch-mother-hint" style="font-size:10px;color:var(--text3);font-weight:400;">(clone donor for this cross — any M- batch)</span>'
+        ? 'Source Batch <span style="color:var(--red);font-weight:700;">*</span> <span id="batch-mother-hint" style="font-size:10px;color:var(--text3);font-weight:400;">(clone donor for this cross — a mother or regular batch; not X- or S-)</span>'
         : 'Mother ID <span style="color:var(--red);font-weight:700;">*</span> <span id="batch-mother-hint" style="font-size:10px;color:var(--text3);font-weight:400;">(M-' + (newPrefix || 'XXX') + '-NNN — same-prefix clone donor)</span>';
     }
     momSel.innerHTML = '<option value="">-- select mother batch --</option>'
@@ -11324,8 +11326,8 @@ function batchGeneticsChange(){
     momSel.disabled = false; momSel.style.cursor='';
     momMsg.style.color = 'var(--amber)';
     if(_isExp){
-      if(!options.length){ momMsg.style.color = 'var(--red)'; momMsg.textContent = 'No open mother batches to clone from. Create a mother batch first.'; }
-      else { momMsg.textContent = 'Required — which mother batch are these breeding clones taken from?'; }
+      if(!options.length){ momMsg.style.color = 'var(--red)'; momMsg.textContent = 'No open mother or regular batches to clone from. Create one first.'; }
+      else { momMsg.textContent = 'Required — which mother or regular batch are these breeding clones taken from?'; }
     } else if(!newPrefix){
       momMsg.textContent = 'Enter a valid Batch ID (XX-NNN or XXX-NNN) first — the mother list filters to M-* batches with the same letter prefix.';
     } else if(!options.length){
@@ -11731,8 +11733,17 @@ async function batchCreate(){
       return;
     }
     if(!isMotherBatch(mother)){
-      toast('Mother ID must be an M-XXX-NNN batch.', 5000);
-      return;
+      // Experimental (X-) batches may clone from a mother OR a regular batch — but never from
+      // another X- batch or an S- batch. Regular Clones-Internal batches still require an M- donor.
+      if(isExperimentalBatch(batchId)){
+        if(isExperimentalBatch(mother) || isSeedsBatchId(mother)){
+          toast('An experimental (X-) batch can take clones from a mother or a regular batch — not another X- or an S- batch.', 6500);
+          return;
+        }
+      } else {
+        toast('Mother ID must be an M-XXX-NNN batch.', 5000);
+        return;
+      }
     }
     const _momRec = batchRecs.find(r => r.batchId === mother && !r.type);
     if(!_momRec){
@@ -14472,8 +14483,9 @@ function summaryUpdateTxTypeOptions(batchId){
     }
   }
   // Moved to Experimental — relocate live plants INTO an X- breeding batch (e.g. a mom's Veg plant).
-  // Offered on any non-X batch that currently has plants in a movable phase, when an open X- batch exists.
-  if(!isExperimentalBatch(batchId) && ['Clones','Veg','Flower'].includes(phase)){
+  // Offered on a mother or regular batch with plants in a movable phase, when an open X- batch exists.
+  // NOT offered on S- (seeds) or X- batches — an X- cross sources only from mothers or regular batches.
+  if(!isExperimentalBatch(batchId) && !isSeedsBatchId(batchId) && ['Clones','Veg','Flower'].includes(phase)){
     const _hasOpenX = batchRecs.some(r => r && !r.type && isExperimentalBatch(r.batchId) && (r.status||'') !== 'Closed' && r.batchId !== batchId);
     if(_hasOpenX && calcBatchQty(batchId) > 0 && !opts.includes('Moved to Experimental')) opts.push('Moved to Experimental');
   }
