@@ -12201,7 +12201,7 @@ function renderMilestonesDue(){
   try {
     const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
     const groups = [];
-    batchRecs.filter(b => b && !b.type && !isMotherBatch(b.batchId) && !(typeof isBatchClosedRec==='function' && isBatchClosedRec(b)))
+    batchRecs.filter(b => b && !b.type && !isMotherBatch(b.batchId) && !isSeedsBatchId(b.batchId) && !isExperimentalBatch(b.batchId) && !(typeof isBatchClosedRec==='function' && isBatchClosedRec(b)))
       .sort(batchCreatedCmp)
       .forEach(b => {
         const grp = _msGroupForPhase(b.plantPhase||'');
@@ -12811,7 +12811,7 @@ function summaryRenderFlowerAlerts(batchId){
   if(!batchId) return;
   const b = batchRecs.find(r => r.batchId === batchId && !r.type);
   if(!b) return;
-  if(isMotherBatch(batchId)) return; // milestones don't apply to mother batches
+  if(isMotherBatch(batchId) || isSeedsBatchId(batchId) || isExperimentalBatch(batchId)) return; // milestones apply to regular batches only
   const group = _msGroupForPhase(b.plantPhase||'');
   if(!group) return;                 // Drying/Packaged/Delivered have no milestone group
   const fd = _msPhaseDay(b, group);
