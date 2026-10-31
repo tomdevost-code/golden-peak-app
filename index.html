@@ -7666,8 +7666,11 @@ function ecRenderRecent(batch /*, room — ignored: filters by batch only */){
         '<td style="padding:5px 8px;border-top:1px solid var(--border);border-left:1px solid var(--border);text-align:center;font-family:var(--mono);">'+_phv+'</td>'+
         '<td style="padding:5px 8px;border-top:1px solid var(--border);border-left:1px solid var(--border);text-align:center;font-family:var(--mono);">'+_mlv+'</td>'+
         '<td style="padding:5px 8px;border-top:1px solid var(--border);border-left:1px solid var(--border);text-align:center;white-space:nowrap;">'+(function(){
+            const _esc = s => String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
             const _fr = _flowByKey[(r.date||'')+'|'+(r.room||'—')];
-            if(!_fr) return '<span style="color:var(--text3);">—</span>';
+            if(!_fr){
+              return '<button type="button" title="Add flow reading" onclick="flowQuickAdd(\''+_esc(r.batch)+'\',\''+_esc(r.room)+'\',\''+_esc(r.date)+'\',\''+_esc(r.grower)+'\')" style="font-size:10px;padding:1px 7px;border:1px solid var(--green);background:var(--green-pale);border-radius:var(--radius-sm);cursor:pointer;color:var(--green);font-weight:600;">+ add</button>';
+            }
             const _fId = "'" + String(_fr.id).replace(/\\/g,'\\\\').replace(/'/g,"\\'") + "'";
             return '<span style="font-family:var(--mono);font-weight:600;">'+Math.round(parseFloat(_fr.reading))+'</span>'+
               ' <button type="button" title="Edit flow reading" onclick="flowQuickEdit('+_fId+')" style="font-size:10px;padding:1px 6px;border:1px solid var(--border);background:var(--bg2);border-radius:var(--radius-sm);cursor:pointer;color:var(--text2);">✎</button>';
@@ -7880,6 +7883,33 @@ async function flowQuickEdit(id){
   }catch(e){ setSyncPill('err','Sync failed'); toast('Updated locally — sync failed, will retry.',5000); }
   if(typeof updatePendingBadge === 'function') updatePendingBadge();
   const _b = (document.getElementById('ec-batch-select')||{}).value || rec.batch;
+  if(typeof ecRenderRecent === 'function') ecRenderRecent(_b);
+  if(typeof flowRenderRecent === 'function'){ try{ flowRenderRecent(); }catch(_){} }
+}
+// Add a flow-meter reading for an EC entry that has none yet, straight from the EC "Edit / delete
+// entries" table. Creates + syncs a flowRec keyed to that entry's batch / room / date.
+async function flowQuickAdd(batch, room, date, grower){
+  if(!batch || !room || !date){ toast('Missing batch/room/date for this reading.'); return; }
+  const ans = prompt('New flow meter reading (L)\n\n'+batch+' · '+room+' · '+date, '');
+  if(ans === null) return;
+  const v = parseFloat(String(ans).trim());
+  if(isNaN(v) || v < 0){ toast('Enter a valid reading (0 or more).'); return; }
+  const _now = new Date();
+  const _hhmm = String(_now.getHours()).padStart(2,'0')+':'+String(_now.getMinutes()).padStart(2,'0');
+  const rec = { id: Date.now()+Math.floor(Math.random()*1000), batch, room, date, time:_hhmm, grower:grower||'', reading:Math.round(v), notes:'Added from EC edit list', synced:false };
+  flowRecs.unshift(rec); lsSet('gp-flow', flowRecs);
+  try{
+    if(cfg.flowTbl && cfg.token && cfg.base){
+      setSyncPill('ing','Syncing...');
+      const ff = { 'Batch ID':[batch], 'Date':date, 'Time':_hhmm, 'Room':room, 'Grower':grower||undefined, 'Flow Reading':rec.reading, 'Notes':rec.notes };
+      Object.keys(ff).forEach(k=>{ if(ff[k]===undefined||ff[k]===null||ff[k]==='') delete ff[k]; });
+      const r2 = await atPost(cfg.flowTbl, ff); rec.synced=true; if(r2 && r2.id) rec.airtableId=r2.id;
+      lsSet('gp-flow', flowRecs); setSyncPill('ok','Synced');
+    }
+    toast('Flow reading added.');
+  }catch(e){ setSyncPill('err','Sync failed'); toast('Saved locally — sync failed, will retry.',5000); }
+  if(typeof updatePendingBadge === 'function') updatePendingBadge();
+  const _b = (document.getElementById('ec-batch-select')||{}).value || batch;
   if(typeof ecRenderRecent === 'function') ecRenderRecent(_b);
   if(typeof flowRenderRecent === 'function'){ try{ flowRenderRecent(); }catch(_){} }
 }
