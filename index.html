@@ -7570,8 +7570,9 @@ function ecRenderRecent(batch /*, room — ignored: filters by batch only */){
       }
     });
   const _flowShown = {}; // show the value once per date+room (a Feed and Flush share one meter reading)
-  // Edit/delete is restricted to the current entry date only — older flow readings are display-only.
-  const _flowEditableDate = (document.getElementById('ec-date')||{}).value || localDate();
+  // Edit/delete is allowed for flow readings from the last 5 days (same window as EC entry edits),
+  // so a mistyped meter reading can be corrected without re-entering it. Older readings stay read-only.
+  const _flowToday = localDate();
   // Show only the latest 3 days at full height; older days scroll. Height is approximated from the
   // number of rows belonging to the 3 most recent distinct dates (rows are already date-desc sorted).
   const _distinctDates = [];
@@ -7609,7 +7610,8 @@ function ecRenderRecent(batch /*, room — ignored: filters by batch only */){
       if(_fr){
         _flowShown[_fk] = true;
         const _fId = "'" + String(_fr.id).replace(/\\/g,'\\\\').replace(/'/g,"\\'") + "'";
-        const _fEditable = (_fr.date || '') === _flowEditableDate;
+        const _fDays = (typeof daysBetween === 'function') ? daysBetween(_fr.date, _flowToday) : null;
+        const _fEditable = _fDays != null && _fDays >= 1 && _fDays <= 5;
         flowCell = '<span style="font-weight:600;">'+Math.round(parseFloat(_fr.reading))+'</span>'+
           (_fEditable
             ? ' <button type="button" title="Edit reading" onclick="flowEditStart('+_fId+')" style="font-size:10px;padding:1px 5px;margin-left:3px;border:1px solid var(--border);background:var(--bg2);border-radius:var(--radius-sm);cursor:pointer;color:var(--text2);">✎</button>'+
