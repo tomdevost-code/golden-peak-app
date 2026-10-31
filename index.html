@@ -7614,7 +7614,7 @@ function ecRenderRecent(batch /*, room — ignored: filters by batch only */){
         const _fEditable = _fDays != null && _fDays >= 1 && _fDays <= 5;
         flowCell = '<span style="font-weight:600;">'+Math.round(parseFloat(_fr.reading))+'</span>'+
           (_fEditable
-            ? ' <button type="button" title="Edit reading" onclick="flowEditStart('+_fId+')" style="font-size:10px;padding:1px 5px;margin-left:3px;border:1px solid var(--border);background:var(--bg2);border-radius:var(--radius-sm);cursor:pointer;color:var(--text2);">✎</button>'+
+            ? ' <button type="button" title="Edit reading" onclick="flowQuickEdit('+_fId+')" style="font-size:10px;padding:1px 5px;margin-left:3px;border:1px solid var(--border);background:var(--bg2);border-radius:var(--radius-sm);cursor:pointer;color:var(--text2);">✎</button>'+
               '<button type="button" title="Delete reading" onclick="flowDelete('+_fId+')" style="font-size:10px;padding:1px 5px;margin-left:2px;border:1px solid var(--red);background:var(--red-pale);border-radius:var(--radius-sm);cursor:pointer;color:var(--red);">✕</button>'
             : '');
       }
@@ -7650,6 +7650,7 @@ function ecRenderRecent(batch /*, room — ignored: filters by batch only */){
       '<th style="padding:6px 8px;text-align:center;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;border-left:1px solid var(--border);">EC</th>'+
       '<th style="padding:6px 8px;text-align:center;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;border-left:1px solid var(--border);">pH</th>'+
       '<th style="padding:6px 8px;text-align:center;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;border-left:1px solid var(--border);">ml</th>'+
+      '<th style="padding:6px 8px;text-align:center;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;border-left:1px solid var(--border);">Flow (L)</th>'+
       '<th style="padding:6px 8px;text-align:center;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;border-left:1px solid var(--border);">Actions</th>'+
     '</tr></thead><tbody>';
     _ecEditRecs.forEach(r => {
@@ -7664,6 +7665,13 @@ function ecRenderRecent(batch /*, room — ignored: filters by batch only */){
         '<td style="padding:5px 8px;border-top:1px solid var(--border);border-left:1px solid var(--border);text-align:center;font-family:var(--mono);">'+_ecv+'</td>'+
         '<td style="padding:5px 8px;border-top:1px solid var(--border);border-left:1px solid var(--border);text-align:center;font-family:var(--mono);">'+_phv+'</td>'+
         '<td style="padding:5px 8px;border-top:1px solid var(--border);border-left:1px solid var(--border);text-align:center;font-family:var(--mono);">'+_mlv+'</td>'+
+        '<td style="padding:5px 8px;border-top:1px solid var(--border);border-left:1px solid var(--border);text-align:center;white-space:nowrap;">'+(function(){
+            const _fr = _flowByKey[(r.date||'')+'|'+(r.room||'—')];
+            if(!_fr) return '<span style="color:var(--text3);">—</span>';
+            const _fId = "'" + String(_fr.id).replace(/\\/g,'\\\\').replace(/'/g,"\\'") + "'";
+            return '<span style="font-family:var(--mono);font-weight:600;">'+Math.round(parseFloat(_fr.reading))+'</span>'+
+              ' <button type="button" title="Edit flow reading" onclick="flowQuickEdit('+_fId+')" style="font-size:10px;padding:1px 6px;border:1px solid var(--border);background:var(--bg2);border-radius:var(--radius-sm);cursor:pointer;color:var(--text2);">✎</button>';
+          })()+'</td>'+
         '<td style="padding:5px 8px;border-top:1px solid var(--border);border-left:1px solid var(--border);text-align:center;white-space:nowrap;">'+
           '<button type="button" onclick="ecEditStart('+_ecIdArg+')" style="font-size:11px;padding:3px 8px;margin-right:4px;border:1px solid var(--border);background:var(--bg2);border-radius:var(--radius-sm);cursor:pointer;color:var(--text2);">Edit</button>'+
           '<button type="button" onclick="ecDelete('+_ecIdArg+')" style="font-size:11px;padding:3px 8px;border:1px solid var(--red);background:var(--red-pale);border-radius:var(--radius-sm);cursor:pointer;color:var(--red);">Delete</button>'+
@@ -7848,6 +7856,32 @@ function flowRenderRecent(){
 function flowEditCancel(){
   flowEditId = null;
   const btn = document.getElementById('flow-btn'); if(btn) btn.textContent = 'Save Flow Reading';
+}
+// Quick inline edit of a flow-meter reading from the EC "Edit / delete entries" table — avoids the
+// standalone Flow Meter card (which is hidden). Prompts for the new reading, updates + syncs.
+async function flowQuickEdit(id){
+  const rec = flowRecs.find(r => String(r.id) === String(id));
+  if(!rec){ toast('Reading not found.'); return; }
+  const cur = (rec.reading != null ? Math.round(parseFloat(rec.reading)) : '');
+  const ans = prompt('Flow meter reading (L)\n\n'+(rec.batch||'')+' · '+(rec.room||'')+' · '+(rec.date||''), String(cur));
+  if(ans === null) return;
+  const v = parseFloat(String(ans).trim());
+  if(isNaN(v) || v < 0){ toast('Enter a valid reading (0 or more).'); return; }
+  rec.reading = Math.round(v);
+  rec.synced = false;
+  lsSet('gp-flow', flowRecs);
+  try{
+    if(rec.airtableId && cfg.flowTbl && cfg.token && cfg.base){
+      setSyncPill('ing','Syncing...');
+      await atUpdateById(cfg.flowTbl, rec.airtableId, { 'Flow Reading': rec.reading });
+      rec.synced = true; lsSet('gp-flow', flowRecs); setSyncPill('ok','Synced');
+    }
+    toast('Flow reading updated.');
+  }catch(e){ setSyncPill('err','Sync failed'); toast('Updated locally — sync failed, will retry.',5000); }
+  if(typeof updatePendingBadge === 'function') updatePendingBadge();
+  const _b = (document.getElementById('ec-batch-select')||{}).value || rec.batch;
+  if(typeof ecRenderRecent === 'function') ecRenderRecent(_b);
+  if(typeof flowRenderRecent === 'function'){ try{ flowRenderRecent(); }catch(_){} }
 }
 function flowEditStart(id){
   const rec = flowRecs.find(r => String(r.id) === String(id));
