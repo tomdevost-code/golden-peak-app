@@ -17980,7 +17980,12 @@ function ctlsVegMetrics(from, to){
       .sort((a,c) => (a.date||'').localeCompare(c.date||'') || (a.id||0)-(c.id||0))
       .forEach(pr => {
         const _pd = pr.date||'';
-        const _beforeDestroy = !_dDate || _pd < _dDate || (_pd === _dDate && (pr.id||0) < _dId);
+        // Count intake up to AND INCLUDING the first-destroy date: for an external-clone batch the
+        // plants arrive on intake, so a same-day cull is necessarily after the intake. (The old
+        // id-based same-day tie-breaker wrongly dropped a brought-in intake logged the same day as
+        // the first veg-waste cull.) Only Produced/Received on a LATER day than destruction began is
+        // treated as a possible in-house cutting and excluded.
+        const _beforeDestroy = !_dDate || _pd <= _dDate;
         if(!_beforeDestroy) return;
         if(_inRange(pr.date, from, to)){
           broughtInExternal += (parseInt(pr.qty)||0);
