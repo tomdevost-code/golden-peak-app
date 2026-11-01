@@ -18118,18 +18118,38 @@ function ctlsFlowerMetrics(from, to){
       if(fn > 0) _alreadyDetail.push(b.batchId+' — '+fn+' plants (mom Flower cohort, flower start '+b.flowerStart+')');
       return sum + Math.max(0, fn);
     }
-    // Snapshot of plants at the start of this month
-    const sortedTxs = batchTxRecs
-      .filter(t => t.batchId === b.batchId && (t.date||'') < from)
-      .sort((a,c) => (a.date||'').localeCompare(c.date||''));
-    let qty = 0;
-    sortedTxs.forEach(t => {
-      const q = parseInt(t.qty)||0;
-      if(t.txType === 'Sold' || t.txType === 'Phase Advance' || t.txType === 'Phase Change') return;
-      if(t.txType === 'Produced/Received' || t.txType === 'Seeds Germinated') qty += q; else qty -= q;
-    });
-    if(qty > 0) _alreadyDetail.push(b.batchId+' — '+Math.max(0,qty)+' plants (flower start '+b.flowerStart+')');
-    return sum + Math.max(0, qty);
+    // Flowering cohort as of the start of this month: plants flipped to flower (the Phase Change →
+    // Flower tx carries the flipped count) minus flower-phase destroys and harvests before the month.
+    // This isolates the flowering plants from any Veg clones the batch is still holding — on S-/X-
+    // multi-cohort batches those Veg clones must NOT be counted as "in flower". Falls back to the
+    // whole-batch snapshot for legacy batches whose flip wasn't stamped with a plant count.
+    const _flipBefore = batchTxRecs
+      .filter(t => t.batchId === b.batchId && t.txType === 'Phase Change' && (t.plantPhase||'') === 'Flower' && (t.date||'') < from)
+      .reduce((s,t) => s + (parseInt(t.qty)||0), 0);
+    let qty;
+    if(_flipBefore > 0){
+      const _destFlowerBefore = batchTxRecs
+        .filter(t => t.batchId === b.batchId && t.txType === 'Destroyed' && (t.date||'') < from
+          && ((t.plantPhase||'') === 'Flower' || /Flower/i.test(t.room||'') || (t.room||'') === 'Tent'))
+        .reduce((s,t) => s + (parseInt(t.qty)||0), 0);
+      const _harvBefore = batchTxRecs
+        .filter(t => t.batchId === b.batchId && t.txType === 'Harvested' && (t.date||'') < from)
+        .reduce((s,t) => s + (parseInt(t.qty)||0), 0);
+      qty = Math.max(0, _flipBefore - _destFlowerBefore - _harvBefore);
+    } else {
+      // Legacy fallback: whole-batch snapshot (no stamped flip count available).
+      qty = 0;
+      batchTxRecs
+        .filter(t => t.batchId === b.batchId && (t.date||'') < from)
+        .forEach(t => {
+          const q = parseInt(t.qty)||0;
+          if(t.txType === 'Sold' || t.txType === 'Phase Advance' || t.txType === 'Phase Change') return;
+          if(t.txType === 'Produced/Received' || t.txType === 'Seeds Germinated') qty += q; else qty -= q;
+        });
+      qty = Math.max(0, qty);
+    }
+    if(qty > 0) _alreadyDetail.push(b.batchId+' — '+qty+' plants (flower start '+b.flowerStart+')');
+    return sum + qty;
   }, 0);
   // Destroyed during flower = Destroyed tx where plantPhase=Flower OR room is a flower room.
   const _destFlowerTx = txs.filter(t => t.txType === 'Destroyed' && ((t.plantPhase||'') === 'Flower' || /Flower/i.test(t.room||'') || (t.room||'') === 'Tent'));
