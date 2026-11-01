@@ -2232,8 +2232,8 @@ Lower Sackville, NS, B4C 3Z2</textarea></div>
          reopening the batch. -->
     <div class="page" id="page-retention" data-section="hpp">
       <div class="card" style="margin-bottom:12px;">
-        <div class="section-label">Retention &amp; Pheno Samples</div>
-        <div style="font-size:12px;color:var(--text2);line-height:1.5;margin:-2px 0 12px;"><b>Retention</b> samples are held 2 years from their post-dry date, then destroyed; <b>Pheno</b> samples (S- batches) are held until you're done evaluating. This list covers every batch — including closed ones. Destroying a sample here records a dated dry-cannabis destruction (it flows into the CTLS report) and leaves the batch closed.</div>
+        <div class="section-label">Retention Samples</div>
+        <div style="font-size:12px;color:var(--text2);line-height:1.5;margin:-2px 0 12px;"><b>Retention</b> samples are held 2 years from their post-dry date, then destroyed. This list covers every batch — including closed ones. Destroying a sample here records a dated dry-cannabis destruction (it flows into the CTLS report) and leaves the batch closed.<br><span style="color:var(--text3);">Pheno-hunt samples now follow the regular batch flow — destroy them by recording Dry Waste from the Trim Room, then the signed weigh-out on the Destruction page.</span></div>
         <div id="retention-stats" class="g2" style="margin-bottom:12px;"></div>
         <div class="field" style="margin-bottom:10px;">
           <label>Show</label>
@@ -18246,7 +18246,9 @@ function _retentionDestroyBy(dateStr){ return _retAddDays(dateStr, RETENTION_YEA
 // The samples registry covers Retention holds AND Pheno evaluation samples (S- batches). Both are
 // held Post-Drying containers that get destroyed as dry cannabis; Retention has a 2-year hold clock,
 // Pheno is simply held until destroyed.
-function _retentionSamples(){ return postDryRecs.filter(r => r && !r.retWasted && ((r.sampleType||'') === 'Retention' || (r.sampleType||'') === 'Pheno Samples')); }
+// Pheno samples now follow the regular-batch flow (destroyed via a Waste record + weigh-out), so they
+// no longer appear on the Retention page — this registry is retention holds only.
+function _retentionSamples(){ return postDryRecs.filter(r => r && !r.retWasted && (r.sampleType||'') === 'Retention'); }
 function _retIsPheno(r){ return (r && (r.sampleType||'') === 'Pheno Samples'); }
 function _retentionStatus(r, today){
   if(r.retDestroyed) return 'destroyed';
@@ -18867,12 +18869,11 @@ function ctlsGenerateReport(){
     html += _ctlsBlock('6. Waste Destruction', [
       {label:'Destruction events in the month', value: v(dEvents.length + _phEventCount, 'events'), detail:_evD.concat(_phEvD)},
       {label:'Vegetative waste destroyed (actual)', note:'actual weight destroyed, after drying loss', value: v(totVeg, 'kg'), detail:_vegActD},
-      {label:'Dry cannabis destroyed (actual)', note:'actual weight destroyed, after drying loss — includes destroyed pheno samples', value: v(r3c(totDry + (dry.phenoDestroyedWeight||0)), 'kg'), detail:_dryActD.concat(dry.phenoDestroyedDetail||[])},
+      {label:'Dry cannabis destroyed (actual)', note:'actual weight destroyed, after drying loss', value: v(totDry, 'kg'), detail:_dryActD},
       {label:'Vegetative drying loss (recorded − actual)', note:'veg weight lost between waste entry and destruction', value: v(vegLoss, 'kg'), detail:_vegLossD},
       {label:'Dry drying loss (recorded − actual)', note:'dry weight lost between waste entry and destruction', value: v(dryLoss, 'kg'), detail:_dryLossD},
       {label:'Retention samples destroyed', note: dry.retentionDestroyedCount ? (dry.retentionDestroyedCount+' sample'+(dry.retentionDestroyedCount===1?'':'s')+' · end of 2-year hold') : 'end of 2-year hold', value: v(dry.retentionDestroyedWeight, 'kg'), detail:dry.retentionDestroyedDetail},
-      {label:'Retention samples held (not destroyed)', note: _retHeld.length ? (_retHeld.length+' sample'+(_retHeld.length===1?'':'s')+' · current holdings, all time') : 'current holdings', value: v(_retHeldKg, 'kg'), detail:_retHeldDetail},
-      {label:'Pheno samples held (not destroyed)', note: _phenoHeld.length ? (_phenoHeld.length+' sample'+(_phenoHeld.length===1?'':'s')+' · current holdings, all time') : 'current holdings', value: v(_phenoHeldKg, 'kg'), detail:_phenoHeldDetail}
+      {label:'Retention samples held (not destroyed)', note: _retHeld.length ? (_retHeld.length+' sample'+(_retHeld.length===1?'':'s')+' · current holdings, all time') : 'current holdings', value: v(_retHeldKg, 'kg'), detail:_retHeldDetail}
     ]);
   }
 
