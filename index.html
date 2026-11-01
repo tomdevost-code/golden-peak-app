@@ -16506,6 +16506,38 @@ function renderBatchReport(batchId){
     ])
   );
 
+  // Destruction Events — each signed weigh-out that destroyed material from this batch, with the
+  // batch's OWN actual destroyed weight (vegetative + dry) for that event. Sourced from the per-batch
+  // Adjustments captured on each destruction event; falls back to the batch's covered waste records.
+  {
+    const _ndEsc = v => String(v==null?'':v).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+    const _keyFn = (typeof NAT_KEY_FN !== 'undefined' && NAT_KEY_FN && NAT_KEY_FN.waste) ? NAT_KEY_FN.waste : null;
+    const _events = destroyRecs.filter(d => {
+      if(Array.isArray(d.batches) && d.batches.includes(batchId)) return true;
+      if(Array.isArray(d.adjust) && d.adjust.some(a => a && a.batch === batchId)) return true;
+      if(_keyFn && Array.isArray(d.coveredKeys) && wasteRecs.some(w => w.batch === batchId && d.coveredKeys.includes(_keyFn(w)))) return true;
+      return false;
+    }).slice().sort((a,c) => (a.date||'').localeCompare(c.date||'') || (a.id||0)-(c.id||0));
+    if(_events.length){
+      let tVeg=0, tDry=0;
+      const rows = _events.map(d => {
+        const adj = (d.adjust||[]).find(a => a && a.batch === batchId);
+        let veg = adj ? (parseFloat(adj.vegActual)||0) : 0;
+        let dry = adj ? (parseFloat(adj.dryActual)||0) : 0;
+        if(!adj && _keyFn){
+          const keySet = new Set(d.coveredKeys||[]);
+          const cov = wasteRecs.filter(w => w.batch === batchId && keySet.has(_keyFn(w)));
+          veg = cov.filter(w => w.type === 'Vegetative Waste').reduce((s,w) => s + (parseFloat(w.weight)||0), 0);
+          dry = cov.filter(w => w.type === 'Dry Waste').reduce((s,w) => s + (parseFloat(w.weight)||0), 0);
+        }
+        tVeg += veg; tDry += dry;
+        return [ _ndEsc(d.date||'—'), _ndEsc(d.employee||'—'), _ndEsc(d.method||'—'), fmtKg(veg), fmtKg(dry), fmtKg(veg+dry) ];
+      });
+      rows.push([ '<strong>Total</strong>', '', '', '<strong>'+fmtKg(tVeg)+'</strong>', '<strong>'+fmtKg(tDry)+'</strong>', '<strong>'+fmtKg(tVeg+tDry)+'</strong>' ]);
+      s += sectionTable('Destruction Events ('+_events.length+')', ['Date','Destroyed by','Method','Veg (kg)','Dry (kg)','Total (kg)'], rows);
+    }
+  }
+
   // Water used (flow meter). Source = the separate Flow Meter log (flowRecs); for older batches
   // logged before the flow log existed, fall back to any flow readings stored on EC entries.
   // The meter is zeroed per batch, so within each (batch, room) readings climb from 0 — the delta
