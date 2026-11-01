@@ -4120,7 +4120,17 @@ function summaryRefreshBatchTotals(batchId){
   const dryWasteSum = wasteRecs
     .filter(r => r.batch === batchId && r.type === 'Dry Waste')
     .reduce((s,r) => s + (parseFloat(r.weight)||0), 0);
-  const postDry = (b && b.postDryingWeight) ? parseFloat(b.postDryingWeight) : 0;
+  // Post-Dry weight. For S- (Seeds/pheno) batches the post-drying output is the pheno-evaluation
+  // samples, so show the summed net weight of the Pheno Samples containers instead of the generic
+  // post-drying weight. Falls back to batchRec.postDryingWeight if no pheno containers are logged.
+  let postDry;
+  if(b && isSeedsBatchId(b.batchId)){
+    const _phenoKg = postDryRecs.filter(r => r.batch === batchId && (r.sampleType||'') === 'Pheno Samples')
+      .reduce((s,r) => s + (parseFloat(r.netWeight)||0), 0);
+    postDry = _phenoKg > 0 ? _phenoKg : ((b && b.postDryingWeight) ? parseFloat(b.postDryingWeight) : 0);
+  } else {
+    postDry = (b && b.postDryingWeight) ? parseFloat(b.postDryingWeight) : 0;
+  }
   // Samples: Retention holds and COA (lab) samples, both from Post-Drying containers tagged by
   // Sample Type. Legacy 'Testing' records roll into the COA bucket for backward compatibility.
   const _pdOf = st => postDryRecs.filter(r => r.batch === batchId && st.includes(r.sampleType||''));
