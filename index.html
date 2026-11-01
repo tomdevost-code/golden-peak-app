@@ -18552,7 +18552,12 @@ function ctlsDryMetrics(from, to){
   const _soldTx = txs.filter(t => t.txType === 'Sold' && (!t.saleStage || t.saleStage === 'Dry'));
   const soldWeight = _soldTx.reduce((s,t) => s + (parseFloat(t.weight)||0), 0);
   // Dry Waste = sum of Weight (kg) on Waste records where Waste Type = Dry Waste in the month.
-  const _dryW = _wastesInRange(from, to).filter(w => (w.type||'') === 'Dry Waste');
+  // Retention / pheno samples "sent to destruction" from the Retention page create a Dry Waste record
+  // (Sub-Category 'Retention Sample' / 'Pheno Sample') that lands in the Destruction pending list —
+  // but those count as destroyed only once the signed weigh-out is completed (Section 6 "Dry cannabis
+  // destroyed (actual)"), NOT here. So exclude them from this recorded-dry-waste figure.
+  const _dryW = _wastesInRange(from, to).filter(w => (w.type||'') === 'Dry Waste'
+    && (w.subtype||'') !== 'Retention Sample' && (w.subtype||'') !== 'Pheno Sample');
   const dryWasteWeight = _dryW.reduce((s,w) => s + (parseFloat(w.weight)||0), 0);
   // Processor sample weight — Sent to Lab tx where Destination = Processor and Material = Dry Flower.
   const _procTx = txs.filter(t => t.txType === 'Sent to Lab' && (t.labDestType||'') === 'Processor' && (t.labMaterialType||'') === 'Dry Flower');
