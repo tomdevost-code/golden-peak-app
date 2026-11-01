@@ -1639,6 +1639,10 @@ tr:last-child td { border-bottom: none; }
             <select id="postdry-batch-select" onchange="postDrySetupChanged()">
               <option value="">-- select batch --</option>
             </select>
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);font-weight:400;margin-top:6px;cursor:pointer;">
+              <input type="checkbox" id="postdry-include-closed" onchange="postDryPopulateBatches()" style="width:auto;margin:0;" />
+              Include closed batches
+            </label>
           </div>
           <div class="g2" style="margin-bottom:0;">
             <div class="field"><label>Grower</label>
@@ -6125,16 +6129,20 @@ function postDryPopulateBatches(){
   if(!sel) return;
   const cur = sel.value;
   const _pdMomsOnly = momsOnlyFilter('postdry-batch-select');
+  const _pdInclClosed = !!(document.getElementById('postdry-include-closed')||{}).checked;
+  // Post-drying applies once a batch is harvested — Drying, Packaged (late sample), or Trimmed (S
+  // batches awaiting lab results). Closed batches are hidden unless "Include closed batches" is on,
+  // e.g. to add a late retention / pheno sample after the batch was closed.
   const eligible = batchRecs
-    .filter(b => !b.type && (b.plantPhase === 'Drying' || b.plantPhase === 'Packaged') && !isBatchClosedRec(b))
+    .filter(b => !b.type && ['Drying','Packaged','Trimmed'].includes(b.plantPhase||'') && (_pdInclClosed || !isBatchClosedRec(b)))
     .filter(b => _pdMomsOnly === isMotherBatch(b.batchId))  // moms toggle is exclusive
     .filter(b => !isExperimentalBatch(b.batchId))           // X- breeding batches don't use the Post-Dry flow
     .slice()
     .sort(batchCreatedCmp);
   sel.innerHTML = '<option value="">-- select batch --</option>' +
-    eligible.map(b => '<option value="'+b.batchId+'"'+(b.batchId===cur?' selected':'')+'>'+b.batchId+(b.plantPhase==='Packaged'?' (packaged — add late sample)':'')+'</option>').join('');
+    eligible.map(b => { const _cl = isBatchClosedRec(b); return '<option value="'+b.batchId+'"'+(b.batchId===cur?' selected':'')+'>'+b.batchId+(b.plantPhase==='Packaged'?' (packaged — add late sample)':(b.plantPhase==='Trimmed'?' (trimmed)':''))+(_cl?' (closed)':'')+'</option>'; }).join('');
   if(!eligible.length){
-    sel.innerHTML = '<option value="">No batches in Drying or Packaged phase</option>';
+    sel.innerHTML = '<option value="">No batches in Drying, Trimmed or Packaged phase'+(_pdInclClosed?'':' (tick Include closed to see closed ones)')+'</option>';
   } else {
     autoSelectIfSingle('postdry-batch-select');
   }
