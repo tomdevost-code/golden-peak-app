@@ -9860,6 +9860,11 @@ function wasteSeqUnlock(){
     _wasteTypeOpts = ['Vegetative Waste','Dry Waste'];
   } else if(room === 'Veg'){
     _wasteTypeOpts = ['Vegetative Waste']; // live Veg plants — vegetative waste regardless of batch phase
+  } else if(['Flower 1','Flower 2','Flower 3','Flower 4','Flower 5','Tent'].includes(room)){
+    // A Flower room records harvest / pre-harvest de-leaf material (leaf & stem pulled during harvest)
+    // — Vegetative Waste, attributed to the room it came from. Dried-flower trimmings are still Dry
+    // Waste from the Trim Room only.
+    _wasteTypeOpts = ['Vegetative Waste'];
   } else {
     _wasteTypeOpts = [(_phaseNow === 'Packaged' || _phaseNow === 'Drying' || _phaseNow === 'Trimmed') ? 'Dry Waste' : 'Vegetative Waste'];
   }
@@ -10019,7 +10024,10 @@ async function wasteSave(){
   // S-/X- batches harvesting a flowering cohort may still hold live Veg plants — allow Vegetative
   // Waste from the Veg room (with live plants) even though the batch headline is Drying/Packaged.
   const _wsVegCohortOk = (isSeedsBatchId(batch) || isExperimentalBatch(batch)) && room === 'Veg' && type === 'Vegetative Waste' && _wsRoomLive > 0;
-  if(room !== 'Trim Room' && !_wsVegCohortOk && type !== _wsExpectedType){
+  // Harvest waste (leaf/stem pulled during harvest) is Vegetative Waste attributed to the Flower room
+  // it came from — valid in post-harvest phases even though the batch headline is Drying/Trimmed/etc.
+  const _wsFlowerHarvestOk = type === 'Vegetative Waste' && ['Flower 1','Flower 2','Flower 3','Flower 4','Flower 5','Tent'].includes(room);
+  if(room !== 'Trim Room' && !_wsVegCohortOk && !_wsFlowerHarvestOk && type !== _wsExpectedType){
     if(_wsExpectedType === 'Vegetative Waste'){
       toast('This batch is still pre-harvest — record Vegetative Waste, not Dry Waste.',5500);
     } else if(_wsPhase === 'Drying'){
@@ -10029,12 +10037,10 @@ async function wasteSave(){
     }
     return;
   }
-  // Guard: Dry Waste during/after harvest comes from the Trim Room OR one of the batch's Flower
-  // rooms — so harvest / dried-flower waste can be attributed to the room it came from. Other rooms
-  // (e.g. Veg) are not valid Dry Waste sources.
-  if((_wsPhase === 'Drying' || _wsPhase === 'Trimmed' || _wsPhase === 'Packaged' || _wsPhase === 'Delivered') && type === 'Dry Waste'
-     && room !== 'Trim Room' && !['Flower 1','Flower 2','Flower 3','Flower 4','Flower 5','Tent'].includes(room)){
-    toast('Dry Waste can only be recorded from the Trim Room or a Flower room.',5000);
+  // Guard: Dry Waste during/after harvest only comes from the Trim Room — dried-flower trimming and
+  // packaging happen there. (Harvest waste attributed to a Flower room is Vegetative Waste, not Dry.)
+  if((_wsPhase === 'Drying' || _wsPhase === 'Trimmed' || _wsPhase === 'Packaged' || _wsPhase === 'Delivered') && type === 'Dry Waste' && room !== 'Trim Room'){
+    toast('Dry Waste can only be recorded from the Trim Room.',5000);
     return;
   }
   // Guard: destroying plants via Vegetative Waste cannot exceed the count IN THAT SPECIFIC ROOM.
