@@ -16684,6 +16684,10 @@ function renderBatchReport(batchId){
       fmtKg(parseFloat(r.netWeight)||0),
       r.notes||''
     ]);
+    const _hT = harvests.reduce((a,r)=>a+(parseFloat(r.tareWeight)||0),0);
+    const _hG = harvests.reduce((a,r)=>a+(parseFloat(r.totalWeight)||0),0);
+    const _hN = harvests.reduce((a,r)=>a+(parseFloat(r.netWeight)||0),0);
+    rows.push(['<strong>Total</strong>','','','','<strong>'+fmtKg(_hT)+'</strong>','<strong>'+fmtKg(_hG)+'</strong>','<strong>'+fmtKg(_hN)+'</strong>','']);
     s += sectionTable('Harvest Log ('+harvests.length+')', ['Date','Room','Grower','Bin #','Tare','Total','Net','Notes'], rows);
   }
 
@@ -16707,6 +16711,10 @@ function renderBatchReport(batchId){
         _noteCell
       ];
     });
+    const _pT = postDrys.reduce((a,r)=>a+(parseFloat(r.tareWeight)||0),0);
+    const _pG = postDrys.reduce((a,r)=>a+(parseFloat(r.grossWeight)||0),0);
+    const _pN = postDrys.reduce((a,r)=>a+(parseFloat(r.netWeight)||0),0);
+    rows.push(['<strong>Total</strong>','','','','<strong>'+fmtKg(_pT)+'</strong>','<strong>'+fmtKg(_pG)+'</strong>','<strong>'+fmtKg(_pN)+'</strong>','']);
     s += sectionTable('Post-Drying Containers ('+postDrys.length+')', ['Date','Grower','Container #','Type/Size','Tare','Gross','Net','Notes'], rows);
   }
 
@@ -16722,6 +16730,9 @@ function renderBatchReport(batchId){
       (parseInt(r.plants)||0) > 0 ? String(r.plants) : '—',
       r.notes||''
     ]);
+    const _wW = wastes.reduce((a,r)=>a+(parseFloat(r.weight)||0),0);
+    const _wP = wastes.reduce((a,r)=>a+(parseInt(r.plants)||0),0);
+    rows.push(['<strong>Total</strong>','','','','','<strong>'+fmtKg(_wW)+'</strong>','<strong>'+(_wP>0?String(_wP):'—')+'</strong>','']);
     s += sectionTable('Waste Log ('+wastes.length+')', ['Date','Room','Grower','Type','Sub-Category','Weight','Plants','Notes'], rows);
   }
 
