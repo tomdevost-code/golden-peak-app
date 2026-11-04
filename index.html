@@ -18881,8 +18881,18 @@ function ctlsGenerateReport(){
       const _evHead = (d.date||'')+(d.employee?' · '+d.employee:'');
       _vegActD.push(_evHead+' — '+vegA.toFixed(3)+' kg'+_perBatchLines('Vegetative Waste','vegActual'));
       if(dryA > 0) _dryActD.push(_evHead+' — '+dryA.toFixed(3)+' kg'+_perBatchLines('Dry Waste','dryActual')); // omit 0.000 kg dry-destroyed rows
-      _vegLossD.push(_lab(_vegBatches)+' — recorded '+vegR.toFixed(3)+' − actual '+vegA.toFixed(3)+' = '+(vegR-vegA).toFixed(3)+' kg');
-      _dryLossD.push(_lab(_dryBatches)+' — recorded '+dryR.toFixed(3)+' − actual '+dryA.toFixed(3)+' = '+(dryR-dryA).toFixed(3)+' kg');
+      // Per-batch drying-loss breakdown (recorded − actual) within the event, same indented style.
+      const _perBatchLoss = (adjKeyR, adjKeyA, type) => {
+        const map = {};
+        if(_adjArr.length){
+          _adjArr.forEach(a => { const rr=parseFloat(a[adjKeyR])||0, aa=parseFloat(a[adjKeyA])||0; if(rr>0||aa>0) map[a.batch]={r:(map[a.batch]?map[a.batch].r:0)+rr, a:(map[a.batch]?map[a.batch].a:0)+aa}; });
+        } else {
+          covered.filter(w => w.type === type).forEach(w => { const wt=parseFloat(w.weight)||0; if(wt>0){ const m=map[w.batch]||(map[w.batch]={r:0,a:0}); m.r+=wt; m.a+=wt; } });
+        }
+        return Object.keys(map).sort().map(bid => { const st=_ctlsStrainFor(bid); const m=map[bid]; return '<br>&nbsp;&nbsp;↳ '+bid+(st?' · '+st:'')+' — recorded '+m.r.toFixed(3)+' − actual '+m.a.toFixed(3)+' = '+(m.r-m.a).toFixed(3)+' kg'; }).join('');
+      };
+      _vegLossD.push(_evHead+' — recorded '+vegR.toFixed(3)+' − actual '+vegA.toFixed(3)+' = '+(vegR-vegA).toFixed(3)+' kg'+_perBatchLoss('vegRecorded','vegActual','Vegetative Waste'));
+      _dryLossD.push(_evHead+' — recorded '+dryR.toFixed(3)+' − actual '+dryA.toFixed(3)+' = '+(dryR-dryA).toFixed(3)+' kg'+_perBatchLoss('dryRecorded','dryActual','Dry Waste'));
     });
     totVeg = r3c(totVeg); totDry = r3c(totDry);
     const vegLoss = r3c(vegRecSum - totVeg);
