@@ -18866,8 +18866,21 @@ function ctlsGenerateReport(){
       const _lab = bs => (d.date||'')+(d.employee?' · '+d.employee:'')+(bs&&bs.length?' · '+bs.join(', '):'');
       const _vegBatches = _batchesFor('Vegetative Waste','vegRecorded');
       const _dryBatches = _batchesFor('Dry Waste','dryRecorded');
-      _vegActD.push(_lab(_vegBatches)+' — '+vegA.toFixed(3)+' kg');
-      if(dryA > 0) _dryActD.push(_lab(_dryBatches)+' — '+dryA.toFixed(3)+' kg'); // omit 0.000 kg dry-destroyed rows
+      // Per-batch breakdown within the event: the actual destroyed weight (this waste type) for each
+      // batch covered by the event. Prefers the event's per-batch Adjustments; falls back to the
+      // covered waste records. Rendered as indented sub-lines under the event's total.
+      const _perBatchLines = (type, adjKey) => {
+        const map = {};
+        if(_adjArr.length){
+          _adjArr.forEach(a => { const w = parseFloat(a[adjKey])||0; if(w > 0) map[a.batch] = (map[a.batch]||0) + w; });
+        } else {
+          covered.filter(w => w.type === type).forEach(w => { const wt = parseFloat(w.weight)||0; if(wt > 0) map[w.batch] = (map[w.batch]||0) + wt; });
+        }
+        return Object.keys(map).sort().map(bid => { const st = _ctlsStrainFor(bid); return '<br>&nbsp;&nbsp;↳ '+bid+(st?' · '+st:'')+' — '+map[bid].toFixed(3)+' kg'; }).join('');
+      };
+      const _evHead = (d.date||'')+(d.employee?' · '+d.employee:'');
+      _vegActD.push(_evHead+' — '+vegA.toFixed(3)+' kg'+_perBatchLines('Vegetative Waste','vegActual'));
+      if(dryA > 0) _dryActD.push(_evHead+' — '+dryA.toFixed(3)+' kg'+_perBatchLines('Dry Waste','dryActual')); // omit 0.000 kg dry-destroyed rows
       _vegLossD.push(_lab(_vegBatches)+' — recorded '+vegR.toFixed(3)+' − actual '+vegA.toFixed(3)+' = '+(vegR-vegA).toFixed(3)+' kg');
       _dryLossD.push(_lab(_dryBatches)+' — recorded '+dryR.toFixed(3)+' − actual '+dryA.toFixed(3)+' = '+(dryR-dryA).toFixed(3)+' kg');
     });
