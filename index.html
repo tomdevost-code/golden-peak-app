@@ -10721,11 +10721,15 @@ async function destroySave(){
 function destroyRenderHistory(){
   const el = document.getElementById('destroy-history');
   if(!el) return;
-  // Signed weigh-out destruction events.
+  // Signed weigh-out destruction events. `detail` carries each batch's actual veg/dry weight for the
+  // drill-down (from the event's per-batch Adjustments).
   const _events = destroyRecs.map(r => ({
     kind:'event', id:r.id, date:r.date||'', employee:r.employee||'',
     batches:(r.batches||[]).join(', '), veg:parseFloat(r.vegWeight)||0, dry:parseFloat(r.dryWeight)||0,
-    records:(r.coveredKeys||[]).length
+    records:(r.coveredKeys||[]).length,
+    detail:(r.adjust||[]).filter(a => (parseFloat(a.vegActual)||0) > 0 || (parseFloat(a.dryActual)||0) > 0)
+      .map(a => ({ batch:a.batch, veg:parseFloat(a.vegActual)||0, dry:parseFloat(a.dryActual)||0 }))
+      .sort((x,y)=>(x.batch||'').localeCompare(y.batch||''))
   }));
   // Pheno-sample destructions (logged on the Retention Samples page) — shown here so all dry cannabis
   // destruction is in one place. Weight = remaining net (net minus any portion already sent to the lab).
@@ -10737,15 +10741,16 @@ function destroyRenderHistory(){
   postDryRecs.forEach(p => {
     if(!p || (p.sampleType||'')!=='Pheno Samples' || !p.retDestroyed) return;
     const day = p.retDestroyedDate||'';
-    const g = _phMap[day] || (_phMap[day] = { kind:'sample', id:'pd-'+day, date:day, emps:new Set(), bats:new Set(), dry:0, records:0 });
+    const g = _phMap[day] || (_phMap[day] = { kind:'sample', id:'pd-'+day, date:day, emps:new Set(), bats:new Set(), dry:0, records:0, batchDry:{} });
     if(p.retDestroyedBy) g.emps.add(p.retDestroyedBy);
-    if(p.batch) g.bats.add(p.batch);
+    if(p.batch){ g.bats.add(p.batch); g.batchDry[p.batch] = (g.batchDry[p.batch]||0) + _remainOf(p); }
     g.dry += _remainOf(p);
     g.records += 1;
   });
   const _phenoDes = Object.keys(_phMap).map(day => { const g=_phMap[day]; return {
     kind:'sample', id:g.id, date:g.date, employee:[...g.emps].join(', '),
-    batches:[...g.bats].join(', '), veg:0, dry:g.dry, records:g.records
+    batches:[...g.bats].join(', '), veg:0, dry:g.dry, records:g.records,
+    detail:Object.keys(g.batchDry).sort().map(b => ({ batch:b, veg:0, dry:g.batchDry[b] }))
   }; });
   const recs = _events.concat(_phenoDes).sort((a,b)=> (b.date||'').localeCompare(a.date||'') || (String(b.id).localeCompare(String(a.id))));
   if(!recs.length){ el.innerHTML = '<div style="font-size:12px;color:var(--text3);">No destructions recorded yet.</div>'; return; }
@@ -10758,10 +10763,14 @@ function destroyRenderHistory(){
       ? ' <span style="font-size:8px;font-weight:700;font-family:var(--mono);color:var(--room4);background:var(--bg2);border-radius:20px;padding:1px 5px;vertical-align:middle;">PHENO SAMPLE'+(r.records>1?'S':'')+'</span>'
       : '';
     const _actions = (r.kind==='event')
-      ? '<button type="button" onclick="destroyPrint(\''+String(r.id).replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\')" style="font-size:11px;padding:3px 8px;border:1px solid var(--border);background:var(--bg2);border-radius:var(--radius-sm);cursor:pointer;color:var(--text2);">Print</button>'
+      ? '<button type="button" onclick="event.stopPropagation();destroyPrint(\''+String(r.id).replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\')" style="font-size:11px;padding:3px 8px;border:1px solid var(--border);background:var(--bg2);border-radius:var(--radius-sm);cursor:pointer;color:var(--text2);">Print</button>'
       : '<span style="font-size:10px;color:var(--text3);">Retention page</span>';
-    html += '<tr>'
-      +'<td style="padding:5px 8px;font-family:var(--mono);border-top:1px solid var(--border);white-space:nowrap;">'+(r.date||'—')+'</td>'
+    const _hasDetail = Array.isArray(r.detail) && r.detail.length;
+    const _did = 'dh_'+String(r.id).replace(/[^a-zA-Z0-9_-]/g,'_');
+    const _caret = _hasDetail ? '<span id="'+_did+'_c" style="color:var(--text3);font-size:10px;margin-right:4px;display:inline-block;width:8px;">▸</span>' : '';
+    const _rowClick = _hasDetail ? ' onclick="destroyHistToggle(\''+_did+'\')" style="cursor:pointer;" title="Click to see the per-batch breakdown"' : '';
+    html += '<tr'+_rowClick+'>'
+      +'<td style="padding:5px 8px;font-family:var(--mono);border-top:1px solid var(--border);white-space:nowrap;">'+_caret+(r.date||'—')+'</td>'
       +'<td style="padding:5px 8px;border-top:1px solid var(--border);">'+(r.employee||'—')+'</td>'
       +'<td style="padding:5px 8px;font-family:var(--mono);font-size:11px;border-top:1px solid var(--border);">'+(r.batches||'—')+_tag+'</td>'
       +'<td style="padding:5px 8px;font-family:var(--mono);text-align:right;border-top:1px solid var(--border);">'+(r.veg||0).toFixed(3)+'</td>'
@@ -10769,9 +10778,28 @@ function destroyRenderHistory(){
       +'<td style="padding:5px 8px;font-family:var(--mono);text-align:right;border-top:1px solid var(--border);">'+(r.records||0)+'</td>'
       +'<td style="padding:5px 8px;white-space:nowrap;border-top:1px solid var(--border);">'+_actions+'</td>'
       +'</tr>';
+    if(_hasDetail){
+      let dh = '<table style="width:100%;border-collapse:collapse;font-size:11px;">';
+      dh += '<tr style="color:var(--text3);font-family:var(--mono);"><td style="padding:2px 8px;">Batch</td><td style="padding:2px 8px;text-align:right;">Veg (kg)</td><td style="padding:2px 8px;text-align:right;">Dry (kg)</td></tr>';
+      r.detail.forEach(d => {
+        dh += '<tr><td style="padding:2px 8px;font-family:var(--mono);">'+(d.batch||'—')+'</td>'
+            + '<td style="padding:2px 8px;font-family:var(--mono);text-align:right;">'+(d.veg||0).toFixed(3)+'</td>'
+            + '<td style="padding:2px 8px;font-family:var(--mono);text-align:right;">'+(d.dry||0).toFixed(3)+'</td></tr>';
+      });
+      dh += '</table>';
+      html += '<tr id="'+_did+'" style="display:none;"><td colspan="7" style="padding:4px 8px 8px 26px;background:var(--bg2);">'+dh+'</td></tr>';
+    }
   });
   html += '</tbody></table></div>';
   el.innerHTML = html;
+}
+function destroyHistToggle(id){
+  const row = document.getElementById(id);
+  const c = document.getElementById(id+'_c');
+  if(!row) return;
+  const show = row.style.display === 'none';
+  row.style.display = show ? '' : 'none';
+  if(c) c.textContent = show ? '▾' : '▸';
 }
 // Drying Loss Report: for each destruction event, list the waste records it covered and compare
 // recorded weight vs actual weight destroyed (per batch), so drying loss can be verified by hand.
