@@ -18599,7 +18599,14 @@ function ctlsFreshMetrics(from, to){
   // for tracking, already reported in the paper binder, so they must NOT appear as newly set aside /
   // in post-dry totals / loss-on-drying. (They still count as destroyed via ctlsDryMetrics.)
   const postDrys = _postDrysInRange(from, to).filter(p => !p.retLegacy);
-  const postDryTotal     = postDrys.reduce((s,p) => s + (parseFloat(p.netWeight)||0), 0);
+  // Dry trim waste pulled off during processing (Trim Room Dry Waste) is part of the dried output, so
+  // it's included in the post-drying total. Retention / pheno samples "sent to destruction" are
+  // excluded here (they're inventory already counted as containers, not fresh dried output).
+  const _dryTrim = _wastesInRange(from, to).filter(w => (w.type||'') === 'Dry Waste'
+    && (w.subtype||'') !== 'Retention Sample' && (w.subtype||'') !== 'Pheno Sample');
+  const _dryTrimKg = _dryTrim.reduce((s,w) => s + (parseFloat(w.weight)||0), 0);
+  const postDryContainersKg = postDrys.reduce((s,p) => s + (parseFloat(p.netWeight)||0), 0);
+  const postDryTotal     = postDryContainersKg + _dryTrimKg;
   const _pdSold      = postDrys.filter(p => (p.sampleType||'Sold') === 'Sold');
   const _pdRetention = postDrys.filter(p => (p.sampleType||'') === 'Retention');
   const _pdCOA       = postDrys.filter(p => (p.sampleType||'') === 'COA');
@@ -18633,7 +18640,7 @@ function ctlsFreshMetrics(from, to){
   const _pdD   = p => p.batch+' — '+(parseFloat(p.netWeight)||0).toFixed(3)+' kg (container '+(p.binNumber||'?')+(p.date?', '+p.date:'')+')';
   return {
     wetTotal, wetTotalDetail: _wetDetailFull,
-    postDryTotal, postDryTotalDetail: postDrys.map(p => _pdD(p)+' ['+(p.sampleType||'Sold')+']'),
+    postDryTotal, postDryTotalDetail: postDrys.map(p => _pdD(p)+' ['+(p.sampleType||'Sold')+']').concat(_dryTrim.map(w => w.batch+' — '+(parseFloat(w.weight)||0).toFixed(3)+' kg [Dry Waste'+(w.room?' · '+w.room:'')+']')),
     postDrySold, postDrySoldDetail: _pdSold.map(_pdD),
     postDryRetention, postDryRetentionDetail: _pdRetention.map(_pdD),
     postDryCOA, postDryCOADetail: _pdCOA.map(_pdD),
@@ -18823,7 +18830,7 @@ function ctlsGenerateReport(){
   // Section 4 — Fresh Cannabis (wet)
   html += _ctlsBlock('4. Fresh Cannabis (wet)', [
     {label:'Total harvested weight (wet)', note:'sum of Harvest Log net weights', value: v(fresh.wetTotal, 'kg'), detail:fresh.wetTotalDetail},
-    {label:'Post-drying total weight', note:'all containers, all sample types', value: v(fresh.postDryTotal, 'kg'), detail:fresh.postDryTotalDetail},
+    {label:'Post-drying total weight', note:'all containers (all sample types) + Trim Room dry waste', value: v(fresh.postDryTotal, 'kg'), detail:fresh.postDryTotalDetail},
     {label:'Loss on drying (wet − post-dry)', value: v(fresh.lossOnDrying, 'kg'), detail:fresh.lossOnDryingDetail},
     {label:'Fresh cannabis sold to processor', note:'Sold tx · Sale Stage = Fresh', value: v(fresh.soldFreshToProcessor, 'kg'), detail:fresh.soldFreshToProcessorDetail}
   ]);
