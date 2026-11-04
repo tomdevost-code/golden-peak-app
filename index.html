@@ -10448,9 +10448,9 @@ function destroyRenderAdjust(){
   const rows = destroyAggregatePendingByBatch();
   if(!rows.length){ el.innerHTML = '<div style="font-size:11px;color:var(--text3);">No pending waste to destroy.</div>'; return; }
   const L = v => (Math.round((v||0)*1000)/1000).toFixed(3);
-  let html = '<div style="font-size:10px;color:var(--text3);margin-bottom:6px;line-height:1.4;">Enter the ACTUAL weight destroyed for each batch (defaults to the recorded weight). Recorded − actual is logged as drying loss.</div>';
+  let html = '<div style="font-size:10px;color:var(--text3);margin-bottom:6px;line-height:1.4;">Enter the ACTUAL Vegetative weight destroyed for each batch (defaults to the recorded weight). Recorded − actual is logged as drying loss. Dry waste is already dry, so its destroyed weight equals the recorded weight (no drying loss).</div>';
   html += '<div style="overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius-sm);background:#fff;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#f5f5f5;">'
-    +['Batch','Veg rec.','Veg actual','Dry rec.','Dry actual'].map(h=>'<th style="padding:6px 6px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;border-bottom:1px solid var(--border);">'+h+'</th>').join('')
+    +['Batch','Veg rec.','Veg actual','Dry destroyed'].map(h=>'<th style="padding:6px 6px;text-align:left;font-size:9px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;border-bottom:1px solid var(--border);">'+h+'</th>').join('')
     +'</tr></thead><tbody>';
   rows.forEach(r=>{
     const ba = (r.batch||'').replace(/"/g,'&quot;');
@@ -10459,7 +10459,6 @@ function destroyRenderAdjust(){
       +'<td style="padding:5px 6px;font-family:var(--mono);text-align:right;border-top:1px solid var(--border);color:var(--text3);">'+L(r.vegRec)+'</td>'
       +'<td style="padding:3px 6px;border-top:1px solid var(--border);"><input type="number" step="0.001" min="0" max="'+L(r.vegRec)+'" class="destroy-vegact" data-batch="'+ba+'" data-rec="'+L(r.vegRec)+'" value="'+L(r.vegRec)+'" style="width:88px;font-size:12px;font-family:var(--mono);padding:4px;border:1px solid var(--border);border-radius:var(--radius-sm);" oninput="destroyAdjustCheck(this)" onwheel="this.blur()" /></td>'
       +'<td style="padding:5px 6px;font-family:var(--mono);text-align:right;border-top:1px solid var(--border);color:var(--text3);">'+L(r.dryRec)+'</td>'
-      +'<td style="padding:3px 6px;border-top:1px solid var(--border);"><input type="number" step="0.001" min="0" max="'+L(r.dryRec)+'" class="destroy-dryact" data-batch="'+ba+'" data-rec="'+L(r.dryRec)+'" value="'+L(r.dryRec)+'" style="width:88px;font-size:12px;font-family:var(--mono);padding:4px;border:1px solid var(--border);border-radius:var(--radius-sm);" oninput="destroyAdjustCheck(this)" onwheel="this.blur()" /></td>'
       +'</tr>';
   });
   html += '</tbody></table></div>';
@@ -18950,9 +18949,8 @@ function ctlsGenerateReport(){
     html += _ctlsBlock('6. Waste Destruction', [
       {label:'Destruction events in the month', value: v(dEvents.length + _phEventCount, 'events'), detail:_evD.concat(_phEvD)},
       {label:'Vegetative waste destroyed (actual)', note:'actual weight destroyed, after drying loss', value: v(totVeg, 'kg'), detail:_vegActD},
-      {label:'Dry cannabis destroyed (actual)', note:'actual weight destroyed, after drying loss', value: v(totDry, 'kg'), detail:_dryActD},
+      {label:'Dry cannabis destroyed', note:'dry waste is already dry — recorded weight = destroyed weight, no drying loss', value: v(totDry, 'kg'), detail:_dryActD},
       {label:'Vegetative drying loss (recorded − actual)', note:'veg weight lost between waste entry and destruction', value: v(vegLoss, 'kg'), detail:_vegLossD},
-      {label:'Dry drying loss (recorded − actual)', note:'dry weight lost between waste entry and destruction', value: v(dryLoss, 'kg'), detail:_dryLossD},
       {label:'Retention samples destroyed', note: dry.retentionDestroyedCount ? (dry.retentionDestroyedCount+' sample'+(dry.retentionDestroyedCount===1?'':'s')+' · end of 2-year hold') : 'end of 2-year hold', value: v(dry.retentionDestroyedWeight, 'kg'), detail:dry.retentionDestroyedDetail},
       {label:'Retention samples held (not destroyed)', note: _retHeld.length ? (_retHeld.length+' sample'+(_retHeld.length===1?'':'s')+' · current holdings, all time') : 'current holdings', value: v(_retHeldKg, 'kg'), detail:_retHeldDetail}
     ]);
