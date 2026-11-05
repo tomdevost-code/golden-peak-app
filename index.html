@@ -10142,6 +10142,13 @@ async function wasteSave(){
     if(_wsBatchRec && isMotherBatch(rec.batch)){
       momPhaseSubtractJunior(_wsBatchRec, rec.plants);
       momPurposeSubtractJunior(_wsBatchRec, rec.plants);
+      // momPhaseCounts / momPurposeCounts only persist to the cloud through the batch upsert, so mark
+      // the batch dirty and flag a distribution change — otherwise a Veg-room clone cull (Veg isn't in
+      // roomDistribution) wouldn't trigger the upsert and the drained Clones bucket would revert on the
+      // next pull.
+      _wsBatchRec.synced = false;
+      lsSet('gp-batch', batchRecs);
+      _distChanged = true;
     }
     // Non-mom clone cull: drop the clone cohort by the destroyed count so the Clones/Veg split stays
     // right (otherwise a destroyed clone would wrongly shrink the Veg side).
