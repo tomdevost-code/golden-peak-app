@@ -4204,7 +4204,14 @@ function formatBatchRoomsForDisplay(batchRec){
   ]));
   // Stable order: Flower 1, Flower 2, ... by name
   allFlowerRooms.sort();
-  const parts = allFlowerRooms.map(r => r + ' (' + (calcRoomPlantCount(batchRec.batchId, r) || 0) + ')');
+  // Show a room if it currently holds plants OR it was actually harvested (count = 0 but part of a
+  // completed harvest) — keeps multi-day harvest visible. Hide rooms that are just declared-but-empty
+  // (count 0 and never harvested), e.g. a stray "Tent (0)".
+  const parts = allFlowerRooms.filter(r => {
+    const cnt = calcRoomPlantCount(batchRec.batchId, r) || 0;
+    const wasHarvested = completed.includes(r) || (parseInt(batchRec.harvestedPlants && batchRec.harvestedPlants[r]) || 0) > 0;
+    return cnt > 0 || wasHarvested;
+  }).map(r => r + ' (' + (calcRoomPlantCount(batchRec.batchId, r) || 0) + ')');
   // Append Veg only if it still has unallocated plants
   const vegCount = calcRoomPlantCount(batchRec.batchId, 'Veg');
   if(vegCount > 0) parts.push('Veg (' + vegCount + ')');
