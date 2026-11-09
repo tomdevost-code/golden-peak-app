@@ -14222,10 +14222,13 @@ function summaryUpdatePhaseOptions(currentPhase, qty){
   const _bRec = batchId ? batchRecs.find(r => r.batchId === batchId && !r.type) : null;
   const _isSeeds = _bRec && (String(_bRec.geneticsSource||'').toLowerCase() === 'seeds');
   const _startPhase = _isSeeds ? 'Germination' : 'Clones';
-  // Zero-qty rule only forces start phase for active growing phases. Post-harvest phases
-  // (Harvested, Drying, Packaged, Sold) keep their value even when qty hits 0.
-  const postHarvest = ['Drying','Trimmed','Packaged','Delivered'].includes(currentPhase);
-  const noPlants = (!qty || qty<=0) && !postHarvest;
+  // Zero-qty rule only forces the START phase while the batch is still AT its starting phase
+  // (Clones / Germination / Seeds). Once a batch has advanced (Veg / Flower / Drying / Trimmed /
+  // Packaged / Delivered) it keeps its phase even when qty hits 0 — phase progression is one-way
+  // (matches enforceZeroQtyState). Otherwise a flowered-out batch with 0 plants was wrongly dragged
+  // back to Clones, which then blocked closing it with a "can't move phase backward" error.
+  const _advanced = ['Veg','Flower','Drying','Trimmed','Packaged','Delivered'].includes(currentPhase);
+  const noPlants = (!qty || qty<=0) && !_advanced;
   // Water-In gate: only relevant while the batch is still in its starting phase (Clones or Germination).
   // Mother batches bypass this gate — they need full manual control of phase transitions.
   const _gateIsMother = batchId ? isMotherBatch(batchId) : false;
