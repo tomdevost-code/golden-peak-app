@@ -16073,7 +16073,7 @@ async function qascaleDelete(id){
 function _qaPass(v){ return v ? '<span style="color:var(--green);font-weight:700;">✓</span>' : '<span style="color:var(--red);">✕</span>'; }
 function qascaleRenderRecent(){
   const el=document.getElementById('qascale-recent'); if(!el) return;
-  const rows=qaScaleRecs.slice().sort((a,b)=>(b.id||0)-(a.id||0)).slice(0,50);
+  const rows=qaScaleRecs.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||'')||(b.id||0)-(a.id||0)).slice(0,50);
   if(!rows.length){ el.innerHTML='<div style="color:var(--text3);padding:6px 2px;">No scale checks yet.</div>'; return; }
   let h='<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:var(--bg2);">'+
     ['Date','Batch','Scale','Emp','50g','200g','500g','2000g',''].map(x=>'<th style="padding:5px 6px;text-align:left;font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;">'+x+'</th>').join('')+'</tr></thead><tbody>';
