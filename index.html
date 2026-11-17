@@ -14586,7 +14586,14 @@ function summaryUpdateTxTypeOptions(batchId){
   // Germination (seed-stage lab testing). It is NOT offered in Packaged or Delivered phases:
   // post-drying retention + COA samples are tracked instead through the Post-Drying page's
   // Sample Type tagging (Retention / COA), which is the canonical record for those samples.
-  if(opts.length > 0 || phase === 'Germination'){
+  // Sent to Lab is allowed any time there are LIVE plants / leaf material to send: Germination,
+  // Clones, Veg, Flower, and Drying (while the batch still has living plants), plus anywhere a
+  // regular manual tx is already offered. Not in Packaged/Delivered — dried-flower samples are
+  // tracked via the Post-Drying COA sample type instead.
+  const _sentToLabOk = opts.length > 0
+    || ['Germination','Clones','Veg','Flower'].includes(phase)
+    || (phase === 'Drying' && (typeof calcBatchQty === 'function') && calcBatchQty(batchId) > 0);
+  if(_sentToLabOk){
     if(!opts.includes('Sent to Lab')) opts.push('Sent to Lab');
   }
   // Seeds Germinated is for Seeds-genetics batches only. It records how many seeds sprouted
