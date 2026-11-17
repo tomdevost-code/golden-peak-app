@@ -15228,7 +15228,7 @@ async function summaryAddTransaction(){
   const _bGuard = batchRecs.find(r=>r.batchId===batchId && !r.type);
   const _isMomBatch = isMotherBatch(batchId);
   const _isSeedsBatch = isSeedsBatchId(batchId);
-  if(_bGuard && _bGuard.plantPhase==='Flower' && txType!=='Harvested'
+  if(_bGuard && _bGuard.plantPhase==='Flower' && txType!=='Harvested' && txType!=='Sent to Lab'
      && !((_isMomBatch || _isSeedsBatch) && txType==='Produced/Received')){
     toast('In Flower phase, only Harvested transactions are allowed.',5000);
     return;
@@ -15247,7 +15247,7 @@ async function summaryAddTransaction(){
   // Guard: in Drying phase, only Harvested rows are allowed (multi-day harvest) —
   // EXCEPT mother batches AND S- batches, where Produced/Received is allowed to keep cloning
   // from the live Veg plants while the flowering cohort dries.
-  if(_bGuard && _bGuard.plantPhase==='Drying' && txType!=='Harvested'
+  if(_bGuard && _bGuard.plantPhase==='Drying' && txType!=='Harvested' && txType!=='Sent to Lab'
      && !((_isMomBatch || _isSeedsBatch) && txType==='Produced/Received')){
     toast('In Drying phase, only Harvested transactions are allowed. Complete Post-Drying first.',5500);
     return;
