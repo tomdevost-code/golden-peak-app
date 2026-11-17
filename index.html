@@ -6151,15 +6151,15 @@ function postDryPopulateBatches(){
   // batches awaiting lab results). Closed batches are hidden unless "Include closed batches" is on,
   // e.g. to add a late retention / pheno sample after the batch was closed.
   const eligible = batchRecs
-    .filter(b => !b.type && ['Drying','Packaged','Trimmed'].includes(b.plantPhase||'') && (_pdInclClosed || !isBatchClosedRec(b)))
+    .filter(b => !b.type && ['Drying','Packaged','Trimmed','Delivered'].includes(b.plantPhase||'') && (_pdInclClosed || !isBatchClosedRec(b)))
     .filter(b => _pdMomsOnly === isMotherBatch(b.batchId))  // moms toggle is exclusive
     .filter(b => !isExperimentalBatch(b.batchId))           // X- breeding batches don't use the Post-Dry flow
     .slice()
     .sort(batchCreatedCmp);
   sel.innerHTML = '<option value="">-- select batch --</option>' +
-    eligible.map(b => { const _cl = isBatchClosedRec(b); return '<option value="'+b.batchId+'"'+(b.batchId===cur?' selected':'')+'>'+b.batchId+(b.plantPhase==='Packaged'?' (packaged — add late sample)':(b.plantPhase==='Trimmed'?' (trimmed)':''))+(_cl?' (closed)':'')+'</option>'; }).join('');
+    eligible.map(b => { const _cl = isBatchClosedRec(b); const _ph=b.plantPhase; return '<option value="'+b.batchId+'"'+(b.batchId===cur?' selected':'')+'>'+b.batchId+(_ph==='Packaged'?' (packaged — add late sample)':_ph==='Trimmed'?' (trimmed)':_ph==='Delivered'?' (delivered — add late sample)':'')+(_cl?' (closed)':'')+'</option>'; }).join('');
   if(!eligible.length){
-    sel.innerHTML = '<option value="">No batches in Drying, Trimmed or Packaged phase'+(_pdInclClosed?'':' (tick Include closed to see closed ones)')+'</option>';
+    sel.innerHTML = '<option value="">No batches in Drying, Trimmed, Packaged or Delivered phase'+(_pdInclClosed?'':' (tick Include closed to see closed ones)')+'</option>';
   } else {
     autoSelectIfSingle('postdry-batch-select');
   }
