@@ -4513,12 +4513,14 @@ function reconcileAllPackagedBatches(){
   // stale distribution would trip the over-allocation guard on the Summary page and could wrongly
   // gate Flower-advance via momHasFloweringCapacity. Trim the excess junior-first so the
   // distribution always reflects reality. Idempotent.
-  let purposeFixed = 0;
+  let purposeFixed = 0, phaseFixed = 0;
   batchRecs.forEach(b => {
     if(!b || b.type || !isMotherBatch(b.batchId)) return;
     if(reconcileMomPurposeCounts(b)) purposeFixed++;
+    if(reconcileMomPhaseCounts(b)) phaseFixed++;
   });
   if(purposeFixed) console.log('[reconcile] trimmed '+purposeFixed+' over-allocated mom purpose distribution(s)');
+  if(phaseFixed) console.log('[reconcile] trimmed '+phaseFixed+' over-allocated mom phase distribution(s)');
 }
 function buildBatchFields(rec){
   const f={
@@ -13113,6 +13115,28 @@ function reconcileMomPurposeCounts(batchRec){
     return true;
   }
   return false;
+}
+// Cap a mother's per-phase bucket split to its real living-plant count. Over-allocation happens when
+// plants leave the batch (destroyed / moved) without the bucket being drained, then new clones are
+// added on top — so the split climbs past the true total (e.g. Clones 6 / Veg 8 on a 7-plant mom).
+// Trims the excess SENIOR-first (Drying → Flower → Veg → Clones): the stale weight is almost always in
+// an older bucket, while the Clones bucket holds the most-recent (usually correct) cohort.
+function reconcileMomPhaseCounts(batchRec){
+  const c = ensureMomPhaseCounts(batchRec);
+  if(!c) return false;
+  const total = calcBatchQty(batchRec.batchId);
+  let sum = MOM_PHASES.reduce((s,p)=>s+(parseInt(c[p])||0),0);
+  if(sum <= total) return false;
+  let excess = sum - total;
+  for(let i = MOM_PHASES.length - 1; i >= 0 && excess > 0; i--){
+    const p = MOM_PHASES[i];
+    const take = Math.min(parseInt(c[p])||0, excess);
+    c[p] = (parseInt(c[p])||0) - take;
+    excess -= take;
+  }
+  batchRec.synced = false; // momPhaseCounts syncs via the batch upsert — mark dirty so the fix persists
+  lsSet('gp-batch', batchRecs);
+  return true;
 }
 // Increment Clone Donor count on a mom. Used when plants arrive at a mom without an explicit
 // purpose designation — most commonly a Produced/Received tx or the destination side of a
